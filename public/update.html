@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#100f14">
+  <title>Update · Dungeon Chess Daily</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { background: #100f14; color: #e8dfc9; font: 16px/1.6 ui-monospace, monospace; }
+    body { margin: 0; padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+    main { max-width: 36rem; margin: 10vh auto; }
+    h1 { font: bold 2rem/1.2 Georgia, serif; }
+    button, a { font: inherit; }
+    button { background: #a52c42; color: #e8dfc9; border: 0; padding: 12px 18px; cursor: pointer; }
+    button:disabled { opacity: .65; cursor: wait; }
+    a { color: #e8dfc9; display: inline-block; padding: 12px; }
+    :focus-visible { outline: 3px solid #e06169; outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Update Dungeon Chess Daily</h1>
+    <p>This checks the latest edition of the app without deleting your saved progress. Finish any move in other open game windows first.</p>
+    <p id="status" role="status"></p>
+    <button id="update" type="button">Check for update</button>
+    <a href="./">Back to the dungeon</a>
+  </main>
+  <script>
+    const button = document.querySelector('#update');
+    const status = document.querySelector('#status');
+    let active = false;
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const bounded = (promise, ms) => Promise.race([promise, delay(ms).then(() => { throw new Error('The update timed out. Reconnect and try again.'); })]);
+    button.addEventListener('click', async () => {
+      if (active) return;
+      if (!('serviceWorker' in navigator)) { status.textContent = 'This browser does not support offline updates. Open the game in Safari, Chrome, or Edge.'; return; }
+      active = true;
+      button.disabled = true;
+      status.textContent = 'Checking for an update…';
+      try {
+        const registration = await bounded(navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' }), 15000);
+        await bounded(registration.update(), 15000);
+        const download = registration.installing;
+        await bounded((async () => {
+          while (registration.installing) await delay(150);
+        })(), 30000);
+        if (download?.state === 'redundant') throw new Error('The new version could not be downloaded completely. Your saved progress is unchanged; try again.');
+        const waiting = registration.waiting;
+        if (waiting) {
+          status.textContent = 'Installing the downloaded update…';
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              navigator.serviceWorker.removeEventListener('controllerchange', changed);
+              reject(new Error('The update timed out. Reconnect and try again.'));
+            }, 15000);
+            const changed = () => {
+              clearTimeout(timeout);
+              navigator.serviceWorker.removeEventListener('controllerchange', changed);
+              resolve();
+            };
+            navigator.serviceWorker.addEventListener('controllerchange', changed);
+            waiting.postMessage({ type: 'SKIP_WAITING' });
+          });
+          location.replace('./');
+          return;
+        }
+        if (!registration.active) throw new Error('The offline download did not finish. Please try again.');
+        status.textContent = 'You have the latest downloaded version. Return to the dungeon to use it.';
+      } catch (error) {
+        status.textContent = error.message || 'Could not update. Check your connection and try again.';
+      } finally {
+        active = false;
+        button.disabled = false;
+        button.textContent = 'Check again';
+      }
+    });
+  </script>
+</body>
+</html>

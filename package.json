@@ -1,0 +1,15 @@
+{
+  "name": "dungeon-chess-daily",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build && node scripts/build-sw.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {"three": "^0.181.1"},
+  "devDependencies": {"vite": "^7.2.2"}
+}

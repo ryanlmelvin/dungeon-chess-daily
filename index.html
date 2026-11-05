@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#100f14">
+  <meta name="description" content="A daily pixel dungeon played by the rules of chess. Read the paper, learn the monsters, find the stairs.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Dungeon Chess Daily</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+</head>
+<body>
+  <header class="app-bar">
+    <a class="wordmark" href="./" aria-label="Dungeon Chess Daily home"><span class="mark" aria-hidden="true">▤</span><span>Dungeon Chess <b>Daily</b></span></a>
+    <nav aria-label="App controls">
+      <button id="update-button" class="update-button" hidden>Update available</button>
+      <button id="install-button">Install</button>
+      <button id="menu-button" class="icon-button" aria-label="Menu and how to play">☰</button>
+    </nav>
+  </header>
+  <main>
+    <section id="paper-screen" class="paper-screen" aria-label="Today's newspaper">
+      <article id="newspaper" class="newspaper arriving">
+        <div class="paper-dateline"><span id="edition"></span><time id="paper-date"></time></div>
+        <h1>Dungeon Chess Daily</h1>
+        <div class="paper-rule"><span>THE UNDERGROUND EDITION</span><span>3 ROOMS · ABOUT 3 MINUTES</span></div>
+        <div class="lead-story">
+          <div class="lead-copy"><h2 id="headline"></h2><p id="deck" class="deck"></p></div>
+          <figure class="paper-figure"><canvas id="paper-art" width="180" height="150" aria-label="Pixel illustration of the dungeon beneath the city" role="img"></canvas><figcaption id="art-caption"></figcaption></figure>
+        </div>
+        <div id="side-stories" class="side-stories"></div>
+        <div class="paper-action"><button id="start-button" class="primary">Enter today's dungeon <span aria-hidden="true">↘</span></button></div>
+      </article>
+    </section>
+    <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
+      <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
+      <div class="game-status"><span id="turns"></span></div>
+      <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
+      <p id="game-message" class="game-message" aria-live="polite"></p>
+      <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
+    </section>
+    <section id="result-screen" class="result-screen" hidden aria-label="Your result">
+      <article class="result-paper">
+        <div class="paper-rule"><span>THE EVENING EDITION</span><span id="result-date"></span></div>
+        <p id="result-kicker" class="eyebrow"></p><h2 id="result-title"></h2><p id="result-summary"></p>
+
+        <pre id="share-preview"></pre>
+        <button id="share-button" class="primary">Share your edition <span aria-hidden="true">↗</span></button>
+        <div class="result-actions"><button id="practice-button">Practice this dungeon</button><button id="result-paper-button">Read the paper</button></div>
+        <p class="next-edition" id="next-edition"></p>
+      </article>
+    </section>
+  </main>
+  <div id="notice" class="notice" role="status" hidden></div>
+  <dialog id="menu-dialog" aria-labelledby="menu-title">
+    <div class="dialog-heading"><h2 id="menu-title">Field notes</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
+    <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p><button id="news-button" hidden>Read today’s paper</button>
+    <div class="how-to"><p><b>Capture a monster to open the stairs.</b> Escape through three rooms. Tap a square to move. Tap your piece to see legal moves. Capture a monster by landing on it.</p><p>Your piece follows chess movement. <b>Pawns move forward into empty squares and capture only diagonally.</b> Reach the far rank to become a queen.</p><p>Monsters have chess moves too. Watch them and read the newspaper. A red path warns where an enemy can capture on its next turn.</p><p>Every move advances the monsters. You have 60 moves. Coins and extra captures improve your edition. Getting captured ends the run. Your first result is the daily; practice never replaces it.</p><details><summary>Keyboard</summary><p>Arrow keys or WASD select a square. Enter moves there. Escape clears the selection.</p></details></div>
+    <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
+    <div class="backup-controls"><button id="export-button">Export progress</button><button id="import-button">Import progress</button><input id="import-file" type="file" accept="application/json,.json" hidden></div>
+    <p class="credits">By <a href="https://ryanlmelvin.com" target="_blank" rel="noopener">Ryan L. Melvin</a> · <a href="https://github.com/ryanlmelvin/dungeon-chess-daily" target="_blank" rel="noopener">Source · GPLv3</a></p>
+    <p class="about-note">A fresh dungeon at 00:00 UTC. Same edition worldwide. Progress stays on this device.</p>
+    <div class="about-bottom"><span id="release">Version 1.0</span><a href="./update.html">Repair updates</a></div>
+  </dialog>
+  <dialog id="copy-dialog" aria-labelledby="copy-title"><div class="dialog-heading"><h2 id="copy-title">Share your edition</h2><button class="icon-button" data-close aria-label="Close sharing">✕</button></div><textarea id="copy-text" readonly rows="8" aria-label="Spoiler-free result to copy"></textarea><p>Select the text and copy it into a message.</p></dialog>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
