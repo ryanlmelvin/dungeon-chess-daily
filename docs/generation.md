@@ -15,7 +15,9 @@ Every returned edition has an explicit sequence of legal actions that:
   captures, piece color, turn order, promotion rules, and automatic pickups from
   the production engine.
 - Collects or purchases no powerups and recruits no companion, except the final
-  floor's own recruit.
+  floor's own recruit. The king recruits on floors 1 and 2 are never used: the
+  route never steps on them. Castling is an ordinary legal move, so a route may
+  castle with the final floor's recruit.
 - Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
   shield or freeze, and never restarts.
 

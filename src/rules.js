@@ -74,7 +74,41 @@ export function legalMoves(state) {
   const moves = movesFor(state, state.player);
   const passed = enPassantVictim(state, state.enPassant);
   if (passed) moves.push({ x: passed.x, y: 2, capture: true, enPassant: true });
-  return state.player.piece === 'king' ? moves.filter((move) => !closeAttacker(state, move)) : moves;
+  const legal = state.player.piece === 'king' ? moves.filter((move) => !closeAttacker(state, move)) : moves;
+  const castle = castling(state);
+  if (!castle) return legal;
+  // A rook castles by clicking its king, a square it could otherwise walk onto.
+  return [...legal.filter((move) => !same(move, castle.click)), { x: castle.click.x, y: castle.click.y, capture: false, castle: true }];
+}
+
+// Castling: your king with a rook recruit, or your rook with a king recruit,
+// on one row with exactly two walkable, monster-free squares between them
+// (items may lie there). The king moves two squares toward the rook, which
+// lands on the square the king crossed. Earlier moves never matter. As in
+// chess, a king you play may not castle out of, through or into close range.
+// A king offers its landing square; a rook offers its king's square.
+function castling(state) {
+  const ally = state.companion;
+  if (!ally || state.status !== 'playing') return null;
+  const pair = `${state.player.piece}+${ally.piece}`;
+  if (pair !== 'king+rook' && pair !== 'rook+king') return null;
+  if (ally.y !== state.player.y || Math.abs(ally.x - state.player.x) !== 3) return null;
+  const playerKing = state.player.piece === 'king';
+  const king = playerKing ? state.player : ally;
+  const rook = playerKing ? ally : state.player;
+  const step = Math.sign(rook.x - king.x);
+  const y = king.y;
+  const crossed = { x: king.x + step, y };
+  const landing = { x: king.x + 2 * step, y };
+  if (![crossed, landing].every((tile) => walkable(state, tile.x, tile.y) && !enemyAt(state, tile.x, tile.y))) return null;
+  if (playerKing && [state.player, crossed, landing].some((tile) => closeAttacker(state, tile))) return null;
+  const kingMove = { from: { x: king.x, y }, to: landing };
+  const rookMove = { from: { x: rook.x, y }, to: crossed };
+  return {
+    click: playerKing ? landing : { x: ally.x, y },
+    king: kingMove, rook: rookMove,
+    player: playerKing ? kingMove : rookMove, companion: playerKing ? rookMove : kingMove,
+  };
 }
 
 // En passant, player side: a monster pawn that just double-stepped beside the
@@ -471,13 +505,15 @@ function setFloor(state, legacyRecruit = false) {
   }
   if (!state.legacyTurnOrder) {
     // Add the recruit after the layout is fixed; older editions keep their map.
-    // Only the final floor keeps its recruit, but the draw still runs on every
-    // floor so its own random stream leaves walls, monsters and coins untouched.
+    // Its own random stream leaves walls, monsters and coins untouched.
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
     // Under royal rules the recruit is a rook, queen or king: a second attacker
     // strong enough to corner a dodging king, even beside a pawn or a bishop.
+    // Floors 1 and 2 always recruit a king. The piece is still drawn from the
+    // old pool so the tile draw stays put; saves from before keep that piece.
     const pool = royalRules(state) ? KING_FLOOR_RECRUITS : PIECES;
-    const piece = pool[Math.floor(recruitRng() * pool.length)];
+    const drawn = pool[Math.floor(recruitRng() * pool.length)];
+    const piece = royalRules(state) || legacyRecruit ? drawn : 'king';
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
     let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
     if (!tiles.length) {
@@ -485,7 +521,7 @@ function setFloor(state, legacyRecruit = false) {
       for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (layoutPiece !== 'bishop' || (x+y)%2===0) && (layoutPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
     }
     const tile = tiles[Math.floor(recruitRng()*tiles.length)];
-    if (tile && (royalRules(state) || legacyRecruit)) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
+    if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
   if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
@@ -529,7 +565,7 @@ export function createGame(daily = getRawDaily()) {
   const state = {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
-    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
+    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
@@ -643,6 +679,8 @@ function grantPower(state, id) {
 function nextState(previous) {
   const state = structuredClone(previous);
   state.companionOrders ??= [];
+  // Saves from before special moves were tracked start an empty list.
+  state.feats ??= [];
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
   state.paidCaptures ??= state.gold - state.treasure + spentGold(state);
   // Older saves only recorded exhaustion in the last action's events.
@@ -687,40 +725,64 @@ export function act(previous, action) {
   // A pawn's double step is also exposed to en passant on the square it passes.
   const doubleStep = state.player.piece === 'pawn' && state.player.y === 6 && action.y === 4;
   const threat = (square) => closeAttacker(state, square) ?? (doubleStep ? enPassantStriker(state, square) : null);
+  const castleFor = (board) => {
+    const castle = castling(board);
+    return castle && same(castle.click, action) ? castle : null;
+  };
   if (state.playerColor === 'black' && !state.awaitingPlayer) {
     const origin = { x: state.player.x, y: state.player.y, piece: state.player.piece };
-    const closeBefore = threat(action);
+    const castleBefore = castleFor(state);
+    // A castling rook lands beside its king, not on the square clicked.
+    const closeBefore = threat(castleBefore ? castleBefore.player.to : action);
     enemyTurn(state);
     // Losing the last life starts a fresh run; the old click has no meaning there.
     if (state.events.some((event) => event.type === 'restart')) return state;
     state.awaitingPlayer = true;
     const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
     // A destination the enemy phase newly put in close range also earns a fresh choice.
-    const ambushed = !closeBefore && threat(action);
+    const castleAfter = castleFor(state);
+    const ambushed = !closeBefore && threat(castleAfter ? castleAfter.player.to : action);
     // A freshly opened en passant capture is a new option worth a fresh choice too.
     const opening = legalMoves(state).some((move) => move.enPassant);
-    if (relocated || ambushed || opening || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
+    // So is a click whose meaning changed: a castle that is no longer possible
+    // (or newly is), even if the square is still an ordinary move.
+    const reinterpreted = Boolean(castleBefore) !== Boolean(castleAfter);
+    if (relocated || ambushed || opening || reinterpreted || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
       if (trapped(state)) return restartRun(state, [], NO_MOVES);
       state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : legalMoves(state).length ? 'The board changed. Choose another move.' : 'The board changed. Wait for an opening.'}`;
       return state;
     }
   }
+  // Castling is decided on the board the move is played on (after black's prelude).
+  const castle = castleFor(state);
   state.awaitingPlayer = false; state.turns++;
   // The en passant window lasts exactly this move: take it now or lose it.
   const passed = action.y === 2 && state.enPassant?.x === action.x ? enPassantVictim(state, state.enPassant) : null;
   state.enPassant = null;
   // White resolves this move before monsters; black has already resolved them.
-  const captured = passed ?? enemyAt(state, action.x, action.y);
+  const captured = castle ? null : passed ?? enemyAt(state, action.x, action.y);
   if (captured) captureEnemy(state,captured);
   if (passed) {
     state.events.push({ type: 'en-passant', id: passed.id, x: passed.x, y: passed.y, to: { x: action.x, y: action.y } });
+    state.feats.push({ floor: state.floor, kind: 'en-passant' });
     if (!state.exit.open) state.message = `En passant! You captured ${passed.name} as it passed.`;
   }
-  state.player.x = action.x; state.player.y = action.y; state.player.moved = true;
-  state.events.push({ type: 'move', x: action.x, y: action.y });
+  const to = castle ? castle.player.to : action;
+  if (castle) {
+    // King and rook move together; this is the recruit's move too.
+    const ally = state.companion;
+    const from = { x: ally.x, y: ally.y };
+    ally.x = castle.companion.to.x; ally.y = castle.companion.to.y; ally.moved = true; ally.sharing = false;
+    state.events.push({ type: 'castle', x: to.x, y: to.y, king: castle.king, rook: castle.rook });
+    state.events.push({ type: 'companion-move', piece: ally.piece, from, x: ally.x, y: ally.y });
+    state.feats.push({ floor: state.floor, kind: 'castle' });
+    state.message = 'Castled! King and rook switched sides in one move.';
+  }
+  state.player.x = to.x; state.player.y = to.y; state.player.moved = true;
+  state.events.push({ type: 'move', x: to.x, y: to.y });
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
-    state.events.push({ type: 'promotion', x: action.x, y: action.y });
+    state.events.push({ type: 'promotion', x: to.x, y: to.y });
     if (!state.exit.open) state.message = 'Promoted to queen for the rest of this room.';
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
@@ -749,7 +811,7 @@ export function act(previous, action) {
     state.events.push(event);
     if (hitPlayer(state, close, true, passing) === 'restart') { state.events.unshift(event); return state; }
   }
-  companionTurn(state);
+  if (!castle) companionTurn(state);
   if (state.playerColor === 'white' && !close) enemyTurn(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
@@ -757,8 +819,10 @@ export function act(previous, action) {
 
 // A spoiler-free result on one line: a 💀 for each earlier try that ran out of
 // lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
-// then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
+// each followed by 🇫🇷 for every en passant and 🏰 for every castle the player
+// made on that floor, in order, then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
 // and last the day's starting piece.
+const FEAT_EMOJI = { 'en-passant': '\u{1F1EB}\u{1F1F7}', castle: '🏰' };
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   // Saves from before the tries counter only know that a restart happened.
   const earlier = (state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1)) - 1;
@@ -772,6 +836,7 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
     const after = record ? record.hp : state.player.hp;
     const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
     line += lost ? '💔'.repeat(lost) : '❤️';
+    for (const feat of state.feats ?? []) if (feat.floor === floor) line += FEAT_EMOJI[feat.kind] ?? '';
   }
   line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
   line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
@@ -812,9 +877,14 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent : value.paidCaptures;
     const bonus = bonusCaptures(value);
     if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid - spent) return false;
+    // Special moves the player made: absent in older saves.
+    if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
+      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle'].includes(feat.kind)))) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
-    // Runs saved before floors 1 and 2 lost their recruit may still hold it, on the board or at their side.
-    const legacyRecruit = value.floor < 2 && (value.companion !== null || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion')));
+    // Floors 1 and 2 recruit a king. Runs saved before that may hold the old
+    // recruit, drawn from every piece, on the board or at their side.
+    const legacyRecruit = value.floor < 2 && ((value.companion && value.companion.basePiece !== 'king')
+      || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion' && item.piece !== 'king')));
     // Layout depends only on the edition and original piece, never on promotion.
     setFloor(template, legacyRecruit);
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
@@ -839,7 +909,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       const ally=value.companion;
       if (!ally || !companionPiece || ally.basePiece !== companionPiece || (ally.piece !== ally.basePiece && !(ally.basePiece==='pawn' && ally.piece==='queen')) || !walkable(value,ally.x,ally.y) || typeof ally.moved !== 'boolean' || typeof ally.sharing !== 'boolean') return false;
       if (ally.sharing !== same(ally,value.player) || value.enemies.some((foe)=>same(foe,ally)) || value.items.some((item)=>item.type==='companion')) return false;
-    } else if (deliveredOrder || (recruit && !value.items.some((item)=>item.type==='companion'))) return false;
+    // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
+    } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp <= (value.records[index - 1]?.hp ?? value.player.maxHp) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
@@ -856,7 +927,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

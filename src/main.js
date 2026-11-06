@@ -2,7 +2,7 @@
 import './style.css';
 import './menu.css';
 import { initGuide } from './guide.js';
-import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL } from './guide-art.js';
+import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, PIECES } from './game.js';
@@ -230,7 +230,7 @@ function showGameFeedback() {
     what.textContent = 'What?';
     what.setAttribute('aria-label', 'What is en passant?');
     what.setAttribute('aria-haspopup', 'dialog');
-    what.addEventListener('click', () => openEnPassant('enemy'));
+    what.addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
     $('game-message').append(' ', what);
     return;
   }
@@ -328,36 +328,50 @@ $('hint-button').addEventListener('click', openHint);
 const EN_PASSANT = {
   player: {
     title: 'You captured a pawn en passant!',
-    text: 'A pawn that jumps two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move.',
+    text: 'A pawn that jumps two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move. This is called ‘en passant!’',
     art: 'Animated board: an enemy pawn jumps two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped.',
   },
   enemy: {
     title: 'What just happened? En passant',
-    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your jump.',
+    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your jump. This is called ‘en passant!’',
     art: 'Animated board: your pawn jumps two squares past an enemy pawn, which captures it by striking the square your pawn skipped.',
   },
 };
-let enPassantFrame = 0;
-// Explains en passant: 'player' after the player's own capture, 'enemy' after a monster pawn's.
-function openEnPassant(mode) {
+const CASTLE = {
+  title: 'You castled!',
+  text: 'Your king and rook, one of them your recruit, stood on one row with two open squares between them. The king slid two squares toward the rook and the rook hopped over to land beside it, both in one move. This is called ‘castling!’',
+  art: 'Animated board: a king slides two squares toward a rook, and the rook hops over the king to land on the square beside it.',
+};
+let specialMoveFrame = 0;
+// Explains a special chess move: en passant ('player' after the player's own
+// capture, 'enemy' after a monster pawn's) or castling.
+function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
-  const copy = EN_PASSANT[mode];
-  $('en-passant-title').textContent = copy.title;
-  $('en-passant-text').textContent = copy.text;
-  $('en-passant-art').setAttribute('aria-label', copy.art);
-  const options = { mode, playerPalette: piecePalette(state.playerColor), enemyPalette: piecePalette(state.playerColor === 'white' ? 'black' : 'white') };
+  const castle = kind === 'castle';
+  const copy = castle ? CASTLE : EN_PASSANT[mode];
+  const canvas = $('special-move-art');
+  $('special-move-title').textContent = copy.title;
+  $('special-move-text').textContent = copy.text;
+  $('special-move-close').setAttribute('aria-label', `Close ${castle ? 'castling' : 'en passant'} explainer`);
+  canvas.setAttribute('aria-label', copy.art);
+  [canvas.width, canvas.height] = castle ? [240, 120] : [200, 200];
+  const playerPalette = piecePalette(state.playerColor);
+  const options = castle
+    ? { playerPalette, player: state.player.piece === 'rook' ? 'rook' : 'king' }
+    : { mode, playerPalette, enemyPalette: piecePalette(state.playerColor === 'white' ? 'black' : 'white') };
+  const draw = castle ? drawCastleDemo : drawEnPassantDemo;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const start = performance.now();
   const frame = (now) => {
-    drawEnPassantDemo($('en-passant-art'), still ? EN_PASSANT_STILL : now - start, options);
-    if (!still && $('en-passant-dialog').open) enPassantFrame = requestAnimationFrame(frame);
+    draw(canvas, still ? (castle ? CASTLE_STILL : EN_PASSANT_STILL) : now - start, options);
+    if (!still && $('special-move-dialog').open) specialMoveFrame = requestAnimationFrame(frame);
   };
-  $('en-passant-dialog').showModal();
-  $('en-passant-continue').focus();
+  $('special-move-dialog').showModal();
+  $('special-move-continue').focus();
   frame(start);
 }
-$('en-passant-dialog').addEventListener('close', () => cancelAnimationFrame(enPassantFrame));
-$('result-en-passant').addEventListener('click', () => openEnPassant('enemy'));
+$('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
+$('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
@@ -370,14 +384,16 @@ function takeAction(action) {
   turnLocked=!shopping;
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(state.events);
   const enPassant = state.events.some(event => event.type === 'en-passant');
-  const animationTime = enPassant || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  const castled = state.events.some(event => event.type === 'castle');
+  const special = enPassant ? 'en-passant' : castled ? 'castle' : null;
+  const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
-  // Congratulate the player's own en passant once the move has settled, unless
-  // another action, a death, a result or the bot replay has taken over since.
-  if (enPassant) {
-    const captured = state;
+  // Congratulate the player's own en passant or castle once the move has settled,
+  // unless another action, a death, a result or the bot replay has taken over since.
+  if (special) {
+    const played = state;
     setTimeout(() => {
-      if (state === captured && !replay && screen === 'game' && state.status === 'playing' && !state.events.some(event => event.type === 'restart')) openEnPassant('player');
+      if (state === played && !replay && screen === 'game' && state.status === 'playing' && !state.events.some(event => event.type === 'restart')) openSpecialMove(special, 'player');
     }, animationTime);
   }
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
@@ -466,7 +482,7 @@ function showResult() {
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · Your piece last\n${next}` : next;
+  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · 🇫🇷 En passant · 🏰 Castled · Your piece last\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }

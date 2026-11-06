@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
-import { drawGuideArt } from './guide-art.js';
+import { drawGuideArt, animateGuideArt } from './guide-art.js';
 
 export function initGuide() {
   const $ = (id) => document.getElementById(id);
@@ -7,6 +7,23 @@ export function initGuide() {
   const pages = [...document.querySelectorAll('.guide-page')];
   const links = [...document.querySelectorAll('[data-guide-page]')];
   let page = -1;
+  let frame = 0;
+
+  // Explainer canvases play only while their page is showing (stills otherwise,
+  // and always under reduced motion).
+  function stopAnimation() { cancelAnimationFrame(frame); frame = 0; }
+  function animate(element) {
+    stopAnimation();
+    if (!element?.querySelector('canvas[data-guide-art^="en-passant"], canvas[data-guide-art="castle"]')) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const start = performance.now();
+    const step = (now) => {
+      if (element.hidden || !dialog.open) { frame = 0; return; }
+      animateGuideArt(element, now - start);
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+  }
 
   function showPage(index, focus = true) {
     page = index;
@@ -15,6 +32,7 @@ export function initGuide() {
     $('guide-contents').hidden = index !== -1;
     $('guide-pagination').hidden = index === -1;
     pages.forEach((element, i) => { element.hidden = i !== index; });
+    animate(pages[index]);
     $('guide-title').textContent = index === -1 ? 'How to play' : links[index].firstChild.textContent.trim();
     $('guide-back').textContent = index === -1 ? '← Menu' : '← Contents';
     $('guide-previous').disabled = index === 0;
@@ -25,6 +43,7 @@ export function initGuide() {
   }
 
   function showMenu(focus = true) {
+    stopAnimation();
     $('guide').hidden = true;
     $('menu-home').hidden = false;
     dialog.setAttribute('aria-labelledby', 'menu-title');

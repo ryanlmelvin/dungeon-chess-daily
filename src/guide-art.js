@@ -189,12 +189,26 @@ function danger(ctx) {
   ctx.fillRect(199, 34, 2, 2);
 }
 
+// Guide canvases that can play their explainer animation.
+const ANIMATED = {
+  'en-passant-player': (canvas, time) => drawEnPassantDemo(canvas, time ?? EN_PASSANT_STILL, { mode: 'player', enemyPalette: piecePalette('black') }),
+  'en-passant-enemy': (canvas, time) => drawEnPassantDemo(canvas, time ?? EN_PASSANT_STILL, { mode: 'enemy', enemyPalette: piecePalette('black') }),
+  castle: (canvas, time) => drawCastleDemo(canvas, time ?? CASTLE_STILL),
+};
+
+/** One frame of every animated guide canvas under `root`, `time` ms into its loop. */
+export function animateGuideArt(root, time) {
+  for (const canvas of root.querySelectorAll('canvas[data-guide-art]')) ANIMATED[canvas.dataset.guideArt]?.(canvas, time);
+}
+
 /** Static examples deliberately do not reveal the daily edition's disguises. */
 export function drawGuideArt(root = document) {
   for (const canvas of root.querySelectorAll('canvas[data-guide-art]')) {
     const ctx = canvas.getContext('2d');
     if (!ctx) continue;
     const kind = canvas.dataset.guideArt;
+    // Animated explainers start on a still frame that reads on its own.
+    if (ANIMATED[kind]) { ANIMATED[kind](canvas); continue; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -350,3 +364,67 @@ export function drawEnPassantDemo(canvas, time, { playerPalette = {}, enemyPalet
 
 /** A representative still for prefers-reduced-motion: the skipped square marked. */
 export const EN_PASSANT_STILL = 1500;
+
+// The recruit's look in the guide: mint pieces on a mint ring, like the board.
+function recruitRing(ctx, x, y) {
+  ctx.save();
+  ctx.strokeStyle = MINT;
+  ctx.globalAlpha = 0.7;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 12, 14, 5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * One frame of the castling explainer on a 6x3 board crop, looping every
+ * 3.5 s: your king and your recruit rook (or your rook and recruit king) stand
+ * two squares apart; the king slides two squares toward the rook, and the rook
+ * hops over to land on the square the king crossed. The crop keeps its shape
+ * on any canvas, centered.
+ */
+export function drawCastleDemo(canvas, time, { playerPalette = {}, player = 'king' } = {}) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const t = ((time % 3500) + 3500) % 3500;
+  const scale = Math.min(canvas.width / 240, canvas.height / 120);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate((canvas.width - 240 * scale) / 2, (canvas.height - 120 * scale) / 2);
+  ctx.scale(scale, scale);
+  board(ctx, 6, 3, 40);
+  // King (1,1) -> (3,1); rook (4,1) -> (2,1).
+  const plan = beat(t, 300, 700) * (1 - beat(t, 1100, 1400));
+  const slide = beat(t, 1100, 1800);
+  const hop = beat(t, 1800, 2500);
+  const reset = beat(t, 3200, 3500);
+  if (plan > 0) {
+    ctx.save();
+    ctx.globalAlpha = plan;
+    ctx.fillStyle = MINT;
+    for (const x of [2, 3]) { ctx.beginPath(); ctx.arc(center(x), center(1), 5, 0, Math.PI * 2); ctx.fill(); }
+    arrow(ctx, center(1) + 10, center(1) - 22, center(3) - 4, center(1) - 22, MINT, 7);
+    arrow(ctx, center(4) - 10, center(1) + 22, center(2) + 4, center(1) + 22, GOLD, 7);
+    ctx.restore();
+  }
+  // Fade out at the end of the loop so the pieces return to the start unseen.
+  ctx.globalAlpha = 1 - reset;
+  const kingX = center(1) + (center(3) - center(1)) * ease(slide);
+  const rookX = center(4) + (center(2) - center(4)) * ease(hop);
+  const rookY = center(1) - Math.sin(Math.PI * hop) * 30;
+  const pieces = [
+    { id: 'piece-king', x: kingX, y: center(1), mine: player === 'king' },
+    { id: 'piece-rook', x: rookX, y: rookY, mine: player !== 'king' },
+  ];
+  for (const piece of pieces) {
+    if (!piece.mine) recruitRing(ctx, piece.x, center(1));
+    sprite(ctx, piece.id, piece.x, piece.y, 2, piece.mine ? playerPalette : COMPANION_PALETTE);
+  }
+  burst(ctx, center(2), center(1), beat(t, 2500, 3000), GOLD);
+  ctx.restore();
+}
+
+/** A representative still for prefers-reduced-motion and the guide: both moves marked. */
+export const CASTLE_STILL = 900;

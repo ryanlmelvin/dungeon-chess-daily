@@ -24,17 +24,26 @@ function descend(state) {
   return act(cleared,{type:'descend'});
 }
 
-test('floors one and two hold no recruit while the final floor keeps its rook, queen or king',()=>{
+// Floors one and two recruit a king, on a square one move from the start.
+function kingRecruit(state,label) {
+  const [recruit,...extra]=recruitsOn(state);
+  assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.equal(recruit.piece,'king',label);
+  assert.equal(state.map[recruit.y][recruit.x],'.');
+  assert.ok(!state.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
+  return recruit;
+}
+
+test('floors one and two hold a king recruit while the final floor keeps its rook, queen or king',()=>{
   const finalTypes=new Set();
   for(let d=0;d<60;d++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
     const state=createCandidate(daily);
-    assert.equal(state.floor,0);assert.deepEqual(recruitsOn(state),[],`${daily.date}: floor 1`);
+    assert.equal(state.floor,0);kingRecruit(state,`${daily.date}: floor 1`);
     assert.equal(state.companion,null);
     assert.equal(validateCandidate(state,state.date,daily),true);
     assert.deepEqual(createCandidate(daily).items,state.items);
     const second=descend(state);
-    assert.equal(second.floor,1);assert.deepEqual(recruitsOn(second),[],`${daily.date}: floor 2`);assert.equal(second.companion,null);
+    assert.equal(second.floor,1);kingRecruit(second,`${daily.date}: floor 2`);assert.equal(second.companion,null);
     const last=descend(second);
     assert.equal(last.floor,2);
     const [recruit,...extra]=recruitsOn(last);
@@ -49,22 +58,30 @@ test('floors one and two hold no recruit while the final floor keeps its rook, q
   assert.deepEqual([...finalTypes].sort(),['king','queen','rook']);
   for(const date of ['2026-11-12','2026-11-13']) {
     const daily=getDaily(date), state=createGame(daily);
-    assert.deepEqual(recruitsOn(state),[]);
+    kingRecruit(state,date);
     assert.equal(validateSave(state,date),true);
     assert.deepEqual(createGame(daily).items,state.items);
   }
 });
 
 test('saves from before the change keep their floor-one recruit, on the board or recruited',()=>{
-  const daily=getDaily('2026-11-13');const state=createGame(daily);
-  // The validator accepts exactly the recruit the old rules placed, and nothing else.
+  const daily=getDaily('2026-11-13');const fresh=createGame(daily);
+  const state=structuredClone(fresh);state.items=state.items.filter((item)=>item.type!=='companion');
+  state.floorSnapshot.items=state.floorSnapshot.items.filter((item)=>item.type!=='companion');
+  // Saves from the brief era with no recruit on floors one and two still validate.
+  assert.equal(validateSave(state,state.date),true);
+  // The validator accepts exactly the recruit the old rules placed (or today's
+  // king on that square), and nothing else.
+  const king=fresh.items.find((item)=>item.type==='companion');
   const accepted=[];
   for(const piece of PIECES) for(let y=0;y<8;y++) for(let x=0;x<8;x++) {
     const old=structuredClone(state);old.items.push({type:'companion',piece,x,y});
     if(validateSave(old,old.date)) accepted.push(old);
   }
-  assert.equal(accepted.length,1);
-  const [old]=accepted;const pickup=old.items.find((item)=>item.type==='companion');
+  assert.ok(accepted.every((old)=>{const item=old.items.at(-1);return item.x===king.x&&item.y===king.y;}));
+  assert.ok(accepted.some((old)=>old.items.at(-1).piece==='king'));
+  assert.ok(accepted.length<=2);
+  const old=accepted.find((entry)=>entry.items.at(-1).piece!=='king')??accepted[0];const pickup=old.items.find((item)=>item.type==='companion');
   assert.ok(legalMoves(old).some((tile)=>tile.x===pickup.x&&tile.y===pickup.y));
   const recruited=act(old,move(pickup.x,pickup.y));
   assert.equal(recruited.companion.basePiece,pickup.piece);assert.deepEqual(recruitsOn(recruited),[]);
@@ -166,7 +183,7 @@ test('floor changes and exhausted lives clear the active companion',()=>{
   const state=scenario('queen');state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
   const cleared=act(state,move(4,2));const downstairs=act(cleared,{type:'descend'});
   assert.equal(downstairs.floor,1);assert.equal(downstairs.companion,null);
-  assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,0);
+  assert.deepEqual(downstairs.items.filter((item)=>item.type==='companion').map((item)=>item.piece),['king']);
   const doomed=scenario('king','white',4,5);doomed.companion=ally('pawn',0,7);
   doomed.enemies=[{...foe('attacker','rook',4,0),phase:'aim',target:{x:4,y:4},intent:[{x:4,y:4}]}];
   const reset=act(doomed,move(4,4));

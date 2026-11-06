@@ -40,8 +40,10 @@ test('all fallback floors have reachable stationary pickups for every piece, sid
       assert.equal(state.items.filter((item) => item.type === 'coin').length, last ? 0 : 3, `${identity}, floor ${state.floor}`);
       assert.ok(state.items.some((item) => item.type === 'powerup'));
       if (last) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${identity}: magnet on the last floor`);
-      // Only the last floor holds a recruit.
-      assert.equal(state.items.some((item) => item.type === 'companion'), last, `${identity}, floor ${state.floor}`);
+      // Every floor holds one recruit: a king on floors 1 and 2, a rook, queen or king on the last.
+      const recruits = state.items.filter((item) => item.type === 'companion').map((item) => item.piece);
+      assert.equal(recruits.length, 1, `${identity}, floor ${state.floor}`);
+      assert.ok((last ? ['rook', 'queen', 'king'] : ['king']).includes(recruits[0]), `${identity}, floor ${state.floor}: ${recruits[0]}`);
       visitedFloors.add(state.floor); floors++;
     };
     checkFloor();
