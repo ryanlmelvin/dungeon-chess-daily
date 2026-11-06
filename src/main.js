@@ -234,7 +234,7 @@ function renderLives() {
 function updateGame() {
   if (!state) return;
   if (state.awaitingPlayer) showMoves = true;
-  $('room-label').textContent = `Room ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
+  $('room-label').textContent = `Floor ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
   $('practice-label').hidden = !practice;
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
@@ -407,7 +407,7 @@ function showResult() {
   $('result-kicker').hidden=!runLabel();
   $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
-  $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured in room ${state.floor+1}. Tomorrow is another story.`:state.message;
+  $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured on floor ${state.floor+1}. Tomorrow is another story.`:state.message;
   if (state.status === 'lost') return showDeath();
   showResultActions(true);
   const shareable = isOfficialPiece(state, daily);

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
-import { drawSprite, SPRITE_SIZE, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
+import { drawSprite, SPRITE_SIZE, STONE_SIZE, paintStone, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
 
 const INK = '#17131d';
 const MINT = '#a5e2cc';
@@ -140,17 +140,23 @@ function goal(ctx) {
     ctx.moveTo(x + 23, 41); ctx.lineTo(x - 23, 87);
     ctx.stroke();
   }
-  // A complete matching target group reveals the same stair silhouette as play.
+  // A complete matching target group reveals the stairwell exactly as play draws it
+  // (renderer.js): a faint glow over a dark well on the exit's red stone, with four white steps.
   arrow(ctx, 196, 64, 254, 64, MINT, 12);
-  ctx.fillStyle = '#2f514b';
-  ctx.fillRect(284, 18, 96, 92);
-  ctx.fillStyle = INK;
-  ctx.fillRect(294, 28, 76, 72);
-  ctx.fillStyle = MINT;
-  for (let step = 0; step < 4; step++) {
-    const width = 26 + step * 12;
-    ctx.fillRect(332 - width / 2, 39 + step * 14, width, 5);
-  }
+  const size = STONE_SIZE * 4;
+  const left = 284;
+  const top = 16;
+  const stone = document.createElement('canvas');
+  stone.width = stone.height = STONE_SIZE;
+  paintStone(stone.getContext('2d'), true, 0);
+  ctx.drawImage(stone, left, top, size, size);
+  const mark = (cx, cy, width, height, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(left + (0.5 + cx - width / 2) * size), Math.round(top + (0.5 + cy - height / 2) * size), Math.round(width * size), Math.round(height * size));
+  };
+  mark(0, 0, 0.76, 0.84, '#0d0910');
+  mark(0, 0, 0.9, 0.9, 'rgba(195, 239, 220, 0.2)');
+  for (let i = 0; i < 4; i++) mark(0, -0.25 + i * 0.16, 0.25 + i * 0.1, 0.055, '#eee8e1');
 }
 
 function danger(ctx) {

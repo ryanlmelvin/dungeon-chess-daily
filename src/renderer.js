@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -28,30 +28,8 @@ function pixelTexture(rows, paletteOverride = {}) {
 
 function stoneTexture(red, variation) {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 24;
-  const context = canvas.getContext('2d');
-  context.fillStyle = red ? '#653942' : '#25212a';
-  context.fillRect(0, 0, 24, 24);
-  let seed = variation * 65537 + (red ? 911 : 173);
-  const random = () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  // Sparse chipped stone and hairline cracks keep the checkerboard legible.
-  for (let i = 0; i < 28; i++) {
-    context.fillStyle = red ? (i % 3 ? '#59323d' : '#74434b') : (i % 3 ? '#201c24' : '#302a35');
-    context.fillRect(Math.floor(random() * 24), Math.floor(random() * 24), 1 + Math.floor(random() * 3), 1);
-  }
-  context.fillStyle = red ? '#7c4a50' : '#39303a';
-  context.fillRect(1, 1, 22, 1);
-  context.fillRect(1, 2, 1, 20);
-  context.fillStyle = '#151018';
-  context.fillRect(0, 23, 24, 1);
-  if (variation % 3 === 0) {
-    context.fillRect(15, 15, 5, 1);
-    context.fillRect(15, 13, 1, 3);
-    context.fillRect(13, 12, 3, 1);
-  }
+  canvas.width = canvas.height = STONE_SIZE;
+  paintStone(canvas.getContext('2d'), red, variation);
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = texture.minFilter = THREE.NearestFilter;
   texture.colorSpace = THREE.SRGBColorSpace;

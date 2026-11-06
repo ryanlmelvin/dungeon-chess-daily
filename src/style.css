@@ -101,6 +101,7 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 .guide-lives dd{margin:2px 0 0;font-size:12px;color:var(--gold)}
 .guide-pickups{display:grid;gap:15px;margin:20px 0}
 .guide-pickups div{display:flex;align-items:center;gap:16px}
+.guide-pickups dt{flex:none}
 .guide-pickups dd{margin:0;font-size:12px;line-height:1.5}
 #guide-pagination{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);margin-top:18px;padding-top:14px}
 #guide-pagination button{min-height:44px}
