@@ -39,12 +39,12 @@ test('generated rooms offer one deterministic recruit and all six types appear',
   }
 });
 
-test('a white recruit moves after its player, captures for gold and the objective, then enemies respond',()=>{
+test('a white recruit moves after its player, captures the objective for no gold, then enemies respond',()=>{
   const state=scenario();state.items=[{type:'companion',piece:'rook',x:4,y:5}];state.enemies=[foe('target','king',4,2)];
   const next=act(state,move(4,5));
   assert.equal(next.player.piece,'king');assert.equal(next.startingPiece,'king');
   assert.deepEqual([next.companion.x,next.companion.y],[4,2]);
-  assert.equal(next.captures,1);assert.equal(next.gold,1);assert.equal(next.exit.open,true);assert.equal(next.turns,1);
+  assert.equal(next.captures,1);assert.equal(next.gold,0);assert.equal(next.exit.open,true);assert.equal(next.turns,1);
   const phases=['move','companion-recruit','companion-phase','companion-move','companion-capture','enemy-phase'].map((type)=>next.events.findIndex((event)=>event.type===type));
   assert.ok(phases.every((index,i)=>index>=0&&(!i||index>phases[i-1])));
   assert.deepEqual(act(state,move(4,5)),next,'companion choices replay deterministically');

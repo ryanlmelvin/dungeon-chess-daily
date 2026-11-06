@@ -311,7 +311,7 @@ export function createGame(daily = getRawDaily()) {
   const state = {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
-    turns: 0, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
+    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
@@ -355,9 +355,26 @@ function finishFloor(state) {
   }
 }
 
+// Each floor's challenge pieces are mandatory, so only the optional residents pay out.
+function bonusResidents(state, floor) {
+  return [state.species[3 + floor * 2], state.species[4 + floor * 2]].filter((species) => species?.piece !== state.targets[floor]).length;
+}
+function bonusCaptures(state) {
+  const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - (PIECE_COUNTS[state.targets[record.floor]] + 2 - bonusResidents(state, record.floor)), 0);
+  const remaining = state.enemies.filter((foe) => (foe.role ?? foe.piece) !== state.targets[state.floor]).length;
+  return earlier + bonusResidents(state, state.floor) - remaining;
+}
+
+function spentGold(state) {
+  const orders = state.companionOrders ?? [];
+  return orders.reduce((sum, entry) => sum + COMPANIONS.find((recruit) => recruit.piece === entry.piece).cost, 0)
+    + state.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0);
+}
+
 function captureEnemy(state, captured, companion = false) {
   state.enemies = state.enemies.filter((foe) => foe.id !== captured.id);
-  state.captures++; state.gold++;
+  state.captures++;
+  if ((captured.role ?? captured.piece) !== state.objective.piece) { state.gold++; state.paidCaptures++; }
   state.events.push({ type: companion ? 'companion-capture' : 'capture', id: captured.id, x: captured.x, y: captured.y });
   if ((captured.role ?? captured.piece) === state.objective.piece) {
     state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
@@ -404,6 +421,8 @@ function grantPower(state, id) {
 function nextState(previous) {
   const state = structuredClone(previous);
   state.companionOrders ??= [];
+  // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
+  state.paidCaptures ??= state.gold - state.treasure + spentGold(state);
   // Older saves only recorded exhaustion in the last action's events.
   if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
@@ -530,7 +549,13 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const orders = value.companionOrders === undefined ? [] : value.companionOrders;
     if (!Array.isArray(orders) || orders.length > 2 || !orders.every((entry, index) => entry && Object.keys(entry).length === 2 && integer(entry.floor, 1, 2) && entry.floor <= value.floor + 1 && COMPANIONS.some((recruit) => recruit.piece === entry.piece) && (!index || orders[index - 1].floor < entry.floor))) return false;
     const companionCost = orders.reduce((sum, entry) => sum + COMPANIONS.find((recruit) => recruit.piece === entry.piece).cost, 0);
-    if (value.gold !== value.treasure + value.captures - companionCost - value.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0)) return false;
+    const spent = companionCost + value.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0);
+    if (!Array.isArray(value.records) || !Array.isArray(value.enemies) || !Array.isArray(value.species)) return false;
+    // Gold comes from coins and optional captures. Runs through the 2026-11-06 edition began
+    // under the old rule that paid every capture, so they may hold up to one gold per capture.
+    const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent : value.paidCaptures;
+    const bonus = bonusCaptures(value);
+    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid - spent) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
     // Layout depends only on the edition and original piece, never on promotion.
     setFloor(template);

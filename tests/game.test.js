@@ -442,3 +442,51 @@ test('restarting a floor returns to its arrival state without costing a life or 
   assert.equal(validateSave(legacy, daily.date), true);
   assert.equal(resetFloor(legacy), legacy);
 });
+
+test('only optional residents pay gold; challenge pieces pay nothing and the ledger rejects forged gold', () => {
+  const state = scenario('rook'); state.objective = {piece:'king',complete:false};
+  state.enemies = [monster('bonus','knight',4,5), monster('other','king',0,0)];
+  const bonus = act(state, move(4,5));
+  assert.equal(bonus.captures, 1); assert.equal(bonus.gold, 1); assert.equal(bonus.paidCaptures, 1); assert.match(bonus.message, /\+1 gold/);
+  const challenge = scenario('rook'); challenge.objective = {piece:'king',complete:false};
+  challenge.enemies = [monster('target','king',4,5), monster('other','king',0,0)];
+  const target = act(challenge, move(4,5));
+  assert.equal(target.captures, 1); assert.equal(target.gold, 0); assert.equal(target.paidCaptures, 0); assert.doesNotMatch(target.message, /gold/);
+});
+
+test('certified routes keep a valid ledger where only coins and optional captures add gold', () => {
+  const daily = getDaily('2026-11-10');
+  let state = createGame(daily);
+  for (const action of daily.generation.certificate.actions) {
+    state = act(state, action);
+    assert.ok(state.paidCaptures <= 2 * (state.floor + 1));
+    assert.equal(validateSave(state, state.date), true);
+    if (state.gold > 0) {
+      const forged = structuredClone(state); forged.gold++;
+      assert.equal(validateSave(forged, forged.date), false, 'one extra gold must not validate');
+    }
+  }
+  assert.equal(state.status, 'won');
+  assert.ok(state.gold < state.treasure + state.captures, 'challenge captures must not have paid out');
+});
+
+test('an in-progress save from the old every-capture rule keeps its gold and stays valid under the new rule', () => {
+  const daily = getDaily('2026-11-06');
+  let state = createGame(daily);
+  const actions = daily.generation.certificate.actions;
+  const firstStairs = actions.findIndex((action) => action.type === 'descend');
+  for (const action of actions.slice(0, firstStairs)) state = act(state, action);
+  const legacy = structuredClone(state); delete legacy.paidCaptures; legacy.gold = legacy.treasure + legacy.captures;
+  assert.equal(validateSave(legacy, legacy.date), true);
+  let resumed = legacy;
+  for (const action of actions.slice(firstStairs)) {
+    resumed = act(resumed, action);
+    assert.equal(validateSave(resumed, resumed.date), true);
+  }
+  let current = state;
+  for (const action of actions.slice(firstStairs)) current = act(current, action);
+  assert.equal(resumed.status, 'won');
+  assert.equal(resumed.gold - current.gold, legacy.gold - state.gold, 'old-rule gold is kept; later challenge captures add none');
+  const late = createGame(getDaily('2026-11-07')); late.gold = 1; late.captures = 0;
+  assert.equal(validateSave(late, late.date), false);
+});

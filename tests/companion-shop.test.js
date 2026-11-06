@@ -13,6 +13,9 @@ for(const action of daily.generation.certificate.actions) {
   earned=act(earned,action);
 }
 assert.equal(earned.exit.open,true);
+// Price tests need every companion affordable. Saves from before optional-only capture
+// gold banked every capture, and that legacy ledger stays valid.
+earned.paidCaptures=earned.captures;earned.gold=earned.treasure+earned.captures;
 assert.ok(earned.gold>=8);
 assert.equal(validateSave(earned,earned.date),true);
 const bank=()=>structuredClone(earned);

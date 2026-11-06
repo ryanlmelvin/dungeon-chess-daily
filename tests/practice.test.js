@@ -15,7 +15,9 @@ const layout = (state) => ({
 // descent without trying to solve an intentionally uncertified variant.
 function nextFloor(previous) {
   const state = structuredClone(previous);
-  state.captures += state.enemies.length; state.gold += state.enemies.length;
+  // Only optional residents pay gold; the challenge pieces pay nothing.
+  const optional = state.enemies.filter((foe) => foe.role !== state.objective.piece).length;
+  state.captures += state.enemies.length; state.gold += optional; state.paidCaptures += optional;
   state.enemies = []; state.objective.complete = true; state.exit.open = true;
   state.turns++;
   return act(state, { type: 'descend' });
