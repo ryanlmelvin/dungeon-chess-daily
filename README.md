@@ -51,7 +51,7 @@ The build fingerprints shipped content and generates an integrity-verified offli
 
 ## Generation and fairness
 
-Generation uses fixed structural constraints, at most two deterministic candidate searches, and a replay-verified fallback bank. It never runs an open-ended repair loop or treats an unfinished search as proof. The search uses fixed work budgets, so different device speeds cannot change the daily edition. Difficulty presets vary obstacle density and measured attack-lane exposure separately from the no-powerup victory requirement.
+Generation uses fixed structural constraints, at most two deterministic candidate searches, and a replay-verified fallback bank. It never runs an open-ended repair loop or treats an unfinished search as proof. The search uses fixed work budgets, so different device speeds cannot change the daily edition. Every stationary pickup also passes a piece-specific terrain reachability check on every floor, including bishop color restrictions and pawn promotion; knights may revisit squares. Difficulty presets vary obstacle density and measured attack-lane exposure separately from the no-powerup victory requirement.
 
 Run `npm run verify:fallbacks` to replay all 36 piece/color/difficulty combinations, or `npm run audit:dungeons -- 2026-11-05 365 standard` to audit a year of daily editions. [Generation and fairness](docs/generation.md) explains the guarantee, difficulty metrics, and versioning requirements. The presets are tuning tools, not proven rankings of human difficulty.
 

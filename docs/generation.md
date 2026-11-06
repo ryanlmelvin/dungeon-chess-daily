@@ -36,8 +36,13 @@ obstacle position once. The rules preserve the exact chess-army count of the
 assigned target, cap other roles, prevent overlapping units/items/obstacles,
 reserve the entrance and exit, maintain the player's movement connectivity,
 place opposing bishop targets on the player's bishop color, and preserve pawn
-promotion files. Enemy movement also keeps an unpromoted player's forward file
-open. These rules reduce the search space; they do not replace combat replay.
+promotion files. Every stationary pickup (coins, relics, and recruitable pieces)
+also passes a movement-graph reachability check on every floor. Bishop pickups
+must lie on the bishop's starting color and be connected through its diagonals;
+knight pickups must be connected through legal jumps. Pawn graph states advance
+and promote to queen before exploring the remaining squares. Revisiting squares
+is allowed, so this is a reachability problem, not a knight's-tour problem. Enemy movement also keeps an unpromoted player's forward file
+open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 60-move route. These rules reduce the search space; they do not replace combat replay.
 
 There is no mutate-until-it-passes loop. Each edition gets at most two candidates
 and 12,000 simulated transitions per candidate, then one certified fallback.

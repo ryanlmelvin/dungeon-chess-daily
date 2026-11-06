@@ -66,6 +66,30 @@ export function legalMoves(state) {
   return movesFor(state, state.player);
 }
 
+/**
+ * Static pickup accessibility using the real movement rules and walls. Enemies
+ * are excluded here: combat feasibility is checked separately by route replay.
+ * Pawn states retain first-move eligibility and become queens on the far rank.
+ * Reachability permits revisits; a Hamiltonian (knight's) tour is unnecessary.
+ */
+export function unreachablePickups(state) {
+  const board = { ...state, enemies: [], companion: null };
+  const queue = [{ ...state.player }];
+  const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}`;
+  const visited = new Set([key(queue[0])]);
+  const squares = new Set([`${state.player.x},${state.player.y}`]);
+  for (let index = 0; index < queue.length; index++) {
+    for (const tile of movesFor(board, queue[index])) {
+      const unit = { ...queue[index], x: tile.x, y: tile.y, moved: true };
+      if (unit.piece === 'pawn' && unit.y === 0) unit.piece = 'queen';
+      const id = key(unit);
+      squares.add(`${unit.x},${unit.y}`);
+      if (!visited.has(id)) { visited.add(id); queue.push(unit); }
+    }
+  }
+  return state.items.filter((item) => !squares.has(`${item.x},${item.y}`));
+}
+
 /** Entire committed attack lanes; jump/step captures warn on their destination. */
 export function dangerTiles(state) {
   const cells = new Map();

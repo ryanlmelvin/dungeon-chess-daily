@@ -1,6 +1,6 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-import { act, legalMoves, dangerTiles } from './rules.js';
+import { act, legalMoves, dangerTiles, unreachablePickups } from './rules.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const hasPowers = (state) => Object.values(state.powers).some((value) => value !== 0)
@@ -80,6 +80,7 @@ export function verifyWinningRoute(initial, actions) {
     || initial.records.length !== 0 || hasPowers(initial) || initial.purchases.length !== 0) {
     return { valid: false, reason: 'The certificate must start from a fresh, unpowered dungeon.' };
   }
+  if (unreachablePickups(initial).length) return { valid: false, reason: 'A pickup is unreachable with this floor’s piece and terrain.' };
   // An enemy-first turn can invalidate its initiating click and require a
   // second destination. Those board-changing actions spend no chess move.
   if (!Array.isArray(actions) || actions.length > initial.maxTurns * 2 + 3) {
@@ -120,6 +121,9 @@ export function verifyWinningRoute(initial, actions) {
     }
     const next = safeTransition(state, action);
     if (!next) return { valid: false, reason: 'The route loses a life, uses a power, misses the deadline, or takes invalid stairs.' };
+    if (next.floor !== state.floor && unreachablePickups(next).length) {
+      return { valid: false, reason: 'A later floor has an unreachable pickup.' };
+    }
     if (next.events.some((event) => event.type === 'move') && !next.events.some((event) => event.type === 'capture')) metrics.positioningMoves++;
     if (next.events.some((event) => event.type === 'promotion')) metrics.promotion = true;
     state = next;
@@ -141,7 +145,7 @@ export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
     throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
   }
-  if (!initial || initial.status !== 'playing' || hasPowers(initial)) return { status: 'unknown', explored: 0 };
+  if (!initial || initial.status !== 'playing' || hasPowers(initial) || unreachablePickups(initial).length) return { status: 'unknown', explored: 0 };
   let explored = 0;
   const root = { state: initial, parent: null, action: null };
   const expand = (node) => {
