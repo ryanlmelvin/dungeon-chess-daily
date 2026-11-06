@@ -23,9 +23,9 @@ function mapWithOpenSquares(squares) {
 
 // This is terrain reachability with the actual chess movement graph. Combat
 // survivability is checked independently by replaying the full winning route.
-test('all fallback floors have reachable stationary pickups for every piece, side and difficulty', () => {
+test('all fallback floors have reachable stationary pickups for every piece and difficulty', () => {
   let floors = 0;
-  assert.equal(Object.keys(FALLBACKS).length, 30);
+  assert.equal(Object.keys(FALLBACKS).length, 15);
   for (const [identity, fallback] of Object.entries(FALLBACKS)) {
     const [difficulty, piece, color] = identity.split(':');
     const daily = generateDaily(fallback.date, { difficulty, maxAttempts: 0 });
@@ -56,7 +56,7 @@ test('all fallback floors have reachable stationary pickups for every piece, sid
     assert.equal(state.status, 'won');
     assert.deepEqual([...visitedFloors], [0, 1, 2]);
   }
-  assert.equal(floors, 90);
+  assert.equal(floors, 45);
 });
 
 test('a bishop cannot reach coins, relics or recruits on the opposite square color', () => {

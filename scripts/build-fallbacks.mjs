@@ -8,7 +8,8 @@ import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { PLAYABLE_PIECES as PIECES } from '../src/pieces.js';
 import { DIFFICULTY_PROFILES as profiles } from '../src/difficulty.js';
 
-const colors = ['white', 'black'];
+// Every daily is white (src/edition.js), so only white needs a fallback.
+const colors = ['white'];
 const stateFor = (entry, difficulty) => createGame({
   ...getRawDaily(entry.date), dungeonSeed: entry.dungeonSeed,
   obstacleBase: profiles[difficulty].obstacleBase, difficulty,

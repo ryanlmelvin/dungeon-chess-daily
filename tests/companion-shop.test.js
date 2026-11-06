@@ -73,7 +73,7 @@ test('unaffordable, final-floor, finished-run and unknown purchases stay inert',
   for(const status of ['won','lost']) {const done={...bank(),status};assert.equal(buy(done,'pawn'),done);}
   const last={...bank(),floor:2};assert.equal(buy(last,'pawn'),last);
   const state=bank();assert.equal(buy(state,'dragon'),state);
-  const raw=getRawDaily('2026-12-12');let pending=createCandidate(raw);pending=act(pending,move(4,5));
+  const raw={...getRawDaily('2026-12-12'),playerColor:'black'};let pending=createCandidate(raw);pending=act(pending,move(4,5));
   assert.equal(pending.awaitingPlayer,true);
   pending.gold=5;assert.equal(buy(pending,'rook'),pending);
 });

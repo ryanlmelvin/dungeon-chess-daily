@@ -9,8 +9,9 @@ function scenario(piece='king',color='white',x=4,y=6) {
   let daily;
   // Kings are no longer a daily piece; engine tests borrow a rook day.
   const wanted=piece==='king'?'rook':piece;
-  for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor===color){daily=candidate;break;}}
-  const state=createGame(daily);Object.assign(state.player,{x,y});
+  for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor==='white'){daily=candidate;break;}}
+  // Every daily is white; black engine tests flip the color, as practice does.
+  const state=createGame(daily);state.playerColor=color;Object.assign(state.player,{x,y});
   if(piece==='king'){state.startingPiece="king";state.player.piece="king";state.player.hp=state.player.maxHp=1;}
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
   // Knights are the challenge here, so the kings and queens below are fair game for a recruit.

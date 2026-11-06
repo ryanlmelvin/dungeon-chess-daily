@@ -130,6 +130,11 @@ const HINTS = {
   king: 'A coronation with no witnesses, a throne with no receipt. The former mayor has gone into hiding.',
 };
 
+// The daily piece is always white: moving second made 1 in 5 black days
+// uncertifiable. Black stays a practice choice. The color never fed any other
+// draw, so every edition keeps its layout.
+const DAILY_COLOR = 'white';
+
 export function getRawDaily(date = new Date()) {
   const value = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date(date).toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw new TypeError('Invalid daily date.');
@@ -149,7 +154,7 @@ export function getRawDaily(date = new Date()) {
     return { id, name: `${palette[0].toUpperCase() + palette.slice(1)} ${baseName.toLowerCase()}`, baseName, plural, palette, piece: allowed.splice(Math.floor(rng() * allowed.length), 1)[0] };
   });
   return {
-    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: ((hash(`${value}:color`) >>> 8) & 1) ? 'black' : 'white', species, targets,
+    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: DAILY_COLOR, species, targets,
     theme: buildTheme(species),
   };
 }

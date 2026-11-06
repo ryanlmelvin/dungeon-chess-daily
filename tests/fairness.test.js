@@ -8,11 +8,13 @@ import { DIFFICULTY_PROFILES, generateDaily, getDaily, GENERATOR_VERSION } from 
 
 const move = (x, y) => ({ type: 'move', x, y });
 const dates = new Map();
-for (let day = 0; dates.size < PIECES.length * 2 && day < 1000; day++) {
+// Every daily is white; black is a practice choice.
+for (let day = 0; dates.size < PIECES.length && day < 1000; day++) {
   const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
+  assert.equal(daily.playerColor, 'white');
   dates.set(`${daily.playerPiece}:${daily.playerColor}`, daily.date);
 }
-assert.equal(dates.size, PIECES.length * 2, 'fixtures cover every piece and both turn orders');
+assert.equal(dates.size, PIECES.length, 'fixtures cover every piece');
 
 function monster(id, piece, x, y, target = null) {
   return {
@@ -23,7 +25,9 @@ function monster(id, piece, x, y, target = null) {
 }
 function scenario(piece = 'rook', color = 'white') {
   // Kings are no longer a daily piece; engine tests borrow a rook day.
-  const state = piece === 'king' ? createGame({ ...getRawDaily(dates.get(`rook:${color}`)), playerPiece: 'king' }) : createGame(getRawDaily(dates.get(`${piece}:${color}`)));
+  // Black borrows a white day, as practice does.
+  const raw = getRawDaily(dates.get(`${piece === 'king' ? 'rook' : piece}:white`));
+  const state = createGame({ ...raw, playerPiece: piece, playerColor: color });
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = [];
   state.objective = { piece: 'king', complete: false };
   return state;
@@ -66,7 +70,7 @@ function replay(daily) {
   return { initial, state, promoted, revertedPromotion };
 }
 
-test('forced fallbacks certify every piece, turn order and difficulty with the production rules', () => {
+test('forced fallbacks certify every piece and difficulty with the production rules', () => {
   for (const [difficulty, profile] of Object.entries(DIFFICULTY_PROFILES)) {
     for (const [identity, date] of dates) {
       const daily = generateDaily(date, { difficulty, maxAttempts: 0 });
@@ -87,7 +91,7 @@ test('forced fallbacks certify every piece, turn order and difficulty with the p
 });
 
 test('the full certificate permits promotion and the promoted pawn reverts between rooms', () => {
-  for (const color of ['white', 'black']) {
+  for (const color of ['white']) {
     const daily = generateDaily(dates.get(`pawn:${color}`), { maxAttempts: 0 });
     const result = replay(daily);
     assert.equal(result.promoted, true);
@@ -134,7 +138,8 @@ test('active companions and companion pickups cannot support a no-powerup certif
 });
 
 test('certified saves reject edited turn order, legacy mode and earlier rules versions', () => {
-  const daily = getRawDaily(dates.get('rook:black'));
+  // A black edition, as practice builds one from a white day.
+  const daily = { ...getRawDaily(dates.get('rook:white')), playerColor: 'black' };
   const initial = createGame(daily);
   assert.equal(validateSave(initial, daily.date, daily), true);
   for (const mutate of [

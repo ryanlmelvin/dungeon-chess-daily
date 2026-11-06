@@ -82,7 +82,7 @@ searching the entire game tree for every proposed decoration.
 
 ## Generation and certification
 
-1. The UTC date selects the piece, color, species, target roles, and first layout.
+1. The UTC date selects the piece, species, target roles, and first layout. The piece is always white.
 2. A bounded two-ply rollout and beam search try to find a complete route. Search
    uses fixed transition counts and stable ordering, never a wall-clock timeout.
 3. An independent replay of the returned action list calls the same `act()` used
@@ -95,7 +95,7 @@ searching the entire game tree for every proposed decoration.
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
 
-The fallback bank covers all 30 combinations of five playable pieces, two colors, and three
+The fallback bank covers all 15 combinations of five playable pieces (always white) and three
 profiles. A broken or missing fallback fails closed with an error; it never
 releases an unverified dungeon. The test suite and build check the entire bank.
 Search and verification share `src/rules.js` with live gameplay, avoiding a second
