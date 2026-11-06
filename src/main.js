@@ -501,24 +501,34 @@ $('reset-floor-button').addEventListener('click', () => {
 $('reset-day-button').addEventListener('click', () => {
   if (!state) return;
   // A run begun before the UTC rollover still holds yesterday's edition; "today's"
-  // must not quietly mean that one, so offer the new edition first.
+  // must not quietly mean that one, so let the player pick which to start.
   if (!archiveMode) {
     const current = getDaily();
     if (current.date !== daily.date) {
-      if (confirm(`A new edition (No. ${String(current.edition).padStart(3, '0')}) is out since this run began. Open today’s new dungeon?\n\nCancel to restart the ${formatShortDate(daily.date)} dungeon instead.`)) {
-        $('menu-dialog').close();
-        openEdition(current.date);
-        return;
-      }
-      if (!confirm(`Restart the ${formatShortDate(daily.date)} ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
-      const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
-      startOver(next, `The ${formatShortDate(daily.date)} dungeon restarted from floor 1.`);
+      const day = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      rolloverDates = { current: daily.date, next: current.date };
+      $('rollover-text').textContent = `This run is from ${formatShortDate(daily.date)}. Edition No. ${String(current.edition).padStart(3, '0')} came out since it began. Restarting discards this run; today’s edition leaves it saved in the archive.`;
+      $('rollover-new').textContent = `Start today’s · ${day(current.date)}`;
+      $('rollover-current').textContent = `Restart ${practice ? 'practice · ' : ''}${day(daily.date)}`;
+      $('rollover-dialog').showModal();
+      $('rollover-new').focus();
       return;
     }
   }
   if (!confirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
   const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
   startOver(next, `${archiveMode ? 'This' : 'Today’s'} dungeon restarted from floor 1.`);
+});
+let rolloverDates = null;
+$('rollover-new').addEventListener('click', () => {
+  $('rollover-dialog').close();
+  if (rolloverDates) openEdition(rolloverDates.next);
+});
+$('rollover-current').addEventListener('click', () => {
+  $('rollover-dialog').close();
+  if (!state || rolloverDates?.current !== daily.date) return;
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
+  startOver(next, `The ${formatShortDate(daily.date)} dungeon restarted from floor 1.`);
 });
 $('result-paper-button').addEventListener('click',()=>{
   if(!archiveMode){
