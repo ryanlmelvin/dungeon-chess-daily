@@ -312,6 +312,7 @@ function openHint() {
   frame(start);
 }
 $('hint-button').addEventListener('click', openHint);
+$('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
 function takeAction(action) {
@@ -337,6 +338,7 @@ window.addEventListener('keydown',event=>{
   const name=event.key.length===1?event.key.toLowerCase():event.key;
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
   else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else takeAction({type:'move',...cursor});}
+  else if(name===' '||name==='.'){event.preventDefault();takeAction({type:'wait'});}
   else if(name==='Escape'){showMoves=false;cursor=null;paintBoard();}
 });
 function renderShop() {

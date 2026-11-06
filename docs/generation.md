@@ -11,16 +11,24 @@ personalized difficulty, device-dependent seed, or server dependency.
 Every returned edition has an explicit sequence of legal actions that:
 
 - Completes all three capture objectives and takes the final stairs within 60 moves.
-- Uses the actual obstacles, enemy movement, attack warnings, piece color, turn
-  order, promotion rules, and automatic pickups from the production engine.
-- Collects or purchases no powerups and recruits no companion.
-- Loses no lives, uses no shield or freeze, and never restarts.
+- Uses the actual obstacles, enemy movement, attack warnings, close-range
+  captures, piece color, turn order, promotion rules, and automatic pickups from
+  the production engine.
+- Collects or purchases no powerups and recruits no companion, except the final
+  floor's own recruit.
+- Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
+  shield or freeze, and never restarts.
 
 Pawn promotion is an ordinary chess rule and is permitted. The proof carries the
 promoted piece, turn count, and all other state through the entire run; three
 separate room proofs would not be sufficient. Black's enemy phase can invalidate
 a clicked destination, so a certificate can include a re-selection that costs no
-player move. Extraction also costs no move.
+player move. Extraction also costs no move. Waiting is an ordinary action that
+spends a move; certificates may wait so monsters walk into range. Under
+close-range captures a pawn can only strike from a square next to its target,
+which most targets attack, so pawn routes depend on waiting and on spending
+lives: in a one-year audit, waiting cut pawn days that needed a fallback from
+63 of 75 to 12.
 
 After a daily win with the official piece, `src/bot.js` replays this same
 certificate through `act()` to show the player the bot's per-floor move counts

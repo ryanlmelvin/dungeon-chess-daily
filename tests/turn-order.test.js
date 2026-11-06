@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { act, createGame, getDaily, legalMoves, validateSave } from '../src/game.js';
 import { getRawDaily } from '../src/edition.js';
-import { createGame as createCandidate, validateSave as validateCandidate } from '../src/rules.js';
+import { closeAttacker, createGame as createCandidate, validateSave as validateCandidate } from '../src/rules.js';
 
 const move = (x,y) => ({type:'move',x,y});
+// The first legal move that no monster captures at close range.
+const safeMove = (state) => ({type:'move',...legalMoves(state).find((tile)=>!closeAttacker(state,tile))});
 function dailyFor(piece,color) {
   for(let day=0;day<365;day++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
@@ -60,10 +62,14 @@ test('white captures before enemy movement; black enemies can leave the selected
   assert.equal(captured.captures,1);
   assert.ok(captured.events.findIndex((event)=>event.type==='capture')<captured.events.findIndex((event)=>event.type==='enemy-phase'));
   const black=scenario('knight'); black.enemies=[monster('target','king',3,4)];
+  // The king steps off the clicked square but stays beside it, guarding it at
+  // close range, so the player chooses again instead of walking into a capture.
   const vacated=act(black,move(3,4));
   assert.equal(vacated.captures,0); assert.equal(vacated.enemies.length,1);
-  assert.deepEqual([vacated.player.x,vacated.player.y],[3,4]);
-  assert.ok(vacated.events.findIndex((event)=>event.type==='enemy-move')<vacated.events.findIndex((event)=>event.type==='move'));
+  assert.ok(vacated.events.some((event)=>event.type==='enemy-move'));
+  assert.equal(vacated.awaitingPlayer,true); assert.equal(vacated.turns,0);
+  assert.deepEqual([vacated.player.x,vacated.player.y],[4,6]);
+  assert.match(vacated.message,/Choose another move/);
 });
 
 test('black animates a monster moving onto a destination before the player captures it',()=>{
@@ -96,7 +102,7 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   assert.equal(pending.awaitingPlayer,true);
   assert.equal(validateSave(pending,pending.date),true);
   const saved=JSON.parse(JSON.stringify(pending));
-  const reply=act(saved,{type:'move',...legalMoves(saved)[0]});
+  const reply=act(saved,safeMove(saved));
   assert.equal(reply.turns,1); assert.equal(reply.awaitingPlayer,false);
   assert.equal(validateSave(reply,reply.date),true);
   assert.ok(!reply.events.some((event)=>event.type==='enemy-phase'));
@@ -104,7 +110,7 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   const lastPending=act(beforeDeadline,move(4,3));
   assert.equal(lastPending.turns,59); assert.equal(lastPending.status,'playing');
   assert.equal(validateSave(lastPending,lastPending.date),true);
-  const timedOut=act(lastPending,{type:'move',...legalMoves(lastPending)[0]});
+  const timedOut=act(lastPending,safeMove(lastPending));
   assert.equal(timedOut.turns,60); assert.equal(timedOut.status,'playing');
   assert.equal(timedOut.awaitingPlayer,false);
   const shopping=scenario(); shopping.enemies=[monster('blocker','king',4,4)]; shopping.gold=2;

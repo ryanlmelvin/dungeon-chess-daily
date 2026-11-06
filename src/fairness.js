@@ -1,5 +1,6 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
+import { PIECE_LIVES } from './pieces.js';
 import { act, legalMoves, dangerTiles, unreachablePickups, royalRules } from './rules.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
@@ -50,13 +51,15 @@ function score(state) {
   const nearest = targets.length ? Math.min(...targets.map((target) => targetDistance(state, target))) : 0;
   return state.floor * 2000 + (state.exit.open ? 1600 : 0) + state.captures * 35
     - nearest * 8 - state.turns * 0.7
+    - (PIECE_LIVES[state.startingPiece] - state.player.hp) * 150
     + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? 50 : 0)
     + (state.player.piece === 'pawn' ? (6 - state.player.y) * 6 : 0)
     + (allyFloor(state) && state.companion ? 40 : 0);
 }
 
 function actionsFor(state) {
-  const actions = state.exit.open ? [{ type: 'descend' }] : [];
+  // Waiting lets monsters come to the player; never useful once the stairs are open.
+  const actions = state.exit.open ? [{ type: 'descend' }] : [{ type: 'wait' }];
   for (const tile of legalMoves(state)) {
     // Relics and companions activate automatically. Avoiding their pickups
     // makes this an exact playable route without special solver-only rules.
@@ -65,10 +68,25 @@ function actionsFor(state) {
   return actions;
 }
 
-function safeTransition(state, action) {
+// Lives a proof route may spend: pawn days start with extra lives, so their
+// certified route may lose up to 4; every other piece's route loses none.
+export const livesSpendable = (state) => (state.startingPiece === 'pawn' ? 4 : 0);
+
+export function safeTransition(state, action) {
   const next = act(state, action);
   return next !== state && next.status !== 'lost' && !hurt(next) && !powered(next)
     && next.player.hp === state.player.hp ? next : null;
+}
+
+// Like safeTransition, but damage is allowed while hp stays at or above the
+// day's spendable-lives floor. Restarts, losses, powers and shields still reject.
+export function routeTransition(state, action) {
+  const next = act(state, action);
+  if (next === state || next.status === 'lost' || powered(next)) return null;
+  if (next.events.some((event) => event.type === 'restart' || event.type === 'shield')) return null;
+  if (next.player.hp < PIECE_LIVES[state.startingPiece] - livesSpendable(state)) return null;
+  if (next.player.hp > state.player.hp) return null;
+  return next;
 }
 
 function routeFor(node) {
@@ -80,7 +98,8 @@ function routeFor(node) {
 /**
  * Replay a positive certificate through the production engine, without changing
  * its map, residents, pickups, AI, or rules. A valid proof wins all three rooms
- * within the move budget, with no bought/collected powers or lost lives, and no
+ * within the move budget, with no bought/collected powers, no lost lives (pawn
+ * routes may lose up to 4), and no
  * ally except the king floor's own recruit.
  * Metrics describe this witnessed route; they are not shortest-path bounds or
  * claims that its tactical decisions are unavoidable on every winning route.
@@ -99,11 +118,11 @@ export function verifyWinningRoute(initial, actions) {
   let state = initial;
   const metrics = {
     turns: 0, actions: actions.length, threatenedDecisions: 0, unsafeAlternatives: 0, legalAlternatives: 0,
-    narrowEscapes: 0, positioningMoves: 0, captureOpportunities: 0, promotion: false,
+    narrowEscapes: 0, positioningMoves: 0, captureOpportunities: 0, promotion: false, livesLost: 0,
   };
   for (const action of actions) {
-    if (!action || !['move', 'descend'].includes(action.type)) {
-      return { valid: false, reason: 'Only chess moves and stairs are allowed.' };
+    if (!action || !['move', 'descend', 'wait'].includes(action.type)) {
+      return { valid: false, reason: 'Only chess moves, waiting and stairs are allowed.' };
     }
     if (action.type === 'move') {
       const alternatives = legalMoves(state);
@@ -129,8 +148,8 @@ export function verifyWinningRoute(initial, actions) {
       if (unsafe && safeCount === 1) metrics.narrowEscapes++;
       if (captureAvailable) metrics.captureOpportunities++;
     }
-    const next = safeTransition(state, action);
-    if (!next) return { valid: false, reason: 'The route loses a life, uses a power, takes invalid stairs.' };
+    const next = routeTransition(state, action);
+    if (!next) return { valid: false, reason: 'The route loses too many lives, uses a power, takes invalid stairs.' };
     if (next.floor !== state.floor && unreachablePickups(next).length) {
       return { valid: false, reason: 'A later floor has an unreachable pickup.' };
     }
@@ -142,6 +161,7 @@ export function verifyWinningRoute(initial, actions) {
     return { valid: false, reason: 'The route does not complete all three rooms within the move budget.' };
   }
   metrics.turns = state.turns;
+  metrics.livesLost = initial.player.hp - state.player.hp;
   return { valid: true, state, metrics };
 }
 
@@ -163,7 +183,7 @@ export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 
     for (const action of actionsFor(node.state)) {
       if (explored >= maxExpansions) break;
       explored++;
-      const state = safeTransition(node.state, action);
+      const state = routeTransition(node.state, action);
       if (state) result.push({ state, parent: node, action });
     }
     return result;

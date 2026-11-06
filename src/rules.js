@@ -68,10 +68,23 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
   return moves;
 }
 
-/** The player's legal chess destinations. A pawn captures only diagonally. */
+/** The player's legal chess destinations. A pawn captures only diagonally. A king may not step into close range. */
 export function legalMoves(state) {
   if (!state || state.status !== 'playing') return [];
-  return movesFor(state, state.player);
+  const moves = movesFor(state, state.player);
+  return state.player.piece === 'king' ? moves.filter((move) => !closeAttacker(state, move)) : moves;
+}
+
+/**
+ * The first monster that would capture the player at once on `square`: one
+ * adjacent to it, or a knight. Distant sliders still give a turn of warning.
+ * Evaluated on a copy with the player on `square` and any monster there taken.
+ */
+export function closeAttacker(state, square) {
+  if (state.powers?.freeze > 0) return null;
+  const board = { ...state, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
+  return board.enemies.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
+    && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
 }
 
 /**
@@ -249,6 +262,40 @@ function returnToPawn(state) {
   }
 }
 
+// One capture of the player: a shield absorbs it, otherwise a life is lost.
+// Returns 'shield', 'damage' or 'restart' (the last life ended the run).
+function hitPlayer(state, foe) {
+  if (state.powers.shield > 0) {
+    state.powers.shield--; foe.phase = 'ready'; foe.intent = []; foe.target = null;
+    state.events.push({ type: 'shield', x: state.player.x, y: state.player.y });
+    state.message = 'Your bone ward shattered and blocked the capture.';
+    return 'shield';
+  }
+  state.player.hp--;
+  const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
+  if (state.player.hp === 0) {
+    restartRun(state, [damage], 'Out of lives. Back to the start of today’s dungeon.');
+    return 'restart';
+  }
+  // Clear the committed attack so
+  // the monster must give another full turn of warning before a hit.
+  foe.phase = 'ready'; foe.intent = []; foe.target = null;
+  const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
+  if (demoted) returnToPawn(state);
+  state.events.push(damage);
+  state.message = `${foe.name} took a life. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
+  return 'damage';
+}
+
+// A distant rook, bishop or queen with the player in its line steps one square
+// closer along it before aiming, so a line it can already strike is pressed.
+function closeIn(state, foe) {
+  if (!['rook', 'bishop', 'queen'].includes(foe.piece) || chebyshev(foe, state.player) <= 1) return;
+  if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return;
+  const step = attackPath(state, foe, state.player)[0];
+  if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))) relocate(state, foe, step);
+}
+
 function enemyTurn(state) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
@@ -258,28 +305,9 @@ function enemyTurn(state) {
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
-      if (capture && state.powers.shield > 0) {
-        state.powers.shield--; foe.phase = 'ready'; foe.intent = []; foe.target = null;
-        state.events.push({ type: 'shield', x: state.player.x, y: state.player.y });
-        state.message = 'Your bone ward shattered and blocked the capture.';
-        continue;
-      }
-      if (capture) {
-        state.player.hp--;
-        const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
-        if (state.player.hp === 0) {
-          restartRun(state, [damage], 'Out of lives. Back to the start of today’s dungeon.');
-        } else {
-          // Clear the committed attack so
-          // the monster must give another full turn of warning before a hit.
-          foe.phase = 'ready'; foe.intent = []; foe.target = null;
-          const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
-          if (demoted) returnToPawn(state);
-          state.events.push(damage);
-          state.message = `${foe.name} took a life. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
-        }
-        return;
-      }
+      // A shield keeps the phase going; a lost life ends it.
+      if (capture && hitPlayer(state, foe) === 'shield') continue;
+      if (capture) return;
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
       if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
       else if (destination) relocate(state, foe, destination);
@@ -289,8 +317,9 @@ function enemyTurn(state) {
       royalKingTurn(state, foe);
     } else if (royal && state.enemies.includes(royal)) {
       royalGuardTurn(state, foe, royal);
-    } else if (!aimAtPlayer(state, foe)) {
-      moveMonster(state, foe);
+    } else {
+      closeIn(state, foe);
+      if (!aimAtPlayer(state, foe)) moveMonster(state, foe);
     }
   }
 }
@@ -438,6 +467,13 @@ function setFloor(state) {
 }
 
 const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
+
+// Waiting answers a board where monsters block every move, so only terrain can
+// truly trap the player: no move even with every monster gone.
+function trapped(state) {
+  return state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0
+    && movesFor({ ...state, enemies: [] }, state.player).length === 0;
+}
 
 // Running out of lives or out of moves ends the try: back to floor 1, with one more try on the share card.
 function restartRun(state, events, message) {
@@ -605,20 +641,37 @@ export function act(previous, action) {
     if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
     const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
   }
+  if (action.type === 'wait') {
+    // Waiting spends a move without moving: monsters act, the companion acts,
+    // and nothing is resolved on the player's square (no close-range capture).
+    const state = nextState(previous);
+    state.events = [{ type: 'wait', x: state.player.x, y: state.player.y }]; state.message = '';
+    if (state.playerColor === 'black' && !state.awaitingPlayer) {
+      enemyTurn(state);
+      if (state.events.some((event) => event.type === 'restart')) return state;
+    }
+    state.awaitingPlayer = false; state.turns++;
+    companionTurn(state);
+    if (state.playerColor === 'white') enemyTurn(state);
+    if (trapped(state)) restartRun(state, [], NO_MOVES);
+    return state;
+  }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
   const state = nextState(previous);
   state.events = []; state.message = '';
   if (state.playerColor === 'black' && !state.awaitingPlayer) {
     const origin = { x: state.player.x, y: state.player.y, piece: state.player.piece };
+    const closeBefore = closeAttacker(state, action);
     enemyTurn(state);
     // Losing the last life starts a fresh run; the old click has no meaning there.
     if (state.events.some((event) => event.type === 'restart')) return state;
     state.awaitingPlayer = true;
     const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
-    if (relocated || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
-      if (!state.exit.open && legalMoves(state).length === 0) {
-        return restartRun(state, [], NO_MOVES);
-      } else state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : 'The board changed. Choose another move.'}`;
+    // A destination the enemy phase newly put in close range also earns a fresh choice.
+    const ambushed = !closeBefore && closeAttacker(state, action);
+    if (relocated || ambushed || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
+      if (trapped(state)) return restartRun(state, [], NO_MOVES);
+      state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : legalMoves(state).length ? 'The board changed. Choose another move.' : 'The board changed. Wait for an opening.'}`;
       return state;
     }
   }
@@ -648,11 +701,17 @@ export function act(previous, action) {
     state.items = state.items.filter((item) => item !== coin); state.treasure++; state.gold++;
     state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
-  companionTurn(state);
-  if (state.playerColor === 'white') enemyTurn(state);
-  if (state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0) {
-    restartRun(state, [], NO_MOVES);
+  // Ending a move in close range of a monster is captured at once: no warning
+  // turn. At most one hit per move, so white's enemy phase is then skipped.
+  const close = closeAttacker(state, state.player);
+  if (close) {
+    const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y };
+    state.events.push(event);
+    if (hitPlayer(state, close) === 'restart') { state.events.unshift(event); return state; }
   }
+  companionTurn(state);
+  if (state.playerColor === 'white' && !close) enemyTurn(state);
+  if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
 }
 
@@ -751,7 +810,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
     }
     if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

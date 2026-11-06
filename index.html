@@ -37,7 +37,7 @@
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
       <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
-      <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button></p>
+      <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
       <p id="game-message" class="game-message" aria-live="polite"></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
@@ -136,7 +136,7 @@
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the far edge becomes a queen until the floor ends.</p>
-        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Esc: clear · Tab: controls</p></details>
+        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p></details>
       </article>
       <article class="guide-page" hidden>
         <h3 id="guide-order-title">Who moves first</h3>
@@ -147,6 +147,10 @@
         </div>
         <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
         <p>Red paths show where monsters strike next. As white, step off them to dodge. As black, strikes land before your move, so a red path on your square will hit. If enemies block the square you chose, pick another; they won’t move again first.</p>
+        <h3 id="guide-close-title">Close range</h3>
+        <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
+        <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. As in chess, a king can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
+        <p>Tap <b>Wait</b> to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can strike first.</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
           <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
@@ -156,7 +160,7 @@
           <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
           <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King"></canvas></dt><dd>1</dd></div>
         </dl>
-        <p>Each hit costs a life, and turns a promoted queen back into a pawn. Running out of lives, or out of legal moves, sends you back to floor 1 and costs a try.</p>
+        <p>Each hit costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
       <article class="guide-page" hidden>
         <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop: buy powerups or reserve a companion for the next floor. With no shop after it, the last floor holds no coins.</p>

@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { act, closeAttacker, createGame, legalMoves, PIECE_LIVES } from '../src/rules.js';
+import { getRawDaily } from '../src/edition.js';
+
+const move = (x,y) => ({type:'move',x,y});
+function dailyFor(piece,color) {
+  for(let day=0;day<365;day++) {
+    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
+    if(daily.playerPiece===piece && daily.playerColor===color) return daily;
+  }
+  throw Error(`No ${color} ${piece} edition found`);
+}
+function scenario(piece='rook',color='white',x=4,y=6) {
+  const state=createGame(dailyFor(piece,color));
+  Object.assign(state.player,{x,y});
+  state.map=Array(8).fill('........'); state.props=[]; state.items=[]; state.enemies=[];
+  state.objective={piece:'king',complete:false}; state.companion=null;
+  state.powers={shield:0,freeze:0,magnet:0}; state.awaitingPlayer=false;
+  return state;
+}
+function monster(id,piece,x,y,target=null) {
+  return {id,piece,role:piece,species:'bat',palette:'ice',name:'Ice bat',x,y,moved:false,
+    phase:target?'aim':'ready',target,intent:target?[{...target}]:[]};
+}
+const count = (state,type) => state.events.filter((event)=>event.type===type).length;
+
+test('white: ending next to a monster king loses a life at once, and only once per move',()=>{
+  const state=scenario(); const hp=state.player.hp;
+  state.enemies=[monster('king','king',5,3),monster('rook','rook',0,4,{x:4,y:4})];
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp-1);
+  assert.deepEqual(next.events.find((event)=>event.type==='close-capture'),{type:'close-capture',id:'king',x:5,y:3});
+  assert.equal(count(next,'damage'),1);
+  assert.equal(count(next,'enemy-phase'),0);
+  assert.deepEqual([next.player.x,next.player.y],[4,4]);
+});
+
+test('black: a destination close-attacked before and after the enemy phase is an instant hit',()=>{
+  const state=scenario('rook','black'); const hp=state.player.hp;
+  state.enemies=[monster('king','king',5,5)];
+  assert.ok(closeAttacker(state,{x:4,y:4}));
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp-1);
+  assert.equal(count(next,'close-capture'),1); assert.equal(count(next,'damage'),1);
+  assert.deepEqual([next.player.x,next.player.y],[4,4]);
+  assert.equal(next.awaitingPlayer,false);
+});
+
+test('a knight two squares away captures instantly',()=>{
+  const state=scenario(); const hp=state.player.hp;
+  state.enemies=[monster('knight','knight',6,3)];
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp-1);
+  assert.equal(next.events.find((event)=>event.type==='close-capture').id,'knight');
+});
+
+test('a shield absorbs the instant hit',()=>{
+  const state=scenario(); const hp=state.player.hp; state.powers.shield=1;
+  state.enemies=[monster('king','king',5,3)];
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp); assert.equal(next.powers.shield,0);
+  assert.equal(count(next,'shield'),1); assert.equal(count(next,'close-capture'),1);
+  assert.equal(count(next,'enemy-phase'),0);
+});
+
+test('frozen monsters never capture at close range',()=>{
+  const state=scenario(); const hp=state.player.hp; state.powers.freeze=2;
+  state.enemies=[monster('king','king',5,3)];
+  assert.equal(closeAttacker(state,{x:4,y:4}),null);
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp); assert.equal(count(next,'close-capture'),0);
+  assert.equal(next.powers.freeze,1);
+});
+
+test('capturing the only adjacent attacker is safe',()=>{
+  const state=scenario(); const hp=state.player.hp;
+  state.enemies=[monster('king','king',4,4)];
+  const next=act(state,move(4,4));
+  assert.equal(next.captures,1); assert.equal(next.player.hp,hp);
+  assert.equal(count(next,'close-capture'),0);
+});
+
+test('a distant rook in the new line steps one square closer, then aims without hitting',()=>{
+  const state=scenario(); const hp=state.player.hp;
+  state.enemies=[monster('rook','rook',2,1)];
+  const next=act(state,move(2,6));
+  const foe=next.enemies[0];
+  assert.equal(next.player.hp,hp);
+  assert.deepEqual([foe.x,foe.y],[2,2]);
+  assert.equal(foe.phase,'aim'); assert.deepEqual(foe.target,{x:2,y:6});
+  assert.deepEqual(next.events.find((event)=>event.type==='enemy-move'),{type:'enemy-move',id:'rook',from:{x:2,y:1},x:2,y:2});
+});
+
+test('a monster that walks into range only aims',()=>{
+  const state=scenario(); const hp=state.player.hp;
+  state.enemies=[monster('king','king',6,3)];
+  const next=act(state,move(4,5));
+  const foe=next.enemies[0];
+  assert.equal(next.player.hp,hp); assert.equal(count(next,'close-capture'),0);
+  assert.deepEqual([foe.x,foe.y],[5,4]); assert.equal(foe.phase,'aim');
+});
+
+test('black re-prompts when the enemy phase newly puts the clicked destination in close range',()=>{
+  const state=scenario('rook','black'); const hp=state.player.hp;
+  // Walls leave the king one sensible step: next to the clicked square.
+  state.map=['........','........','.....###','.......#','......##','........','........','........'];
+  state.enemies=[monster('king','king',6,3)];
+  assert.equal(closeAttacker(state,{x:4,y:4}),null);
+  const pending=act(state,move(4,4));
+  assert.deepEqual([pending.enemies[0].x,pending.enemies[0].y],[5,4]);
+  assert.ok(legalMoves(pending).some((m)=>m.x===4 && m.y===4));
+  assert.equal(pending.awaitingPlayer,true);
+  assert.deepEqual([pending.player.x,pending.player.y],[4,6]);
+  assert.match(pending.message,/The board changed\. Choose another move\./);
+  assert.equal(pending.player.hp,hp); assert.equal(pending.turns,state.turns);
+  // Insisting on the square now walks into the capture, with no extra enemy phase.
+  const insisted=act(pending,move(4,4));
+  assert.equal(insisted.player.hp,hp-1); assert.equal(count(insisted,'enemy-phase'),0);
+});
+
+test('a king player cannot step into close range, but may stand on a distant slider line',()=>{
+  const state=scenario('king','white');
+  state.enemies=[monster('king','king',4,4),monster('rook','rook',0,7)];
+  const keys=legalMoves(state).map((m)=>`${m.x},${m.y}`);
+  for(const square of ['3,5','4,5','5,5']) assert.ok(!keys.includes(square),square);
+  for(const square of ['3,7','4,7','5,7','3,6','5,6']) assert.ok(keys.includes(square),square);
+  assert.equal(act(state,move(4,5)),state);
+});
+
+test('an instant hit demotes a pawn-start queen',()=>{
+  const state=scenario('pawn','white',4,2); state.player.piece='queen'; state.player.moved=true;
+  const hp=state.player.hp;
+  state.enemies=[monster('king','king',5,3)];
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,hp-1); assert.equal(next.player.piece,'pawn');
+  assert.equal(count(next,'close-capture'),1);
+  assert.match(next.message,/Back to a pawn/);
+});
+
+test('an instant hit on the last life restarts the run and keeps the capture event',()=>{
+  const state=scenario(); state.player.hp=1;
+  state.enemies=[monster('king','king',5,3)];
+  const next=act(state,move(4,4));
+  assert.equal(next.player.hp,PIECE_LIVES.rook); assert.equal(next.floor,0);
+  assert.deepEqual(next.events.map((event)=>event.type),['close-capture','damage','restart']);
+});

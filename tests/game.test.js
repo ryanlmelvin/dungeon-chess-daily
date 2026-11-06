@@ -76,7 +76,8 @@ test('knights jump over blockers and kings move exactly one square', () => {
 test('a pawn moves forward, double-steps only initially, and captures diagonally ONLY', () => {
   const state = scenario('pawn');
   assert.deepEqual(legalMoves(state), [{ x: 4, y: 5, capture: false }, { x: 4, y: 4, capture: false }]);
-  state.enemies = [monster('front', 'king', 4, 5), monster('diagonal', 'king', 3, 5)];
+  // The blocker is a knight, so it does not guard the diagonal capture square.
+  state.enemies = [monster('front', 'knight', 4, 5), monster('diagonal', 'king', 3, 5)];
   assert.deepEqual(legalMoves(state), [{ x: 3, y: 5, capture: true }]);
   assert.equal(act(state, move(4, 5)), state, 'forward capture must be rejected');
   assert.equal(act(state, move(4, 4)), state, 'double move cannot jump a blocker');
@@ -126,12 +127,13 @@ test('ranged captures warn for a full turn along their entire firing path', () =
   const warning = act(state, move(4, 5));
   assert.equal(warning.player.hp, 1, 'a newly announced capture cannot happen immediately');
   assert.equal(warning.enemies[0].phase, 'aim');
-  assert.deepEqual(dangerTiles(warning), Array.from({ length: 7 }, (_, i) => ({ x: 4, y: i + 1 })));
+  assert.deepEqual({ x: warning.enemies[0].x, y: warning.enemies[0].y }, { x: 4, y: 1 }, 'a distant rook closes in one square first');
+  assert.deepEqual(dangerTiles(warning), Array.from({ length: 6 }, (_, i) => ({ x: 4, y: i + 2 })));
   warning.player.hp = 2; warning.player.maxHp = 2;
   const caught = act(warning, move(4, 4));
   assert.equal(caught.status, 'playing');
   assert.equal(caught.player.hp, 1);
-  assert.deepEqual({ x: caught.enemies[0].x, y: caught.enemies[0].y }, { x: 4, y: 0 }, 'a surviving player holds its square');
+  assert.deepEqual({ x: caught.enemies[0].x, y: caught.enemies[0].y }, { x: 4, y: 1 }, 'a surviving player holds its square');
   const dodged = act(warning, move(5, 5));
   assert.equal(dodged.player.hp, 2);
   assert.deepEqual({ x: dodged.enemies[0].x, y: dodged.enemies[0].y }, { x: 4, y: 5 }, 'an escaped attack commits to the old target');
@@ -256,7 +258,7 @@ function assertInitialArmy(state) {
   if (state.startingPiece==='bishop' && state.objective.piece==='bishop') assert.ok(state.enemies.filter((foe) => foe.role==='bishop').every((foe) => (foe.x+foe.y)%2===0));
 }
 
-test('100 consecutive certified dates win without powers or damage and preserve valid saves', () => {
+test('100 consecutive certified dates win without powers, and only pawn routes spend lives, preserving valid saves', () => {
   for (let day = 0; day < 100; day++) {
     const issue = getDaily(new Date(Date.UTC(2026, 10, 5 + day)));
     let state = createGame(issue);
@@ -268,7 +270,7 @@ test('100 consecutive certified dates win without powers or damage and preserve 
       if (next.floor !== state.floor) assertInitialArmy(next);
       state = next;
       assert.equal(validateSave(state, state.date), true, `${state.date} save after move ${state.turns}`);
-      assert.equal(state.player.hp, state.player.maxHp);
+      assert.ok(state.player.hp >= state.player.maxHp - (state.startingPiece === 'pawn' ? 4 : 0));
       // Only the king floor's own recruit (a rook, queen or king) may help, under royal rules.
       if (royalRules(state)) assert.ok(state.companion === null || ['rook', 'queen', 'king'].includes(state.companion.basePiece));
       else assert.equal(state.companion, null);

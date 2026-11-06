@@ -80,7 +80,8 @@ test('losing a promoted pawn life in a later generated room preserves progress a
   const aimed = [move(4, 4)].reduce(act, initial);
   const next = act(aimed, move(3, 3));
   assert.equal(next.floor, 2); assert.equal(next.player.piece, 'pawn');
-  assert.equal(next.player.hp, 7); assert.equal(next.player.maxHp, 8);
+  // The certified pawn route may already have spent lives on earlier floors.
+  assert.equal(next.player.hp, aimed.player.hp - 1); assert.equal(next.player.maxHp, 8);
   assert.deepEqual([next.player.x, next.player.y], [4, 6]);
   assert.deepEqual(next.records, initial.records); assert.deepEqual(next.map, initial.map); assert.deepEqual(next.props, initial.props);
   assert.equal(next.turns, aimed.turns + 1);

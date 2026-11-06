@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, dangerTiles, legalMoves, PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
-import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
+import { findWinningRoute, livesSpendable, verifyWinningRoute } from '../src/fairness.js';
 import { DIFFICULTY_PROFILES, generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
@@ -31,7 +31,7 @@ function replay(daily) {
   const initial = createGame(daily);
   let state = initial, promoted = false, revertedPromotion = false, threatenedDecisions = 0;
   for (const action of daily.generation.certificate.actions) {
-    assert.ok(['move', 'descend'].includes(action.type));
+    assert.ok(['move', 'descend', 'wait'].includes(action.type));
     if (action.type === 'move') {
       assert.ok(legalMoves(state).some((tile) => tile.x === action.x && tile.y === action.y));
       // Only the king floor's own recruit may help, and only under royal rules.
@@ -40,14 +40,15 @@ function replay(daily) {
     }
     const next = act(state, action);
     assert.notEqual(next, state, 'every certified action must do something');
-    assert.equal(next.player.hp, initial.player.hp);
+    // Only a pawn's route may spend lives, and at most livesSpendable of them.
+    assert.ok(next.player.hp >= initial.player.hp - livesSpendable(initial));
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0 });
     assert.deepEqual(next.purchases, []);
     if (royalRules(next)) assert.ok(next.companion === null || ['rook', 'queen', 'king'].includes(next.companion.basePiece));
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.deepEqual(next.companionOrders, []);
-    assert.ok(!next.events.some((event) => ['damage', 'restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type.startsWith('companion') && !royalRules(next))));
+    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'damage' && !livesSpendable(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
     if (next.floor !== state.floor && next.status === 'playing') {
