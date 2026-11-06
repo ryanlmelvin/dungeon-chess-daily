@@ -18,11 +18,8 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 5,
+        "x": 4,
         "y": 3
       },
       {
@@ -42,23 +39,33 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 3,
         "y": 0
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
         "y": 5
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 0
+        "x": 7,
+        "y": 4
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 0
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
       },
       {
         "type": "move",
@@ -72,13 +79,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 5
+        "x": 2,
+        "y": 2
       },
       {
         "type": "move",
@@ -88,39 +90,41 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
+        "y": 5
       },
       {
         "type": "descend"
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 4
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 6,
+        "x": 3,
         "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
       },
       {
         "type": "move",
@@ -194,40 +198,34 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 3,
+        "x": 4,
         "y": 3
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
       },
       {
         "type": "move",
         "x": 2,
         "y": 0
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 1
       },
       {
         "type": "move",
@@ -242,17 +240,7 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
+        "y": 4
       },
       {
         "type": "move",
@@ -270,12 +258,30 @@ export const FALLBACKS = {
         "y": 4
       },
       {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
         "type": "descend"
       },
       {
         "type": "move",
         "x": 4,
         "y": 4
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
@@ -321,13 +327,30 @@ export const FALLBACKS = {
         "y": 2
       },
       {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 3,
         "y": 1
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 4,
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
         "y": 0
       },
       {
@@ -351,11 +374,8 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 5,
+        "x": 4,
         "y": 3
       },
       {
@@ -372,51 +392,31 @@ export const FALLBACKS = {
         "type": "move",
         "x": 5,
         "y": 0
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
       },
       {
         "type": "move",
         "x": 3,
-        "y": 1
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
       },
       {
         "type": "move",
         "x": 7,
         "y": 5
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
       },
       {
         "type": "move",
@@ -429,26 +429,14 @@ export const FALLBACKS = {
         "y": 6
       },
       {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "wait"
+        "x": 4,
+        "y": 4
       },
       {
         "type": "move",
         "x": 6,
-        "y": 4
+        "y": 6
       },
       {
         "type": "move",
@@ -457,8 +445,46 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
       },
       {
         "type": "descend"
@@ -527,62 +553,39 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 3,
+        "x": 4,
         "y": 3
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
         "x": 3,
         "y": 0
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 5,
         "y": 0
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
         "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
@@ -601,8 +604,23 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
         "x": 2,
-        "y": 2
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
       },
       {
         "type": "move",
@@ -618,38 +636,32 @@ export const FALLBACKS = {
         "y": 4
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 3,
         "y": 3
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 2
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 0
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 1
+        "x": 5,
+        "y": 2
       },
       {
         "type": "descend"
@@ -705,42 +717,54 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 3,
+        "x": 4,
         "y": 3
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
         "x": 7,
         "y": 4
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 4
+        "x": 6,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
+        "x": 6,
+        "y": 6
       },
       {
         "type": "move",
@@ -768,22 +792,15 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
         "type": "descend"
       },
       {
         "type": "move",
         "x": 4,
         "y": 4
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
@@ -801,9 +818,12 @@ export const FALLBACKS = {
         "y": 1
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 3,
-        "y": 2
+        "y": 4
       },
       {
         "type": "descend"
@@ -859,62 +879,39 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 3,
+        "x": 4,
         "y": 3
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
         "x": 3,
         "y": 0
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 5,
         "y": 0
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
         "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
@@ -928,13 +925,33 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
         "x": 6,
         "y": 6
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 2
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
       },
       {
         "type": "move",
@@ -955,32 +972,23 @@ export const FALLBACKS = {
         "y": 3
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 2
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 0
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 1
       },
       {
@@ -1007,14 +1015,27 @@ export const FALLBACKS = {
         "y": 2
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 3,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
       },
       {
         "type": "descend"
@@ -1037,77 +1058,49 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 3,
+        "x": 4,
         "y": 3
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
         "x": 3,
         "y": 0
       },
       {
         "type": "move",
         "x": 7,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 7,
         "y": 4
       },
       {
         "type": "move",
         "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
+        "y": 5
       },
       {
         "type": "move",
@@ -1120,6 +1113,31 @@ export const FALLBACKS = {
         "y": 5
       },
       {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
         "type": "descend"
       },
       {
@@ -1133,32 +1151,23 @@ export const FALLBACKS = {
         "y": 3
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 2
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 0
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 1
       },
       {
@@ -1185,14 +1194,27 @@ export const FALLBACKS = {
         "y": 2
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 3,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
       },
       {
         "type": "descend"
@@ -1204,43 +1226,50 @@ export const FALLBACKS = {
     "dungeonSeed": 1881022441,
     "actions": [
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 4,
         "y": 4
       },
       {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
         "type": "wait"
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 0
       },
       {
         "type": "move",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "type": "move",
         "x": 7,
-        "y": 0
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
@@ -1250,7 +1279,12 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 6,
-        "y": 4
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 6
       },
       {
         "type": "move",
@@ -1279,23 +1313,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
         "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
+        "y": 3
       },
       {
         "type": "descend"
@@ -1311,33 +1330,19 @@ export const FALLBACKS = {
         "y": 3
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 2
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
+        "x": 3,
+        "y": 2
       },
       {
         "type": "descend"
@@ -1373,11 +1378,8 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
-        "x": 5,
+        "x": 4,
         "y": 3
       },
       {
@@ -1397,38 +1399,28 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 0
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 5,
+        "y": 0
       },
       {
         "type": "move",
         "x": 3,
-        "y": 1
+        "y": 0
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
+        "x": 7,
         "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
       },
       {
         "type": "move",
@@ -1448,39 +1440,27 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 6,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
         "y": 3
       },
       {
         "type": "move",
-        "x": 5,
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
       },
       {
         "type": "descend"
@@ -1491,9 +1471,6 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 3,
         "y": 3
@@ -1502,6 +1479,67 @@ export const FALLBACKS = {
         "type": "move",
         "x": 2,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
       },
       {
         "type": "descend"
@@ -1528,11 +1566,6 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
         "type": "descend"
       },
       {
@@ -1545,16 +1578,6 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
         "x": 0,
         "y": 4
       },
@@ -1565,8 +1588,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 2,
+        "y": 2
       },
       {
         "type": "move",
@@ -1575,36 +1598,13 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 2
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "descend"
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
@@ -1613,16 +1613,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
+        "x": 7,
+        "y": 3
       },
       {
         "type": "wait"
@@ -1630,12 +1622,61 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 1
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
       },
       {
         "type": "move",
@@ -1646,6 +1687,11 @@ export const FALLBACKS = {
         "type": "move",
         "x": 4,
         "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -1672,11 +1718,6 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
         "type": "descend"
       },
       {
@@ -1689,66 +1730,33 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
         "y": 2
       },
       {
         "type": "move",
         "x": 1,
-        "y": 1
+        "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 2
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "descend"
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
@@ -1757,16 +1765,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
+        "x": 7,
+        "y": 3
       },
       {
         "type": "wait"
@@ -1774,12 +1774,61 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 1
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
       },
       {
         "type": "move",
@@ -1790,6 +1839,11 @@ export const FALLBACKS = {
         "type": "move",
         "x": 4,
         "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -1816,11 +1870,6 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
         "type": "descend"
       },
       {
@@ -1833,76 +1882,83 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
         "y": 2
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 0
       },
       {
         "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 0,
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 1,
+        "y": 3
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 0,
         "y": 4
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
+        "x": 2,
+        "y": 6
       },
       {
         "type": "descend"
@@ -1985,16 +2041,6 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
         "x": 0,
         "y": 4
       },
@@ -2005,8 +2051,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 2,
+        "y": 2
       },
       {
         "type": "move",
@@ -2015,41 +2061,67 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 2
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "descend"
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
         "x": 6,
         "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "descend"
       },
       {
         "type": "move",
@@ -2058,30 +2130,31 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 4,
         "y": 6
       },
       {
         "type": "wait"
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "type": "move",
+        "x": 5,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 2,
         "y": 2
       },
       {
         "type": "move",
         "x": 4,
         "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -2120,63 +2193,79 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
         "y": 2
       },
       {
         "type": "move",
         "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 1
       },
       {
         "type": "move",
-        "x": 0,
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
         "y": 2
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
         "x": 2,
-        "y": 0
+        "y": 6
       },
       {
         "type": "descend"
@@ -2197,26 +2286,30 @@ export const FALLBACKS = {
         "y": 6
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
         "x": 5,
-        "y": 3
+        "y": 7
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 4,
-        "y": 0
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -2255,76 +2348,83 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
         "y": 2
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 0
+        "x": 1,
+        "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "wait"
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 4
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
         "x": 6,
-        "y": 0
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "move",
         "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 6,
         "y": 0
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
       },
       {
         "type": "descend"
@@ -2345,26 +2445,30 @@ export const FALLBACKS = {
         "y": 6
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 2
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 4,
-        "y": 0
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -2418,53 +2522,63 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 3,
         "y": 3
       },
       {
         "type": "move",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
         "x": 0,
-        "y": 4
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
       },
       {
         "type": "move",
         "x": 1,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 3,
         "y": 3
       },
       {
         "type": "move",
-        "x": 0,
+        "x": 4,
         "y": 4
       },
       {
         "type": "move",
         "x": 2,
         "y": 6
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
       },
       {
         "type": "descend"
@@ -2492,17 +2606,12 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 4
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
+        "x": 6,
         "y": 2
       },
       {
@@ -2562,53 +2671,46 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 3,
         "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 1,
+        "y": 1
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 3,
         "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 6,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 1
       },
       {
         "type": "move",
         "x": 2,
         "y": 6
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
       },
       {
         "type": "descend"
@@ -2636,40 +2738,6 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 2
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
         "x": 4,
         "y": 4
       },
@@ -2680,8 +2748,21 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 7
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
       },
       {
         "type": "descend"
@@ -2735,23 +2816,51 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 3,
         "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 1,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 3
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
       },
       {
         "type": "move",
@@ -2760,22 +2869,12 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 2
+        "x": 0,
+        "y": 4
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
+        "x": 2,
         "y": 2
       },
       {
@@ -2785,11 +2884,6 @@ export const FALLBACKS = {
       },
       {
         "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
       },
       {
         "type": "move",
@@ -2798,14 +2892,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "x": 5,
+        "y": 5
       },
       {
         "type": "move",
@@ -2813,9 +2901,12 @@ export const FALLBACKS = {
         "y": 4
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 1,
-        "y": 1
+        "x": 3,
+        "y": 3
       },
       {
         "type": "move",
@@ -2823,363 +2914,17 @@ export const FALLBACKS = {
         "y": 2
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 4,
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
         "y": 0
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "gentle:knight:white": {
-    "date": "2026-11-08",
-    "dungeonSeed": 2048798631,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "gentle:knight:white:ice": {
-    "date": "2026-11-08",
-    "dungeonSeed": 2048798631,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
       },
       {
         "type": "descend"
@@ -3199,63 +2944,7 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
         "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
       },
       {
         "type": "move",
@@ -3263,9 +2952,12 @@ export const FALLBACKS = {
         "y": 3
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 6,
-        "y": 5
+        "y": 1
       },
       {
         "type": "move",
@@ -3273,167 +2965,6 @@ export const FALLBACKS = {
         "y": 3
       },
       {
-        "type": "move",
-        "x": 5,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:knight:white": {
-    "date": "2026-11-08",
-    "dungeonSeed": 2048798631,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
         "type": "descend"
       },
       {
@@ -3453,56 +2984,52 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 7
+        "x": 5,
+        "y": 3
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 5
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "wait"
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
         "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
+        "y": 2
       },
       {
         "type": "move",
         "x": 0,
         "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
@@ -3529,175 +3056,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
+        "x": 0,
         "y": 2
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:knight:white:ice": {
-    "date": "2026-11-08",
-    "dungeonSeed": 2048798631,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 6
       },
       {
         "type": "move",
@@ -3705,19 +3065,17 @@ export const FALLBACKS = {
         "y": 4
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 3,
-        "y": 3
+        "x": 0,
+        "y": 2
       },
       {
         "type": "move",
         "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
+        "y": 3
       },
       {
         "type": "descend"
@@ -3737,55 +3095,25 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 3,
-        "y": 3
+        "type": "wait"
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 4
+        "x": 7,
+        "y": 3
       },
       {
         "type": "wait"
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 7,
         "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
       },
       {
         "type": "descend"
@@ -3797,7 +3125,7 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 7,
+        "x": 5,
         "y": 3
       },
       {
@@ -3807,43 +3135,13 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
         "x": 5,
-        "y": 2
+        "y": 7
       },
       {
         "type": "move",
         "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 2
+        "y": 6
       },
       {
         "type": "move",
@@ -3853,6 +3151,36 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 3
       },
       {
@@ -3880,8 +3208,72 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "move",
         "x": 0,
         "y": 6
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
@@ -3895,13 +3287,44 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 1,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
         "y": 1
       },
       {
         "type": "move",
         "x": 4,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 0
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
       },
       {
         "type": "descend"
@@ -3921,50 +3344,11 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 7,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
         "y": 3
       },
       {
@@ -3974,18 +3358,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
+        "x": 4,
+        "y": 4
       },
       {
         "type": "move",
@@ -3995,12 +3369,63 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 2,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
         "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
       },
       {
         "type": "move",
@@ -4016,6 +3441,26 @@ export const FALLBACKS = {
         "type": "move",
         "x": 2,
         "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
       },
       {
         "type": "descend"
@@ -4027,27 +3472,34 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 6
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 4
       },
       {
         "type": "move",
         "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
         "y": 2
       },
       {
@@ -4068,50 +3520,11 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 7,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
         "y": 3
       },
       {
@@ -4121,18 +3534,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
+        "x": 4,
+        "y": 4
       },
       {
         "type": "move",
@@ -4142,12 +3545,63 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 2,
-        "y": 4
+        "y": 0
       },
       {
         "type": "move",
         "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
       },
       {
         "type": "move",
@@ -4163,6 +3617,26 @@ export const FALLBACKS = {
         "type": "move",
         "x": 2,
         "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
       },
       {
         "type": "descend"
@@ -4174,27 +3648,34 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 6
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
-        "x": 1,
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 4
       },
       {
         "type": "move",
         "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
         "y": 2
       },
       {
@@ -4215,50 +3696,11 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 7,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
         "y": 3
       },
       {
@@ -4268,18 +3710,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
+        "x": 4,
+        "y": 4
       },
       {
         "type": "move",
@@ -4289,11 +3721,106 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 2,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 2,
         "y": 4
       },
       {
         "type": "move",
         "x": 0,
+        "y": 3
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 3
       },
       {
@@ -4310,6 +3837,16 @@ export const FALLBACKS = {
         "type": "move",
         "x": 2,
         "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
       },
       {
         "type": "descend"
@@ -4321,8 +3858,73 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "gentle:knight:white": {
+    "date": "2026-11-09",
+    "dungeonSeed": 2032021012,
+    "actions": [
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
@@ -4332,17 +3934,387 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 3
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 6,
         "y": 1
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "gentle:knight:white:ice": {
+    "date": "2026-11-09",
+    "dungeonSeed": 2032021012,
+    "actions": [
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "standard:knight:white": {
+    "date": "2026-11-09",
+    "dungeonSeed": 2032021012,
+    "actions": [
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "standard:knight:white:ice": {
+    "date": "2026-11-09",
+    "dungeonSeed": 2032021012,
+    "actions": [
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
       },
       {
         "type": "descend"
@@ -5166,11 +5138,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5209,11 +5183,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5252,11 +5228,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5295,11 +5273,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5338,11 +5318,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5381,11 +5363,13 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 1
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
         "y": 2
       },
       {
@@ -5400,56 +5384,6 @@ export const FALLBACKS = {
         "type": "move",
         "x": 3,
         "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "expert:rook:white": {
-    "date": "2026-11-16",
-    "dungeonSeed": 1847320108,
-    "actions": [
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
       },
       {
         "type": "descend"
@@ -5487,19 +5421,25 @@ export const FALLBACKS = {
         "y": 2
       },
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
         "x": 0,
         "y": 2
       },
       {
-        "type": "move",
-        "x": 0,
-        "y": 1
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 3,
-        "y": 1
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
       },
       {
         "type": "descend"
@@ -5514,10 +5454,20 @@ export const FALLBACKS = {
       }
     ]
   },
-  "expert:rook:white:collapse": {
-    "date": "2026-11-16",
-    "dungeonSeed": 1847320108,
+  "expert:rook:white": {
+    "date": "2027-01-04",
+    "dungeonSeed": 1515677383,
     "actions": [
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
       {
         "type": "move",
         "x": 4,
@@ -5534,22 +5484,287 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
         "y": 2
       },
       {
         "type": "move",
-        "x": 0,
+        "x": 4,
         "y": 2
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 1
+        "x": 7,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
       },
       {
         "type": "move",
         "x": 3,
-        "y": 1
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "expert:rook:white:collapse": {
+    "date": "2027-01-04",
+    "dungeonSeed": 1515677383,
+    "actions": [
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
       },
       {
         "type": "descend"
