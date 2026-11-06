@@ -29,7 +29,7 @@ function scenario(piece = 'rook', color = 'white') {
 }
 function replay(daily) {
   const initial = createGame(daily);
-  let state = initial, promoted = false, carriedPromotion = false, threatenedDecisions = 0;
+  let state = initial, promoted = false, revertedPromotion = false, threatenedDecisions = 0;
   for (const action of daily.generation.certificate.actions) {
     assert.ok(['move', 'descend'].includes(action.type));
     if (action.type === 'move') {
@@ -47,7 +47,10 @@ function replay(daily) {
     assert.ok(!next.events.some((event) => ['damage', 'restart', 'powerup', 'shield', 'recruit'].includes(event.type) || event.type.startsWith('companion')));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
-    if (next.floor !== state.floor && promoted && next.player.piece === 'queen') carriedPromotion = true;
+    if (next.floor !== state.floor && next.status === 'playing') {
+      assert.equal(next.player.piece, initial.player.piece, 'each room starts with the original piece');
+      if (state.player.piece !== initial.player.piece) revertedPromotion = true;
+    }
     state = next;
   }
   assert.equal(state.status, 'won');
@@ -55,7 +58,7 @@ function replay(daily) {
   assert.ok(state.turns <= 60);
   assert.equal(state.turns, daily.generation.certificate.metrics.turns);
   assert.equal(threatenedDecisions, daily.generation.certificate.metrics.threatenedDecisions);
-  return { initial, state, promoted, carriedPromotion };
+  return { initial, state, promoted, revertedPromotion };
 }
 
 test('forced fallbacks certify every piece, turn order and difficulty with the production rules', () => {
@@ -78,12 +81,12 @@ test('forced fallbacks certify every piece, turn order and difficulty with the p
   }
 });
 
-test('the full certificate permits promotion and carries the promoted pawn between rooms', () => {
+test('the full certificate permits promotion and the promoted pawn reverts between rooms', () => {
   for (const color of ['white', 'black']) {
     const daily = generateDaily(dates.get(`pawn:${color}`), { maxAttempts: 0 });
     const result = replay(daily);
     assert.equal(result.promoted, true);
-    assert.equal(result.carriedPromotion, true);
+    assert.equal(result.revertedPromotion, true);
     assert.equal(daily.generation.certificate.metrics.promotion, true);
   }
 });

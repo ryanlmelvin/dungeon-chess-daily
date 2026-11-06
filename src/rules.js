@@ -242,6 +242,8 @@ function setFloor(state) {
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null;
   state.map = Array(8).fill('........');
+  // Promotion lasts only for the room it happened in; each floor starts with the original piece.
+  state.player.piece = state.startingPiece;
   state.player.x = 4; state.player.y = 6; state.player.moved = false;
   state.exit = { x: 4, y: 0, open: false };
   state.objective = { piece: state.targets[state.floor], complete: false };
@@ -432,7 +434,7 @@ export function act(previous, action) {
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: action.x, y: action.y });
-    if (!state.exit.open) state.message = 'Promoted to queen. Your new moves carry into the next room.';
+    if (!state.exit.open) state.message = 'Promoted to queen for the rest of this room.';
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
   if (recruit && !state.companion) {

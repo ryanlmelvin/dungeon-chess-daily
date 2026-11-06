@@ -25,7 +25,9 @@ function promotedThirdRoom(beforeLastStairs) {
     assert.equal(validateSave(state, state.date), true);
     if (state.floor === 2) break;
   }
-  assert.equal(state.floor, 2); assert.equal(state.player.piece, 'queen');
+  // Promotion never carries downstairs; stand in for a promotion made inside this room.
+  assert.equal(state.floor, 2); assert.equal(state.player.piece, 'pawn');
+  state.player.piece = 'queen';
   return state;
 }
 

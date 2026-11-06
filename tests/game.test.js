@@ -88,7 +88,7 @@ test('a pawn moves forward, double-steps only initially, and captures diagonally
   assert.equal(hasMove(moved, 4, 7), false, 'a pawn cannot move backward');
 });
 
-test('a pawn promotes on the far rank and keeps its queen moves downstairs', () => {
+test('a pawn promotes on the far rank and reverts to a pawn downstairs', () => {
   const state = scenario('pawn', 4, 1);
   state.enemies = [monster('last', 'king', 3, 0)];
   const promoted = act(state, move(3, 0));
@@ -96,7 +96,8 @@ test('a pawn promotes on the far rank and keeps its queen moves downstairs', () 
   assert.ok(promoted.events.some((event) => event.type === 'promotion'));
   const nextRoom = act(promoted, {type:'descend'});
   assert.equal(nextRoom.floor, 1);
-  assert.equal(nextRoom.player.piece, 'queen');
+  assert.equal(nextRoom.player.piece, 'pawn');
+  assert.equal(nextRoom.player.moved, false);
 });
 
 test('player move and capture resolve BEFORE the surviving enemy response', () => {
