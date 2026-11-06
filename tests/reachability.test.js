@@ -35,8 +35,11 @@ test('all fallback floors have reachable stationary pickups for every piece, sid
     const visitedFloors = new Set();
     const checkFloor = () => {
       assert.deepEqual(unreachablePickups(state), [], `${identity}, floor ${state.floor}`);
-      assert.ok(state.items.some((item) => item.type === 'coin'));
+      // Gold has nothing left to buy on the last floor, so it holds no coins or coin magnet.
+      const last = state.floor === 2;
+      assert.equal(state.items.filter((item) => item.type === 'coin').length, last ? 0 : 3, `${identity}, floor ${state.floor}`);
       assert.ok(state.items.some((item) => item.type === 'powerup'));
+      if (last) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${identity}: magnet on the last floor`);
       assert.ok(state.items.some((item) => item.type === 'companion'));
       visitedFloors.add(state.floor); floors++;
     };

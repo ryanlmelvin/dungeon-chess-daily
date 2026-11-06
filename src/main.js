@@ -5,7 +5,7 @@ import { initGuide } from './guide.js';
 import { drawMoveDemo } from './guide-art.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -328,6 +328,8 @@ function renderShop() {
       $('shop-items').append(button);
     }
     const owned = state.powers[power.id];
+    // A magnet is useless on the coinless final floor, so the shop before it leaves it out.
+    button.hidden = power.id === 'magnet' && coinlessFloor(state, state.floor + 1);
     button.disabled = state.gold < power.cost || owned >= power.max;
     button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
     button.lastElementChild.textContent = `${power.description}${owned ? ` (${power.id === 'freeze' ? `${owned} moves left` : power.id === 'magnet' ? 'Active' : `${owned} left`})` : ''}`;

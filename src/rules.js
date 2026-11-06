@@ -266,6 +266,18 @@ function distantPowerTile(state, layoutPiece, rng) {
   return options[Math.floor(rng() * options.length)];
 }
 
+// Gold buys from the shop between floors and nothing else, so the last floor
+// holds no coins and no coin magnet: nothing would remain to spend them on.
+// The launch edition keeps its published layout (see LEGACY_LAYOUT_SEEDS).
+export function coinlessFloor(state, floor = state.floor) {
+  return floor === state.targets.length - 1 && !LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed);
+}
+
+// One draw either way, so the rest of the room's random layout is unchanged.
+function powerRoll(roll, coinless) {
+  return coinless ? ['shield', 'freeze'][Math.floor(roll * 2)] : ['shield', 'freeze', 'magnet'][Math.floor(roll * 3)];
+}
+
 function setFloor(state) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
@@ -296,7 +308,7 @@ function setFloor(state) {
     : distantPowerTile(state, layoutPiece, rng);
   state.items = [
     { x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' },
-    { x: powerTile[0], y: powerTile[1], type: 'powerup', power: target.piece === 'pawn' ? 'freeze' : ['shield', 'freeze', 'magnet'][Math.floor(rng() * 3)] },
+    { x: powerTile[0], y: powerTile[1], type: 'powerup', power: target.piece === 'pawn' ? 'freeze' : powerRoll(rng(), coinlessFloor(state)) },
   ];
   state.props = [];
   const reserved = [...state.enemies, ...state.items, state.player, state.exit];
@@ -327,6 +339,8 @@ function setFloor(state) {
     const tile = tiles[Math.floor(recruitRng()*tiles.length)];
     if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
   }
+  // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
+  if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
   const order = (state.companionOrders ?? []).find((entry) => entry.floor === state.floor);
   if (order) {
     state.items = state.items.filter((item) => item.type !== 'companion');
@@ -501,7 +515,7 @@ export function act(previous, action) {
       return state;
     }
     const power = POWERUPS.find((entry) => entry.id === action.id);
-    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max) return previous;
+    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
     const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
@@ -643,7 +657,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
-    if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + 3 - value.items.filter((item) => item.type === 'coin').length) return false;
+    if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - value.items.filter((item) => item.type === 'coin').length) return false;
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;

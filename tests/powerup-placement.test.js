@@ -30,3 +30,39 @@ test('editions before the rule keep their published powerup square', () => {
   const expected = { bishop: [3, 5], knight: [3, 4] }[state.startingPiece] ?? [4, 5];
   assert.deepEqual([power.x, power.y], expected);
 });
+
+// Gold buys from the between-floor shop and nothing else, so the last floor has no use for it.
+test('the last floor holds no coins or coin magnet, and the shop before it sells no magnet (from 2026-11-06)', () => {
+  for (let offset = 0; offset < 30; offset++) {
+    const date = new Date(Date.UTC(2026, 10, 6 + offset)).toISOString().slice(0, 10);
+    const daily = getDaily(date);
+    let state = createGame(daily);
+    for (const action of daily.generation.certificate.actions) {
+      if (action.type === 'descend' && state.floor === 1) {
+        const shopper = { ...structuredClone(state), gold: 20 };
+        assert.equal(act(shopper, { type: 'buy', id: 'magnet' }), shopper, `${date}: magnet sold before the last floor`);
+        assert.notEqual(act(shopper, { type: 'buy', id: 'shield' }), shopper, `${date}: shop closed before the last floor`);
+      }
+      if (action.type === 'descend' && state.floor === 0) {
+        const shopper = { ...structuredClone(state), gold: 20 };
+        assert.notEqual(act(shopper, { type: 'buy', id: 'magnet' }), shopper, `${date}: magnet missing before floor 2`);
+      }
+      state = act(state, action);
+      if (action.type !== 'descend' || state.status !== 'playing') continue;
+      const coins = state.items.filter((item) => item.type === 'coin').length;
+      assert.equal(coins, state.floor === 2 ? 0 : 3, `${date} floor ${state.floor}`);
+      if (state.floor === 2) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${date}: magnet on the last floor`);
+    }
+  }
+});
+
+test('the launch edition keeps its coins and relics on the last floor', () => {
+  const daily = getDaily('2026-11-05');
+  let state = createGame(daily);
+  for (const action of daily.generation.certificate.actions) {
+    state = act(state, action);
+    if (state.floor === 2) break;
+  }
+  assert.equal(state.floor, 2);
+  assert.equal(state.items.filter((item) => item.type === 'coin').length, 3);
+});

@@ -75,9 +75,9 @@ test('a demoted pawn skips an occupied entrance and blocked replacement squares'
 
 test('losing a promoted pawn life in a later generated room preserves progress and a valid resumable save', () => {
   const initial = promotedThirdRoom();
-  // The king falls on (4,3), beside the room's coin magnet; the queen then hits the player landing on (4,1).
-  const aimed = [move(4, 4), move(4, 3)].reduce(act, initial);
-  const next = act(aimed, move(4, 1));
+  // Steer clear of the room's frost hourglass on (4,3); the player is hit landing on (1,0).
+  const aimed = [move(4, 4), move(0, 0)].reduce(act, initial);
+  const next = act(aimed, move(1, 0));
   assert.equal(next.floor, 2); assert.equal(next.player.piece, 'pawn');
   assert.equal(next.player.hp, 7); assert.equal(next.player.maxHp, 8);
   assert.deepEqual([next.player.x, next.player.y], [4, 6]);
@@ -91,12 +91,12 @@ test('losing a promoted pawn life in a later generated room preserves progress a
 });
 
 test('exhaustion on the last move in room three resets the whole run to the same daily dungeon', () => {
-  const initial = promotedThirdRoom((cleared) => act(cleared, { type: 'buy', id: 'magnet' }));
-  const aimed = [move(4, 4), move(4, 3)].reduce(act, initial);
-  assert.deepEqual(aimed.purchases, ['magnet']); assert.equal(aimed.powers.magnet, 1);
+  const initial = promotedThirdRoom((cleared) => act(cleared, { type: 'buy', id: 'companion-pawn' }));
+  const aimed = [move(4, 4), move(0, 0)].reduce(act, initial);
+  assert.deepEqual(aimed.companionOrders, [{ floor: 2, piece: 'pawn' }]);
   aimed.player.hp = 1; aimed.turns = 59;
   assert.equal(validateSave(aimed, aimed.date), true);
-  const restarted = act(aimed, move(4, 1));
+  const restarted = act(aimed, move(1, 0));
   assert.equal(restarted.status, 'playing');
   assert.deepEqual(restarted.events.map((event) => event.type), ['damage', 'restart']);
   assert.match(restarted.message, /Out of lives/);
