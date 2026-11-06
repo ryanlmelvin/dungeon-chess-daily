@@ -7,26 +7,31 @@ import { createGame } from '../src/rules.js';
 import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { PLAYABLE_PIECES as PIECES } from '../src/pieces.js';
 import { DIFFICULTY_PROFILES as profiles } from '../src/difficulty.js';
+import { MODIFIERS } from '../src/modifiers.js';
+import { fallbackKey } from '../src/generation.js';
 
 // Every daily is white (src/edition.js), so only white needs a fallback.
 const colors = ['white'];
-const stateFor = (entry, difficulty) => createGame({
+// Plain play, plus each room modifier that changes the rules (src/modifiers.js).
+// The modifier is forced, whatever the template date's own modifier is.
+const modifiers = Object.values(MODIFIERS).filter((entry) => entry.id === 'none' || entry.changesRules).map((entry) => entry.id);
+const stateFor = (entry, difficulty, modifier) => createGame({
   ...getRawDaily(entry.date), dungeonSeed: entry.dungeonSeed,
-  obstacleBase: profiles[difficulty].obstacleBase, difficulty,
+  obstacleBase: profiles[difficulty].obstacleBase, difficulty, modifier,
 });
 
 if (process.argv.includes('--verify')) {
   const { FALLBACKS } = await import('../src/fallbacks.js');
   let checked = 0;
   for (const [difficulty, profile] of Object.entries(profiles)) {
-    for (const piece of PIECES) for (const color of colors) {
-      const entry = FALLBACKS[`${difficulty}:${piece}:${color}`];
-      if (!entry) throw new Error(`Missing ${difficulty}/${piece}/${color} certificate.`);
-      const state = stateFor(entry, difficulty);
+    for (const piece of PIECES) for (const color of colors) for (const modifier of modifiers) {
+      const entry = FALLBACKS[fallbackKey(difficulty, piece, color, modifier)];
+      if (!entry) throw new Error(`Missing ${difficulty}/${piece}/${color}/${modifier} certificate.`);
+      const state = stateFor(entry, difficulty, modifier);
       const proof = verifyWinningRoute(state, entry.actions);
       if (state.startingPiece !== piece || state.playerColor !== color || !proof.valid
         || proof.metrics.threatenedDecisions < profile.minThreatenedDecisions) {
-        throw new Error(`Invalid ${difficulty}/${piece}/${color} certificate: ${proof.reason ?? 'profile mismatch'}`);
+        throw new Error(`Invalid ${difficulty}/${piece}/${color}/${modifier} certificate: ${proof.reason ?? 'profile mismatch'}`);
       }
       checked++;
     }
@@ -34,15 +39,15 @@ if (process.argv.includes('--verify')) {
   console.log(`Replayed ${checked} fallback certificates: all win without powerups or purchases, losing no lives (pawns at most 4).`);
 } else {
   const bank = {};
-  let remaining = Object.keys(profiles).length * PIECES.length * colors.length;
+  let remaining = Object.keys(profiles).length * PIECES.length * colors.length * modifiers.length;
   // Skip the launch edition: its seed keeps a legacy layout (LEGACY_LAYOUT_SEEDS).
   for (let offset = 1; offset < 3660 && remaining; offset++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + offset)));
-    for (const [difficulty, profile] of Object.entries(profiles)) {
-      const key = `${difficulty}:${raw.playerPiece}:${raw.playerColor}`;
+    for (const [difficulty, profile] of Object.entries(profiles)) for (const modifier of modifiers) {
+      const key = fallbackKey(difficulty, raw.playerPiece, raw.playerColor, modifier);
       if (bank[key]) continue;
       const entry = { date: raw.date, dungeonSeed: raw.seed };
-      const state = stateFor(entry, difficulty);
+      const state = stateFor(entry, difficulty, modifier);
       const found = findWinningRoute(state, { maxExpansions: 100_000, beamWidth: 48 });
       if (found.status !== 'solved') continue;
       const proof = verifyWinningRoute(state, found.actions);
@@ -50,7 +55,7 @@ if (process.argv.includes('--verify')) {
       entry.actions = found.actions;
       bank[key] = entry;
       remaining--;
-      console.log(`${difficulty}/${raw.playerPiece}/${raw.playerColor}: ${raw.date}, ${proof.metrics.turns} moves, ${proof.metrics.threatenedDecisions} threatened decisions (${remaining} remaining)`);
+      console.log(`${difficulty}/${raw.playerPiece}/${raw.playerColor}/${modifier}: ${raw.date}, ${proof.metrics.turns} moves, ${proof.metrics.threatenedDecisions} threatened decisions (${remaining} remaining)`);
     }
   }
   if (remaining) throw new Error(`Could not certify ${remaining} fallback configurations.`);

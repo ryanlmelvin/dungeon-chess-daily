@@ -12,6 +12,7 @@ import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { createMusic, editionTracks } from './music.js';
+import { MODIFIERS, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
 
 const $ = (id) => document.getElementById(id);
@@ -149,6 +150,12 @@ function renderPaper() {
   $('headline').textContent = headlineFor(daily.species[0], daily.date);
   $('deck').replaceChildren(createPrintLines(0));
   $('art-caption').textContent = "Artist's impression";
+  // The day's room modifier gets a bulletin under the masthead; plain days none.
+  const modifier = MODIFIERS[daily.modifier] ?? MODIFIERS.none;
+  $('modifier-bulletin').hidden = modifier.id === 'none';
+  $('modifier-emoji').textContent = modifier.emoji;
+  $('modifier-kicker').textContent = `${modifier.name}:`;
+  $('modifier-headline').textContent = modifier.headline;
   $('side-stories').replaceChildren(...daily.species.slice(1, 3).map((creature, index) => {
     const article = document.createElement('article');
     const h = document.createElement('h3'); h.textContent = headlineFor(creature, daily.date);
@@ -261,6 +268,8 @@ function updateGame() {
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
+  $('modifier-status').textContent = modifierStatus(state);
+  $('modifier-status').hidden = !$('modifier-status').textContent;
   $('objective-text').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;

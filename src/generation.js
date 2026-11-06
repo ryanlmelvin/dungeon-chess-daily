@@ -6,6 +6,7 @@ import { hash } from './random.js';
 import { findWinningRoute, verifyWinningRoute } from './fairness.js';
 import { FALLBACKS } from './fallbacks.js';
 import { DIFFICULTY_PROFILES } from './difficulty.js';
+import { MODIFIERS } from './modifiers.js';
 export { DIFFICULTY_PROFILES } from './difficulty.js';
 
 export const GENERATOR_VERSION = RULES_VERSION;
@@ -46,7 +47,8 @@ export function generateDaily(date = new Date(), { difficulty = 'standard', maxA
   // Bounded search may miss a solution. Fall back to a tested complete dungeon,
   // retaining this date's piece/color and cosmetic variety. Never accept an
   // uncertified layout, even if a future rule change invalidates the fallback.
-  const fallback = FALLBACKS[`${difficulty}:${base.playerPiece}:${base.playerColor}`];
+  // Each room modifier has its own bank; plain days keep the original keys.
+  const fallback = FALLBACKS[fallbackKey(difficulty, base.playerPiece, base.playerColor, base.modifier)];
   if (!fallback) throw new Error('No certified fallback for this edition.');
   const template = getRawDaily(fallback.date);
   const species = base.species.map((entry, index) => ({ ...entry, piece: template.species[index].piece }));
@@ -56,6 +58,11 @@ export function generateDaily(date = new Date(), { difficulty = 'standard', maxA
   }, fallback.actions, 'fallback', maxAttempts);
   if (!certified) throw new Error('Dungeon certification failed. No unverified dungeon was released.');
   return certified;
+}
+
+/** Bank key: modifiers that change play (ice, collapse) have their own certificates. */
+export function fallbackKey(difficulty, piece, color, modifier = 'none') {
+  return `${difficulty}:${piece}:${color}${MODIFIERS[modifier]?.changesRules ? `:${modifier}` : ''}`;
 }
 
 export function getDaily(date = new Date(), { difficulty = 'standard' } = {}) {

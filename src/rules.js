@@ -3,6 +3,7 @@
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
 import { getRawDaily } from './edition.js';
+import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState, modifierOf } from './modifiers.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 5;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -68,8 +69,16 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
   return moves;
 }
 
-/** The player's legal chess destinations. A pawn captures only diagonally. A king may not step into close range. */
+/**
+ * The player's legal chess destinations. A pawn captures only diagonally. A king may not step into close range.
+ * On ice days a move that will skid carries its resting square as `slide`.
+ */
 export function legalMoves(state) {
+  const moves = chessMoves(state);
+  if (state?.modifier !== 'ice') return moves;
+  return moves.map((move) => { const slide = iceSlide(state, move); return slide ? { ...move, slide } : move; });
+}
+function chessMoves(state) {
   if (!state || state.status !== 'playing') return [];
   const moves = movesFor(state, state.player);
   const passed = enPassantVictim(state, state.enPassant);
@@ -559,6 +568,8 @@ function setFloor(state, kingRecruit = false) {
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
   if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
+  // The day's modifier (ice tiles, reinforcement count) once the room is fixed.
+  setupFloorModifier(state);
   const order = (state.companionOrders ?? []).find((entry) => entry.floor === state.floor);
   if (order) {
     state.items = state.items.filter((item) => item.type !== 'companion');
@@ -603,6 +614,8 @@ export function createGame(daily = getRawDaily()) {
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
+  // Plain days carry no modifier field, so their saves keep their shape.
+  if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
   setFloor(state);
   markFloorStart(state);
@@ -654,7 +667,8 @@ function bonusResidents(state, floor) {
 function bonusCaptures(state) {
   const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - (PIECE_COUNTS[state.targets[record.floor]] + 2 - bonusResidents(state, record.floor)), 0);
   const remaining = state.enemies.filter((foe) => (foe.role ?? foe.piece) !== state.targets[state.floor]).length;
-  return earlier + bonusResidents(state, state.floor) - remaining;
+  // Collapse reinforcements are decoys too: each one that entered pays when taken.
+  return earlier + bonusResidents(state, state.floor) + (state.reinforcements ?? 0) - remaining;
 }
 
 function spentGold(state) {
@@ -757,6 +771,7 @@ export function act(previous, action) {
     state.awaitingPlayer = false; state.turns++; state.enPassant = null;
     companionTurn(state);
     if (state.playerColor === 'white') enemyTurn(state);
+    collapseTick(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
     return state;
   }
@@ -774,7 +789,7 @@ export function act(previous, action) {
     const origin = { x: state.player.x, y: state.player.y, piece: state.player.piece };
     const castleBefore = castleFor(state);
     // A castling rook lands beside its king, not on the square clicked.
-    const closeBefore = threat(castleBefore ? castleBefore.player.to : action);
+    const closeBefore = threat(castleBefore ? castleBefore.player.to : iceSlide(state, action) ?? action);
     enemyTurn(state);
     // Losing the last life starts a fresh run; the old click has no meaning there.
     if (state.events.some((event) => event.type === 'restart')) return state;
@@ -782,7 +797,7 @@ export function act(previous, action) {
     const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
     // A destination the enemy phase newly put in close range also earns a fresh choice.
     const castleAfter = castleFor(state);
-    const ambushed = !closeBefore && threat(castleAfter ? castleAfter.player.to : action);
+    const ambushed = !closeBefore && threat(castleAfter ? castleAfter.player.to : iceSlide(state, action) ?? action);
     // A freshly opened en passant capture is a new option worth a fresh choice too.
     const opening = legalMoves(state).some((move) => move.enPassant);
     // So is a click whose meaning changed: a castle that is no longer possible
@@ -808,7 +823,9 @@ export function act(previous, action) {
     state.feats.push({ floor: state.floor, kind: 'en-passant' });
     if (!state.exit.open) state.message = `En passant! You captured ${passed.name} as it passed.`;
   }
-  const to = castle ? castle.player.to : action;
+  // On ice a non-capturing slide skids one more square (src/modifiers.js).
+  const slide = castle || captured ? null : iceSlide(state, action);
+  const to = castle ? castle.player.to : slide ?? action;
   if (castle) {
     // King and rook move together; this is the recruit's move too.
     const ally = state.companion;
@@ -821,6 +838,10 @@ export function act(previous, action) {
   }
   state.player.x = to.x; state.player.y = to.y; state.player.moved = true;
   state.events.push({ type: 'move', x: to.x, y: to.y });
+  if (slide) {
+    state.events.push({ type: 'slide', from: { x: action.x, y: action.y }, x: to.x, y: to.y });
+    if (!state.message) state.message = 'You skid across the ice.';
+  }
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: to.x, y: to.y });
@@ -854,6 +875,7 @@ export function act(previous, action) {
   }
   if (!castle) companionTurn(state);
   if (state.playerColor === 'white' && !close) enemyTurn(state);
+  collapseTick(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
 }
@@ -870,7 +892,8 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
   // The day's starting piece in its color. The text-presentation selector keeps
   // the black pawn from switching to its gray emoji form beside the others.
   const glyphs = { white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' }, black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' } };
-  let line = '💀'.repeat(earlier);
+  // The day's modifier emoji leads the line; plain days add nothing.
+  let line = modifierOf(state).emoji + '💀'.repeat(earlier);
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
@@ -896,9 +919,12 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     } else if (value.practice !== undefined || value.layoutPiece !== undefined) return false;
     if (value.legacyTurnOrder !== false || value.playerColor !== daily.playerColor || typeof value.awaitingPlayer !== 'boolean') return false;
     if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing')) return false;
+    if ((value.modifier ?? 'none') !== (daily.modifier ?? 'none')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
     if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
-    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2;
+    // Collapse days may add reinforcements to a floor (up to a cap).
+    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2 + extraPopulation(value.modifier);
+    const reinforced = value.reinforcements ?? 0;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
     if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
@@ -928,11 +954,13 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion' && item.piece === 'king')));
     // Layout depends only on the edition and original piece, never on promotion.
     setFloor(template, kingRecruit);
+    if (!validModifierState(value, template)) return false;
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
     if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;
     if (!value.enemies.every((foe) => {
-      const original = template.enemies.find((entry) => entry.id === foe.id);
+      const original = template.enemies.find((entry) => entry.id === foe.id)
+        ?? Array.from({ length: reinforced }, (_, n) => reinforcement(value, n)).find((entry) => entry?.id === foe.id);
       if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
@@ -957,7 +985,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
-    if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - value.items.filter((item) => item.type === 'coin').length) return false;
+    if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - value.items.filter((item) => item.type === 'coin').length) return false;
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
@@ -968,7 +996,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

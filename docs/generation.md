@@ -25,6 +25,11 @@ Every returned edition has an explicit sequence of legal actions that:
 - Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
   shield or freeze, and never restarts.
 
+The day's room modifier (`src/modifiers.js`) is part of the game state
+(`state.modifier`, absent on plain days), so the route is found and replayed
+under it: ice slides, collapse reinforcements and their timing are all part of
+the certified play. Dark changes only rendering, so its routes are plain routes.
+
 Pawn promotion is an ordinary chess rule and is permitted. The proof carries the
 promoted piece, turn count, and all other state through the entire run; three
 separate room proofs would not be sufficient. Black's enemy phase can invalidate
@@ -95,12 +100,44 @@ searching the entire game tree for every proposed decoration.
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
 
-The fallback bank covers all 15 combinations of five playable pieces (always white) and three
-profiles. A broken or missing fallback fails closed with an error; it never
+The fallback bank covers all 45 combinations of five playable pieces (always white), three
+profiles, and plain, ice or collapse rules. A broken or missing fallback fails closed with an error; it never
 releases an unverified dungeon. The test suite and build check the entire bank.
 Search and verification share `src/rules.js` with live gameplay, avoiding a second
 implementation of combat. `rules.createGame()` is the internal candidate builder
 for search, authoring, and rule fixtures; application code uses `game.createGame()`.
+
+## Room modifiers
+
+`modifierFor(date)` draws `none`, `dark`, `ice` or `collapse` uniformly from its
+own hash stream (`modifier:<date>`), so no other daily draw moves. Editions
+before 2026-11-07 are plain, keeping their saves valid. The modifier is part of
+`getRawDaily()` and is copied into the state by `createGame()`.
+
+- **Ice** picks 8 tiles per floor on the stream `<dungeonSeed>:ice:<floor>`,
+  after walls, monsters, pickups and the recruit are placed, never on a wall, a
+  monster, a pickup, the start square or the exit square. Saves store them as
+  `state.ice` and validation recomputes them. Only the player's piece slides:
+  a rook, bishop or queen, or a pawn moving straight, whose non-capturing move
+  ends on ice moves one more square in the same direction if it is walkable and
+  holds no monster or recruit. `legalMoves()` reports that landing as `slide`,
+  and `act()` emits a `slide` event. Monsters and recruits never slide, which
+  keeps the monster AI and attack warnings unchanged.
+- **Collapse** counts moves on the current floor. At the end of each player
+  turn, if `floor(moves / 10)` exceeds the reinforcements so far (`state.reinforcements`,
+  capped at 3) and the door square is free, a copy of one of the floor's decoy
+  species (never a pawn, which could block a pawn's promotion file) enters there
+  as `f<floor>-r<n>`. None arrive once the stairs open. Reinforcements are
+  ordinary decoys: capturing one pays a gold, and save validation widens floor
+  populations by the cap.
+- **Dark** has no rules effect. `visibleSquares()` and `updateSightings()` drive
+  the renderer's fog and last-seen ghosts.
+
+Ice and collapse change play, so the fallback bank holds a certificate for
+each piece, difficulty and one of `none`, `ice` or `collapse` (45 in all);
+dark days use the plain certificate. Over the 60 standard editions from
+2026-11-06, every modifier certified at the same rate as the same days
+without it (the same three days needed fallbacks).
 
 ## Difficulty and chess learning
 
