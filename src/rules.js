@@ -862,7 +862,7 @@ export function act(previous, action) {
 // lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
 // each followed by 🇫🇷 for every en passant and 🏰 for every castle the player
 // made on that floor, in order, then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
-// and last the day's starting piece.
+// and last the day's starting piece, then a won run's total par stars (⭐N).
 const FEAT_EMOJI = { 'en-passant': '\u{1F1EB}\u{1F1F7}', castle: '🏰' };
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   // Saves from before the tries counter only know that a restart happened.
@@ -881,6 +881,9 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
   }
   line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
   line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
+  // Par stars (src/par.js) close a won line once every floor has been scored.
+  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
+  if (stars !== null) line += ` ⭐${stars}`;
   return `Dungeon Chess Daily #${state.edition}\n${line}\n${url}`;
 }
 
@@ -954,6 +957,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp <= (value.records[index - 1]?.hp ?? value.player.maxHp) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    // Par stars: absent in older saves and on runs without a par.
+    if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
