@@ -3,6 +3,8 @@ import './style.css';
 import './menu.css';
 import { initGuide } from './guide.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
+import { TACTIC_COPY } from './tactics-art.js';
+import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, PIECES } from './game.js';
@@ -261,6 +263,12 @@ function updateGame() {
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
+  // The combo counter shows from the second capture in a row; the third pays.
+  const combo = state.combo ?? 0;
+  $('combo-status').hidden = combo < 2;
+  $('combo-status').classList.toggle('hot', combo >= COMBO_START);
+  $('combo-status').textContent = `🔥 Combo ×${combo}`;
+  $('combo-status').setAttribute('aria-label', `${combo} captures in a row${combo < COMBO_START ? `: capture again for bonus gold` : ''}`);
   $('objective-text').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
@@ -349,6 +357,7 @@ let specialMoveFrame = 0;
 // capture, 'enemy' after a monster pawn's) or castling.
 function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
+  if (TACTIC_COPY[kind]) return openTactic(kind);
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
   const canvas = $('special-move-art');
@@ -372,6 +381,47 @@ function openSpecialMove(kind, mode = 'player') {
   $('special-move-continue').focus();
   frame(start);
 }
+// The first fork won and the first combo on this device get the same
+// congratulation dialog, with their own animated explainer (tactics-art.js).
+function openTactic(kind) {
+  const copy = TACTIC_COPY[kind];
+  try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  const canvas = $('special-move-art');
+  $('special-move-title').textContent = copy.title;
+  $('special-move-text').textContent = copy.text;
+  $('special-move-close').setAttribute('aria-label', `Close ${kind} explainer`);
+  canvas.setAttribute('aria-label', copy.art);
+  [canvas.width, canvas.height] = [200, 200];
+  const options = { playerPalette: piecePalette(state.playerColor) };
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = performance.now();
+  const frame = (now) => {
+    copy.draw(canvas, still ? copy.still : now - start, options);
+    if (!still && $('special-move-dialog').open) specialMoveFrame = requestAnimationFrame(frame);
+  };
+  $('special-move-dialog').showModal();
+  $('special-move-continue').focus();
+  frame(start);
+}
+// Kept outside the save prefix so backups never carry it.
+const tacticSeenKey = (kind) => `dchess-tactic-seen:${scope}:${kind}`;
+function tacticSeen(kind) { try { return localStorage.getItem(tacticSeenKey(kind)) === '1'; } catch { return false; } }
+// A brief "Fork!" or "Combo!" stamp over the board.
+let calloutTimer;
+function showTacticCallout(events) {
+  const won = events.find((event) => event.type === 'fork-won');
+  const combo = events.find((event) => event.type === 'combo');
+  const fork = events.find((event) => event.type === 'fork');
+  const parts = [won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🍴'].filter(Boolean);
+  if (!parts.length) return;
+  const callout = $('tactic-callout');
+  callout.textContent = parts.join(' · ');
+  callout.classList.toggle('combo', Boolean(combo));
+  callout.hidden = false;
+  callout.classList.remove('pop'); void callout.offsetWidth; callout.classList.add('pop');
+  clearTimeout(calloutTimer);
+  calloutTimer = setTimeout(() => { callout.hidden = true; }, 1600);
+}
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
 $('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
@@ -387,7 +437,9 @@ function takeAction(action) {
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(state.events);
   const enPassant = state.events.some(event => event.type === 'en-passant');
   const castled = state.events.some(event => event.type === 'castle');
-  const special = enPassant ? 'en-passant' : castled ? 'castle' : null;
+  const tactic = state.events.some(event => event.type === 'fork-won') ? 'fork' : state.events.some(event => event.type === 'combo') ? 'combo' : null;
+  if (!shopping) showTacticCallout(state.events);
+  const special = enPassant ? 'en-passant' : castled ? 'castle' : tactic && !tacticSeen(tactic) ? tactic : null;
   const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   // Congratulate the player's own en passant or castle once the move has settled,

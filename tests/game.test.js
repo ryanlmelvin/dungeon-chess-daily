@@ -486,6 +486,8 @@ test('an in-progress save from the old every-capture rule keeps its gold and sta
   const firstStairs = actions.findIndex((action) => action.type === 'descend');
   for (const action of actions.slice(0, firstStairs)) state = act(state, action);
   const legacy = structuredClone(state); delete legacy.paidCaptures; legacy.gold = legacy.treasure + legacy.captures;
+  // Old-rule saves predate fork and combo bonuses.
+  legacy.feats = legacy.feats.filter((feat) => !['fork', 'combo'].includes(feat.kind));
   assert.equal(validateSave(legacy, legacy.date), true);
   let resumed = legacy;
   for (const action of actions.slice(firstStairs)) {

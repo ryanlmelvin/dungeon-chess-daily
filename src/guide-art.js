@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import { drawSprite, SPRITE_SIZE, STONE_SIZE, paintStone, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
+import { drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL } from './tactics-art.js';
 
 const INK = '#17131d';
 const MINT = '#a5e2cc';
@@ -194,6 +195,8 @@ const ANIMATED = {
   'en-passant-player': (canvas, time) => drawEnPassantDemo(canvas, time ?? EN_PASSANT_STILL, { mode: 'player', enemyPalette: piecePalette('black') }),
   'en-passant-enemy': (canvas, time) => drawEnPassantDemo(canvas, time ?? EN_PASSANT_STILL, { mode: 'enemy', enemyPalette: piecePalette('black') }),
   castle: (canvas, time) => drawCastleDemo(canvas, time ?? CASTLE_STILL),
+  fork: (canvas, time) => drawForkDemo(canvas, time ?? FORK_STILL),
+  combo: (canvas, time) => drawComboDemo(canvas, time ?? COMBO_STILL),
 };
 
 /** One frame of every animated guide canvas under `root`, `time` ms into its loop. */

@@ -10,6 +10,7 @@ const MINT = 0x8af4d5;
 const MOVE_COLOR = 0x56dcff;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
+const FORK_GLOW_MS = 900;
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -364,6 +365,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       }
     }
     if (next.cursor) cornerMarks(next.cursor.x, next.cursor.y, 0xcabfd7, 0.46, 0.2);
+    // A pending fork (tactics.js): gold rings under every forked monster.
+    for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
   }
 
   function render(next, afterTransition = false) {
@@ -480,6 +483,12 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       attacker.strikeTo = { x: strike.x, y: strike.y };
       attacker.strikeFrom = strike.from ?? { x: attacker.target.x, y: attacker.target.z };
     }
+    // A fresh fork flashes its monsters gold as the player lands.
+    const fork = events.find((event) => event.type === 'fork');
+    if (fork && !changedBoard) for (const id of fork.ids) {
+      const entity = entities.get(id);
+      if (entity) entity.glowAt = animateTurn ? captureAt : now;
+    }
     if (animateTurn) {
       clear(hints);
       pendingHints = { next, at: now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 };
@@ -568,7 +577,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         }
       }
       entity.flash = Math.max(0, entity.flash - dt);
-      entity.art.material.color.set(entity.flash ? 0xff6889 : 0xffffff);
+      const glow = entity.glowAt && timestamp >= entity.glowAt ? (timestamp - entity.glowAt) / FORK_GLOW_MS : -1;
+      if (glow >= 1) entity.glowAt = 0;
+      // Three gold pulses, or one steady flash under reduced motion.
+      const gold = glow >= 0 && glow < 1 && (reducedMotion || Math.sin(glow * Math.PI * 6) > 0);
+      entity.art.material.color.set(entity.flash ? 0xff6889 : gold ? 0xffd46b : 0xffffff);
       if (entity.player && entity.flash) playerPulse.value = 0;
     }
     if (pendingHints && timestamp >= pendingHints.at) {
