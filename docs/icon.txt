@@ -1,0 +1,28 @@
+Dungeon Chess Daily app icon
+
+Source: assets/icon-source.png
+Generated with the built-in image_gen tool. Project license: GPL-3.0-only.
+
+The installed app and browser icons share the same knight-and-dungeon artwork.
+The maskable variant adds padding to keep the knight inside circular crops.
+The high-resolution source stays outside public/ so it is not downloaded offline.
+
+To export the shipped sizes on macOS, run from the repository root:
+
+sips -z 512 512 assets/icon-source.png --out public/icons/icon-512.png
+sips -z 192 192 assets/icon-source.png --out public/icons/icon-192.png
+sips -z 180 180 assets/icon-source.png --out public/icons/apple-touch-icon.png
+sips -z 410 410 assets/icon-source.png --out /tmp/dungeon-knight-maskable.png
+sips -p 512 512 --padColor 100f14 /tmp/dungeon-knight-maskable.png --out public/icons/maskable-512.png
+
+Generation prompt:
+
+Use case: logo-brand
+Asset type: production app icon for Dungeon Chess Daily, a pixel-art chess dungeon game.
+Primary request: redesign the supplied app icon into a strong, memorable pixel-art mark that clearly communicates chess and a dungeon at small sizes. Replace the newspaper layout with one large ivory chess knight in a dark stone dungeon arch.
+Input image: current app icon, redesign target and palette reference. Keep the restrained bone/cream, dark plum/charcoal, and dusty crimson palette, plus chunky pixel geometry. The old newspaper frame and marks may be completely replaced.
+Subject: a single unmistakable chess knight piece, side profile facing left, with pointed ears, broad muzzle, strong arched neck and wide stepped chess base. It should feel like an actual carved chess piece, not an animal portrait or armored person. Large bold cream silhouette, simple block shadow on its right, one small dark square eye.
+Scene/backdrop: one simple chunky pixel stone arch behind the piece, in muted plum gray, against a nearly black plum background (#100f14). A small restrained dusty crimson inset within the arch gives contrast; the chess piece remains the dominant bright element.
+Style/medium: crisp deliberate retro pixel art, consistent coarse pixel grid, straight orthogonal stepped contours, flat 5-to-7-color palette, no antialiasing, no texture noise, no gradients, no blur. Polished game icon, confident minimal composition.
+Composition/framing: square full-bleed opaque canvas. The knight is centered with its entire silhouette and base comfortably inside the central 70% of the square so it survives circular app-icon crops. Arch can extend farther, but generous dark breathing room surrounds the primary mark. Icon fills most of the canvas without a detached badge. Legible at 32px and 64px.
+Constraints: no text, letters, numbers, border frame, newspaper, swords, crowns, extra characters, checkerboard clutter, sparkles, extraneous ornaments, rounded outer corners, phone mockup, or presentation sheet. Deliver just the single square icon.
