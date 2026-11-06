@@ -207,8 +207,6 @@ function updateGame() {
   if (state.awaitingPlayer) showMoves = true;
   $('room-label').textContent = `Room ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
   $('practice-label').hidden = !practice;
-  $('turns').textContent = `◷ ${state.maxTurns - state.turns}`;
-  $('turns').setAttribute('aria-label', `${state.maxTurns - state.turns} moves left`);
   renderLives();
   $('shop-button').textContent = `${state.gold} gold`;
   $('shop-button').setAttribute('aria-label', `${state.gold} gold. Open shop`);

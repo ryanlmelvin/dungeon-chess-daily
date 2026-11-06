@@ -70,7 +70,7 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
 
 /** The player's legal chess destinations. A pawn captures only diagonally. */
 export function legalMoves(state) {
-  if (!state || state.status !== 'playing' || state.turns >= state.maxTurns) return [];
+  if (!state || state.status !== 'playing') return [];
   return movesFor(state, state.player);
 }
 
@@ -306,7 +306,7 @@ export function createGame(daily = getRawDaily()) {
   const state = {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
-    turns: 0, maxTurns: 60, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
+    turns: 0, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
@@ -326,7 +326,6 @@ function finishFloor(state) {
     state.floor++; setFloor(state);
     state.message = `Capture all enemy ${state.objective.piece}s. New faces, new clues.`;
     state.events.push({ type: 'descend', x: state.player.x, y: state.player.y });
-    if (state.turns >= state.maxTurns) { state.status = 'lost'; state.message = 'The presses have rolled. You missed the deadline.'; }
   }
 }
 
@@ -394,7 +393,7 @@ export function act(previous, action) {
     const recruit = COMPANIONS.find((entry) => entry.id === action.id);
     if (recruit) {
       const orders = previous.companionOrders ?? [];
-      if (!Array.isArray(orders) || previous.floor >= 2 || previous.turns >= previous.maxTurns || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
+      if (!Array.isArray(orders) || previous.floor >= 2 || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
       const state = nextState(previous);
       state.gold -= recruit.cost; state.companionOrders.push({ floor: state.floor + 1, piece: recruit.piece });
       state.events = [{ type: 'companion-order', piece: recruit.piece, x: state.player.x, y: state.player.y }];
@@ -402,7 +401,7 @@ export function act(previous, action) {
       return state;
     }
     const power = POWERUPS.find((entry) => entry.id === action.id);
-    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || previous.turns >= previous.maxTurns) return previous;
+    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max) return previous;
     const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
@@ -450,10 +449,7 @@ export function act(previous, action) {
   }
   companionTurn(state);
   if (state.playerColor === 'white') enemyTurn(state);
-  // The last move may solve the final floor; extraction does not spend a turn.
-  if (state.status === 'playing' && state.turns >= state.maxTurns && !(state.floor === 2 && state.exit.open)) {
-    state.status = 'lost'; state.message = 'The presses have rolled. You missed the deadline.';
-  } else if (state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0) {
+  if (state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0) {
     state.status = 'lost'; state.message = 'No legal moves. The dungeon has the last word.';
   }
   return state;
@@ -464,7 +460,7 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
     const record = state.records.find((entry) => entry.floor === floor);
     return record ? ({ gold: '🟨', silver: '⬜', bronze: '🟫' })[record.grade] : state.status === 'lost' && state.floor === floor ? '💀' : '⬛';
   }).join('');
-  return `Dungeon Chess Daily\n${state.date} · ${state.status === 'won' ? 'Filed' : state.status === 'lost' ? (state.player.hp ? 'Deadline missed' : 'Captured') : 'On assignment'}\n${stamps}\n${state.turns}/${state.maxTurns} moves · ${state.captures} ⚔️ · ${state.treasure} 🪙\n${url}`;
+  return `Dungeon Chess Daily\n${state.date} · ${state.status === 'won' ? 'Filed' : state.status === 'lost' ? 'Trapped' : 'On assignment'}\n${stamps}\n${state.turns} moves · ${state.captures} ⚔️ · ${state.treasure} 🪙\n${url}`;
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
@@ -477,15 +473,15 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (value.practice !== true || value.layoutPiece !== daily.layoutPiece || !PIECES.includes(value.layoutPiece)) return false;
     } else if (value.practice !== undefined || value.layoutPiece !== undefined) return false;
     if (value.legacyTurnOrder !== false || value.playerColor !== daily.playerColor || typeof value.awaitingPlayer !== 'boolean') return false;
-    if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing' || value.turns >= value.maxTurns)) return false;
+    if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
     if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
     const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
-    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, 60) || value.maxTurns !== 60 || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
+    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
     if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
     if (value.player.piece !== value.startingPiece && !(value.startingPiece === 'pawn' && value.player.piece === 'queen')) return false;
-    if (value.status === 'playing' && (value.player.hp < 1 || (value.turns === 60 && !(value.floor === 2 && value.exit.open)))) return false;
+    if (value.status === 'playing' && value.player.hp < 1) return false;
     if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
     if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id], 0, power.max))) return false;
     if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor((totalPopulation + 9) / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
@@ -521,7 +517,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (ally.sharing !== same(ally,value.player) || value.enemies.some((foe)=>same(foe,ally)) || value.items.some((item)=>item.type==='companion')) return false;
     } else if (deliveredOrder || (recruit && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, 60) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;

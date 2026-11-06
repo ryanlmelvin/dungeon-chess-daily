@@ -155,14 +155,14 @@ test('life loss and restart are rejected even when moves are legal and spare liv
   assert.equal(verifyWinningRoute(state, [action]).valid, false);
 });
 
-test('obstacles and the deadline are enforced by the same action simulator used in play', () => {
+test('obstacles are enforced while gameplay has no move deadline', () => {
   const state = scenario();
   state.map[5] = '....#...';
   assert.equal(verifyWinningRoute(state, [move(4, 4)]).valid, false);
   state.map[5] = '........';
   state.maxTurns = 1;
   const expired = act(state, move(4, 4));
-  assert.equal(expired.status, 'lost');
+  assert.equal(expired.status, 'playing');
   assert.equal(verifyWinningRoute(state, [move(4, 4)]).valid, false);
 });
 

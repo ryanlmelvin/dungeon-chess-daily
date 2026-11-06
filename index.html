@@ -36,7 +36,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="turns"></span><button id="shop-button" aria-label="Buy powerups with gold"></button><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
+      <div class="game-status"><button id="shop-button" aria-label="Buy powerups with gold"></button><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
@@ -83,7 +83,7 @@
         </ol>
       </nav>
       <article class="guide-page" hidden>
-        <p>Clear <b>3 rooms in 60 moves.</b> No timer.</p>
+        <p>Clear <b>3 rooms.</b></p>
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to reveal the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last room targets the king.</p>
         <p>Capture them all, then take the stairs from anywhere. Stairs cost no moves.</p>

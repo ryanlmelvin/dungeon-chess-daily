@@ -184,18 +184,20 @@ test('illegal, obsolete and malformed inputs do not spend a turn', () => {
   assert.equal(state.turns, 0);
 });
 
-test('the 60-move deadline ends play, but final-move objective capture still permits extraction', () => {
+test('moves remain available beyond sixty and final-floor extraction still works', () => {
   const state = scenario('rook');
   state.turns = 59;
-  assert.equal(act(state, move(4, 5)).status, 'lost');
+  assert.equal(act(state, move(4, 5)).status, 'playing');
+  state.turns = 100;
+  assert.equal(act(state, move(4, 5)).turns, 101);
   state.floor = 2; state.enemies = [monster('last', 'king', 4, 4)];
   const solved = act(state, move(4, 4));
   assert.equal(solved.status, 'playing');
-  assert.equal(solved.turns, 60);
-  assert.equal(legalMoves(solved).length, 0);
+  assert.equal(solved.turns, 101);
+  assert.ok(legalMoves(solved).length > 0);
   const extracted = act(solved, { type: 'descend' });
   assert.equal(extracted.status, 'won');
-  assert.equal(extracted.turns, 60);
+  assert.equal(extracted.turns, 101);
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
@@ -212,6 +214,8 @@ test('share text contains results, not piece, species or route spoilers', () => 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
   const state = createGame(daily);
   assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true);
+  const longRun = structuredClone(state); longRun.turns = 120;
+  assert.equal(validateSave(longRun, daily.date), true);
   assert.equal(validateSave(state, '2026-11-06'), false);
   for (const mutate of [
     (save) => { save.schema = 1; }, (save) => { save.player.piece = 'dragon'; },

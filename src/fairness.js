@@ -87,7 +87,7 @@ export function verifyWinningRoute(initial, actions) {
   if (unreachablePickups(initial).length) return { valid: false, reason: 'A pickup is unreachable with this floor’s piece and terrain.' };
   // An enemy-first turn can invalidate its initiating click and require a
   // second destination. Those board-changing actions spend no chess move.
-  if (!Array.isArray(actions) || actions.length > initial.maxTurns * 2 + 3) {
+  if (!Array.isArray(actions) || actions.length > 60 * 2 + 3) {
     return { valid: false, reason: 'Invalid certificate length.' };
   }
   let state = initial;
@@ -124,7 +124,7 @@ export function verifyWinningRoute(initial, actions) {
       if (captureAvailable) metrics.captureOpportunities++;
     }
     const next = safeTransition(state, action);
-    if (!next) return { valid: false, reason: 'The route loses a life, uses a power, misses the deadline, or takes invalid stairs.' };
+    if (!next) return { valid: false, reason: 'The route loses a life, uses a power, takes invalid stairs.' };
     if (next.floor !== state.floor && unreachablePickups(next).length) {
       return { valid: false, reason: 'A later floor has an unreachable pickup.' };
     }
@@ -132,7 +132,7 @@ export function verifyWinningRoute(initial, actions) {
     if (next.events.some((event) => event.type === 'promotion')) metrics.promotion = true;
     state = next;
   }
-  if (state.status !== 'won' || state.records.length !== 3 || state.turns > state.maxTurns) {
+  if (state.status !== 'won' || state.records.length !== 3 || state.turns > 60) {
     return { valid: false, reason: 'The route does not complete all three rooms within the move budget.' };
   }
   metrics.turns = state.turns;
@@ -163,7 +163,8 @@ export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 
     return result;
   };
   const solved = (node) => ({ status: 'solved', actions: routeFor(node), explored });
-  const horizon = (initial.maxTurns - initial.turns) * 2 + 3 - initial.floor;
+  // Generation keeps a short route search budget; players have unlimited moves.
+  const horizon = (60 - initial.turns) * 2 + 3 - initial.floor;
 
   // Most ordinary rooms yield to a cheap two-ply rollout. Revisiting a board
   // is penalized only as a heuristic; exact search identity still keeps time.

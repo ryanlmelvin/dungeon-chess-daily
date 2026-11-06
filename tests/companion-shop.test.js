@@ -61,7 +61,7 @@ test('unaffordable, duplicate, final-floor, finished-run and unknown orders are 
   const first=buy(bank(),'pawn');assert.equal(buy(first,'queen'),first);assert.equal(buy(first,'pawn'),first);
   for(const status of ['won','lost']) {const done={...bank(),status};assert.equal(buy(done,'pawn'),done);}
   const last={...bank(),floor:2};assert.equal(buy(last,'pawn'),last);
-  const deadline={...bank(),turns:60};assert.equal(buy(deadline,'pawn'),deadline);
+  const deadline={...bank(),turns:60};assert.notEqual(buy(deadline,'pawn'),deadline);
   const state=bank();assert.equal(buy(state,'dragon'),state);
 });
 
