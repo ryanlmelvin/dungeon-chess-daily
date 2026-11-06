@@ -36,7 +36,7 @@ function stoneTexture(red, variation) {
   return texture;
 }
 
-export function createDungeonRenderer(container, { onTile } = {}) {
+export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(1);
   renderer.setClearColor(VOID);
@@ -78,6 +78,8 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   let stairMaterial = null;
   let stairGlow = null;
   let stairs = null;
+  let door = null;
+  let exitTile = { x: 4, y: 0 };
   let itemKey = '';
   let pendingItems = null;
   let lastEvents = null;
@@ -198,18 +200,40 @@ export function createDungeonRenderer(container, { onTile } = {}) {
         if (x % 2) tileMark(board, x + 0.32, y - 0.29, 0.065, 0.035, chip, 0.015);
       }
     }
-    // The stairwell itself is concealed until the floor's capture is complete.
+    // The exit is a door set into the back wall, behind the exit square, so the
+    // square itself stays an ordinary tile (a pawn can still promote there).
+    // The door stays shut until the floor's capture is complete, then opens
+    // onto the stairwell.
     const exit = next.exit || { x: 4, y: 0 };
+    exitTile = { x: exit.x, y: exit.y };
+    const doorZ = exit.y - 0.95;
+    const doorway = new THREE.Group();
+    board.add(doorway);
+    block(doorway, exit.x, -0.06, doorZ, 1.04, 0.14, 0.62, dark);
+    block(doorway, exit.x - 0.5, 0.02, doorZ, 0.1, 0.1, 0.62, edgeTop);
+    block(doorway, exit.x + 0.5, 0.02, doorZ, 0.1, 0.1, 0.62, edgeTop);
+    block(doorway, exit.x, 0.02, doorZ - 0.3, 1.1, 0.1, 0.08, edgeTop);
+    const doorTarget = tileMark(doorway, exit.x, doorZ, 1.0, 0.62, basic(0x000000, { transparent: true, opacity: 0, depthWrite: false }), 0.03);
+    doorTarget.userData.tile = { x: exit.x, y: exit.y - 1 };
+    targets.push(doorTarget);
+    door = new THREE.Group();
+    doorway.add(door);
+    const wood = basic(0x5a3a2c);
+    const iron = basic(0x2a2530);
+    for (let i = 0; i < 4; i++) tileMark(door, exit.x - 0.3 + i * 0.2, doorZ, 0.18, 0.5, wood, 0.016);
+    for (const dz of [-0.14, 0.14]) tileMark(door, exit.x, doorZ + dz, 0.84, 0.06, iron, 0.018);
+    tileMark(door, exit.x + 0.24, doorZ + 0.02, 0.07, 0.07, basic(0xb39a62), 0.02);
     stairs = new THREE.Group();
-    stairs.visible = !!next.exit?.open;
-    board.add(stairs);
-    tileMark(stairs, exit.x, exit.y, 0.76, 0.84, basic(0x0d0910), 0.014);
+    doorway.add(stairs);
+    tileMark(stairs, exit.x, doorZ, 0.84, 0.5, basic(0x0d0910), 0.014);
     stairMaterial = basic(WHITE);
     stairGlow = basic(0xc3efdc, { transparent: true, opacity: 0.2, depthWrite: false });
-    tileMark(stairs, exit.x, exit.y, 0.9, 0.9, stairGlow, 0.015);
+    tileMark(stairs, exit.x, doorZ, 0.96, 0.6, stairGlow, 0.015);
     for (let i = 0; i < 4; i++) {
-      tileMark(stairs, exit.x, exit.y - 0.25 + i * 0.16, 0.25 + i * 0.1, 0.055, stairMaterial, 0.018);
+      tileMark(stairs, exit.x, doorZ + 0.18 - i * 0.12, 0.6 - i * 0.1, 0.05, stairMaterial, 0.018);
     }
+    stairs.visible = !!next.exit?.open;
+    door.visible = !stairs.visible;
     resize();
   }
 
@@ -351,7 +375,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     const changedBoard = key !== boardKey || restarted;
     if (changedBoard && state && state.date === next.date && next.floor > state.floor && !reducedMotion && !afterTransition) {
       const player = entities.get('player');
-      if (player) player.target.set(state.exit.x, 0, state.exit.y);
+      if (player) player.target.set(state.exit.x, 0, state.exit.y - 1);
       clear(hints);
       pendingTransition = { next, at: now + 175 };
       return;
@@ -361,6 +385,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       buildBoard(next);
     }
     if (stairs) stairs.visible = !!next.exit?.open;
+    if (door) door.visible = !next.exit?.open;
     const events = freshEvents ? next.events || [] : [];
     const playerMoved = events.some((event) => event.type === 'move');
     const enemyPhase = events.some((event) => event.type === 'enemy-phase');
@@ -461,18 +486,21 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     const width = Math.max(1, bounds.width);
     const height = Math.max(1, bounds.height);
     const aspect = width / height;
-    const halfHeight = Math.max(rows * 0.49 + 0.35, (columns / 2 + 0.18) / aspect);
+    // The exit door sits about half a square beyond the back edge.
+    const doorRoom = 0.3;
+    const halfHeight = Math.max(rows * 0.49 + 0.35 + doorRoom, (columns / 2 + 0.18) / aspect);
     camera.left = -halfHeight * aspect;
     camera.right = halfHeight * aspect;
     camera.top = halfHeight;
     camera.bottom = -halfHeight;
     const x = (columns - 1) / 2;
-    const z = (rows - 1) / 2;
+    const z = (rows - 1) / 2 - doorRoom;
     camera.position.set(x, 18, z + 5.8);
     camera.lookAt(x, 0.14, z);
     camera.updateProjectionMatrix();
     const internalWidth = Math.min(768, Math.round(width));
     renderer.setSize(internalWidth, Math.max(1, Math.round(internalWidth / aspect)), false);
+    onLayout?.();
   }
 
   function tick(timestamp) {
@@ -578,9 +606,23 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   resize();
   animation = requestAnimationFrame(tick);
 
+  // Where the exit door sits on screen, in CSS pixels from the container's
+  // top-left corner, so page controls can sit beside it instead of over a square.
+  function exitAnchor() {
+    const bounds = container.getBoundingClientRect();
+    const point = (z) => {
+      const projected = new THREE.Vector3(exitTile.x, 0, z).project(camera);
+      return { x: (projected.x + 1) / 2 * bounds.width, y: (1 - projected.y) / 2 * bounds.height };
+    };
+    const far = point(exitTile.y - 1.26);
+    const near = point(exitTile.y - 0.64);
+    return { x: far.x, top: far.y, bottom: near.y };
+  }
+
   return {
     render,
     resize,
+    exitAnchor,
     dispose() {
       if (disposed) return;
       disposed = true;

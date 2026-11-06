@@ -195,9 +195,9 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: placeDescendButton, onTile: ({x,y}) => {
       if (!state || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
-      if(state.exit.open&&x===state.exit.x&&y===state.exit.y){takeStairs();return;}
+      if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
       else {showMoves=true;cursor=null;paintBoard();}
@@ -246,6 +246,7 @@ function updateGame() {
   $('objective').hidden = state.exit.open;
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
+  placeDescendButton();
   $('treasure').textContent = ` · ${state.captures} captures`;
   $('news-button').hidden = false;
   $('treasure').setAttribute('aria-label', `${state.captures} enemies captured`);
@@ -255,6 +256,18 @@ function updateGame() {
   $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
   paintBoard();
   syncMusic();
+}
+// The stairs button sits just above the exit door, or over the door itself when
+// the board fills the screen, so it never covers a square a piece may need.
+function placeDescendButton() {
+  const button = $('descend-button');
+  const anchor = renderer?.exitAnchor?.();
+  if (!anchor || button.hidden) return;
+  const height = button.offsetHeight;
+  const top = Math.min(Math.max(anchor.top - 6 - height, 64), anchor.bottom - height);
+  button.style.top = `${Math.round(top)}px`;
+  button.style.left = `${Math.round(anchor.x)}px`;
+  button.style.bottom = 'auto';
 }
 function paintBoard(){if(state)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
 function enterGame() {
@@ -317,8 +330,8 @@ window.addEventListener('keydown',event=>{
   if(event.target instanceof Element && event.target.closest('button,input,textarea,select,a'))return;
   if(screen!=='game'||!state||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
-  if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};cursor={x:Math.max(0,Math.min(7,cursor.x+dx)),y:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
-  else if(name==='Enter'&&cursor){event.preventDefault();if(state.exit.open&&cursor.x===state.exit.x&&cursor.y===state.exit.y)takeStairs();else takeAction({type:'move',...cursor});}
+  if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
+  else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else takeAction({type:'move',...cursor});}
   else if(name==='Escape'){showMoves=false;cursor=null;paintBoard();}
 });
 function renderShop() {
