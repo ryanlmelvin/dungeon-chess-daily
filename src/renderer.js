@@ -203,7 +203,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // The exit is a door set into the back wall, behind the exit square, so the
     // square itself stays an ordinary tile (a pawn can still promote there).
     // The door stays shut until the floor's capture is complete, then opens
-    // onto the stairwell.
+    // onto the stairwell. guide-art.js draws the same doorway.
     const exit = next.exit || { x: 4, y: 0 };
     exitTile = { x: exit.x, y: exit.y };
     const doorZ = exit.y - 0.95;

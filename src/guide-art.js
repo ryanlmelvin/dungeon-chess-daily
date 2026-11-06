@@ -140,23 +140,30 @@ function goal(ctx) {
     ctx.moveTo(x + 23, 41); ctx.lineTo(x - 23, 87);
     ctx.stroke();
   }
-  // A complete matching target group reveals the stairwell exactly as play draws it
-  // (renderer.js): a faint glow over a dark well on the exit's red stone, with four white steps.
+  // A complete matching target group opens the exit door exactly as play draws
+  // it (renderer.js): a doorway in the back wall, behind the top-center square,
+  // open onto a glowing well with four white steps. Units are board squares.
   arrow(ctx, 196, 64, 254, 64, MINT, 12);
-  const size = STONE_SIZE * 4;
-  const left = 284;
-  const top = 16;
+  const size = 64;
+  const centerX = 334;
+  const top = 8;
+  const mark = (cx, cz, width, length, color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(centerX + (cx - width / 2) * size), Math.round(top + (cz + 1.3 - length / 2) * size), Math.round(width * size), Math.round(length * size));
+  };
+  const doorZ = -0.95;
+  mark(0, doorZ, 1.04, 0.62, '#141017');
+  for (const side of [-0.5, 0.5]) mark(side, doorZ, 0.1, 0.62, '#56404a');
+  mark(0, doorZ - 0.3, 1.1, 0.08, '#56404a');
+  mark(0, -0.57, 1.3, 0.08, '#56404a');
+  mark(0, doorZ, 0.84, 0.5, '#0d0910');
+  mark(0, doorZ, 0.96, 0.6, 'rgba(195, 239, 220, 0.2)');
+  for (let i = 0; i < 4; i++) mark(0, doorZ + 0.18 - i * 0.12, 0.6 - i * 0.1, 0.05, '#eee8e1');
+  // The exit square itself stays an ordinary floor stone.
   const stone = document.createElement('canvas');
   stone.width = stone.height = STONE_SIZE;
   paintStone(stone.getContext('2d'), true, 0);
-  ctx.drawImage(stone, left, top, size, size);
-  const mark = (cx, cy, width, height, color) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(Math.round(left + (0.5 + cx - width / 2) * size), Math.round(top + (0.5 + cy - height / 2) * size), Math.round(width * size), Math.round(height * size));
-  };
-  mark(0, 0, 0.76, 0.84, '#0d0910');
-  mark(0, 0, 0.9, 0.9, 'rgba(195, 239, 220, 0.2)');
-  for (let i = 0; i < 4; i++) mark(0, -0.25 + i * 0.16, 0.25 + i * 0.1, 0.055, '#eee8e1');
+  ctx.drawImage(stone, Math.round(centerX - 0.4875 * size), Math.round(top + (1.3 - 0.4875) * size), Math.round(0.975 * size), Math.round(0.975 * size));
 }
 
 function danger(ctx) {
