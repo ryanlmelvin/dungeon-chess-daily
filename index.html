@@ -57,15 +57,79 @@
   </main>
   <div id="notice" class="notice" role="status" hidden></div>
   <dialog id="menu-dialog" aria-labelledby="menu-title">
-    <div class="dialog-heading"><h2 id="menu-title">Field notes</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
+    <div id="menu-home">
+    <div class="dialog-heading"><h2 id="menu-title">Menu</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
     <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p><button id="news-button" hidden>Read today’s paper</button>
-    <div class="how-to"><p><b>Capture all enemies of the named chess role.</b> The target group has matching sprites: 8 pawns, 2 rooks, knights, or bishops, or 1 queen or king. The newspaper hints at their disguise; watch how they move. The third floor always targets the king. Once every target is captured, click the revealed stairs from anywhere to leave.</p><p>Tap a square to move or your piece to see legal moves. Land on a monster to capture it. Pillars and crates block paths; knights can jump over them. <b>Pawns advance into empty squares and capture diagonally.</b> Reach the far rank to become a queen.</p><p>A red path warns of an enemy's next attack. Your color is assigned each edition. <b>White acts first:</b> as white, you move before the enemies; as black, they move before you. If they block your chosen destination, choose again without giving them another move. You have 60 moves. Pawns start with 8 lives; rooks, knights, and bishops with 2; queens and kings with 1. Each hit costs a life unless a shield saves you. <b>Losing your last life restarts today's dungeon.</b> Promotion keeps your remaining lives; losing a life turns you back into a pawn.</p><p>Collect coins and earn gold from captures. Tap your gold to buy powerups; buying and taking revealed stairs cost no moves. Pickups activate immediately. <b>Land on a glowing chess piece marked + to recruit a companion.</b> It moves after you for this floor, taking a legal capture first or moving toward the nearest enemy. Companions follow chess movement and stop at obstacles; friendly pawns can promote. Your first result is the daily; practice never replaces it.</p><details><summary>Keyboard</summary><p>Arrow keys or WASD select a square. Enter moves there or takes revealed stairs. Tab reaches the shop, stairs, and menu. Escape clears the selection.</p></details></div>
+    <button id="guide-button" class="guide-open">How to play <span aria-hidden="true">→</span></button>
     <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
     <div class="backup-controls"><button id="export-button">Download backup</button><button id="import-button">Restore backup</button><button id="persist-button">Enable persistent storage</button><input id="import-file" type="file" accept="application/json,.json" hidden></div>
     <p id="progress-feedback" role="status" hidden></p>
     <p class="credits">By <a href="https://ryanlmelvin.com" target="_blank" rel="noopener">Ryan L. Melvin</a> · <a href="https://github.com/ryanlmelvin/dungeon-chess-daily" target="_blank" rel="noopener">Source · GPLv3</a></p>
-    <p class="about-note">A fresh dungeon at 00:00 UTC. Same edition worldwide. Progress stays on this device.</p>
+
     <div class="about-bottom"><span id="release">Version 1.0</span><a href="./update.html">Repair updates</a></div>
+    </div>
+    <section id="guide" hidden>
+      <div class="dialog-heading"><h2 id="guide-title" tabindex="-1">How to play</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
+      <button id="guide-back" class="guide-back">← Menu</button>
+      <nav id="guide-contents" aria-label="Table of contents">
+        <ol>
+          <li><button data-guide-page="0">Capture targets <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="1">Move your piece <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="2">Turns &amp; lives <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="3">Pickups <span aria-hidden="true">→</span></button></li>
+        </ol>
+      </nav>
+      <article class="guide-page" hidden>
+        <p>Clear <b>3 rooms in 60 moves.</b> No timer.</p>
+        <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to reveal the stairs."></canvas>
+        <p>Use the paper’s clues and monsters’ moves to find every target. The last room targets the king.</p>
+        <p>Capture them all, then take the stairs from anywhere. Stairs cost no moves.</p>
+        <p>First result = daily. Replays = practice.</p>
+      </article>
+      <article class="guide-page" hidden>
+        <p>Tap your piece for legal moves. Land on a monster to capture it.</p>
+        <div class="move-diagrams">
+          <figure><canvas data-guide-art="move-pawn" width="200" height="200" role="img" aria-label="Pawn: forward into empty space, up to two squares on its first move; capture diagonally forward."></canvas><figcaption>Pawn</figcaption></figure>
+          <figure><canvas data-guide-art="move-knight" width="200" height="200" role="img" aria-label="Knight: two squares then one sideways, jumping over obstacles."></canvas><figcaption>Knight</figcaption></figure>
+          <figure><canvas data-guide-art="move-rook" width="200" height="200" role="img" aria-label="Rook: straight lines until blocked."></canvas><figcaption>Rook</figcaption></figure>
+          <figure><canvas data-guide-art="move-bishop" width="200" height="200" role="img" aria-label="Bishop: diagonal lines until blocked."></canvas><figcaption>Bishop</figcaption></figure>
+          <figure><canvas data-guide-art="move-queen" width="200" height="200" role="img" aria-label="Queen: straight or diagonal lines until blocked."></canvas><figcaption>Queen</figcaption></figure>
+          <figure><canvas data-guide-art="move-king" width="200" height="200" role="img" aria-label="King: one square in any direction."></canvas><figcaption>King</figcaption></figure>
+        </div>
+        <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
+        <p>Obstacles block paths; knights jump. Pawns may open with two steps; the far edge promotes them.</p>
+        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Esc: clear · Tab: controls</p></details>
+      </article>
+      <article class="guide-page" hidden>
+        <div class="turn-order">
+          <p><canvas data-guide-art="piece-pawn" width="40" height="40" aria-hidden="true"></canvas><span>White: you → enemies</span></p>
+          <p><canvas data-guide-art="black-pawn" width="40" height="40" aria-hidden="true"></canvas><span>Black: enemies → you</span></p>
+        </div>
+        <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
+        <p>Red paths warn of attacks. Black may be hit before moving. Destination blocked? Choose again; enemies wait.</p>
+        <h3 id="guide-lives-title">Starting lives</h3>
+        <dl class="guide-lives" aria-labelledby="guide-lives-title">
+          <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
+          <div><dt><canvas data-guide-art="piece-knight" width="40" height="40" role="img" aria-label="Knight"></canvas></dt><dd>2</dd></div>
+          <div><dt><canvas data-guide-art="piece-rook" width="40" height="40" role="img" aria-label="Rook"></canvas></dt><dd>2</dd></div>
+          <div><dt><canvas data-guide-art="piece-bishop" width="40" height="40" role="img" aria-label="Bishop"></canvas></dt><dd>2</dd></div>
+          <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
+          <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King"></canvas></dt><dd>1</dd></div>
+        </dl>
+        <p>Each hit costs a life. Zero lives restarts the dungeon. A hit undoes pawn promotion.</p>
+      </article>
+      <article class="guide-page" hidden>
+        <p>Coins + captures earn gold. Tap gold to shop; buying costs no moves.</p>
+        <dl class="guide-pickups">
+          <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit</dd></div>
+          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for 3 moves</dd></div>
+          <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect nearby coins</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Recruit a companion for this room. It moves after you.</dd></div>
+        </dl>
+        <p>Land on pickups to activate them.</p>
+      </article>
+      <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
+    </section>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
     <div class="dialog-heading"><h2 id="shop-title">Powerups</h2><button class="icon-button" data-close aria-label="Close powerups">✕</button></div>

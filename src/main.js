@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
+import { initGuide } from './guide.js';
 import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
@@ -25,6 +26,7 @@ let audio;
 const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v5:${daily.date}`;
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
+initGuide();
 
 function notify(message, persistent = false) {
   clearTimeout(noticeTimer);
