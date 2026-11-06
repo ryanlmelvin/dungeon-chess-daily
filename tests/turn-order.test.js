@@ -2,12 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { act, createGame, getDaily, legalMoves, migrateSave, validateSave } from '../src/game.js';
+import { act, createGame, getDaily, legalMoves, validateSave } from '../src/game.js';
+import { getRawDaily } from '../src/edition.js';
+import { createGame as createCandidate, validateSave as validateCandidate } from '../src/rules.js';
 
 const move = (x,y) => ({type:'move',x,y});
 function dailyFor(piece,color) {
   for(let day=0;day<365;day++) {
-    const daily=getDaily(new Date(Date.UTC(2026,10,5+day)));
+    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
     if(daily.playerPiece===piece && daily.playerColor===color) return daily;
   }
   throw Error(`No ${color} ${piece} edition found`);
@@ -27,23 +29,29 @@ function monster(id,piece,x,y,target=null) {
 // Exported from the published schema-3 engine at 17eb94c after six legal actions.
 const legacy=JSON.parse(readFileSync(new URL('./fixtures/schema3-run.json',import.meta.url),'utf8'));
 
-test('side is seeded independently, leaves existing content unchanged, and black floors begin without committed attacks',()=>{
+test('side is seeded independently and raw black floors begin without committed attacks',()=>{
   const colors=new Set();
   for(let day=0;day<100;day++) {
-    const daily=getDaily(new Date(Date.UTC(2026,10,5+day)));
+    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
     colors.add(daily.playerColor);
-    assert.equal(getDaily(daily.date).playerColor,daily.playerColor);
-    const state=createGame(daily);
+    assert.equal(getRawDaily(daily.date).playerColor,daily.playerColor);
+    const state=createCandidate(daily);
     assert.equal(state.playerColor,daily.playerColor);
     assert.equal(state.awaitingPlayer,false);
     assert.equal(state.legacyTurnOrder,false);
-    assert.equal(validateSave(state,state.date),true);
+    assert.equal(validateCandidate(state,state.date,daily),true);
     if(state.playerColor==='black') assert.ok(state.enemies.every((foe)=>foe.phase==='ready' && foe.intent.length===0));
   }
   assert.deepEqual([...colors].sort(),['black','white']);
-  const current=getDaily(legacy.date);
-  assert.equal(current.playerColor,'black');
-  for(const key of ['seed','edition','species','targets','theme']) assert.deepEqual(current[key],legacy[key]);
+  const raw=getRawDaily(legacy.date);
+  assert.equal(raw.playerColor,'black');
+  for(const key of ['seed','edition','species','targets','theme']) assert.deepEqual(raw[key],legacy[key]);
+  for(const color of colors) {
+    const state=createGame(dailyFor('rook',color));
+    assert.equal(state.playerColor,color);
+    assert.equal(validateSave(state,state.date),true);
+    if(color==='black') assert.ok(state.enemies.every((foe)=>foe.phase==='ready' && foe.intent.length===0));
+  }
 });
 
 test('white captures before enemy movement; black enemies can leave the selected capture square first',()=>{
@@ -148,29 +156,22 @@ test('black can complete the final objective on move sixty and click the stairs 
   assert.ok(!won.events.some((event)=>event.type==='enemy-phase'));
 });
 
-test('real schema-three progress migrates intact to legacy white order, including after exhaustion',()=>{
+test('older progress stays archived instead of being relabeled as a certified edition',()=>{
   const original=structuredClone(legacy);
-  const migrated=migrateSave(legacy);
-  assert.deepEqual(legacy,original,'migration must not mutate the old stored record');
-  assert.equal(migrated.schema,4); assert.equal(migrated.playerColor,'white');
-  assert.equal(migrated.legacyTurnOrder,true); assert.equal(migrated.awaitingPlayer,false);
-  assert.equal(migrated.companion,null);
-  const {schema,playerColor,legacyTurnOrder,awaitingPlayer,companion,...rest}=migrated;
-  assert.deepEqual(rest,((({schema,...rest})=>rest)(legacy)));
-  assert.equal(validateSave(migrated,migrated.date),true);
-  const played=act(migrated,{type:'move',...legalMoves(migrated)[0]});
-  assert.equal(played.playerColor,'white'); assert.equal(validateSave(played,played.date),true);
-  const death=structuredClone(migrated);
-  death.player.hp=1; death.player.x=4; death.player.y=6;
-  death.map=Array(8).fill('........'); death.items=[];
-  death.enemies=[{...monster('attacker','bishop',0,2,{x:4,y:6}),intent:[{x:3,y:5},{x:4,y:6}]}];
-  const reset=act(death,move(3,5));
-  assert.ok(reset.events.some((event)=>event.type==='restart'));
-  assert.equal(reset.playerColor,'white'); assert.equal(reset.legacyTurnOrder,true);
-  assert.equal(validateSave(reset,reset.date),true);
+  assert.equal(validateSave(legacy,legacy.date),false);
+  assert.deepEqual(legacy,original,'validation must preserve the archived stored record');
+  const current=createGame(getDaily(legacy.date));
+  assert.equal(current.schema,5);
+  assert.equal(current.rulesVersion,5);
+  assert.equal(current.legacyTurnOrder,false);
+  for(const schema of [2,3,4]) {
+    assert.equal(validateSave({...current,schema},current.date),false);
+  }
+  const previousRules={...current,rulesVersion:4};
+  assert.equal(validateSave(previousRules,current.date),false);
 });
 
-test('turn metadata and corrupt legacy imports are rejected instead of silently changing order',()=>{
+test('turn metadata and archived imports cannot silently change the certified order',()=>{
   const state=createGame(getDaily('2026-11-12'));
   for(const mutate of [
     (s)=>{s.playerColor='purple';}, (s)=>{s.playerColor='white';},
@@ -180,8 +181,7 @@ test('turn metadata and corrupt legacy imports are rejected instead of silently 
   const white=createGame(getDaily('2026-11-05')); white.awaitingPlayer=true;
   assert.equal(validateSave(white,white.date),false);
   assert.equal(validateSave(legacy,legacy.date),false);
-  assert.equal(migrateSave({...legacy,gold:999}),null);
-  assert.equal(migrateSave({...legacy,schema:2}),null);
-  assert.equal(migrateSave(legacy,'2026-11-08'),null);
-  assert.deepEqual(migrateSave(state),state);
+  assert.equal(validateSave({...legacy,gold:999},legacy.date),false);
+  assert.equal(validateSave(legacy,'2026-11-08'),false);
+  assert.equal(validateSave(JSON.parse(JSON.stringify(state)),state.date),true);
 });

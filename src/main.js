@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
-import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, migrateSave, POWERUPS } from './game.js';
+import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
+import { initPersistentStorage } from './storage.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,7 +22,7 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v4:${daily.date}`;
+const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v5:${daily.date}`;
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
 
@@ -35,22 +36,15 @@ function load() {
   try {
     lastSaved = localStorage.getItem(key());
     if (!lastSaved) {
-      const earlier = localStorage.getItem(`${prefix}${practice ? 'practice:' : 'daily:'}v3:${daily.date}`);
-      if (earlier) {
-        const migrated = migrateSave(JSON.parse(earlier), daily.date);
-        if (migrated) {
-          lastSaved = JSON.stringify(migrated);
-          localStorage.setItem(key(), lastSaved);
-          return migrated;
-        }
+      if (!practice && ['v4:', 'v3:', ''].some((version) => localStorage.getItem(`${prefix}daily:${version}${daily.date}`))) {
+        notify('New dungeon rules are here. Your earlier run is preserved in backups.');
       }
-      if (!practice && localStorage.getItem(`${prefix}daily:${daily.date}`)) notify('New dungeon rules are here. Your earlier run is preserved in Export progress.');
       return null;
     }
     const parsed = JSON.parse(lastSaved);
     if (validateSave(parsed, daily.date)) return parsed;
-    notify('This save could not be read. Export it from the menu before starting again.', true);
-  } catch { notify('Progress storage is unavailable. Keep this tab open; you can export your run.', true); }
+    notify('This save could not be read. Download a backup from the menu before starting again.', true);
+  } catch { notify('Progress storage is unavailable. Keep this tab open; you can download a backup of your run.', true); }
   return null;
 }
 function save() {
@@ -70,7 +64,7 @@ function save() {
     lastSaved = serialized;
     return true;
   } catch {
-    notify('Progress could not be saved. Keep this tab open or export from the menu.', true);
+    notify('Progress could not be saved. Keep this tab open or download a backup from the menu.', true);
     return false;
   }
 }
@@ -299,17 +293,27 @@ $('result-paper-button').addEventListener('click',()=>{
   if(current.date!==daily.date){daily=current;practice=false;state=load();}
   renderPaper();switchScreen('paper');
 });
-$('menu-button').addEventListener('click',()=>{$('menu-dialog').showModal();});
-$('game-menu-button').addEventListener('click',()=>{$('menu-dialog').showModal();});
+function progressStatus(message) {
+  $('progress-feedback').textContent = message;
+  $('progress-feedback').hidden = !message;
+}
+const persistentStorage = initPersistentStorage({ button: $('persist-button'), onStatus: progressStatus });
+function openMenu() {
+  progressStatus('');
+  $('menu-dialog').showModal();
+  persistentStorage.refresh();
+}
+$('menu-button').addEventListener('click',openMenu);
+$('game-menu-button').addEventListener('click',openMenu);
 document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
 $('sound-toggle').addEventListener('change',()=>{sound=$('sound-toggle').checked;try{localStorage.setItem(`${prefix}sound`,sound?'on':'off');}catch{}});
 $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:'))saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:v4:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice)saves[`daily:v5:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);notify('Progress export requested.');
+  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);progressStatus('Backup download requested.');
 });
 $('import-button').addEventListener('click',()=>$('import-file').click());
 $('import-file').addEventListener('change',async(event)=>{
@@ -317,33 +321,27 @@ $('import-file').addEventListener('change',async(event)=>{
   try{
     if(file.size>2_000_000)throw new Error('This file is too large.');
     const data=JSON.parse(await file.text());
-    if(data.app!=='dungeon-chess-daily'||data.schema!==1||!data.saves||typeof data.saves!=='object')throw new Error('Choose a Dungeon Chess Daily progress export.');
+    if(data.app!=='dungeon-chess-daily'||data.schema!==1||!data.saves||typeof data.saves!=='object')throw new Error('Choose a Dungeon Chess Daily backup.');
     const entries=Object.entries(data.saves);
-    const imported = new Map(entries);
     let archived = false;
     for (const [name, value] of entries) {
       if (name === 'sound') { if (!['on','off'].includes(value)) throw new Error('Invalid sound preference.'); continue; }
-      const match = /^daily:(v[34]:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
-      if (!match || typeof value !== 'string') throw new Error('This export contains an unreadable save.');
+      const match = /^daily:(v[345]:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
+      if (!match || typeof value !== 'string') throw new Error('This backup contains an unreadable save.');
       const entry = JSON.parse(value);
-      if (match[1] === 'v4:') {
-        if (!validateSave(entry, match[2])) throw new Error('This export contains an unreadable save.');
-      } else if (match[1] === 'v3:') {
-        const migrated = migrateSave(entry, match[2]);
-        if (!migrated) throw new Error('This export contains an unreadable save.');
-        const newName = `daily:v4:${match[2]}`;
-        if (!imported.has(newName)) imported.set(newName, JSON.stringify(migrated));
+      if (match[1] === 'v5:') {
+        if (!validateSave(entry, match[2])) throw new Error('This backup contains an unreadable save.');
       } else {
         // Earlier rules are archived as data; they are never loaded into this engine.
-        if (!entry || ![2,3].includes(entry.schema) || entry.date !== match[2] || !['playing','won','lost'].includes(entry.status)) throw new Error('This export contains an unreadable earlier edition.');
+        if (!entry || ![2,3,4].includes(entry.schema) || entry.date !== match[2] || !['playing','won','lost'].includes(entry.status)) throw new Error('This backup contains an unreadable earlier edition.');
         archived = true;
       }
     }
-    if(!confirm('Import this progress? Matching saved days on this device will be replaced.'))return;
-    for(const [name,value]of imported)localStorage.setItem(`${prefix}${name}`,value);
+    if(!confirm('Restore this backup? Matching saved days on this device will be replaced.'))return;
+    for(const [name,value]of entries)localStorage.setItem(`${prefix}${name}`,value);
     practice=false;state=load();sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
-    $('menu-dialog').close();renderPaper();switchScreen('paper');notify(archived ? 'Progress imported. Earlier ruleset runs are archived for export.' : 'Progress imported.');
-  }catch(error){notify(error.message||'Progress could not be imported.',true);}
+    $('menu-dialog').close();renderPaper();switchScreen('paper');notify(archived ? 'Backup restored. Earlier ruleset runs are preserved in backups.' : 'Backup restored.');
+  }catch(error){progressStatus(error.message||'Backup could not be restored.');}
 });
 window.addEventListener('storage',event=>{if(event.key===key())refreshFromOtherWindow();});
 let rolloverNotice = '';

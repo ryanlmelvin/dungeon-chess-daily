@@ -17,14 +17,12 @@ function rook(id, x, y, target) {
     phase: 'aim', target, intent: Array.from({ length: 8 }, (_, i) => horizontal ? { x: i, y } : { x, y: i }).filter((tile) => tile.x !== x || tile.y !== y) };
 }
 function promotedThirdRoom() {
-  let state = createGame(getDaily('2026-11-19'));
-  // A real route promotes in room one and carries the queen through room two.
-  for (const tile of [
-    [4, 4], [4, 3], [4, 2], [3, 1], [3, 0], [3, 1], null,
-    [0, 2], [6, 2], [3, 5], [2, 4], [2, 2], [2, 3], [1, 4], [4, 4], [7, 1], [4, 4], [6, 4], [2, 0], null,
-  ]) {
-    state = act(state, tile ? move(...tile) : { type: 'descend' });
+  const daily = getDaily('2026-11-19');
+  let state = createGame(daily);
+  for (const action of daily.generation.certificate.actions) {
+    state = act(state, action);
     assert.equal(validateSave(state, state.date), true);
+    if (state.floor === 2) break;
   }
   assert.equal(state.floor, 2); assert.equal(state.player.piece, 'queen');
   return state;
@@ -74,8 +72,8 @@ test('a demoted pawn skips an occupied entrance and blocked replacement squares'
 
 test('losing a promoted pawn life in a later generated room preserves progress and a valid resumable save', () => {
   const initial = promotedThirdRoom();
-  const aimed = act(initial, move(4, 4));
-  const next = act(aimed, move(3, 4));
+  const aimed = act(act(initial, move(4, 4)), move(4, 3));
+  const next = act(aimed, move(4, 1));
   assert.equal(next.floor, 2); assert.equal(next.player.piece, 'pawn');
   assert.equal(next.player.hp, 7); assert.equal(next.player.maxHp, 8);
   assert.deepEqual([next.player.x, next.player.y], [4, 6]);
@@ -90,11 +88,11 @@ test('losing a promoted pawn life in a later generated room preserves progress a
 
 test('exhaustion on the last move in room three resets the whole run to the same daily dungeon', () => {
   const initial = promotedThirdRoom();
-  const aimed = act(act(initial, move(4, 4)), { type: 'buy', id: 'magnet' });
+  const aimed = act(act(act(initial, move(4, 4)), move(4, 3)), { type: 'buy', id: 'magnet' });
   assert.deepEqual(aimed.purchases, ['magnet']); assert.equal(aimed.powers.magnet, 1);
   aimed.player.hp = 1; aimed.turns = 59;
   assert.equal(validateSave(aimed, aimed.date), true);
-  const restarted = act(aimed, move(3, 4));
+  const restarted = act(aimed, move(4, 1));
   assert.equal(restarted.status, 'playing');
   assert.deepEqual(restarted.events.map((event) => event.type), ['damage', 'restart']);
   assert.match(restarted.message, /Out of lives/);

@@ -11,7 +11,7 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 - Your daily piece is selected from pawn, knight, bishop, rook, queen, and king with equal probability. Its color is independently selected as white or black. It moves and captures like that chess piece. Tap your piece to see legal destinations, then tap a destination to move.
 - Capture a monster by landing on its square. A pawn advances into empty squares and captures diagonally; reaching the far rank promotes it to a queen.
 - Each edition draws nine monster species from twenty-six original sprites, with six randomized color palettes. Each floor mixes three species. Their chess roles stay hidden behind those appearances; read the newspaper's three clues and watch their moves.
-- Seven to nine pillars, crates, barrels, and rocks fill each floor. They block movement and attack lanes; knights jump over them. Layouts preserve movement connectivity and pawn promotion lanes.
+- Seven to nine pillars, crates, barrels, and rocks fill each floor. They block movement and attack lanes; knights jump over them. Layouts preserve movement connectivity and pawn promotion lanes. Every edition also has a replay-verified winning route through combat within sixty moves, without powerups, companions, or lost lives; pawn promotion is allowed.
 - White acts first each turn. When you are white, your move resolves before the monsters respond; when you are black, the monsters act before your selected move. If they block that destination or a hit returns you to a pawn, choose again without another enemy response. A threatened capture winds up before it lands, showing its full attack path.
 - Floors one and two each ask you to capture all enemies of a particular chess role; the third always asks for the king. Every target group has the exact starting chess-army count: eight matching pawns, two matching rooks, knights, or bishops, or one queen or king. Other roles never exceed those limits. Capturing a different role earns gold but does not complete the challenge. The stairs stay hidden until every target is captured. Then click the stairs or the exit button from anywhere to leave, without spending a move.
 - Coins and captures each earn one gold. Tap your gold to buy a Bone ward (3 gold, blocks one hit), Frost hourglass (2 gold, freezes monsters for three moves), or Coin magnet (4 gold, collects coins within two orthogonal steps). Relic pickups activate the same powers for free. Powers carry between floors; buying them costs no moves.
@@ -27,7 +27,7 @@ The mobile game gives the board the screen. Open the in-game menu for the paper,
 
 Use **Install** from the newspaper or result screen. The installation dialog includes instructions for Safari on iPhone/iPad, Chrome on Android, and desktop browsers. After its first complete download, the game and future deterministic daily editions work offline. Three.js, sprites, and other runtime assets are bundled locally.
 
-Progress stays on the device. Export/import in the menu transfers saved editions between browsers or installed apps; there is no account or automatic cloud synchronization. Existing capture-challenge saves resume as white with their original turn order and progress. New saves use separate versioned keys; earlier data remains preserved and included in exports.
+Progress saves automatically on the device. **Download backup** and **Restore backup** in the menu transfer saved editions between browsers or installed apps; there is no account or automatic cloud synchronization. **Enable persistent storage** asks the browser to protect local data from automatic cleanup. The browser may grant or decline the request, and clearing browser data can still erase progress, so keep a backup. Certified editions use version 5 save keys. Earlier ruleset runs remain archived and included in backups; their old layouts are not loaded into the new certified editions.
 
 Updates download in the background. **Update available**, including in the game menu, saves progress before reloading and refuses activation if saving fails. Other open windows keep their own reload choice. [Update recovery](https://ryanlmelvin.github.io/dungeon-chess-daily/update.html) works independently of the main app and preserves stored progress. Service-worker caches and saves are scoped to this project's path.
 
@@ -45,9 +45,15 @@ node scripts/serve.mjs
 
 The production preview serves `dist/` at `http://127.0.0.1:4320/dungeon-chess-daily/`, matching the GitHub Pages project prefix. Use `HOST` and `PORT` environment variables to change its address. Development mode does not register the production service worker.
 
-`src/game.js` contains the deterministic rules and daily generation. `src/renderer.js` renders the pixelated Three.js board. `src/sprites.js` contains original monster and chess-piece pixel art. `src/main.js` owns input, the newspaper, local progress, and sharing.
+`src/game.js` exposes the certified game API. `src/rules.js` contains the shared gameplay simulator; `src/generation.js` and `src/fairness.js` generate and replay-certify editions. `src/renderer.js` renders the pixelated Three.js board. `src/sprites.js` contains original monster and chess-piece pixel art. `src/main.js` owns input, the newspaper, local progress, and sharing.
 
 The build fingerprints shipped content and generates an integrity-verified offline cache. `dist/` is generated and is not committed. Run the engine and PWA tests before publishing. Browser checks should cover a complete run, touch input, save/resume, newspaper hints, sharing, installation, offline reopening, and updating an older installed release. Physical installed-iPhone behavior requires device testing.
+
+## Generation and fairness
+
+Generation uses fixed structural constraints, at most two deterministic candidate searches, and a replay-verified fallback bank. It never runs an open-ended repair loop or treats an unfinished search as proof. The search uses fixed work budgets, so different device speeds cannot change the daily edition. Difficulty presets vary obstacle density and measured attack-lane exposure separately from the no-powerup victory requirement.
+
+Run `npm run verify:fallbacks` to replay all 36 piece/color/difficulty combinations, or `npm run audit:dungeons -- 2026-11-05 365 standard` to audit a year of daily editions. [Generation and fairness](docs/generation.md) explains the guarantee, difficulty metrics, and versioning requirements. The presets are tuning tools, not proven rankings of human difficulty.
 
 ## Publish
 

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {act,createGame,getDaily,legalMoves,migrateSave,validateSave,PIECES} from '../src/game.js';
+import {act,createGame,getDaily,legalMoves,validateSave,PIECES} from '../src/game.js';
+import {getRawDaily} from '../src/edition.js';
+import {createGame as createCandidate,validateSave as validateCandidate} from '../src/rules.js';
 const move=(x,y)=>({type:'move',x,y});
 function scenario(piece='king',color='white',x=4,y=6) {
   let daily;
-  for(let d=0;d<365;d++) {const candidate=getDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===piece&&candidate.playerColor===color){daily=candidate;break;}}
+  for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===piece&&candidate.playerColor===color){daily=candidate;break;}}
   const state=createGame(daily);Object.assign(state.player,{x,y});
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
   state.objective={piece:'king',complete:false};return state;
@@ -13,23 +15,28 @@ function scenario(piece='king',color='white',x=4,y=6) {
 const foe=(id,piece,x,y)=>({id,piece,role:piece,species:'bat',palette:'ice',name:'Ice bat',x,y,moved:false,phase:'ready',target:null,intent:[]});
 const ally=(piece,x,y)=>({piece,basePiece:piece,x,y,moved:false,sharing:false});
 
-test('every new floor offers one deterministic recruit, all six types appear, and legacy layouts remain unchanged',()=>{
+test('generated rooms offer one deterministic recruit and all six types appear',()=>{
   const types=new Set();
   for(let d=0;d<100;d++) {
-    const daily=getDaily(new Date(Date.UTC(2026,10,5+d)));
-    const state=createGame(daily), legacy=createGame({...daily,legacyTurnOrder:true});
+    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
+    const state=createCandidate(daily);
     const pickups=state.items.filter((item)=>item.type==='companion');
     assert.equal(pickups.length,1);types.add(pickups[0].piece);
     if(state.startingPiece==='pawn') assert.ok(pickups[0].y<6,'pawn recruits must be ahead of the player, not behind the entrance');
     assert.ok(state.items.every((item)=>item.x!==state.exit.x||item.y!==state.exit.y),'pickups must remain clickable after stairs appear');
     assert.ok(!state.enemies.some((enemy)=>enemy.x===pickups[0].x&&enemy.y===pickups[0].y));
-    assert.deepEqual(state.map,legacy.map);assert.deepEqual(state.props,legacy.props);
-    assert.deepEqual(state.items.filter((item)=>item.type!=='companion'),legacy.items);
-    assert.equal(legacy.companion,null);
-    assert.equal(validateSave(state,state.date),true);
-    assert.deepEqual(createGame(daily).items,state.items);
+    assert.equal(state.map[pickups[0].y][pickups[0].x],'.');
+    assert.equal(state.companion,null);
+    assert.equal(validateCandidate(state,state.date,daily),true);
+    assert.deepEqual(createCandidate(daily).items,state.items);
   }
   assert.deepEqual([...types].sort(),[...PIECES].sort());
+  for(const date of ['2026-11-12','2026-11-13']) {
+    const daily=getDaily(date), state=createGame(daily);
+    assert.equal(state.items.filter((item)=>item.type==='companion').length,1);
+    assert.equal(validateSave(state,date),true);
+    assert.deepEqual(createGame(daily).items,state.items);
+  }
 });
 
 test('a white recruit moves after its player, captures for gold and the objective, then enemies respond',()=>{
@@ -137,7 +144,7 @@ test('real recruited companions survive save and resume, and invalid companion d
   const pickup=state.items.find((item)=>item.type==='companion');
   const recruited=act(state,move(pickup.x,pickup.y));
   assert.ok(recruited.companion);assert.equal(validateSave(recruited,recruited.date),true);
-  const saved=JSON.parse(JSON.stringify(recruited));assert.deepEqual(migrateSave(saved),saved);
+  const saved=JSON.parse(JSON.stringify(recruited));assert.equal(validateSave(saved,saved.date),true);
   const resumed=act(saved,{type:'move',...legalMoves(saved)[0]});assert.equal(validateSave(resumed,resumed.date),true);
   for(const mutate of [
     (s)=>{s.companion.piece='dragon';},(s)=>{s.companion.x=99;},
