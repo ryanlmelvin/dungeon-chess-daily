@@ -5,6 +5,7 @@ import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, valid
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
+import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 
 const $ = (id) => document.getElementById(id);
@@ -365,30 +366,49 @@ $('export-button').addEventListener('click',()=>{
 $('import-button').addEventListener('click',()=>$('import-file').click());
 $('import-file').addEventListener('change',async(event)=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
-  try{
+  let written = 0;
+  progressStatus('');
+  const reloadProgress = () => {
+    practice=false;state=load();
+    sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
+    renderPaper();switchScreen('paper');
+  };
+  try {
     if(file.size>2_000_000)throw new Error('This file is too large.');
     const data=JSON.parse(await file.text());
-    if(data.app!=='dungeon-chess-daily'||data.schema!==1||!data.saves||typeof data.saves!=='object')throw new Error('Choose a Dungeon Chess Daily backup.');
-    const entries=Object.entries(data.saves);
-    let archived = false;
-    for (const [name, value] of entries) {
-      if (name === 'sound') { if (!['on','off'].includes(value)) throw new Error('Invalid sound preference.'); continue; }
-      const match = /^daily:(v[345]:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
-      if (!match || typeof value !== 'string') throw new Error('This backup contains an unreadable save.');
-      const entry = JSON.parse(value);
-      if (match[1] === 'v5:') {
-        if (!validateSave(entry, match[2])) throw new Error('This backup contains an unreadable save.');
-      } else {
-        // Earlier rules are archived as data; they are never loaded into this engine.
-        if (!entry || ![2,3,4].includes(entry.schema) || entry.date !== match[2] || !['playing','won','lost'].includes(entry.status)) throw new Error('This backup contains an unreadable earlier edition.');
-        archived = true;
-      }
+    // Capture the latest window and in-memory progress before merging. There
+    // are no awaits between reading current storage and applying the delta.
+    refreshFromOtherWindow();
+    if (!save()) {
+      progressStatus('Current progress could not be saved. Download a backup before restoring, or try again.');
+      return;
     }
-    if(!confirm('Restore this backup? Matching saved days on this device will be replaced.'))return;
-    for(const [name,value]of entries)localStorage.setItem(`${prefix}${name}`,value);
-    practice=false;state=load();sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
-    $('menu-dialog').close();renderPaper();switchScreen('paper');notify(archived ? 'Backup restored. Earlier ruleset runs are preserved in backups.' : 'Backup restored.');
-  }catch(error){progressStatus(error.message||'Backup could not be restored.');}
+    const current = new Map();
+    for(let i=0;i<localStorage.length;i++) {
+      const name=localStorage.key(i);
+      if(name.startsWith(prefix)&&!name.includes('practice:'))current.set(name.slice(prefix.length),localStorage.getItem(name));
+    }
+    const { writes, archived, unreadable } = planBackupMerge(current, data);
+    for (const [name,value] of writes) {
+      const latest = localStorage.getItem(`${prefix}${name}`);
+      // Another window may finish a day while this backup is being validated.
+      if (latest !== (current.get(name) ?? null)) {
+        const checked = planBackupMerge(new Map(latest === null ? [] : [[name,latest]]), { app: data.app, schema: data.schema, saves: { [name]: value } });
+        unreadable.push(...checked.unreadable);
+        if (!checked.writes.has(name)) continue;
+      }
+      localStorage.setItem(`${prefix}${name}`,value); written++;
+    }
+    reloadProgress();$('menu-dialog').close();
+    notify(unreadable.length
+      ? `${written ? 'Backup merged. ' : ''}${unreadable.length} unreadable local ${unreadable.length===1?'save was':'saves were'} kept unchanged; matching backup entries were skipped.`
+      : archived ? 'Backup merged. Earlier ruleset runs remain in backups.' : 'Backup merged.', unreadable.length > 0);
+  } catch(error) {
+    if (written) { try { reloadProgress(); } catch {} }
+    progressStatus(written
+      ? 'Some progress was merged before storage became unavailable. Keep your backup and try again.'
+      : error.message||'Backup could not be merged.');
+  }
 });
 window.addEventListener('storage',event=>{if(event.key===key())refreshFromOtherWindow();});
 let rolloverNotice = '';
