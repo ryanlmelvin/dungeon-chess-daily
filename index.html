@@ -15,8 +15,6 @@
   <header class="app-bar">
     <a class="wordmark" href="./" aria-label="Dungeon Chess Daily home"><span class="mark" aria-hidden="true">▤</span><span>Dungeon Chess <b>Daily</b></span></a>
     <nav aria-label="App controls">
-      <button id="update-button" class="update-button" hidden>Update available</button>
-      <button id="install-button">Install</button>
       <button id="menu-button" class="icon-button" aria-label="Menu and how to play">☰</button>
     </nav>
   </header>
@@ -55,6 +53,10 @@
       </article>
     </section>
   </main>
+  <div id="pwa-bar" class="pwa-bar" role="region" aria-label="App install and updates">
+    <button id="update-button" class="update-button" hidden>Update available</button>
+    <button id="install-button">Install app</button>
+  </div>
   <div id="notice" class="notice" role="status" hidden></div>
   <dialog id="menu-dialog" aria-labelledby="menu-title">
     <div id="menu-home">
