@@ -397,6 +397,10 @@ function finishFloor(state) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
   } else {
+    // A frozen room's leftover moves stay behind; only hourglasses bought in the
+    // between-floor shop (the only purchases possible since the floor began) come along.
+    const bought = state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0).filter((id) => id === 'freeze').length;
+    state.powers.freeze = Math.min(state.powers.freeze, bought * 3);
     state.floor++; setFloor(state);
     state.message = `Capture all enemy ${state.objective.piece}s. New faces, new clues.`;
     state.events.push({ type: 'descend', x: state.player.x, y: state.player.y });

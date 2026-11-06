@@ -517,3 +517,20 @@ test('an older save that ended trapped can be retried, counting as another try',
   const playing = createGame(daily);
   assert.equal(retryLostRun(playing), playing);
 });
+
+test('leftover hourglass moves stay on their floor, but shop hourglasses carry to the next', () => {
+  const state = scenario('queen');
+  state.enemies = [monster('key', 'king', 4, 2), monster('other', 'pawn', 0, 7)];
+  state.powers.freeze = 4; state.powers.shield = 1; state.powers.magnet = 1;
+  const cleared = act(state, move(4, 2));
+  assert.equal(cleared.exit.open, true); assert.equal(cleared.powers.freeze, 3);
+  const leftover = act(cleared, {type:'descend'});
+  assert.equal(leftover.floor, 1);
+  assert.deepEqual(leftover.powers, { shield: 1, freeze: 0, magnet: 1 });
+  cleared.gold = 2;
+  const bought = act(cleared, {type:'buy', id:'freeze'});
+  assert.equal(bought.powers.freeze, 6);
+  assert.equal(act(bought, {type:'descend'}).powers.freeze, 3, 'only the bought hourglass carries');
+  bought.powers.freeze = 1;
+  assert.equal(act(bought, {type:'descend'}).powers.freeze, 1, 'moves already spent are not refunded');
+});
