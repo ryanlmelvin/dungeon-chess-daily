@@ -48,12 +48,14 @@ function targetDistance(state, target) {
 function score(state) {
   if (state.status === 'won') return 1_000_000;
   const targets = state.enemies.filter((enemy) => enemy.role === state.objective.piece);
-  const nearest = targets.length ? Math.min(...targets.map((target) => targetDistance(state, target))) : 0;
+  // A pawn can't take a dodging king: promote first, then hunt as a queen.
+  const promoteFirst = state.startingPiece === 'pawn' && state.objective.piece === 'king';
+  const nearest = targets.length && !(promoteFirst && state.player.piece === 'pawn') ? Math.min(...targets.map((target) => targetDistance(state, target))) : 0;
   return state.floor * 2000 + (state.exit.open ? 1600 : 0) + state.captures * 35
     - nearest * 8 - state.turns * 0.7
     - (PIECE_LIVES[state.startingPiece] - state.player.hp) * 150
-    + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? 50 : 0)
-    + (state.player.piece === 'pawn' ? (6 - state.player.y) * 6 : 0)
+    + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? (promoteFirst ? 300 : 50) : 0)
+    + (state.player.piece === 'pawn' ? (6 - state.player.y) * (promoteFirst ? 30 : 6) : 0)
     + (allyFloor(state) && state.companion ? 40 : 0);
 }
 
