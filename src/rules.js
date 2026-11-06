@@ -320,7 +320,7 @@ export function createGame(daily = getRawDaily()) {
 function finishFloor(state) {
   const captures = state.captures - state.floorStart.captures;
   const treasure = state.treasure - state.floorStart.treasure;
-  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, hp: state.player.hp, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
@@ -459,12 +459,41 @@ export function act(previous, action) {
   return state;
 }
 
+// Each floor holds three coins and exactly two monsters outside its target role.
+// Those five optional prizes, plus finishing without losing a life, are what a
+// share row shows; the headline ranks how many of the 18 the run collected.
+export const SHARE_RANKS = [
+  [18, '📰 FRONT PAGE'], [15, '🗞️ Above the fold'], [11, '✒️ Headline'], [7, '📎 Column inch'], [0, '🗑️ Buried on page 12'],
+];
+
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
-  const stamps = Array.from({ length: 3 }, (_, floor) => {
+  const keycaps = ['1️⃣', '2️⃣', '3️⃣'];
+  let score = 0;
+  const rows = [];
+  const hpBefore = (floor) => floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
+  for (let floor = 0; floor < 3; floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    return record ? ({ gold: '🟨', silver: '⬜', bronze: '🟫' })[record.grade] : state.status === 'lost' && state.floor === floor ? '💀' : '⬛';
-  }).join('');
-  return `Dungeon Chess Daily\n${state.date} · ${state.status === 'won' ? 'Filed' : state.status === 'lost' ? 'Trapped' : 'On assignment'}\n${stamps}\n${state.turns} moves · ${state.captures} ⚔️ · ${state.treasure} 🪙\n${url}`;
+    const current = !record && floor === state.floor;
+    if (!record && !current) { rows.push(`${keycaps[floor]} 🔒`); continue; }
+    const target = PIECE_COUNTS[state.targets[floor]];
+    const coins = record ? record.treasure : state.treasure - (state.floorStart?.treasure ?? 0);
+    const extra = Math.max(0, (record ? record.captures : state.captures - (state.floorStart?.captures ?? 0)) - target);
+    const before = hpBefore(floor);
+    const after = record ? record.hp : state.player.hp;
+    const hits = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : null;
+    let row = `${keycaps[floor]} ${'🪙'.repeat(coins)}${'▫️'.repeat(3 - coins)} ${'⚔️'.repeat(extra)}${'▫️'.repeat(2 - extra)}`;
+    if (hits) row += ` ${'💔'.repeat(hits)}`;
+    if (record) {
+      score += coins + extra + (hits === 0 ? 1 : 0);
+      if (coins === 3 && extra === 2 && hits === 0) row += ' ✨';
+    } else row += state.status === 'lost' ? ' 💀' : ' ⏳';
+    rows.push(row);
+  }
+  const headline = state.status === 'won'
+    ? `${SHARE_RANKS.find(([min]) => score >= min)[1]} · ${score}/18`
+    : state.status === 'lost' ? `💀 Trapped on floor ${state.floor + 1}` : `⏳ On assignment · floor ${state.floor + 1}`;
+  const retry = state.replayUnlocked && !state.practice && state.status === 'won' ? ' · 🔁 retried' : '';
+  return `Dungeon Chess Daily #${state.edition}\n${headline}\n${rows.join('\n')}\n${state.turns} moves${retry}\n${url}`;
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
@@ -521,7 +550,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (ally.sharing !== same(ally,value.player) || value.enemies.some((foe)=>same(foe,ally)) || value.items.some((item)=>item.type==='companion')) return false;
     } else if (deliveredOrder || (recruit && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp <= (value.records[index - 1]?.hp ?? value.player.maxHp) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
