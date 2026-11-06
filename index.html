@@ -36,7 +36,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="freeze-status" hidden></span><span id="modifier-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="modifier-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
@@ -66,7 +66,7 @@
           <h3 id="bot-title">Dungeon Bot</h3>
           <p id="bot-verdict" class="bot-verdict"></p>
           <table class="bot-table">
-            <thead><tr><th scope="col"></th><th scope="col">You</th><th scope="col">Bot</th></tr></thead>
+            <thead><tr><th scope="col"></th><th scope="col">You</th><th scope="col">Bot</th><th scope="col" id="bot-stars-head" hidden>Stars</th></tr></thead>
             <tbody id="bot-rows"></tbody>
           </table>
           <p class="bot-note">The bot is the route the fairness checker found when it certified this dungeon: no powerups, and no lost lives except on pawn days, where it may spend up to four.</p>
@@ -126,6 +126,7 @@
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to open the exit door onto the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last floor targets the king.</p>
         <p>Capture them all to open the door behind the back row. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
+        <p>Each floor shows a <b>Par</b>: the moves the certified route needed there. Clear the floor at or under par for ⭐⭐⭐, within 5 over for ⭐⭐, or else ⭐. Only the official piece and color have a par.</p>
         <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
       <article class="guide-page" hidden>

@@ -14,6 +14,7 @@ import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
+import { parFor, runPars, awardStars, totalStars, starText, MAX_STARS } from './par.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -243,6 +244,20 @@ function showGameFeedback() {
   }
   if (text) feedbackTimer = setTimeout(()=>{$('game-message').hidden=true;},3000);
 }
+// Par: the certified route's moves for this floor. Only the number shows, and
+// only for the official piece and color the route was certified for.
+function renderPar() {
+  const par = parFor(state, daily);
+  $('par-status').hidden = par === null;
+  if (par === null) return;
+  $('par-status').textContent = `Par ${par}`;
+  $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${state.turns - state.floorStart.turns} so far`);
+}
+function announceStars(record) {
+  notify(`Floor ${record.floor + 1} cleared in ${record.turns} ${record.turns === 1 ? 'move' : 'moves'} · ${starText(record.stars)}`);
+  const notice = $('notice');
+  notice.classList.remove('star-toast'); void notice.offsetWidth; notice.classList.add('star-toast');
+}
 function renderLives() {
   const { hp, maxHp } = state.player;
   const markers = $('lives');
@@ -265,6 +280,7 @@ function updateGame() {
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
   $('move-status').textContent = `${state.turns} ${state.turns === 1 ? 'move' : 'moves'}`;
+  renderPar();
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
@@ -393,7 +409,8 @@ function takeAction(action) {
   const next = act(state, action);
   if (next === state) return false;
   turnLocked=!shopping;
-  state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(state.events);
+  const scored = awardStars(next, runPars(next, daily));
+  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(scored.length)announceStars(scored.at(-1));updateGame();playSound(state.events);
   const enPassant = state.events.some(event => event.type === 'en-passant');
   const castled = state.events.some(event => event.type === 'castle');
   const special = enPassant ? 'en-passant' : castled ? 'castle' : null;
@@ -487,13 +504,15 @@ function showResult() {
   $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured on floor ${state.floor+1}. Tomorrow is another story.`:state.message;
   if (state.status === 'lost') return showDeath();
   showResultActions(true);
+  // Runs won before par existed get their stars the first time the result shows.
+  if (awardStars(state, runPars(state, daily)).length) save();
   const shareable = isOfficialPiece(state, daily);
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · 🇫🇷 En passant · 🏰 Castled · Your piece last\n${next}` : next;
+  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · 🇫🇷 En passant · 🏰 Castled · Your piece · ⭐ Par stars\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -813,11 +832,19 @@ function renderBotComparison() {
     tr.append(th, ...cells);
     return tr;
   };
+  // Par stars sit in their own column beside the floor and total rows.
+  const stars = totalStars(state.records);
+  $('bot-stars-head').hidden = stars === null;
+  const starCell = (tr, value, label) => {
+    if (stars === null) return tr;
+    const td = document.createElement('td'); td.className = 'bot-stars'; td.textContent = value; if (label) td.setAttribute('aria-label', label);
+    tr.append(td); return tr;
+  };
   $('bot-rows').replaceChildren(
-    ...bot.floors.map((moves, index) => row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves)),
-    row('Total moves', you.moves, bot.moves, true),
-    row('Lives lost', you.livesLost, 0),
-    ...(you.tries > 1 ? [row('Tries', you.tries, 1)] : []),
+    ...bot.floors.map((moves, index) => starCell(row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves), starText(state.records[index]?.stars ?? 0), `${state.records[index]?.stars} of ${MAX_STARS} stars`)),
+    starCell(row('Total moves', you.moves, bot.moves, true), `⭐${stars}/${MAX_STARS * 3}`, `${stars} of ${MAX_STARS * 3} stars`),
+    starCell(row('Lives lost', you.livesLost, 0), ''),
+    ...(you.tries > 1 ? [starCell(row('Tries', you.tries, 1), '')] : []),
   );
 }
 
