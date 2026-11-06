@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
 import { initGuide } from './guide.js';
-import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS } from './game.js';
+import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -194,7 +194,7 @@ function updateGame() {
   $('turns').setAttribute('aria-label', `${state.maxTurns - state.turns} moves left`);
   renderLives();
   $('shop-button').textContent = `${state.gold} gold`;
-  $('shop-button').setAttribute('aria-label', `${state.gold} gold. Buy powerups`);
+  $('shop-button').setAttribute('aria-label', `${state.gold} gold. Open shop`);
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
@@ -268,7 +268,33 @@ function renderShop() {
     button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
     button.lastElementChild.textContent = `${power.description}${owned ? ` (${power.id === 'freeze' ? `${owned} moves left` : power.id === 'magnet' ? 'Active' : `${owned} left`})` : ''}`;
   }
+  $('companion-shop').hidden = state.floor === 2;
+  const reserved = (state.companionOrders || []).find(order => order.floor === state.floor + 1);
+  $('companion-picker').hidden = !!reserved;
+  $('companion-reserved').hidden = !reserved;
+  if (reserved) {
+    const name = COMPANIONS.find(companion => companion.piece === reserved.piece).name;
+    $('companion-reserved').textContent = `${name} reserved for floor ${reserved.floor + 1} only.`;
+  } else {
+    $('companion-label').textContent = `Companion for floor ${state.floor + 2} only`;
+    const select = $('companion-choice');
+    if (!select.options.length) {
+      for (const companion of COMPANIONS) {
+        const option = document.createElement('option');
+        option.value = companion.id;
+        option.textContent = `${companion.name} · ${companion.cost} gold`;
+        select.append(option);
+      }
+    }
+    const chosen = COMPANIONS.find(companion => companion.id === select.value);
+    $('buy-companion').disabled = !chosen || state.gold < chosen.cost;
+  }
 }
+$('companion-choice').addEventListener('change', renderShop);
+$('companion-shop').addEventListener('submit', event => {
+  event.preventDefault();
+  if (takeAction({type:'buy', id:$('companion-choice').value})) $('shop-feedback').hidden = true;
+});
 $('shop-button').addEventListener('click', () => {
   if (!state || state.status !== 'playing' || turnLocked) return;
   refreshFromOtherWindow();

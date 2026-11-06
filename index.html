@@ -119,12 +119,12 @@
         <p>Each hit costs a life. Zero lives restarts the dungeon. A hit undoes pawn promotion.</p>
       </article>
       <article class="guide-page" hidden>
-        <p>Coins + captures earn gold. Tap gold to shop; buying costs no moves.</p>
+        <p>Coins + captures earn gold. Tap gold to buy powerups or reserve a companion for the next floor. Buying costs no moves.</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for 3 moves</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect nearby coins</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Recruit a companion for this room. It moves after you.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Recruit a companion for this room only. It moves after you.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -132,9 +132,16 @@
     </section>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
-    <div class="dialog-heading"><h2 id="shop-title">Powerups</h2><button class="icon-button" data-close aria-label="Close powerups">✕</button></div>
+    <div class="dialog-heading"><h2 id="shop-title">Gold shop</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>
     <p id="shop-gold"></p>
     <div id="shop-items" class="shop-items"></div>
+    <form id="companion-shop" class="companion-shop">
+      <div id="companion-picker">
+        <label id="companion-label" for="companion-choice">Companion for next floor only</label>
+        <div class="companion-order-controls"><select id="companion-choice"></select><button id="buy-companion" type="submit">Reserve</button></div>
+      </div>
+      <p id="companion-reserved" role="status" hidden></p>
+    </form>
     <p id="shop-feedback" role="status" hidden></p>
   </dialog>
   <dialog id="copy-dialog" aria-labelledby="copy-title"><div class="dialog-heading"><h2 id="copy-title">Share your edition</h2><button class="icon-button" data-close aria-label="Close sharing">✕</button></div><textarea id="copy-text" readonly rows="8" aria-label="Spoiler-free result to copy"></textarea><p>Select the text and copy it into a message.</p></dialog>

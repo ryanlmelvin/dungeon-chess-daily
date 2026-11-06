@@ -4,7 +4,11 @@ import { act, legalMoves, dangerTiles, unreachablePickups } from './rules.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const hasPowers = (state) => Object.values(state.powers).some((value) => value !== 0)
-  || Boolean(state.companion) || (state.companions?.length ?? 0) > 0;
+  || Boolean(state.companion) || (state.companions?.length ?? 0) > 0
+  // An undelivered order is already bought assistance. Older schema-5 states
+  // omit the ledger; only an absent ledger or an empty array is unpowered.
+  || (state.companionOrders !== undefined
+    && (!Array.isArray(state.companionOrders) || state.companionOrders.length > 0));
 const hurt = (state) => state.events.some((event) => event.type === 'damage' || event.type === 'restart');
 const relicAt = (state, tile) => state.items.some((item) => ['powerup', 'companion'].includes(item.type) && same(item, tile));
 const powered = (state) => hasPowers(state) || state.events.some((event) =>

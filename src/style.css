@@ -102,3 +102,5 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 #guide-pagination{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);margin-top:18px;padding-top:14px}
 #guide-pagination button{min-height:44px}
 @media(max-width:380px){#menu-dialog{padding:16px}#guide-title{font-size:22px}.move-diagrams{gap:12px 7px}}
+
+.companion-shop{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.companion-shop label{display:block;font-size:12px;margin-bottom:9px}.companion-order-controls{display:flex;gap:8px}.companion-order-controls select{min-width:0;flex:1;font:inherit;font-size:12px;color:var(--paper);background:#100f14;border:1px solid #766b7b;padding:10px 8px}.companion-order-controls select:focus-visible{outline:3px solid var(--gold);outline-offset:3px}.companion-order-controls button{color:var(--gold)}#companion-reserved{margin:0;color:var(--gold)}
