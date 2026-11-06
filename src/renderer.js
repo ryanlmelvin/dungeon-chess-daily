@@ -332,19 +332,18 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       tileMark(hints, tile.x, tile.y, 0.94, 0.94, basic(0xc72c51, { transparent: true, opacity: 0.42, depthWrite: false }), 0.03);
       cornerMarks(tile.x, tile.y, 0xff6685);
     }
-    // Connect every marked firing-path tile back along its ray, without exposing
-    // the monster's hidden chess role. A path remains visible under its sprites.
+    // Anchor each attack at the enemy's square center, including jump attacks.
+    // The shaded tiles, rather than the connector, identify threatened squares.
     for (const enemy of next.enemies) {
       if (enemy.phase !== 'aim') continue;
-      for (const target of enemy.intent || []) {
-        const dx = target.x - enemy.x;
-        const dy = target.y - enemy.y;
-        if ((!dx && !dy) || (dx && dy && Math.abs(dx) !== Math.abs(dy))) continue;
-        const stepX = Math.sign(dx);
-        const stepY = Math.sign(dy);
-        const beam = tileMark(hints, target.x, target.y, 0.035, stepX && stepY ? Math.SQRT2 : 1, basic(0xff557a, { transparent: true, opacity: 0.8, depthWrite: false }), 0.05);
-        beam.rotation.z = Math.atan2(stepX, stepY);
-      }
+      const target = enemy.intent?.at(-1);
+      if (!target) continue;
+      const dx = target.x - enemy.x;
+      const dy = target.y - enemy.y;
+      const length = Math.hypot(dx, dy);
+      if (!length) continue;
+      const beam = tileMark(hints, enemy.x + dx / 2, enemy.y + dy / 2, 0.035, length, basic(0xff557a, { transparent: true, opacity: 0.8, depthWrite: false }), 0.05);
+      beam.rotation.z = Math.atan2(dx, dy);
     }
     if (next.showMoves) {
       moveMaterial = basic(MOVE_COLOR, { transparent: true, opacity: 0.5, depthWrite: false });
