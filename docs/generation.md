@@ -51,7 +51,10 @@ obstacle position once. The rules preserve the exact chess-army count of the
 assigned target, cap other roles, prevent overlapping units/items/obstacles,
 reserve the entrance and exit, maintain the player's movement connectivity,
 place opposing bishop targets on the player's bishop color, and preserve pawn
-promotion files. Every stationary pickup (coins, relics, and recruitable pieces)
+promotion files. A pawn-target floor draws its eight pawns from the back four
+rows on a stream of its own (off the player's file and the decoys' squares, at
+least three on each side, at most three per row); the first two editions keep
+the fixed V they were published with. Every stationary pickup (coins, relics, and recruitable pieces)
 also passes a movement-graph reachability check on every floor. Bishop pickups
 must lie on the bishop's starting color and be connected through its diagonals;
 knight pickups must be connected through legal jumps. Pawn graph states advance

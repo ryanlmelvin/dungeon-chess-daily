@@ -98,7 +98,7 @@ test('a blocked black selection waits without spending a move and retries never 
 
 test('black pending turns persist in valid saves, purchases preserve the phase, and play continues beyond sixty completed moves',()=>{
   const state=createGame(getDaily('2026-11-12'));
-  const pending=act(state,move(4,3));
+  const pending=act(state,move(4,5));
   assert.equal(pending.awaitingPlayer,true);
   assert.equal(validateSave(pending,pending.date),true);
   const saved=JSON.parse(JSON.stringify(pending));
@@ -107,7 +107,7 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   assert.equal(validateSave(reply,reply.date),true);
   assert.ok(!reply.events.some((event)=>event.type==='enemy-phase'));
   const beforeDeadline=structuredClone(state); beforeDeadline.turns=59;
-  const lastPending=act(beforeDeadline,move(4,3));
+  const lastPending=act(beforeDeadline,move(4,5));
   assert.equal(lastPending.turns,59); assert.equal(lastPending.status,'playing');
   assert.equal(validateSave(lastPending,lastPending.date),true);
   const timedOut=act(lastPending,safeMove(lastPending));

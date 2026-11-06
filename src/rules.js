@@ -415,6 +415,36 @@ function connectedBoard(state) {
 // layout so its saved runs still validate. Keyed by seed, not date, so a
 // fallback layout plays the same on any date it is certified for.
 const LEGACY_LAYOUT_SEEDS = new Set([1830689584]);
+// A pawn floor draws its eight pawns from the four back rows instead of one
+// fixed V, so pawn floors stop looking alike from day to day. Its own random
+// stream leaves the room's other draws (mirror, powerup, walls) in sequence.
+// The pawns stay off the player's file and the decoys' squares, at least
+// three on each side of that file and at most three on one row.
+// The first two editions (2026-11-05 and 2026-11-06) keep the fixed V so
+// their saved runs still validate; 2026-11-06's seed is also the white-pawn
+// fallback, which keeps its certificate.
+const FIXED_PAWN_FORMATION_SEEDS = new Set([1830689584, 1881022441]);
+function pawnFormation(state) {
+  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:pawns:${state.floor}`));
+  const squares = [];
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) {
+    // (1, 0) too: a mirrored room moves the (7, 0) decoy there.
+    if (x === 4 || (y === 0 && (x <= 1 || x === 7))) continue;
+    squares.push({ x, y, order: rng() });
+  }
+  squares.sort((a, b) => a.order - b.order);
+  const chosen = [];
+  const count = (test) => chosen.filter(test).length;
+  for (const tile of squares) {
+    if (chosen.length === 8) break;
+    const side = tile.x < 4;
+    // Leave room for three on the other side of the file.
+    if (count((entry) => entry.x < 4 === side) >= 5) continue;
+    if (count((entry) => entry.y === tile.y) >= 3) continue;
+    chosen.push(tile);
+  }
+  return chosen.map(({ x, y }) => [x, y]);
+}
 // The king floor plays by royal rules: a smarter king and guards (enemyTurn)
 // and a stronger recruit (setFloor) that may help certify the room (fairness.js).
 export function royalRules(state) { return state.floor === 2; }
@@ -469,14 +499,17 @@ function setFloor(state, legacyRecruit = false) {
   const target = state.species[state.floor];
   const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), state.species[3 + state.floor * 2], state.species[4 + state.floor * 2]];
   const mirror = rng() < 0.5;
-  const targetTiles = target.piece === 'pawn'
+  const formation = target.piece === 'pawn' && !FIXED_PAWN_FORMATION_SEEDS.has(state.dungeonSeed ?? state.seed)
+    ? pawnFormation(state) : null;
+  const targetTiles = formation ?? (target.piece === 'pawn'
     ? [[3, 3], [5, 3], [2, 2], [6, 2], [1, 1], [7, 1], [0, 2], [6, 0]]
-    : layoutPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]];
+    : layoutPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]]);
   const coordinates = [...targetTiles.slice(0, PIECE_COUNTS[target.piece]), [0, 0], [7, 0]];
   state.enemies = coordinates.map(([initialX, y], index) => {
     const creature = residents[index];
     // Keep pawn editions' starting file free; a bishop target shares its color.
-    let x = mirror && initialX ? 8 - initialX : initialX;
+    // A drawn pawn formation is already random, so only fixed tiles mirror.
+    let x = mirror && initialX && !(formation && index < formation.length) ? 8 - initialX : initialX;
     return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
       piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
   });
