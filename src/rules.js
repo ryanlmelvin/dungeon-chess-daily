@@ -5,6 +5,7 @@ import { hash, random } from './random.js';
 import { getRawDaily } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState, modifierOf } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, tacticMarks, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
+import { chooseMonsterMove } from './monster-ai.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 5;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -221,12 +222,10 @@ function moveMonster(state, foe) {
   const candidates = movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
   if (!candidates.length) return;
   const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
-  candidates.sort((a, b) => {
-    const score = (move) => distance(move, state.player) + distance(move, foe) * 0.35 + tie(move) * 0.7;
-    return score(a) - score(b);
-  });
+  // Each role steps with its own habits (src/monster-ai.js).
+  const step = chooseMonsterMove(state, foe, candidates, { movesFor, closeAttacker, tie });
   const from = { x: foe.x, y: foe.y };
-  foe.x = candidates[0].x; foe.y = candidates[0].y; foe.moved = true;
+  foe.x = step.x; foe.y = step.y; foe.moved = true;
   state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
