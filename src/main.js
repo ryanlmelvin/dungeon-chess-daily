@@ -524,6 +524,22 @@ $('reset-floor-button').addEventListener('click', () => {
 });
 $('reset-day-button').addEventListener('click', () => {
   if (!state) return;
+  // A run begun before the UTC rollover still holds yesterday's edition; "today's"
+  // must not quietly mean that one, so offer the new edition first.
+  if (!archiveMode) {
+    const current = getDaily();
+    if (current.date !== daily.date) {
+      if (confirm(`A new edition (No. ${String(current.edition).padStart(3, '0')}) is out since this run began. Open today’s new dungeon?\n\nCancel to restart the ${formatShortDate(daily.date)} dungeon instead.`)) {
+        $('menu-dialog').close();
+        openEdition(current.date);
+        return;
+      }
+      if (!confirm(`Restart the ${formatShortDate(daily.date)} ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
+      const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
+      startOver(next, `The ${formatShortDate(daily.date)} dungeon restarted from floor 1.`);
+      return;
+    }
+  }
   if (!confirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
   const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
   startOver(next, `${archiveMode ? 'This' : 'Today’s'} dungeon restarted from floor 1.`);
