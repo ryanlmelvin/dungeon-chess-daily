@@ -38,6 +38,17 @@ export const MONSTER_PALETTES = Object.freeze({
 
 export function spritePalette(id) { return MONSTER_PALETTES[id]?.colors || {}; }
 
+const BLACK_PIECE_PALETTE = Object.freeze({
+  x: '#a5acb7', // silver rim keeps dark pieces readable against the dungeon
+  d: '#11151e', s: '#151a24', b: '#292f3d', w: '#707c91',
+});
+
+export const COMPANION_PALETTE = Object.freeze({
+  x: '#123e3d', d: '#174c49', s: '#278a7d', b: '#78dec8', w: '#d5fff1',
+});
+
+export function piecePalette(color) { return color === 'black' ? BLACK_PIECE_PALETTE : {}; }
+
 // Each hand-drawn 16-pixel silhouette sits inside a 20-pixel texture.
 // The transparent border keeps neighboring tiles and point sampling clean.
 function framed(rows) {

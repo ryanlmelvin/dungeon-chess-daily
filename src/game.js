@@ -77,7 +77,7 @@ export function getDaily(date = new Date()) {
   });
   const headline = (creature) => HEADLINES[creature.piece](PIECE_COUNTS[creature.piece] > 1 ? `${creature.palette[0].toUpperCase() + creature.palette.slice(1)} ${creature.plural.toLowerCase()}` : creature.name);
   return {
-    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, species, targets,
+    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: ((hash(`${value}:color`) >>> 8) & 1) ? 'black' : 'white', species, targets,
     theme: {
       name: 'The Midnight Board', headline: headline(species[0]),
       deck: HINTS[species[0].piece], boss: species[2].name, accent: '#b75652',
@@ -103,6 +103,8 @@ function rays(piece) {
 function movesFor(state, unit, enemy = false, attacksOnly = false) {
   const moves = [];
   const occupant = (x, y) => {
+    if (enemy && state.companion && state.companion.x === x && state.companion.y === y) return 'friend';
+    if (unit === state.companion && state.player.x === x && state.player.y === y) return 'friend';
     const foe = enemyAt(state, x, y);
     if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
     if (enemy && state.player.x === x && state.player.y === y && state.player.hp) return 'opponent';
@@ -152,7 +154,7 @@ function attackPath(state, foe, target) {
   const path = [];
   for (let step = 1; step < 8; step++) {
     const x = foe.x + dx * step, y = foe.y + dy * step;
-    if (!walkable(state, x, y) || enemyAt(state, x, y)) break;
+    if (!walkable(state, x, y) || enemyAt(state, x, y) || (state.companion && state.companion.x === x && state.companion.y === y)) break;
     path.push({ x, y });
   }
   return path;
@@ -189,7 +191,9 @@ function moveMonster(state, foe) {
     const score = (move) => distance(move, state.player) + distance(move, foe) * 0.35 + tie(move) * 0.7;
     return score(a) - score(b);
   });
+  const from = { x: foe.x, y: foe.y };
   foe.x = candidates[0].x; foe.y = candidates[0].y; foe.moved = true;
+  state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
   promoteMonster(state, foe);
   aimAtPlayer(state, foe);
 }
@@ -201,7 +205,7 @@ function returnToPawn(state) {
   // the entrance, skipping occupied squares and positions with no pawn move.
   // Pawn editions reserve the central files, so a live room has room to reenter.
   for (let y = 6; y >= 1; y--) for (const x of [4, 3, 5, 2, 6, 1, 7, 0]) {
-    if (!walkable(state, x, y) || enemyAt(state, x, y)) continue;
+    if (!walkable(state, x, y) || enemyAt(state, x, y) || (state.companion && state.companion.x === x && state.companion.y === y)) continue;
     const candidate = { ...state.player, x, y };
     if (!movesFor(state, candidate).length) continue;
     state.player.x = x; state.player.y = y;
@@ -210,6 +214,7 @@ function returnToPawn(state) {
 }
 
 function enemyTurn(state) {
+  state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   for (const foe of state.enemies) {
     if (foe.phase === 'aim') {
@@ -241,7 +246,12 @@ function enemyTurn(state) {
         return;
       }
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
-      if (destination) { foe.x = destination.x; foe.y = destination.y; foe.moved = true; promoteMonster(state, foe); }
+      if (destination) {
+        const from = { x: foe.x, y: foe.y };
+        foe.x = destination.x; foe.y = destination.y; foe.moved = true;
+        state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
+        promoteMonster(state, foe);
+      }
       foe.phase = 'ready'; foe.intent = []; foe.target = null;
       state.events.push({ type: 'miss', x: foe.x, y: foe.y });
     } else if (!aimAtPlayer(state, foe)) {
@@ -270,6 +280,7 @@ function connectedBoard(state) {
 
 function setFloor(state) {
   const rng = random(hash(`${state.seed}:room:${state.floor}`));
+  state.awaitingPlayer = false; state.companion = null;
   state.map = Array(8).fill('........');
   state.player.x = 4; state.player.y = 6; state.player.moved = false;
   state.exit = { x: 4, y: 0, open: false };
@@ -309,12 +320,25 @@ function setFloor(state) {
     state.props.push({ x: tile.x, y: tile.y, type: ['pillar', 'crate', 'barrel', 'rock'][Math.floor(rng() * 4)] });
     if (state.props.length === 7 + state.floor) break;
   }
-  for (const foe of state.enemies) aimAtPlayer(state, foe);
+  if (!state.legacyTurnOrder) {
+    // Add the recruit after the layout is fixed; older editions keep their map.
+    const recruitRng = random(hash(`${state.seed}:companion:${state.floor}`));
+    const piece = PIECES[Math.floor(recruitRng() * PIECES.length)];
+    const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
+    let tiles = movesFor(state,{...state.player,piece:state.startingPiece}).filter(clear);
+    if (!tiles.length) {
+      tiles = [];
+      for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (state.startingPiece !== 'bishop' || (x+y)%2===0) && (state.startingPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
+    }
+    const tile = tiles[Math.floor(recruitRng()*tiles.length)];
+    if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
+  }
+  if (state.playerColor === 'white') for (const foe of state.enemies) aimAtPlayer(state, foe);
 }
 
 export function createGame(daily = getDaily()) {
   const state = {
-    schema: 3, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
+    schema: 4, playerColor: daily.legacyTurnOrder === true ? 'white' : (daily.playerColor ?? getDaily(daily.date).playerColor), legacyTurnOrder: daily.legacyTurnOrder === true, awaitingPlayer: false, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
     turns: 0, maxTurns: 60, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
@@ -338,6 +362,45 @@ function finishFloor(state) {
   }
 }
 
+function captureEnemy(state, captured, companion = false) {
+  state.enemies = state.enemies.filter((foe) => foe.id !== captured.id);
+  state.captures++; state.gold++;
+  state.events.push({ type: companion ? 'companion-capture' : 'capture', id: captured.id, x: captured.x, y: captured.y });
+  if ((captured.role ?? captured.piece) === state.objective.piece) {
+    state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
+    state.exit.open = state.objective.complete;
+    state.message = state.exit.open ? 'Challenge complete. Tap the stairs to leave.' : `${captured.name} captured. Keep hunting.`;
+  } else state.message = `${captured.name} captured. +1 gold.`;
+}
+
+function companionTurn(state) {
+  const unit = state.companion;
+  if (!unit) return;
+  unit.sharing = same(unit,state.player);
+  state.events.push({type:'companion-phase',x:unit.x,y:unit.y});
+  // A pawn recruited on the far rank promotes before choosing its first move.
+  if (unit.piece==='pawn' && unit.y===0) {
+    unit.piece='queen';
+    state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
+  }
+  if (!state.enemies.length) return;
+  const candidates = movesFor(state,unit);
+  const nearest = (move) => Math.min(...state.enemies.map((foe)=>distance(move,foe)));
+  const tie = (move) => hash(`${state.seed}:companion:${state.floor}:${state.turns}:${move.x},${move.y}`);
+  candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
+  const destination = candidates[0];
+  if (!destination) return;
+  const from = {x:unit.x,y:unit.y};
+  const captured = enemyAt(state,destination.x,destination.y);
+  unit.x=destination.x; unit.y=destination.y; unit.moved=true; unit.sharing=false;
+  state.events.push({type:'companion-move',piece:unit.piece,from,x:unit.x,y:unit.y});
+  if (captured) captureEnemy(state,captured,true);
+  if (unit.piece==='pawn' && unit.y===0) {
+    unit.piece='queen';
+    state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
+  }
+}
+
 function grantPower(state, id) {
   const power = POWERUPS.find((entry) => entry.id === id);
   state.powers[id] = Math.min(power.max, state.powers[id] + (id === 'freeze' ? 3 : 1));
@@ -349,7 +412,7 @@ export function act(previous, action) {
   if (!previous || previous.status !== 'playing' || !action) return previous;
   if (action.type === 'descend') {
     if (!previous.exit.open || !previous.objective.complete) return previous;
-    const state = structuredClone(previous); state.events = []; finishFloor(state); return state;
+    const state = structuredClone(previous); state.events = []; state.awaitingPlayer = false; finishFloor(state); return state;
   }
   if (action.type === 'buy') {
     const power = POWERUPS.find((entry) => entry.id === action.id);
@@ -358,25 +421,38 @@ export function act(previous, action) {
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
   const state = structuredClone(previous);
-  state.events = []; state.turns++; state.message = '';
-  // The player's entire move and capture happen before any monster responds.
-  const captured = enemyAt(state, action.x, action.y);
-  if (captured) {
-    state.enemies = state.enemies.filter((foe) => foe.id !== captured.id);
-    state.captures++; state.gold++;
-    state.events.push({ type: 'capture', x: action.x, y: action.y });
-    if ((captured.role ?? captured.piece) === state.objective.piece) {
-      state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
-      state.exit.open = state.objective.complete;
-      state.message = state.exit.open ? 'Challenge complete. Tap the stairs to leave.' : `${captured.name} captured. Keep hunting.`;
-    } else state.message = `${captured.name} captured. +1 gold.`;
+  state.events = []; state.message = '';
+  if (state.playerColor === 'black' && !state.awaitingPlayer) {
+    const origin = { x: state.player.x, y: state.player.y, piece: state.player.piece };
+    enemyTurn(state);
+    // Losing the last life starts a fresh run; the old click has no meaning there.
+    if (state.events.some((event) => event.type === 'restart')) return state;
+    state.awaitingPlayer = true;
+    const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
+    if (relocated || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
+      if (!state.exit.open && legalMoves(state).length === 0) {
+        state.awaitingPlayer = false; state.status = 'lost'; state.message = 'No legal moves. The dungeon has the last word.';
+      } else state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : 'The board changed. Choose another move.'}`;
+      return state;
+    }
   }
+  state.awaitingPlayer = false; state.turns++;
+  // White resolves this move before monsters; black has already resolved them.
+  const captured = enemyAt(state, action.x, action.y);
+  if (captured) captureEnemy(state,captured);
   state.player.x = action.x; state.player.y = action.y; state.player.moved = true;
   state.events.push({ type: 'move', x: action.x, y: action.y });
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: action.x, y: action.y });
     if (!state.exit.open) state.message = 'Promoted to queen. Your new moves carry into the next room.';
+  }
+  const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
+  if (recruit && !state.companion) {
+    state.items = state.items.filter((item)=>item!==recruit);
+    state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
+    state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
+    state.message = `A ${recruit.piece} joins you for this floor.`;
   }
   // Pick up the relic before applying the magnet, so it works immediately.
   const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
@@ -386,7 +462,8 @@ export function act(previous, action) {
     state.items = state.items.filter((item) => item !== coin); state.treasure++; state.gold++;
     state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
-  enemyTurn(state);
+  companionTurn(state);
+  if (state.playerColor === 'white') enemyTurn(state);
   // The last move may solve the final floor; extraction does not spend a turn.
   if (state.status === 'playing' && state.turns >= state.maxTurns && !(state.floor === 2 && state.exit.open)) {
     state.status = 'lost'; state.message = 'The presses have rolled. You missed the deadline.';
@@ -408,8 +485,10 @@ export function validateSave(value, date) {
   try {
     const integer = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
     const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    if (!value || value.schema !== 3 || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
+    if (!value || value.schema !== 4 || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
     const daily = getDaily(date);
+    if (typeof value.legacyTurnOrder !== 'boolean' || value.playerColor !== (value.legacyTurnOrder ? 'white' : daily.playerColor) || typeof value.awaitingPlayer !== 'boolean') return false;
+    if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing' || value.turns >= value.maxTurns)) return false;
     if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
     const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
@@ -421,12 +500,12 @@ export function validateSave(value, date) {
     if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id], 0, power.max))) return false;
     if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor((totalPopulation + 9) / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
     if (value.gold !== value.treasure + value.captures - value.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0)) return false;
-    const template = createGame(daily); template.floor = value.floor;
+    const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor;
     // Layout depends only on the edition and original piece, never on promotion.
     setFloor(template);
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
     if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
-    if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > 4 || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 24) return false;
+    if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;
     if (!value.enemies.every((foe) => {
       const original = template.enemies.find((entry) => entry.id === foe.id);
       if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
@@ -439,6 +518,12 @@ export function validateSave(value, date) {
     const capturedTarget = !value.enemies.some((foe) => foe.role === value.objective.piece);
     if (value.objective.complete !== capturedTarget) return false;
     if (!value.items.every((item) => template.items.some((original) => equal(original, item))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
+    const recruit = template.items.find((item)=>item.type==='companion');
+    if (value.companion !== null) {
+      const ally=value.companion;
+      if (!ally || !recruit || ally.basePiece !== recruit.piece || (ally.piece !== ally.basePiece && !(ally.basePiece==='pawn' && ally.piece==='queen')) || !walkable(value,ally.x,ally.y) || typeof ally.moved !== 'boolean' || typeof ally.sharing !== 'boolean') return false;
+      if (ally.sharing !== same(ally,value.player) || value.enemies.some((foe)=>same(foe,ally)) || value.items.some((item)=>item.type==='companion')) return false;
+    } else if (recruit && !value.items.some((item)=>item.type==='companion')) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, 60) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
@@ -446,7 +531,16 @@ export function validateSave(value, date) {
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
     if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + 3 - value.items.filter((item) => item.type === 'coin').length) return false;
     if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'miss', 'restart'].includes(event.type) && inside(event.x, event.y))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
+}
+
+/** Keep an in-progress older edition on its original player-first rules. */
+export function migrateSave(value, date = value?.date) {
+  if (!value || (value.schema !== 3 && value.schema !== 4)) return null;
+  const migrated = value.schema === 3
+    ? { ...structuredClone(value), schema: 4, playerColor: 'white', legacyTurnOrder: true, awaitingPlayer: false, companion: null }
+    : structuredClone(value);
+  return validateSave(migrated, date) ? migrated : null;
 }

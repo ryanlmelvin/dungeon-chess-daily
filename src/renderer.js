@@ -1,11 +1,12 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE, spritePalette } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
 const RED = 0xd13959;
+const MINT = 0x8af4d5;
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -127,10 +128,19 @@ export function createDungeonRenderer(container, { onTile } = {}) {
 
   function spriteTexture(id, palette) {
     if (!SPRITES[id]) id = 'skull';
-    if (!palette) return textures.get(id);
+    const piece = id.startsWith('piece-');
+    if (!palette || (piece && palette === 'white')) return textures.get(id);
     const key = `${id}:${palette}`;
-    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], spritePalette(palette)));
+    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], palette === 'companion' ? COMPANION_PALETTE : piece ? piecePalette(palette) : spritePalette(palette)));
     return textures.get(key);
+  }
+
+  function tileRing(parent, x, y, inner, outer, color, opacity = 0.8, height = 0.045) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 16), basic(color, { transparent: true, opacity, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, height, y);
+    parent.add(ring);
+    return ring;
   }
 
   function propSprite(parent, id, x, y, size = 0.84, height = 0.25) {
@@ -215,42 +225,54 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     resize();
   }
 
-  function makeEntity(key, data, player) {
+  function makeEntity(key, data, player, playerColor, origin = data) {
     const group = new THREE.Group();
-    const id = player ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
-    const palette = player ? null : data.palette;
+    const companion = key === 'companion';
+    const id = player || companion ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
+    const palette = companion ? 'companion' : player ? playerColor || 'white' : data.palette;
     const texture = spriteTexture(id, palette);
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
     materials.add(material);
     const art = new THREE.Sprite(material);
     art.center.set(0.5, 0.42);
-    const size = player ? 0.88 : 0.8;
+    const size = companion ? 0.76 : player ? 0.88 : 0.8;
     art.scale.set(size, size, 1);
     art.position.y = 0.15;
     art.userData.tile = { x: data.x, y: data.y };
     group.add(art);
     tileMark(group, 0, 0, player ? 0.46 : 0.42, 0.26, basic(0x09070c, { transparent: true, opacity: 0.8 }), 0.012);
-    group.position.set(data.x, 0, data.y);
+    if (companion) tileRing(group, 0, 0, 0.23, 0.27, MINT, 0.6, 0.035);
+    group.position.set(origin.x, 0, origin.y);
     actors.add(group);
-    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(data.x, 0, data.y), pendingTarget: null, moveAt: 0, removeAt: 0, player, flash: 0, flashAt: 0 };
+    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(origin.x, 0, origin.y), pendingTarget: null, moveAt: 0, removeAt: 0, spawnAt: 0, player, companion, flash: 0, flashAt: 0, flashPosition: null };
     entities.set(key, entity);
     return entity;
   }
 
   function updateItems(items) {
-    const key = items.map((item) => `${item.x}:${item.y}:${item.type}:${item.power || ''}`).join('|');
+    const key = items.map((item) => `${item.x}:${item.y}:${item.type}:${item.power || item.piece || ''}`).join('|');
     if (key === itemKey) return;
     itemKey = key;
     clear(collectibles);
     for (const item of items) {
       const power = item.type === 'powerup';
-      const material = new THREE.SpriteMaterial({ map: power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin'), transparent: true, alphaTest: 0.1, depthWrite: false });
+      const companion = item.type === 'companion';
+      const texture = companion ? spriteTexture(`piece-${item.piece}`, 'companion') : power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin');
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
       materials.add(material);
       const coin = new THREE.Sprite(material);
-      coin.scale.set(power ? 0.55 : 0.3, power ? 0.55 : 0.3, 1);
-      coin.position.set(item.x, power ? 0.22 : 0.13, item.y);
+      const size = companion ? 0.72 : power ? 0.55 : 0.3;
+      coin.scale.set(size, size, 1);
+      coin.position.set(item.x, companion ? 0.24 : power ? 0.22 : 0.13, item.y);
       collectibles.add(coin);
       if (power) tileMark(collectibles, item.x, item.y, 0.44, 0.44, basic(0x83c5bd, { transparent: true, opacity: 0.2, depthWrite: false }), 0.02);
+      if (companion) {
+        tileRing(collectibles, item.x, item.y, 0.29, 0.36, MINT, 0.65);
+        tileRing(collectibles, item.x, item.y, 0.36, 0.43, MINT, 0.12, 0.025);
+        const plus = basic(MINT);
+        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.19, 0.055, plus, 0.06);
+        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.055, 0.19, plus, 0.06);
+      }
     }
   }
 
@@ -345,24 +367,49 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       buildBoard(next);
     }
     if (stairs) stairs.visible = !!next.exit?.open;
-    const animateTurn = !changedBoard && !reducedMotion && next.turns > currentTurn;
-    if (animateTurn) pendingItems = { items: next.items || [], at: now + 145 };
+    const events = freshEvents ? next.events || [] : [];
+    const playerMoved = events.some((event) => event.type === 'move');
+    const enemyPhase = events.some((event) => event.type === 'enemy-phase');
+    const companionPhase = events.some((event) => event.type === 'companion-phase');
+    const recruited = events.find((event) => event.type === 'companion-recruit');
+    const companionMove = events.find((event) => event.type === 'companion-move');
+    const blackPhase = next.playerColor === 'black' && enemyPhase;
+    // A black move can stop after the enemies act and await a new destination.
+    // That phase has no turn increment; its marker still drives the animation.
+    const animateTurn = !changedBoard && !reducedMotion && (next.turns > currentTurn || enemyPhase || playerMoved || companionPhase);
+    const playerDelay = blackPhase && playerMoved ? 175 : 0;
+    const companionDelay = companionPhase ? playerDelay + 175 : 0;
+    const enemyDelay = !blackPhase && enemyPhase && playerMoved ? (companionPhase ? 350 : 175) : 0;
+    const captureAt = now + playerDelay + 145;
+    if (animateTurn && playerMoved) pendingItems = { items: next.items || [], at: captureAt };
     else if (!pendingItems) updateItems(next.items || []);
     const live = new Set();
-    const units = [['player', next.player, true], ...next.enemies.map((enemy) => [enemy.id, enemy, false])];
+    const units = [['player', next.player, true], ...(next.companion ? [['companion', next.companion, false]] : []), ...next.enemies.map((enemy) => [enemy.id, enemy, false])];
     for (const [id, data, player] of units) {
       live.add(id);
-      const entity = entities.get(id) || makeEntity(id, data, player);
-      if (animateTurn && !player) {
-        entity.pendingTarget = new THREE.Vector3(data.x, 0, data.y);
-        entity.moveAt = now + 175;
-      } else if (!entity.pendingTarget || changedBoard || reducedMotion) {
-        entity.target.set(data.x, 0, data.y);
+      const companion = id === 'companion';
+      const sharing = companion && data.x === next.player.x && data.y === next.player.y;
+      const point = sharing ? { x: data.x + 0.22, y: data.y + 0.18 } : data;
+      // A recruit emerges as its pickup vanishes, then takes its own turn.
+      const origin = companion && animateTurn && recruited ? { x: recruited.x + 0.22, y: recruited.y + 0.18 } : companion && animateTurn && companionMove ? companionMove.from : point;
+      const existing = entities.get(id);
+      const entity = existing || makeEntity(id, data, player, next.playerColor, origin);
+      if (!existing && companion && animateTurn && recruited) {
+        entity.group.visible = false;
+        entity.spawnAt = captureAt;
+      }
+      entity.removeAt = 0;
+      const delay = player ? playerDelay : companion ? companionDelay : enemyDelay;
+      if (animateTurn && delay) {
+        entity.pendingTarget = new THREE.Vector3(point.x, 0, point.y);
+        entity.moveAt = now + delay;
+      } else if (animateTurn || !entity.pendingTarget || changedBoard || reducedMotion) {
+        entity.target.set(point.x, 0, point.y);
         entity.pendingTarget = null;
       }
       entity.art.userData.tile = { x: data.x, y: data.y };
-      const spriteName = player ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
-      const palette = player ? null : data.palette;
+      const spriteName = player || companion ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
+      const palette = companion ? 'companion' : player ? next.playerColor || 'white' : data.palette;
       const spriteId = `${spriteName}:${palette || ''}`;
       if (spriteId !== entity.spriteId) {
         entity.art.material.map = spriteTexture(spriteName, palette);
@@ -372,24 +419,38 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       if (reducedMotion) entity.group.position.copy(entity.target);
     }
     for (const [id, entity] of entities) if (!live.has(id)) {
-      if (animateTurn) entity.removeAt ||= now + 145;
+      if (animateTurn) {
+        // A black player's captured enemy may have moved during the first
+        // phase. Show that move before the piece arrives to take its square.
+        const enemyMove = blackPhase && events.find((event) => event.type === 'enemy-move' && event.id === id);
+        if (enemyMove) {
+          entity.target.set(enemyMove.x, 0, enemyMove.y);
+          entity.pendingTarget = null;
+        }
+        const companionCapture = events.some((event) => event.type === 'companion-capture' && event.id === id);
+        entity.removeAt ||= companionCapture ? now + companionDelay + 145 : captureAt;
+      }
       else if (!entity.removeAt) {
         burst(entity.group.position.x, entity.group.position.z);
         release(entity.group);
         entities.delete(id);
       }
     }
-    if (freshEvents && next.events?.some((event) => event.type === 'damage')) {
+    const damage = events.find((event) => event.type === 'damage');
+    if (damage) {
       const player = entities.get('player');
       if (player) {
-        if (animateTurn) player.flashAt = now + 320;
+        if (animateTurn) {
+          player.flashAt = now + enemyDelay + 145;
+          player.flashPosition = { x: damage.x, y: damage.y };
+        }
         else player.flash = 0.4;
       }
       if (!animateTurn) burst(next.player.x, next.player.y);
     }
     if (animateTurn) {
       clear(hints);
-      pendingHints = { next, at: now + 350 };
+      pendingHints = { next, at: now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 };
     } else if (pendingHints && !changedBoard) pendingHints.next = next;
     else {
       pendingHints = null;
@@ -432,6 +493,10 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       render(next, true);
     }
     for (const [id, entity] of entities) {
+      if (entity.spawnAt && timestamp >= entity.spawnAt) {
+        entity.spawnAt = 0;
+        entity.group.visible = true;
+      }
       if (entity.removeAt && timestamp >= entity.removeAt) {
         burst(entity.group.position.x, entity.group.position.z);
         release(entity.group);
@@ -445,7 +510,8 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       if (entity.flashAt && timestamp >= entity.flashAt) {
         entity.flashAt = 0;
         entity.flash = 0.3;
-        burst(entity.target.x, entity.target.z);
+        burst(entity.flashPosition?.x ?? entity.target.x, entity.flashPosition?.y ?? entity.target.z);
+        entity.flashPosition = null;
       }
       entity.group.position.lerp(entity.target, reducedMotion ? 1 : Math.min(1, dt * 19));
       entity.flash = Math.max(0, entity.flash - dt);

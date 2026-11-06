@@ -1,9 +1,9 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
-import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS } from './game.js';
+import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, migrateSave, POWERUPS } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
-import { drawSprite, spritePalette, SPRITE_SIZE } from './sprites.js';
+import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -21,7 +21,7 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v3:${daily.date}`;
+const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v4:${daily.date}`;
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
 
@@ -35,6 +35,15 @@ function load() {
   try {
     lastSaved = localStorage.getItem(key());
     if (!lastSaved) {
+      const earlier = localStorage.getItem(`${prefix}${practice ? 'practice:' : 'daily:'}v3:${daily.date}`);
+      if (earlier) {
+        const migrated = migrateSave(JSON.parse(earlier), daily.date);
+        if (migrated) {
+          lastSaved = JSON.stringify(migrated);
+          localStorage.setItem(key(), lastSaved);
+          return migrated;
+        }
+      }
       if (!practice && localStorage.getItem(`${prefix}daily:${daily.date}`)) notify('New dungeon rules are here. Your earlier run is preserved in Export progress.');
       return null;
     }
@@ -152,18 +161,19 @@ function showGameFeedback() {
 function renderLives() {
   const { hp, maxHp } = state.player;
   const markers = $('lives');
-  markers.setAttribute('aria-label', `${hp} of ${maxHp} ${state.startingPiece} ${hp === 1 ? 'life' : 'lives'} remaining`);
+  markers.setAttribute('aria-label', `${hp} of ${maxHp} ${state.playerColor} ${state.startingPiece} ${hp === 1 ? 'life' : 'lives'} remaining`);
   markers.replaceChildren(...Array.from({ length: hp }, () => {
     const marker = document.createElement('canvas');
     marker.width = marker.height = SPRITE_SIZE;
     marker.setAttribute('aria-hidden', 'true');
-    drawSprite(marker.getContext('2d'), `piece-${state.startingPiece}`);
+    drawSprite(marker.getContext('2d'), `piece-${state.startingPiece}`, 0, 0, 1, piecePalette(state.playerColor));
     return marker;
   }));
 }
 function updateGame() {
   if (!state) return;
-  $('room-label').textContent = `Room ${state.floor + 1} / 3 · ${state.player.piece}`;
+  if (state.awaitingPlayer) showMoves = true;
+  $('room-label').textContent = `Room ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
   $('practice-label').hidden = !practice;
   $('turns').textContent = `◷ ${state.maxTurns - state.turns}`;
   $('turns').setAttribute('aria-label', `${state.maxTurns - state.turns} moves left`);
@@ -183,6 +193,7 @@ function updateGame() {
   showGameFeedback();
   if ($('shop-dialog').open) renderShop();
   $('first-tip').hidden = state.turns > 0;
+  $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
   paintBoard();
 }
 function paintBoard(){if(state)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
@@ -204,9 +215,10 @@ function takeAction(action) {
   const next = act(state, action);
   if (next === state) return false;
   turnLocked=!shopping;
-  state = next;showMoves=false;cursor=null;save();updateGame();playSound(state.events);
-  if (!shopping) setTimeout(()=>{turnLocked=false;},400);
-  if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, 400);
+  state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(state.events);
+  const animationTime = state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
+  if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
   return true;
 }
 const directions={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
@@ -256,7 +268,7 @@ function playSound(events=[]) {
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
     if(audio.state==='suspended')audio.resume();
-    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type==='damage') ? [110,82] : events.some(e=>e.type==='capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup') ? [660,880] : [85];
+    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type==='damage') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
     notes.forEach((frequency,i)=>{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='square';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.018,audio.currentTime+i*.065);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+i*.065+.07);oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(audio.currentTime+i*.065);oscillator.stop(audio.currentTime+i*.065+.08);});
   } catch {}
 }
@@ -295,7 +307,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:'))saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:v3:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice)saves[`daily:v4:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);notify('Progress export requested.');
 });
@@ -307,14 +319,20 @@ $('import-file').addEventListener('change',async(event)=>{
     const data=JSON.parse(await file.text());
     if(data.app!=='dungeon-chess-daily'||data.schema!==1||!data.saves||typeof data.saves!=='object')throw new Error('Choose a Dungeon Chess Daily progress export.');
     const entries=Object.entries(data.saves);
+    const imported = new Map(entries);
     let archived = false;
     for (const [name, value] of entries) {
       if (name === 'sound') { if (!['on','off'].includes(value)) throw new Error('Invalid sound preference.'); continue; }
-      const match = /^daily:(v3:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
+      const match = /^daily:(v[34]:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
       if (!match || typeof value !== 'string') throw new Error('This export contains an unreadable save.');
       const entry = JSON.parse(value);
-      if (match[1]) {
+      if (match[1] === 'v4:') {
         if (!validateSave(entry, match[2])) throw new Error('This export contains an unreadable save.');
+      } else if (match[1] === 'v3:') {
+        const migrated = migrateSave(entry, match[2]);
+        if (!migrated) throw new Error('This export contains an unreadable save.');
+        const newName = `daily:v4:${match[2]}`;
+        if (!imported.has(newName)) imported.set(newName, JSON.stringify(migrated));
       } else {
         // Earlier rules are archived as data; they are never loaded into this engine.
         if (!entry || ![2,3].includes(entry.schema) || entry.date !== match[2] || !['playing','won','lost'].includes(entry.status)) throw new Error('This export contains an unreadable earlier edition.');
@@ -322,7 +340,7 @@ $('import-file').addEventListener('change',async(event)=>{
       }
     }
     if(!confirm('Import this progress? Matching saved days on this device will be replaced.'))return;
-    for(const [name,value]of entries)localStorage.setItem(`${prefix}${name}`,value);
+    for(const [name,value]of imported)localStorage.setItem(`${prefix}${name}`,value);
     practice=false;state=load();sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
     $('menu-dialog').close();renderPaper();switchScreen('paper');notify(archived ? 'Progress imported. Earlier ruleset runs are archived for export.' : 'Progress imported.');
   }catch(error){notify(error.message||'Progress could not be imported.',true);}

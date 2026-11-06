@@ -237,21 +237,23 @@ function score(state) {
   if (state.status === 'won') return 100000;
   const targets = state.enemies.filter((foe) => foe.role === state.objective.piece);
   const steps = state.exit.open ? 0 : Math.min(...targets.map((target) => metric(state, target)));
-  return state.floor * 1000 + (state.exit.open ? 800 : 0) + state.captures * 25 + state.treasure * 3 + state.player.hp * 10 - state.turns * 0.7 - steps * 5
+  return state.floor * 1000 + (state.exit.open ? 800 : 0) + state.captures * 25 + state.treasure * 3 + state.player.hp * 10 + state.powers.shield * 5 + state.powers.freeze * 2 - state.turns * 0.7 - steps * 5
     + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? 20 : 0) + (state.player.piece === 'pawn' ? (6 - state.player.y) * 3 : 0);
 }
 function choices(state) {
   if (state.exit.open) return [act(state, { type: 'descend' })];
-  return legalMoves(state).map((tile) => act(state, move(tile.x, tile.y)))
+  const actions = legalMoves(state).map((tile) => move(tile.x, tile.y));
+  for (const id of ['freeze','shield']) if (!state.powers[id] && state.gold >= POWERUPS.find((power) => power.id===id).cost) actions.push({type:'buy',id});
+  return actions.map((action) => act(state, action))
     .filter((next) => next.status !== 'lost' && !next.events.some((event) => event.type === 'restart'));
 }
 function positionKey(state) {
-  return JSON.stringify([state.floor, state.player.x, state.player.y, state.player.piece, state.player.hp, state.enemies.map((foe) => [foe.id, foe.x, foe.y, foe.phase, foe.target]), state.items]);
+  return JSON.stringify([state.floor, state.player.x, state.player.y, state.player.piece, state.player.hp, state.awaitingPlayer, state.enemies.map((foe) => [foe.id, foe.x, foe.y, foe.phase, foe.target]), state.items]);
 }
 function choose(state, visits) {
   return choices(state).map((next) => {
     const future = choices(next);
-    const value = future.length ? Math.max(...future.map(score)) : score(next);
+    const value = future.length ? Math.max(...future.map(score)) : next.status === 'won' ? score(next) : -100000;
     return { next, value: value + 0.05 * score(next) - (visits.get(positionKey(next)) ?? 0) * 25 };
   }).sort((a, b) => b.value - a.value)[0]?.next;
 }
@@ -277,7 +279,9 @@ test('100 consecutive dates have survivable three-room solutions and valid saves
     let state = createGame(getDaily(new Date(Date.UTC(2026, 10, 5 + day))));
     assertInitialArmy(state);
     const visits = new Map();
+    let actions=0;
     while (state.status === 'playing') {
+      assert.ok(actions++ < 180, `${state.date} exceeded the bounded action budget`);
       visits.set(positionKey(state), (visits.get(positionKey(state)) ?? 0) + 1);
       const next = choose(state, visits);
       assert.ok(next, `${state.date} needs a safe continuation on move ${state.turns}`);

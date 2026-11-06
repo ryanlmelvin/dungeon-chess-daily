@@ -1,0 +1,377 @@
+{
+  "schema": 3,
+  "date": "2026-11-07",
+  "seed": 1864244822,
+  "edition": 3,
+  "theme": {
+    "name": "The Midnight Board",
+    "headline": "Ember imps insist on a diagonal commute",
+    "deck": "The bells rang at midnight. A new tenant is taking confessions, though nobody has seen a lease.",
+    "boss": "Violet mimic",
+    "accent": "#b75652",
+    "species": "imp",
+    "palette": "ember",
+    "stories": [
+      {
+        "title": "Ember snakes join the front line",
+        "body": "A humble recruit has made the evening roll call. Ambition is cheap in this town.",
+        "species": "snake",
+        "palette": "ember"
+      },
+      {
+        "title": "Violet mimic takes town crown",
+        "body": "A coronation with no witnesses, a throne with no receipt. The former mayor has gone into hiding.",
+        "species": "mimic",
+        "palette": "violet"
+      }
+    ]
+  },
+  "species": [
+    {
+      "id": "imp",
+      "name": "Ember imp",
+      "baseName": "Imp",
+      "plural": "Imps",
+      "palette": "ember",
+      "piece": "bishop"
+    },
+    {
+      "id": "snake",
+      "name": "Ember snake",
+      "baseName": "Snake",
+      "plural": "Snakes",
+      "palette": "ember",
+      "piece": "pawn"
+    },
+    {
+      "id": "mimic",
+      "name": "Violet mimic",
+      "baseName": "Mimic",
+      "plural": "Mimics",
+      "palette": "violet",
+      "piece": "king"
+    },
+    {
+      "id": "worm",
+      "name": "Rose worm",
+      "baseName": "Worm",
+      "plural": "Worms",
+      "palette": "rose",
+      "piece": "pawn"
+    },
+    {
+      "id": "dragon",
+      "name": "Ember dragon",
+      "baseName": "Dragon",
+      "plural": "Dragons",
+      "palette": "ember",
+      "piece": "rook"
+    },
+    {
+      "id": "bat",
+      "name": "Violet bat",
+      "baseName": "Bat",
+      "plural": "Bats",
+      "palette": "violet",
+      "piece": "king"
+    },
+    {
+      "id": "cyclops",
+      "name": "Rose cyclops",
+      "baseName": "Cyclops",
+      "plural": "Cyclopes",
+      "palette": "rose",
+      "piece": "queen"
+    },
+    {
+      "id": "rat",
+      "name": "Violet rat",
+      "baseName": "Rat",
+      "plural": "Rats",
+      "palette": "violet",
+      "piece": "rook"
+    },
+    {
+      "id": "goblin",
+      "name": "Rose goblin",
+      "baseName": "Goblin",
+      "plural": "Goblins",
+      "palette": "rose",
+      "piece": "knight"
+    }
+  ],
+  "targets": [
+    "bishop",
+    "pawn",
+    "king"
+  ],
+  "startingPiece": "bishop",
+  "floor": 1,
+  "player": {
+    "x": 0,
+    "y": 2,
+    "piece": "bishop",
+    "hp": 2,
+    "maxHp": 2,
+    "moved": true
+  },
+  "turns": 5,
+  "maxTurns": 60,
+  "status": "playing",
+  "captures": 4,
+  "treasure": 1,
+  "gold": 5,
+  "purchases": [],
+  "powers": {
+    "shield": 0,
+    "freeze": 0,
+    "magnet": 0
+  },
+  "records": [
+    {
+      "floor": 0,
+      "turns": 4,
+      "captures": 3,
+      "treasure": 1,
+      "grade": "silver"
+    }
+  ],
+  "events": [
+    {
+      "type": "capture",
+      "x": 0,
+      "y": 2
+    },
+    {
+      "type": "move",
+      "x": 0,
+      "y": 2
+    }
+  ],
+  "message": "Ember snake captured. Keep hunting.",
+  "map": [
+    "........",
+    "#.....#.",
+    "........",
+    "..#.....",
+    ".#...#..",
+    "......#.",
+    "........",
+    "#.#....."
+  ],
+  "exit": {
+    "x": 4,
+    "y": 0,
+    "open": false
+  },
+  "objective": {
+    "piece": "pawn",
+    "complete": false
+  },
+  "floorStart": {
+    "turns": 4,
+    "captures": 3,
+    "treasure": 1
+  },
+  "enemies": [
+    {
+      "id": "f1-0",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 3,
+      "y": 4,
+      "moved": true,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-1",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 5,
+      "y": 3,
+      "moved": false,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-2",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 2,
+      "y": 2,
+      "moved": false,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-3",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 6,
+      "y": 3,
+      "moved": true,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-4",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 1,
+      "y": 1,
+      "moved": false,
+      "phase": "aim",
+      "intent": [
+        {
+          "x": 0,
+          "y": 2
+        }
+      ],
+      "target": {
+        "x": 0,
+        "y": 2
+      }
+    },
+    {
+      "id": "f1-5",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 7,
+      "y": 2,
+      "moved": true,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-7",
+      "species": "snake",
+      "palette": "ember",
+      "name": "Ember snake",
+      "piece": "pawn",
+      "role": "pawn",
+      "x": 6,
+      "y": 0,
+      "moved": false,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-8",
+      "species": "bat",
+      "palette": "violet",
+      "name": "Violet bat",
+      "piece": "king",
+      "role": "king",
+      "x": 1,
+      "y": 0,
+      "moved": true,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    },
+    {
+      "id": "f1-9",
+      "species": "cyclops",
+      "palette": "rose",
+      "name": "Rose cyclops",
+      "piece": "queen",
+      "role": "queen",
+      "x": 7,
+      "y": 1,
+      "moved": true,
+      "phase": "ready",
+      "intent": [],
+      "target": null
+    }
+  ],
+  "items": [
+    {
+      "x": 4,
+      "y": 4,
+      "type": "coin"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "type": "coin"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "type": "coin"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "type": "powerup",
+      "power": "freeze"
+    }
+  ],
+  "props": [
+    {
+      "x": 5,
+      "y": 4,
+      "type": "rock"
+    },
+    {
+      "x": 2,
+      "y": 7,
+      "type": "crate"
+    },
+    {
+      "x": 6,
+      "y": 1,
+      "type": "rock"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "type": "barrel"
+    },
+    {
+      "x": 0,
+      "y": 7,
+      "type": "rock"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "type": "pillar"
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "type": "pillar"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "type": "crate"
+    }
+  ]
+}
