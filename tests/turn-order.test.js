@@ -135,7 +135,7 @@ test('black exhaustion discards the stale click, while shields must already be o
   const reset=act(state,move(3,6));
   assert.deepEqual(reset.events.map((event)=>event.type),['damage','restart']);
   const fresh=createGame(getDaily(state.date));
-  assert.deepEqual({...reset,events:fresh.events,message:fresh.message},fresh);
+  assert.deepEqual({...reset,events:fresh.events,message:fresh.message},{...fresh,replayUnlocked:true});
   assert.equal(reset.playerColor,'black'); assert.equal(reset.awaitingPlayer,false);
   assert.equal(validateSave(reset,reset.date),true);
   state.gold=3;

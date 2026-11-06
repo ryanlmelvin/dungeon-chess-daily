@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
 import { initGuide } from './guide.js';
-import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -25,6 +25,16 @@ let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
 const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v5:${daily.date}`;
+const practiceModeKey = () => `${prefix}practice:active:v5:${daily.date}`;
+function setPracticeMode(enabled) {
+  practice = enabled;
+  try {
+    if (enabled) localStorage.setItem(practiceModeKey(), 'true');
+    else localStorage.removeItem(practiceModeKey());
+  } catch {}
+}
+function validateCurrentSave(value) { return validateSave(value, daily.date, { practice }); }
+try { practice = localStorage.getItem(practiceModeKey()) === 'true'; } catch {}
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
 initGuide();
@@ -45,7 +55,7 @@ function load() {
       return null;
     }
     const parsed = JSON.parse(lastSaved);
-    if (validateSave(parsed, daily.date)) return parsed;
+    if (validateCurrentSave(parsed)) return parsed;
     notify('This save could not be read. Download a backup from the menu before starting again.', true);
   } catch { notify('Progress storage is unavailable. Keep this tab open; you can download a backup of your run.', true); }
   return null;
@@ -55,10 +65,10 @@ function save() {
   try {
     const stored = localStorage.getItem(key());
     if (stored !== lastSaved) {
-      if (stored && validateSave(JSON.parse(stored), daily.date)) {
+      if (stored && validateCurrentSave(JSON.parse(stored))) {
         state = JSON.parse(stored); lastSaved = stored;
         notify('Progress changed in another window. This window is now up to date.');
-        updateGame();
+        renderIncomingProgress();
         return false;
       }
     }
@@ -77,15 +87,22 @@ function refreshFromOtherWindow() {
     if (stored === lastSaved) return false;
     if (!stored) return false;
     const incoming = JSON.parse(stored);
-    if (!validateSave(incoming, daily.date)) return false;
+    if (!validateCurrentSave(incoming)) return false;
     state = incoming; lastSaved = stored;
     notify('Resumed the latest progress from your other window.');
-    updateGame();
-    if (screen === 'game' && state.status !== 'playing') showResult();
+    renderIncomingProgress();
     return true;
   } catch { return false; }
 }
+function renderIncomingProgress() {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  if (screen === 'paper') renderPaper();
+  else if (state.status !== 'playing') { showResult(); return; }
+  else if (screen === 'result') { switchScreen('game'); ensureRenderer(); }
+  updateGame();
+}
 state = load();
+if (practice && !state) { setPracticeMode(false); state = load(); }
 function switchScreen(next) {
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
@@ -235,6 +252,9 @@ function takeAction(action) {
   const animationTime = state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
+  else if (state.events.some(event => event.type === 'restart')) setTimeout(() => {
+    if (screen === 'game' && state.status === 'playing' && state.events.some(event => event.type === 'restart')) openPieceChooser();
+  }, animationTime);
   return true;
 }
 const directions={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
@@ -314,7 +334,7 @@ function playSound(events=[]) {
     notes.forEach((frequency,i)=>{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='square';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.018,audio.currentTime+i*.065);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+i*.065+.07);oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(audio.currentTime+i*.065);oscillator.stop(audio.currentTime+i*.065+.08);});
   } catch {}
 }
-function shareText(){const text=getShareText(state);return practice ? text.replace('Dungeon Chess Daily','Dungeon Chess Daily · PRACTICE') : text;}
+function shareText(){if (!isOfficialPiece(state, daily)) return '';const text=getShareText(state);return practice ? text.replace('Dungeon Chess Daily','Dungeon Chess Daily · PRACTICE') : text;}
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -324,21 +344,62 @@ function showResult() {
   $('result-kicker').textContent='PRACTICE EDITION';
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
   $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured in room ${state.floor+1}. Tomorrow is another story.`:state.message;
-  $('share-preview').textContent=shareText().split('\n').slice(0,-1).join('\n');
-  $('next-edition').textContent='🟨 All three coins · ⬜ Extra captures · 🟫 Escaped\nNext edition at 00:00 UTC.';
-  $('share-button').focus({preventScroll:true});
+  const shareable = isOfficialPiece(state, daily);
+  $('share-preview').hidden = !shareable;
+  $('share-button').hidden = !shareable;
+  $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
+  $('next-edition').textContent=shareable ? '🟨 All three coins · ⬜ Extra captures · 🟫 Escaped\nNext edition at 00:00 UTC.' : 'Next edition at 00:00 UTC.';
+  $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
 $('share-button').addEventListener('click',async()=>{
+  if (!state || state.status === 'playing' || !isOfficialPiece(state, daily)) return;
   const text=shareText();
   if(navigator.share){try{await navigator.share({text});return;}catch(error){if(error.name==='AbortError')return;}}
   try{await navigator.clipboard.writeText(text);notify('Edition copied. Ready to paste — no spoilers.');}
   catch{$('copy-text').value=text;$('copy-dialog').showModal();$('copy-text').select();}
 });
-$('practice-button').addEventListener('click',()=>{practice=true;lastSaved=null;try{lastSaved=localStorage.getItem(key());}catch{}state=createGame(daily);save();enterGame();});
+function updatePieceWarning() {
+  $('piece-warning').hidden = $('practice-piece').value === daily.playerPiece && $('practice-color').value === daily.playerColor;
+}
+function openPieceChooser() {
+  if (turnLocked || !state || !(practice || canChoosePiece(state))) return;
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  $('practice-piece').value = state.startingPiece;
+  $('practice-color').value = state.playerColor;
+  $('official-piece').textContent = `Today's official piece: ${daily.playerColor} ${daily.playerPiece}.`;
+  $('piece-start').textContent = state.status === 'playing' ? 'Restart dungeon' : 'Start practice';
+  updatePieceWarning();
+  $('piece-dialog').showModal();
+}
+for (const piece of PIECES) {
+  const option = document.createElement('option');
+  option.value = piece; option.textContent = piece[0].toUpperCase() + piece.slice(1);
+  $('practice-piece').append(option);
+}
+$('practice-piece').addEventListener('change', updatePieceWarning);
+$('practice-color').addEventListener('change', updatePieceWarning);
+$('practice-button').addEventListener('click', openPieceChooser);
+$('change-piece-button').addEventListener('click', openPieceChooser);
+$('piece-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!state || !(practice || canChoosePiece(state))) return;
+  const next = createPracticeGame(daily, { piece: $('practice-piece').value, color: $('practice-color').value });
+  setPracticeMode(true);
+  lastSaved = null;
+  try { lastSaved = localStorage.getItem(key()); } catch {}
+  state = next; showMoves = false; cursor = null;
+  $('piece-dialog').close();
+  save(); enterGame();
+});
+$('daily-button').addEventListener('click', () => {
+  $('menu-dialog').close();
+  setPracticeMode(false); state = load(); showMoves = false; cursor = null;
+  enterGame();
+});
 $('result-paper-button').addEventListener('click',()=>{
   const current=getDaily();
-  if(current.date!==daily.date){daily=current;practice=false;state=load();}
+  if(current.date!==daily.date){daily=current;setPracticeMode(false);state=load();}
   renderPaper();switchScreen('paper');
 });
 function progressStatus(message) {
@@ -348,6 +409,8 @@ function progressStatus(message) {
 const persistentStorage = initPersistentStorage({ button: $('persist-button'), onStatus: progressStatus });
 function openMenu() {
   progressStatus('');
+  $('change-piece-button').hidden = !(practice || canChoosePiece(state));
+  $('daily-button').hidden = !practice;
   $('menu-dialog').showModal();
   persistentStorage.refresh();
 }
@@ -369,7 +432,7 @@ $('import-file').addEventListener('change',async(event)=>{
   let written = 0;
   progressStatus('');
   const reloadProgress = () => {
-    practice=false;state=load();
+    setPracticeMode(false);state=load();
     sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
     renderPaper();switchScreen('paper');
   };
@@ -424,7 +487,7 @@ function refreshEdition() {
     $('next-edition').textContent = "Today's new edition is ready.";
     return;
   }
-  daily = current; practice = false; state = load(); renderPaper();
+  daily = current; setPracticeMode(false); state = load(); renderPaper();
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){refreshFromOtherWindow();refreshEdition();}});
 setInterval(refreshEdition, 60_000);

@@ -60,6 +60,8 @@
     <div id="menu-home">
     <div class="dialog-heading"><h2 id="menu-title">Menu</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
     <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p><button id="news-button" hidden>Read today’s paper</button>
+    <button id="change-piece-button" hidden>Change piece</button>
+    <button id="daily-button" hidden>Return to daily challenge</button>
     <button id="guide-button" class="guide-open">How to play <span aria-hidden="true">→</span></button>
     <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
     <p>Moving to an installed app? Use <b>Download backup</b> in your browser, then <b>Restore backup</b> in the app to bring your progress over.</p>
@@ -85,7 +87,7 @@
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to reveal the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last room targets the king.</p>
         <p>Capture them all, then take the stairs from anywhere. Stairs cost no moves.</p>
-        <p>First result = daily. Replays = practice.</p>
+        <p>After a win or reset, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
       <article class="guide-page" hidden>
         <p>Tap your piece for legal moves. Land on a monster to capture it.</p>
@@ -131,6 +133,18 @@
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
+  </dialog>
+  <dialog id="piece-dialog" aria-labelledby="piece-title">
+    <div class="dialog-heading"><h2 id="piece-title">Choose piece</h2><button class="icon-button" data-close aria-label="Cancel piece selection">✕</button></div>
+    <form id="piece-form">
+      <p id="official-piece"></p>
+      <div class="piece-controls">
+        <label for="practice-piece">Piece<select id="practice-piece" aria-describedby="piece-warning"></select></label>
+        <label for="practice-color">Color<select id="practice-color" aria-describedby="piece-warning"><option value="white">White</option><option value="black">Black</option></select></label>
+      </div>
+      <p id="piece-warning" role="status" hidden>Changing from today's official piece or color means no completion message to share with friends. Today's challenge may be impossible with your chosen piece.</p>
+      <button id="piece-start" type="submit">Start practice</button>
+    </form>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
     <div class="dialog-heading"><h2 id="shop-title">Gold shop</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>

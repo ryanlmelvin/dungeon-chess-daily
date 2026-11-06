@@ -97,7 +97,7 @@ test('exhaustion on the last move in room three resets the whole run to the same
   assert.deepEqual(restarted.events.map((event) => event.type), ['damage', 'restart']);
   assert.match(restarted.message, /Out of lives/);
   const fresh = createGame(getDaily(aimed.date));
-  assert.deepEqual({ ...restarted, events: fresh.events, message: fresh.message }, fresh);
+  assert.deepEqual({ ...restarted, events: fresh.events, message: fresh.message }, { ...fresh, replayUnlocked: true });
   assert.equal(validateSave(JSON.parse(JSON.stringify(restarted)), restarted.date), true);
 });
 

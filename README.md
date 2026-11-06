@@ -20,7 +20,7 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 - Complete all three 8×8 rooms within sixty moves. There is no real-time countdown.
 - Lives match the number of that piece in a chess army: eight pawns, two rooks, knights, or bishops, and one queen or king. A hit costs one life unless a shield absorbs it. A promoted pawn keeps its remaining lives but becomes a pawn again after losing one, returning to a safe square if needed. Losing all lives restarts the same daily dungeon from floor one, resetting gold and powers.
 
-Everyone gets the same UTC-dated edition. Your first attempt is the daily result; unlimited practice is labeled separately. Emoji sharing reveals your result without exposing the newspaper clues, monster movement roles, or route.
+Everyone gets the same UTC-dated edition. After winning, running out of moves, or losing all lives, choose any of the six pieces in white or black for unlimited practice. The rooms stay identical to the official challenge; alternate pieces are not checked for solvability and may be unable to win. Only runs using the official starting piece and color offer emoji sharing, including labeled practice replays. Pawn promotion does not change sharing eligibility. Practice saves separately from the daily run and resumes after reloading; use **Return to daily challenge** in the menu to revisit official progress or results. Emoji sharing reveals your result without exposing the newspaper clues, monster movement roles, or route.
 
 The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, saved progress, or a downloaded update.
 
