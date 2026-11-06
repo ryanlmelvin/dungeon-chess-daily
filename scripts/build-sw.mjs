@@ -14,7 +14,9 @@ async function walk(directory) {
   }
   return result;
 }
-const files = (await walk(root)).filter((file) => !['sw.js', 'release.json'].includes(relative(root, file))).sort();
+// Optional music is cached on first play instead, so players who never turn it on never download it.
+const isMusic = (file) => relative(root, file).split('\\').join('/').startsWith('music/');
+const files = (await walk(root)).filter((file) => !['sw.js', 'release.json'].includes(relative(root, file)) && !isMusic(file)).sort();
 const fingerprint = createHash('sha256');
 fingerprint.update(await readFile(fileURLToPath(import.meta.url)));
 const resources = [];
@@ -34,6 +36,8 @@ const RESOURCES = ${JSON.stringify(resources)};
 const SCOPE = new URL(self.registration.scope);
 const PREFIX = 'dungeon-chess-daily:' + SCOPE.pathname + ':';
 const CACHE = PREFIX + VERSION;
+// Music files are never renamed in place, so one cache serves every release.
+const MUSIC_CACHE = PREFIX + 'music';
 const canonical = (path) => new URL(path, SCOPE).href;
 
 self.addEventListener('install', (event) => {
@@ -78,6 +82,17 @@ self.addEventListener('fetch', (event) => {
       const cache = await caches.open(CACHE);
       return await cache.match(canonical('update.html')) || Response.error();
     }));
+    return;
+  }
+  if (path.startsWith('music/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(MUSIC_CACHE);
+      const cached = await cache.match(canonical(path));
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok && response.status === 200) await cache.put(canonical(path), response.clone());
+      return response;
+    })());
     return;
   }
   event.respondWith((async () => {

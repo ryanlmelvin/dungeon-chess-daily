@@ -107,6 +107,7 @@ dialog .icon-button, .app-bar .icon-button {
   background: #9b899c;
 }
 .sound-setting input:checked::before { background: var(--gold); transform: translateX(18px); }
+.sound-setting.music-setting { margin-top: 0; }
 .saved-progress { border-top: 2px solid #51424f; }
 .saved-progress summary, .pwa-dialog summary, .guide-keyboard summary {
   font-size: 22px;

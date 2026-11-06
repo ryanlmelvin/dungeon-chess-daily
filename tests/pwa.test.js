@@ -134,3 +134,23 @@ test('recovery reaches network and older hashed assets remain available to open 
     assert.equal(env.deleted.length, 0);
   } finally { await f.clean(); }
 });
+
+test('optional music stays out of the precache and is kept offline after its first play', async () => {
+  const f = await fixture();
+  try {
+    await mkdir(join(f.directory, 'dist/music'), { recursive: true });
+    await writeFile(join(f.directory, 'dist/music/floor.mp3'), 'chiptune');
+    const built = await f.build();
+    const withoutMusic = built.version;
+    await writeFile(join(f.directory, 'dist/music/floor.mp3'), 'another chiptune');
+    assert.equal((await f.build()).version, withoutMusic, 'music never forces a new release');
+    const env = workerEnvironment(built.code);
+    await env.lifecycle('install');
+    assert.ok(env.requests.every((request) => !request.url.includes('/music/')), 'install must not download music');
+    const first = await env.request('./music/floor.mp3');
+    assert.equal(first.status, 200);
+    env.offline(true);
+    const again = await env.request('./music/floor.mp3');
+    assert.equal(again.status, 200);
+  } finally { await f.clean(); }
+});

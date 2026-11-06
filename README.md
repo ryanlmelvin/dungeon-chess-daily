@@ -24,7 +24,7 @@ Everyone gets the same UTC-dated edition. After winning or losing all lives, cho
 
 Open **Archive** in the menu to play any edition you missed. It lists every past edition back to No. 001 with this device's result for each: won, lost, in progress, or not played. A past edition is the same certified dungeon everyone got that day and keeps its own save, practice runs included. Its shared result is labeled **ARCHIVE** so it never passes for today's. Use **Back to today** to return to the current edition.
 
-The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, saved progress, or a downloaded update.
+The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, music, saved progress, or a downloaded update.
 
 ## Install and offline use
 
@@ -64,4 +64,4 @@ Push to `main`. `.github/workflows/deploy.yml` installs dependencies, runs tests
 
 ## License
 
-Copyright © 2026 Ryan L. Melvin. Source and original assets are licensed under **GNU GPL version 3 only**; see [LICENSE](LICENSE). Three.js is MIT-licensed; its notice ships in `public/licenses/three.txt`. Pixel artwork and synthesized sound effects are original. One More Crypt inspired the short daily-dungeon idea; this project uses no assets from it and is not affiliated with it.
+Copyright © 2026 Ryan L. Melvin. Source and original assets are licensed under **GNU GPL version 3 only**; see [LICENSE](LICENSE). Three.js is MIT-licensed; its notice ships in `public/licenses/three.txt`. Pixel artwork and synthesized sound effects are original. Optional background music (off by default; turn on **Music** in the menu) uses three CC0 chiptune loops from OpenGameArt by RandomMind, Wolfgang_ and HydroGene; credits are in `public/licenses/music.txt`. One More Crypt inspired the short daily-dungeon idea; this project uses no assets from it and is not affiliated with it.

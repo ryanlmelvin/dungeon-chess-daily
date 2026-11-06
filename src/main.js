@@ -11,6 +11,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
+import { createMusic } from './music.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -49,6 +50,16 @@ function validateCurrentSave(value) { return validateSave(value, daily.date, { p
 try { practice = localStorage.getItem(practiceModeKey()) === 'true'; } catch {}
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
+// Background music is opt-in: it stays off unless the player turned it on here.
+const music = createMusic();
+let musicOn = false;
+try { musicOn = localStorage.getItem(`${prefix}music`) === 'on'; } catch {}
+$('music-toggle').checked = musicOn;
+music.setEnabled(musicOn);
+function syncMusic() {
+  music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? state.floor : null);
+}
+for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => music.unlock(), { capture: true, passive: true });
 initGuide();
 
 function notify(message, persistent = false) {
@@ -125,6 +136,7 @@ function switchScreen(next) {
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (next === 'game') requestAnimationFrame(() => renderer?.resize());
+  syncMusic();
 }
 function renderPaper() {
   $('edition').textContent = `NO. ${String(Math.max(1, daily.edition)).padStart(3, '0')}`;
@@ -242,6 +254,7 @@ function updateGame() {
   $('first-tip').hidden = state.turns > 0;
   $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
   paintBoard();
+  syncMusic();
 }
 function paintBoard(){if(state)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
 function enterGame() {
@@ -588,9 +601,10 @@ $('menu-button').addEventListener('click',openMenu);
 $('game-menu-button').addEventListener('click',openMenu);
 document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
 $('sound-toggle').addEventListener('change',()=>{sound=$('sound-toggle').checked;try{localStorage.setItem(`${prefix}sound`,sound?'on':'off');}catch{}});
+$('music-toggle').addEventListener('change',()=>{musicOn=$('music-toggle').checked;try{localStorage.setItem(`${prefix}music`,musicOn?'on':'off');}catch{}music.setEnabled(musicOn);music.unlock();syncMusic();});
 $('export-button').addEventListener('click',()=>{
   const saves={};
-  try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:'))saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
+  try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
   if(state&&!practice)saves[`daily:v5:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
@@ -661,7 +675,7 @@ function refreshEdition() {
   }
   daily = current; setPracticeMode(false); state = load(); renderPaper();
 }
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){refreshFromOtherWindow();refreshEdition();}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){refreshFromOtherWindow();refreshEdition();}syncMusic();});
 setInterval(refreshEdition, 60_000);
 initPWA({installButton:$('install-button'),updateButton:$('update-button'),onBeforeUpdate:async()=>save(),onStatus:notify});
 getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`;}).catch(()=>{});
