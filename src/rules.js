@@ -188,13 +188,7 @@ function enemyTurn(state) {
         state.player.hp--;
         const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
         if (state.player.hp === 0) {
-          const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
-          // Count today's attempts; saves from before this counter only know a restart happened.
-          const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
-          Object.assign(state, fresh);
-          state.tries = tries;
-          state.events = [damage, { type: 'restart', x: state.player.x, y: state.player.y }];
-          state.message = 'Out of lives. Back to the start of today’s dungeon.';
+          restartRun(state, [damage], 'Out of lives. Back to the start of today’s dungeon.');
         } else {
           // Clear the committed attack so
           // the monster must give another full turn of warning before a hit.
@@ -340,6 +334,26 @@ function setFloor(state) {
     state.events.push({ type: 'companion-recruit', piece: order.piece, x: state.player.x, y: state.player.y });
   }
   if (state.playerColor === 'white') for (const foe of state.enemies) aimAtPlayer(state, foe);
+}
+
+const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
+
+// Running out of lives or out of moves ends the try: back to floor 1, with one more try on the share card.
+function restartRun(state, events, message) {
+  const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
+  // Count today's attempts; saves from before this counter only know a restart happened.
+  const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
+  Object.assign(state, fresh);
+  state.tries = tries;
+  state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
+  state.message = message;
+  return state;
+}
+
+/** Saves from before trapped runs restarted themselves end 'lost'; retrying one counts as another try. */
+export function retryLostRun(previous) {
+  if (previous?.status !== 'lost') return previous;
+  return restartRun(nextState(previous), [], NO_MOVES);
 }
 
 export function createGame(daily = getRawDaily()) {
@@ -498,7 +512,7 @@ export function act(previous, action) {
     const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
     if (relocated || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
       if (!state.exit.open && legalMoves(state).length === 0) {
-        state.awaitingPlayer = false; state.status = 'lost'; state.message = 'No legal moves. The dungeon has the last word.';
+        return restartRun(state, [], NO_MOVES);
       } else state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : 'The board changed. Choose another move.'}`;
       return state;
     }
@@ -532,14 +546,14 @@ export function act(previous, action) {
   companionTurn(state);
   if (state.playerColor === 'white') enemyTurn(state);
   if (state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0) {
-    state.status = 'lost'; state.message = 'No legal moves. The dungeon has the last word.';
+    restartRun(state, [], NO_MOVES);
   }
   return state;
 }
 
 // A spoiler-free result on one line: a 💀 for each earlier try that ran out of
 // lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
-// then 🏆 for escaping, 🔒 when trapped without moves, or ⏳ while still playing,
+// then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
 // and last the day's starting piece.
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   // Saves from before the tries counter only know that a restart happened.

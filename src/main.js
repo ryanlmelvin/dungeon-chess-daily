@@ -5,7 +5,7 @@ import { initGuide } from './guide.js';
 import { drawMoveDemo } from './guide-art.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -295,7 +295,7 @@ function takeAction(action) {
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
   else if (state.events.some(event => event.type === 'restart')) setTimeout(() => {
-    if (screen === 'game' && state.status === 'playing' && state.events.some(event => event.type === 'restart')) openPieceChooser();
+    if (screen === 'game' && state.status === 'playing' && state.events.some(event => event.type === 'restart')) showDeath();
   }, animationTime);
   return true;
 }
@@ -393,6 +393,8 @@ function showResult() {
   $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
   $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured in room ${state.floor+1}. Tomorrow is another story.`:state.message;
+  if (state.status === 'lost') return showDeath();
+  showResultActions(true);
   const shareable = isOfficialPiece(state, daily);
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
@@ -402,6 +404,32 @@ function showResult() {
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
+function showResultActions(finished) {
+  $('retry-button').hidden = finished;
+  $('result-actions').hidden = !finished;
+  if (!finished) { $('share-preview').hidden = true; $('share-button').hidden = true; }
+}
+// A death ends the try, so the only way forward is another one.
+function showDeath() {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  switchScreen('result');
+  showResultActions(false);
+  $('result-date').textContent=daily.date;
+  $('result-kicker').hidden=!runLabel();
+  $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
+  const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
+  $('result-title').textContent=trapped?'Cornered.':'Captured.';
+  $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':'Out of lives. The story isn’t over yet.';
+  $('next-edition').textContent='This counts as an earlier try 💀 on your share card.';
+  $('retry-button').focus({preventScroll:true});
+}
+$('retry-button').addEventListener('click',()=>{
+  if (!state) return;
+  if (state.status === 'lost') { state = retryLostRun(state); save(); }
+  if (state.status !== 'playing') return;
+  showMoves = false; cursor = null; turnLocked = false;
+  enterGame();
+});
 $('share-button').addEventListener('click',async()=>{
   if (!state || state.status === 'playing' || !isOfficialPiece(state, daily)) return;
   const text=shareText();

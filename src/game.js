@@ -5,7 +5,7 @@ import { createGame as createCandidate, validateSave as validateCandidateSave } 
 import { PIECES } from './pieces.js';
 
 export { getDaily, DIFFICULTY_PROFILES, GENERATOR_VERSION } from './generation.js';
-export { act, resetFloor, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, COMPANIONS, RULES_VERSION } from './rules.js';
+export { act, resetFloor, retryLostRun, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, COMPANIONS, RULES_VERSION } from './rules.js';
 
 /** Only canonical certified editions enter the public game. */
 export function createGame(daily = getDaily()) {

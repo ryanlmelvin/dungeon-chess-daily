@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, resetFloor, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -491,4 +491,29 @@ test('an in-progress save from the old every-capture rule keeps its gold and sta
   assert.equal(resumed.gold - current.gold, legacy.gold - state.gold, 'old-rule gold is kept; later challenge captures add none');
   const late = createGame(getDaily('2026-11-07')); late.gold = 1; late.captures = 0;
   assert.equal(validateSave(late, late.date), false);
+});
+
+test('running out of legal moves restarts the dungeon and counts another try, like losing every life', () => {
+  const state = scenario('pawn');
+  state.playerColor = 'white'; state.awaitingPlayer = false; state.player.moved = true;
+  state.map = ['........', '........', '........', '........', '....#...', '........', '........', '........'];
+  state.enemies = [monster('far', 'king', 0, 0)]; state.powers.freeze = 5;
+  const trapped = act(state, move(4, 5));
+  assert.equal(trapped.status, 'playing');
+  assert.deepEqual(trapped.events.map((event) => event.type), ['restart']);
+  assert.match(trapped.message, /No legal moves/);
+  assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
+  assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
+  assert.equal(validateSave(trapped, trapped.date), true);
+  assert.match(getShareText(trapped), /\n💀❤️⏳[♔-♟]\uFE0E\n/u);
+});
+
+test('an older save that ended trapped can be retried, counting as another try', () => {
+  const lost = createGame(daily); lost.status = 'lost'; lost.message = 'No legal moves. The dungeon has the last word.';
+  const retried = retryLostRun(lost);
+  assert.equal(lost.status, 'lost', 'the old save is not mutated');
+  assert.equal(retried.status, 'playing'); assert.equal(retried.tries, 2); assert.equal(retried.floor, 0);
+  assert.equal(validateSave(retried, retried.date), true);
+  const playing = createGame(daily);
+  assert.equal(retryLostRun(playing), playing);
 });
