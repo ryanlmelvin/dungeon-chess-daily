@@ -28,7 +28,7 @@ export const MODIFIERS = Object.freeze({
     headline: 'Cold snap glazes the dungeon: long moves that end on ice skid one square further',
   }),
   collapse: Object.freeze({
-    id: 'collapse', emoji: '⏳', name: 'Collapse', changesRules: true,
+    id: 'collapse', emoji: '🏚️', name: 'Collapse', changesRules: true,
     headline: 'Ceiling cracks above the crypt: fresh monsters stumble through the door every ten moves',
   }),
 });
@@ -137,7 +137,7 @@ export function validModifierState(value, template) {
   return Number.isInteger(count) && count >= 0 && count <= collapseDue(value);
 }
 
-/** Short in-game label, e.g. "🧊 Ice" or "⏳ Next arrival in 4". */
+/** Short in-game label, e.g. "🧊 Ice" or "🏚️ Next arrival in 4". */
 export function modifierStatus(state) {
   const modifier = modifierOf(state);
   if (modifier.id === 'none') return '';
