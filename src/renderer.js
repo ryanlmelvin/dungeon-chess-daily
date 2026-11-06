@@ -7,6 +7,7 @@ const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
 const RED = 0xd13959;
 const MINT = 0x8af4d5;
+const MOVE_COLOR = 0x56dcff;
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -102,6 +103,9 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   let itemKey = '';
   let pendingItems = null;
   let lastEvents = null;
+  let moveMaterial = null;
+  const playerPulse = { value: 0 };
+  const moveColor = { value: new THREE.Color(MOVE_COLOR) };
 
   function basic(color, extra = {}) {
     const material = new THREE.MeshBasicMaterial({ color, ...extra });
@@ -233,6 +237,17 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     const texture = spriteTexture(id, palette);
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
     materials.add(material);
+    if (player) {
+      // Mix after sampling the texture so even black pieces visibly take the
+      // selection color, while keeping their pixel silhouette and shading.
+      material.onBeforeCompile = (shader) => {
+        shader.uniforms.playerPulse = playerPulse;
+        shader.uniforms.moveColor = moveColor;
+        shader.fragmentShader = 'uniform float playerPulse;\nuniform vec3 moveColor;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
+          'outgoingLight = mix(outgoingLight, moveColor, playerPulse);\n#include <opaque_fragment>');
+      };
+    }
     const art = new THREE.Sprite(material);
     art.center.set(0.5, 0.42);
     const size = companion ? 0.76 : player ? 0.88 : 0.8;
@@ -300,6 +315,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
 
   function updateHints(next) {
     clear(hints);
+    moveMaterial = null;
     if (next.powers?.shield) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.39, 16), basic(0xa7dfff, { transparent: true, opacity: 0.85, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2;
@@ -331,16 +347,11 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       }
     }
     if (next.showMoves) {
-      cornerMarks(next.player.x, next.player.y, WHITE, 0.43, 0.18);
+      moveMaterial = basic(MOVE_COLOR, { transparent: true, opacity: 0.5, depthWrite: false });
       for (const tile of next.legalMoves || []) {
-        if (next.enemies.some((enemy) => enemy.x === tile.x && enemy.y === tile.y)) {
-          cornerMarks(tile.x, tile.y, WHITE, 0.32, 0.13);
-        } else {
-          const dot = new THREE.Mesh(new THREE.CircleGeometry(0.07, 8), basic(WHITE, { transparent: true, opacity: 0.8, depthWrite: false }));
-          dot.rotation.x = -Math.PI / 2;
-          dot.position.set(tile.x, 0.065, tile.y);
-          hints.add(dot);
-        }
+        // Full squares stay readable around pickups and capture targets. Keep
+        // them below the danger-path strokes and the sprites themselves.
+        tileMark(hints, tile.x, tile.y, 0.94, 0.94, moveMaterial, 0.04);
       }
     }
     if (next.cursor) cornerMarks(next.cursor.x, next.cursor.y, 0xcabfd7, 0.46, 0.2);
@@ -492,6 +503,10 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       pendingTransition = null;
       render(next, true);
     }
+    const moveHintsVisible = state?.showMoves && !pendingHints && !pendingTransition;
+    const pulse = reducedMotion ? 0.7 : 0.5 - 0.5 * Math.cos(timestamp * Math.PI * 2 / 1600);
+    playerPulse.value = moveHintsVisible ? 0.3 + pulse * 0.45 : 0;
+    if (moveMaterial && materials.has(moveMaterial)) moveMaterial.opacity = 0.3 + pulse * 0.35;
     for (const [id, entity] of entities) {
       if (entity.spawnAt && timestamp >= entity.spawnAt) {
         entity.spawnAt = 0;
@@ -516,6 +531,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       entity.group.position.lerp(entity.target, reducedMotion ? 1 : Math.min(1, dt * 19));
       entity.flash = Math.max(0, entity.flash - dt);
       entity.art.material.color.set(entity.flash ? 0xff6889 : 0xffffff);
+      if (entity.player && entity.flash) playerPulse.value = 0;
     }
     if (pendingHints && timestamp >= pendingHints.at) {
       updateHints(pendingHints.next);
