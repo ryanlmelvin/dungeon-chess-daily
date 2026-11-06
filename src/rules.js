@@ -240,6 +240,21 @@ function connectedBoard(state) {
   return true;
 }
 
+// Walls never land on a monster's opening moves, so none spawns boxed in (a
+// corner knight walled off, a pawn facing a pillar). Knights and kings keep
+// every destination clear; pawns their one- and two-step advance; rooks,
+// bishops and queens the first square of each line.
+// The 2026-11-05 launch dungeon predates this rule and keeps its published
+// layout so its saved runs still validate. Keyed by seed, not date, so a
+// fallback layout plays the same on any date it is certified for.
+const LEGACY_LAYOUT_SEEDS = new Set([1830689584]);
+function openingSquares(foe) {
+  const deltas = foe.piece === 'pawn' ? [[0, 1], ...(foe.y === 1 ? [[0, 2]] : [])]
+    : foe.piece === 'knight' ? KNIGHT
+    : foe.piece === 'rook' ? ORTHOGONAL : foe.piece === 'bishop' ? DIAGONAL : [...ORTHOGONAL, ...DIAGONAL];
+  return deltas.map(([dx, dy]) => ({ x: foe.x + dx, y: foe.y + dy })).filter((tile) => inside(tile.x, tile.y));
+}
+
 function setFloor(state) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
@@ -272,6 +287,7 @@ function setFloor(state) {
   ];
   state.props = [];
   const reserved = [...state.enemies, ...state.items, state.player, state.exit];
+  if (!LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed)) reserved.push(...state.enemies.flatMap(openingSquares));
   const candidates = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if ((layoutPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (layoutPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;

@@ -34,7 +34,8 @@ if (process.argv.includes('--verify')) {
 } else {
   const bank = {};
   let remaining = Object.keys(profiles).length * PIECES.length * colors.length;
-  for (let offset = 0; offset < 3660 && remaining; offset++) {
+  // Skip the launch edition: its seed keeps a legacy layout (LEGACY_LAYOUT_SEEDS).
+  for (let offset = 1; offset < 3660 && remaining; offset++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + offset)));
     for (const [difficulty, profile] of Object.entries(profiles)) {
       const key = `${difficulty}:${raw.playerPiece}:${raw.playerColor}`;
