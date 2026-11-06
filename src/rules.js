@@ -189,7 +189,10 @@ function enemyTurn(state) {
         const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
         if (state.player.hp === 0) {
           const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
+          // Count today's attempts; saves from before this counter only know a restart happened.
+          const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
           Object.assign(state, fresh);
+          state.tries = tries;
           state.events = [damage, { type: 'restart', x: state.player.x, y: state.player.y }];
           state.message = 'Out of lives. Back to the start of today’s dungeon.';
         } else {
@@ -459,41 +462,24 @@ export function act(previous, action) {
   return state;
 }
 
-// Each floor holds three coins and exactly two monsters outside its target role.
-// Those five optional prizes, plus finishing without losing a life, are what a
-// share row shows; the headline ranks how many of the 18 the run collected.
-export const SHARE_RANKS = [
-  [18, '📰 FRONT PAGE'], [15, '🗞️ Above the fold'], [11, '✒️ Headline'], [7, '📎 Column inch'], [0, '🗑️ Buried on page 12'],
-];
-
+// A spoiler-free result: lives lost on each floor reached, and today's try count.
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   const keycaps = ['1️⃣', '2️⃣', '3️⃣'];
-  let score = 0;
   const rows = [];
-  const hpBefore = (floor) => floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
-  for (let floor = 0; floor < 3; floor++) {
+  for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    const current = !record && floor === state.floor;
-    if (!record && !current) { rows.push(`${keycaps[floor]} 🔒`); continue; }
-    const target = PIECE_COUNTS[state.targets[floor]];
-    const coins = record ? record.treasure : state.treasure - (state.floorStart?.treasure ?? 0);
-    const extra = Math.max(0, (record ? record.captures : state.captures - (state.floorStart?.captures ?? 0)) - target);
-    const before = hpBefore(floor);
+    const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
     const after = record ? record.hp : state.player.hp;
-    const hits = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : null;
-    let row = `${keycaps[floor]} ${'🪙'.repeat(coins)}${'▫️'.repeat(3 - coins)} ${'⚔️'.repeat(extra)}${'▫️'.repeat(2 - extra)}`;
-    if (hits) row += ` ${'💔'.repeat(hits)}`;
-    if (record) {
-      score += coins + extra + (hits === 0 ? 1 : 0);
-      if (coins === 3 && extra === 2 && hits === 0) row += ' ✨';
-    } else row += state.status === 'lost' ? ' 💀' : ' ⏳';
-    rows.push(row);
+    const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : null;
+    const hearts = lost === null ? '❔' : lost ? '💔'.repeat(lost) : '❤️';
+    rows.push(`${keycaps[floor]} ${hearts}${!record && state.status === 'lost' ? ' 💀' : ''}`);
   }
-  const headline = state.status === 'won'
-    ? `${SHARE_RANKS.find(([min]) => score >= min)[1]} · ${score}/18`
-    : state.status === 'lost' ? `💀 Trapped on floor ${state.floor + 1}` : `⏳ On assignment · floor ${state.floor + 1}`;
-  const retry = state.replayUnlocked && !state.practice && state.status === 'won' ? ' · 🔁 retried' : '';
-  return `Dungeon Chess Daily #${state.edition}\n${headline}\n${rows.join('\n')}\n${state.turns} moves${retry}\n${url}`;
+  const tries = state.tries ?? (state.replayUnlocked && !state.practice ? '2+' : 1);
+  const ordinal = `try ${tries}`;
+  const headline = state.status === 'won' ? `🏆 Escaped on ${ordinal}`
+    : state.status === 'lost' ? `💀 Trapped on floor ${state.floor + 1}, ${ordinal}`
+    : `⏳ Floor ${state.floor + 1}, ${ordinal}`;
+  return `Dungeon Chess Daily #${state.edition}\n${headline}\n${rows.join('\n')}\n${url}`;
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
@@ -502,6 +488,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     if (!value || value.schema !== RULES_VERSION || value.rulesVersion !== RULES_VERSION || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
     if (value.replayUnlocked !== undefined && typeof value.replayUnlocked !== 'boolean') return false;
+    if (value.tries !== undefined && !integer(value.tries, 2, Number.MAX_SAFE_INTEGER)) return false;
     if (daily.practice === true) {
       if (value.practice !== true || value.layoutPiece !== daily.layoutPiece || !PIECES.includes(value.layoutPiece)) return false;
     } else if (value.practice !== undefined || value.layoutPiece !== undefined) return false;

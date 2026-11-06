@@ -202,46 +202,21 @@ test('moves remain available beyond sixty and final-floor extraction still works
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
-test('share text contains results, not piece, species or route spoilers', () => {
-  const state = createGame(daily);
-  const max = state.player.maxHp;
-  const count = (floor) => PIECE_COUNTS[state.targets[floor]];
-  state.status = 'won'; state.turns = 64;
-  state.records = [
-    { floor: 0, treasure: 3, captures: count(0) + 2, hp: max },
-    { floor: 1, treasure: 2, captures: count(1) + 1, hp: max },
-    { floor: 2, treasure: 0, captures: count(2), hp: max },
-  ];
+test('share text shows lives lost per floor and today\'s try, without spoilers', () => {
+  const state = createGame({ ...daily, playerPiece: 'pawn' });
+  state.status = 'won'; state.floor = 2; state.player.hp = 5;
+  state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
   const share = getShareText(state);
-  const lines = share.split('\n');
-  assert.equal(lines[0], `Dungeon Chess Daily #${state.edition}`);
-  assert.equal(lines[1], '✒️ Headline · 11/18');
-  assert.equal(lines[2], '1️⃣ 🪙🪙🪙 ⚔️⚔️ ✨');
-  assert.equal(lines[3], '2️⃣ 🪙🪙▫️ ⚔️▫️');
-  assert.equal(lines[4], '3️⃣ ▫️▫️▫️ ▫️▫️');
-  assert.equal(lines[5], '64 moves');
-  assert.match(share, /dungeon-chess-daily/);
+  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n🏆 Escaped on try 1\n1️⃣ ❤️\n2️⃣ 💔💔\n3️⃣ 💔\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!share.includes(spoiler));
 });
 
-test('share text shows lives lost per floor and ranks a perfect run front page', () => {
-  const state = createGame({ ...daily, playerPiece: 'pawn' });
-  const count = (floor) => PIECE_COUNTS[state.targets[floor]];
-  state.status = 'won';
-  state.records = [0, 1, 2].map((floor) => ({ floor, treasure: 3, captures: count(floor) + 2, hp: 8 }));
-  assert.match(getShareText(state), /📰 FRONT PAGE · 18\/18/u);
-  state.records[1].hp = 6; state.records[2].hp = 6; state.player.hp = 6;
-  const share = getShareText(state);
-  assert.match(share, /2️⃣ 🪙🪙🪙 ⚔️⚔️ 💔💔\n/u);
-  assert.match(share, /🗞️ Above the fold · 17\/18/u);
-});
-
-test('share text marks the floor where a run was trapped', () => {
+test('share text marks a trapped floor and counts restarts as tries', () => {
   const state = createGame(daily);
-  state.status = 'lost';
-  const share = getShareText(state);
-  assert.match(share, /💀 Trapped on floor 1/u);
-  assert.match(share, /1️⃣ .* 💀\n2️⃣ 🔒\n3️⃣ 🔒/u);
+  state.status = 'lost'; state.tries = 3; state.replayUnlocked = true;
+  assert.match(getShareText(state), /💀 Trapped on floor 1, try 3\n1️⃣ ❤️ 💀\nhttps/u);
+  delete state.tries;
+  assert.match(getShareText(state), /try 2\+/u);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -390,6 +365,8 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.equal(restart.player.hp,PIECE_LIVES[daily.playerPiece]);
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
+  assert.equal(restart.tries,2);
+  assert.match(getShareText(restart),/try 2\n/u);
 });
 
 
