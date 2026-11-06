@@ -1,12 +1,22 @@
 Background music (optional, off by default)
 
-All three tracks are dedicated to the public domain under CC0 1.0 Universal
+Every track is dedicated to the public domain under CC0 1.0 Universal
 (https://creativecommons.org/publicdomain/zero/1.0/). Credit is not required,
-but given gladly. Files were loudness-matched and re-encoded as MP3.
+but given gladly. Each edition plays three different tracks, one per floor.
+Files were trimmed of edge silence, loudness-matched to -18.4 LUFS (a few
+uneven tracks were gently leveled) and re-encoded as MP3.
 
-Floor 1 - "The Old Tower Inn" (chiptune loop) by RandomMind
+"The Old Tower Inn" (chiptune loop) by RandomMind
   https://opengameart.org/content/chiptune-medieval-the-old-tower-inn
-Floor 2 - "8-bit Haunted House Theme" by Wolfgang_
+"8-bit Haunted House Theme" by Wolfgang_
   https://opengameart.org/content/8-bit-haunted-house-theme
-Floor 3 - "8-bit - Perilous Dungeon" by HydroGene
+"8-bit - Perilous Dungeon" by HydroGene
   https://opengameart.org/content/8-bit-perilous-dungeon
+"Chiptune Adventures" (Stage 1, Stage 2, Boss Fight, Stage Select)
+  by Juhani Junkala (SubspaceAudio)
+  https://opengameart.org/content/4-chiptunes-adventure
+"Sinister Abode" by Zane Little Music
+  https://opengameart.org/content/sinister-abode
+Free NES Music Pack (Doom, Incomplete, Blues, Cheery, Hectic, Jazz,
+  Lost Blues, Simple, Soft Then Loud, Upbeat, Chill) by pmiller
+  https://opengameart.org/content/free-nes-music-pack

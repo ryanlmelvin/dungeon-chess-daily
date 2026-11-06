@@ -39,6 +39,8 @@ function workerEnvironment(code, { failAsset = false, offline = false } = {}) {
       return {
         async put(key, response) { entries.set(String(key), response); },
         async match(key) { return entries.get(String(key)); },
+        async keys() { return [...entries.keys()].map((url) => new Request(url)); },
+        async delete(key) { return entries.delete(key instanceof Request ? key.url : String(key)); },
       };
     },
     async delete(name) { deleted.push(name); return data.delete(name); },
@@ -152,5 +154,15 @@ test('optional music stays out of the precache and is kept offline after its fir
     env.offline(true);
     const again = await env.request('./music/floor.mp3');
     assert.equal(again.status, 200);
+  } finally { await f.clean(); }
+});
+
+test('the offline music cache keeps only the most recent nine tracks', async () => {
+  const f = await fixture();
+  try {
+    const env = workerEnvironment((await f.build()).code);
+    for (let i = 0; i < 12; i++) await env.request(`./music/track-${i}.mp3`);
+    const music = [...env.data.entries()].find(([name]) => name.endsWith(':music'))[1];
+    assert.deepEqual([...music.keys()].map((url) => url.split('/').pop()), [3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => `track-${i}.mp3`));
   } finally { await f.clean(); }
 });

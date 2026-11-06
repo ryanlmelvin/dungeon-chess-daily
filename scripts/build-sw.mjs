@@ -91,6 +91,9 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       const response = await fetch(request);
       if (response.ok && response.status === 200) await cache.put(canonical(path), response.clone());
+      // Hold the last few soundtracks offline without growing to the whole library.
+      const stored = await cache.keys();
+      for (const old of stored.slice(0, Math.max(0, stored.length - 9))) await cache.delete(old);
       return response;
     })());
     return;

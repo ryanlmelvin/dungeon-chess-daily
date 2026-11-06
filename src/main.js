@@ -11,7 +11,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
-import { createMusic } from './music.js';
+import { createMusic, editionTracks } from './music.js';
 import { botRun, playerRun, verdict } from './bot.js';
 
 const $ = (id) => document.getElementById(id);
@@ -60,7 +60,7 @@ try { musicOn = localStorage.getItem(`${prefix}music`) === 'on'; } catch {}
 $('music-toggle').checked = musicOn;
 music.setEnabled(musicOn);
 function syncMusic() {
-  music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? state.floor : null);
+  music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? editionTracks(daily.date)[state.floor] : null);
 }
 for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => music.unlock(), { capture: true, passive: true });
 initGuide();
