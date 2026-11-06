@@ -17,6 +17,7 @@ export const PALETTE = Object.freeze({
   t: '#b0bdc5', // moon gray
   o: '#a67c63', // old leather
   y: '#d4b781', // brass
+  g: '#566b4d', // weathered moss
 });
 
 function monsterPalette(name, adjective, shade, body, light, glow) {
@@ -529,23 +530,24 @@ export const SPRITES = Object.freeze({
     '................',
   ]),
 
+  // Straight masonry sides and staggered joints distinguish terrain from rooks.
   'prop-pillar': framed([
-    '..xxxxxxxxxxxx..',
-    '.xsttttttttttsx.',
-    '..xssssssssssx..',
-    '...xsttssstsx...',
-    '...xsttssstsx...',
-    '...xsttssstsx...',
-    '...xsttssstsx...',
-    '...xsttssstsx...',
-    '...xsttssstsx...',
-    '...xsttxsstsx...',
-    '...xstxxsstsx...',
-    '...xsttssstsx...',
-    '..xsttsssssstx..',
-    '.xsttttttttttsx.',
-    '.xssssssssssssx.',
-    '..xxxxxxxxxxxx..',
+    '.....xxxxxxxx...',
+    '...xxtttttttdx..',
+    '..xttttttttaddx.',
+    '..xtaaaaaaadddx.',
+    '..xtaaadaaaaddx.',
+    '..xdddddddddddx.',
+    '..xtaaaadaaaddx.',
+    '..xtaaaadaaaddx.',
+    '..xtaaaadaaddx..',
+    '..xdddddddddddx.',
+    '..xtadaaaaaaddx.',
+    '..xtadaaaaaxddx.',
+    '..xtaaaaaxaaadx.',
+    '..xdddddddddddx.',
+    '..xgaggaaaaaddx.',
+    '...xxxxxxxxxx...',
   ]),
   'prop-crate': framed([
     '................',
