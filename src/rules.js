@@ -317,6 +317,26 @@ export function createGame(daily = getRawDaily()) {
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
   setFloor(state);
+  markFloorStart(state);
+  return state;
+}
+
+// Keep the floor exactly as it began, so the player may voluntarily start it over.
+function markFloorStart(state) {
+  // Attempt counters belong to the live run, so a restart never rewinds them.
+  const { floorSnapshot, replayUnlocked, tries, ...start } = state;
+  state.floorSnapshot = structuredClone(start);
+}
+
+/** Return to the start of the current floor: same lives, gold and powers as on arrival, no penalty. */
+export function resetFloor(previous) {
+  const snapshot = previous?.floorSnapshot;
+  if (!snapshot || previous.status !== 'playing') return previous;
+  const state = structuredClone(snapshot);
+  state.floorSnapshot = structuredClone(snapshot);
+  if (previous.replayUnlocked === true) state.replayUnlocked = true;
+  if (previous.tries !== undefined) state.tries = previous.tries;
+  state.message = `Floor ${state.floor + 1} reset. ${snapshot.message}`;
   return state;
 }
 
@@ -331,6 +351,7 @@ function finishFloor(state) {
     state.floor++; setFloor(state);
     state.message = `Capture all enemy ${state.objective.piece}s. New faces, new clues.`;
     state.events.push({ type: 'descend', x: state.player.x, y: state.player.y });
+    markFloorStart(state);
   }
 }
 
@@ -542,6 +563,11 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
     if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + 3 - value.items.filter((item) => item.type === 'coin').length) return false;
+    // Saves from before floor resets have no snapshot; a present one must be this floor's start.
+    if (value.floorSnapshot !== undefined) {
+      const start = value.floorSnapshot;
+      if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
+    }
     if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
     if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
     return true;

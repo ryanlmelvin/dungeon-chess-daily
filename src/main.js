@@ -4,7 +4,7 @@ import './menu.css';
 import { initGuide } from './guide.js';
 import { drawMoveDemo } from './guide-art.js';
 import { headlineFor } from './edition.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -429,6 +429,24 @@ $('daily-button').addEventListener('click', () => {
   setPracticeMode(false); state = load(); showMoves = false; cursor = null;
   enterGame();
 });
+// Voluntary resets cost nothing: no life, and no extra try on the share card.
+function startOver(next, message) {
+  $('menu-dialog').close();
+  state = next; showMoves = false; cursor = null; turnLocked = false;
+  save(); enterGame(); notify(message);
+}
+$('reset-floor-button').addEventListener('click', () => {
+  if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
+  if (!confirm(`Restart floor ${state.floor + 1}? You keep the lives, gold and powers you arrived with.`)) return;
+  refreshFromOtherWindow();
+  startOver(resetFloor(state), `Floor ${state.floor + 1} restarted.`);
+});
+$('reset-day-button').addEventListener('click', () => {
+  if (!state) return;
+  if (!confirm(`Restart today’s ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
+  startOver(next, 'Today’s dungeon restarted from floor 1.');
+});
 $('result-paper-button').addEventListener('click',()=>{
   const current=getDaily();
   if(current.date!==daily.date){daily=current;setPracticeMode(false);state=load();}
@@ -444,6 +462,8 @@ function openMenu() {
   progressStatus('');
   $('change-piece-button').hidden = !(practice || canChoosePiece(state));
   $('daily-button').hidden = !practice;
+  $('reset-floor-button').hidden = !(state?.status === 'playing' && state.floorSnapshot);
+  $('reset-day-button').hidden = !state;
   $('menu-dialog').showModal();
   persistentStorage.refresh();
 }

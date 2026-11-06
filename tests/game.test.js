@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -400,4 +400,45 @@ test('the public API ignores edited daily metadata and binds saves to the reques
   const state = createGame(alternate);
   assert.equal(validateSave(state, state.date), false);
   assert.equal(validateSave(state, state.date, { difficulty: 'gentle' }), true);
+});
+
+test('restarting a floor returns to its arrival state without costing a life or a try', () => {
+  const withoutMessage = ({ message, events, ...rest }) => rest;
+  let state = createGame(daily);
+  const fresh = state;
+  const arrivals = [fresh];
+  for (const action of daily.generation.certificate.actions) {
+    const next = act(state, action);
+    if (next.floor !== state.floor) arrivals.push(next);
+    state = next;
+    if (state.status !== 'playing') break;
+    assert.equal(validateSave(state, daily.date), true);
+    const reset = resetFloor(state);
+    assert.equal(validateSave(reset, daily.date), true, `reset on floor ${state.floor} after move ${state.turns}`);
+    assert.deepEqual(withoutMessage(reset), withoutMessage(arrivals[state.floor]));
+    assert.match(reset.message, new RegExp(`^Floor ${state.floor + 1} reset`));
+  }
+  assert.equal(state.status, 'won');
+  assert.equal(resetFloor(state), state);
+  assert.equal(arrivals.length, 3);
+
+  // Losing lives on a floor is undone; earlier attempts are still counted, never added to.
+  const hurt = structuredClone(arrivals[1]);
+  hurt.player.hp = 1; hurt.replayUnlocked = true; hurt.tries = 3;
+  const restored = resetFloor(hurt);
+  assert.equal(restored.player.hp, arrivals[1].player.hp);
+  assert.equal(restored.tries, 3);
+  assert.equal(restored.replayUnlocked, true);
+
+  // A snapshot from another floor, or a doctored one, is not a valid save.
+  const tampered = structuredClone(arrivals[1]);
+  tampered.floorSnapshot = structuredClone(fresh.floorSnapshot);
+  assert.equal(validateSave(tampered, daily.date), false);
+  const richer = structuredClone(arrivals[1]);
+  richer.floorSnapshot.gold += 5;
+  assert.equal(validateSave(richer, daily.date), false);
+  // Saves from before floor restarts still load; they simply cannot restart a floor.
+  const legacy = structuredClone(arrivals[1]); delete legacy.floorSnapshot;
+  assert.equal(validateSave(legacy, daily.date), true);
+  assert.equal(resetFloor(legacy), legacy);
 });
