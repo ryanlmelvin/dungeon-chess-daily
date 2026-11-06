@@ -8,7 +8,7 @@ import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 const daily = generateDaily('2026-11-05', { maxAttempts: 0 });
 const actions = daily.generation.certificate.actions;
 
-test('a reserved companion cannot support a no-power certificate before delivery', () => {
+test('an older reserved companion cannot support a no-power certificate before delivery', () => {
   for (const piece of PIECES) {
     const initial = createGame(daily);
     initial.companionOrders = [{ floor: 1, piece }];

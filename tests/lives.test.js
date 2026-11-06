@@ -93,7 +93,8 @@ test('losing a promoted pawn life in a later generated room preserves progress a
 });
 
 test('exhaustion on the last move in room three resets the whole run to the same daily dungeon', () => {
-  const initial = promotedThirdRoom((cleared) => act(cleared, { type: 'buy', id: 'companion-pawn' }));
+  // Companions are no longer sold; a save from before then may still hold a paid pawn order.
+  const initial = promotedThirdRoom((cleared) => ({ ...cleared, gold: cleared.gold - 2, companionOrders: [{ floor: 2, piece: 'pawn' }] }));
   const aimed = [move(4, 4)].reduce(act, initial);
   assert.deepEqual(aimed.companionOrders, [{ floor: 2, piece: 'pawn' }]);
   aimed.player.hp = 1; aimed.turns = 59;

@@ -163,12 +163,12 @@
         <p>Each hit costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
       <article class="guide-page" hidden>
-        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop: buy powerups or reserve a companion for the next floor. With no shop after it, the last floor holds no coins.</p>
+        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop to buy powerups. With no shop after it, the last floor holds no coins.</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit. Stacks up to 3.</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Recruit a companion for this floor only. It moves after you, and its captures count.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Only the last floor holds a recruit: a rook, queen or king that moves after you for that floor, and its captures count.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -202,13 +202,6 @@
     <div class="dialog-heading"><h2 id="shop-title">Between floors</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>
     <p id="shop-gold"></p>
     <div id="shop-items" class="shop-items"></div>
-    <form id="companion-shop" class="companion-shop">
-      <div id="companion-picker">
-        <label id="companion-label" for="companion-choice">Companion for next floor only</label>
-        <div class="companion-order-controls"><select id="companion-choice"></select><button id="buy-companion" type="submit">Reserve</button></div>
-      </div>
-      <p id="companion-reserved" role="status" hidden></p>
-    </form>
     <p id="shop-feedback" role="status" hidden></p>
     <button id="shop-descend" class="shop-descend" type="button">Descend ↘</button>
   </dialog>

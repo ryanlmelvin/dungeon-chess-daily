@@ -391,7 +391,7 @@ function powerRoll(roll, coinless) {
   return coinless ? ['shield', 'freeze'][Math.floor(roll * 2)] : ['shield', 'freeze', 'magnet'][Math.floor(roll * 3)];
 }
 
-function setFloor(state) {
+function setFloor(state, legacyRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null;
@@ -441,6 +441,8 @@ function setFloor(state) {
   }
   if (!state.legacyTurnOrder) {
     // Add the recruit after the layout is fixed; older editions keep their map.
+    // Only the final floor keeps its recruit, but the draw still runs on every
+    // floor so its own random stream leaves walls, monsters and coins untouched.
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
     // Under royal rules the recruit is a rook, queen or king: a second attacker
     // strong enough to corner a dodging king, even beside a pawn or a bishop.
@@ -453,7 +455,7 @@ function setFloor(state) {
       for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (layoutPiece !== 'bishop' || (x+y)%2===0) && (layoutPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
     }
     const tile = tiles[Math.floor(recruitRng()*tiles.length)];
-    if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
+    if (tile && (royalRules(state) || legacyRecruit)) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
   if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
@@ -627,16 +629,8 @@ export function act(previous, action) {
   if (action.type === 'buy') {
     // The shop opens only between floors: after a room is cleared, before its stairs.
     if (previous.floor >= 2 || !previous.exit.open || !previous.objective.complete) return previous;
-    const recruit = COMPANIONS.find((entry) => entry.id === action.id);
-    if (recruit) {
-      const orders = previous.companionOrders ?? [];
-      if (!Array.isArray(orders) || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
-      const state = nextState(previous);
-      state.gold -= recruit.cost; state.companionOrders.push({ floor: state.floor + 1, piece: recruit.piece });
-      state.events = [{ type: 'companion-order', piece: recruit.piece, x: state.player.x, y: state.player.y }];
-      state.message = `${recruit.name} reserved for floor ${state.floor + 2}.`;
-      return state;
-    }
+    // Companions are no longer sold; older saves keep the orders they already placed.
+    if (COMPANIONS.some((entry) => entry.id === action.id)) return previous;
     const power = POWERUPS.find((entry) => entry.id === action.id);
     if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
     const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
@@ -773,8 +767,10 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const bonus = bonusCaptures(value);
     if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid - spent) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
+    // Runs saved before floors 1 and 2 lost their recruit may still hold it, on the board or at their side.
+    const legacyRecruit = value.floor < 2 && (value.companion !== null || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion')));
     // Layout depends only on the edition and original piece, never on promotion.
-    setFloor(template);
+    setFloor(template, legacyRecruit);
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
     if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;

@@ -147,9 +147,8 @@ dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0;
 .shop-items button { padding: 12px; }
 .shop-items strong { font-size: 24px; line-height: 1; margin-bottom: 4px; }
 .shop-items span { font-size: 20px; line-height: 1.2; }
-.companion-shop { border-top: 2px solid #51424f; }
-.companion-shop label, .piece-controls label { font-size: 20px; }
-.companion-order-controls select, .piece-controls select {
+.piece-controls label { font-size: 20px; }
+.piece-controls select {
   font-size: 22px;
   line-height: 1.2;
   min-height: 44px;
@@ -198,8 +197,6 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 @media (max-width: 350px) {
   .wordmark { font-size: 18px; }
   .wordmark .mark { display: none; }
-  .companion-order-controls { flex-wrap: wrap; }
-  .companion-order-controls select { flex-basis: 100%; }
 }
 @media (forced-colors: active) {
   .sound-setting input { appearance: auto; }

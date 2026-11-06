@@ -5,7 +5,7 @@ import { initGuide } from './guide.js';
 import { drawMoveDemo } from './guide-art.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, COMPANIONS, PIECES } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -367,33 +367,7 @@ function renderShop() {
     button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
     button.lastElementChild.textContent = `${power.description}${owned ? ` (${power.id === 'freeze' ? `${owned} moves left` : power.id === 'magnet' ? 'Active' : `${owned} left`})` : ''}`;
   }
-  $('companion-shop').hidden = state.floor === 2;
-  const reserved = (state.companionOrders || []).find(order => order.floor === state.floor + 1);
-  $('companion-picker').hidden = !!reserved;
-  $('companion-reserved').hidden = !reserved;
-  if (reserved) {
-    const name = COMPANIONS.find(companion => companion.piece === reserved.piece).name;
-    $('companion-reserved').textContent = `${name} reserved for floor ${reserved.floor + 1} only.`;
-  } else {
-    $('companion-label').textContent = `Companion for floor ${state.floor + 2} only`;
-    const select = $('companion-choice');
-    if (!select.options.length) {
-      for (const companion of COMPANIONS) {
-        const option = document.createElement('option');
-        option.value = companion.id;
-        option.textContent = `${companion.name} · ${companion.cost} gold`;
-        select.append(option);
-      }
-    }
-    const chosen = COMPANIONS.find(companion => companion.id === select.value);
-    $('buy-companion').disabled = !chosen || state.gold < chosen.cost;
-  }
 }
-$('companion-choice').addEventListener('change', renderShop);
-$('companion-shop').addEventListener('submit', event => {
-  event.preventDefault();
-  if (takeAction({type:'buy', id:$('companion-choice').value})) $('shop-feedback').hidden = true;
-});
 // The shop is offered once a floor is cleared, as the player takes its stairs.
 // The last floor has no shop: its stairs end the run.
 function takeStairs() {

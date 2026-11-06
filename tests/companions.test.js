@@ -15,28 +15,62 @@ function scenario(piece='king',color='white',x=4,y=6) {
 const foe=(id,piece,x,y)=>({id,piece,role:piece,species:'bat',palette:'ice',name:'Ice bat',x,y,moved:false,phase:'ready',target:null,intent:[]});
 const ally=(piece,x,y)=>({piece,basePiece:piece,x,y,moved:false,sharing:false});
 
-test('generated rooms offer one deterministic recruit and all six types appear',()=>{
-  const types=new Set();
-  for(let d=0;d<100;d++) {
+const recruitsOn=(state)=>state.items.filter((item)=>item.type==='companion');
+// Clears the room in place so the stairs can be taken without replaying a route.
+function descend(state) {
+  const cleared=structuredClone(state);
+  cleared.enemies=cleared.enemies.filter((foe)=>foe.role!==cleared.objective.piece);
+  cleared.objective.complete=true;cleared.exit.open=true;
+  return act(cleared,{type:'descend'});
+}
+
+test('floors one and two hold no recruit while the final floor keeps its rook, queen or king',()=>{
+  const finalTypes=new Set();
+  for(let d=0;d<60;d++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
     const state=createCandidate(daily);
-    const pickups=state.items.filter((item)=>item.type==='companion');
-    assert.equal(pickups.length,1);types.add(pickups[0].piece);
-    if(state.startingPiece==='pawn') assert.ok(pickups[0].y<6,'pawn recruits must be ahead of the player, not behind the entrance');
-    assert.ok(state.items.every((item)=>item.x!==state.exit.x||item.y!==state.exit.y),'pickups must remain clickable after stairs appear');
-    assert.ok(!state.enemies.some((enemy)=>enemy.x===pickups[0].x&&enemy.y===pickups[0].y));
-    assert.equal(state.map[pickups[0].y][pickups[0].x],'.');
+    assert.equal(state.floor,0);assert.deepEqual(recruitsOn(state),[],`${daily.date}: floor 1`);
     assert.equal(state.companion,null);
     assert.equal(validateCandidate(state,state.date,daily),true);
     assert.deepEqual(createCandidate(daily).items,state.items);
+    const second=descend(state);
+    assert.equal(second.floor,1);assert.deepEqual(recruitsOn(second),[],`${daily.date}: floor 2`);assert.equal(second.companion,null);
+    const last=descend(second);
+    assert.equal(last.floor,2);
+    const [recruit,...extra]=recruitsOn(last);
+    assert.ok(recruit,`${daily.date}: final recruit`);assert.equal(extra.length,0);
+    assert.ok(['rook','queen','king'].includes(recruit.piece),`${daily.date}: ${recruit.piece}`);finalTypes.add(recruit.piece);
+    if(last.startingPiece==='pawn') assert.ok(recruit.y<6,'pawn recruits must be ahead of the player, not behind the entrance');
+    assert.ok(last.items.every((item)=>item.x!==last.exit.x||item.y!==last.exit.y),'pickups must remain clickable after stairs appear');
+    assert.ok(!last.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
+    assert.equal(last.map[recruit.y][recruit.x],'.');
+    assert.equal(last.companion,null);
   }
-  assert.deepEqual([...types].sort(),[...PIECES].sort());
+  assert.deepEqual([...finalTypes].sort(),['king','queen','rook']);
   for(const date of ['2026-11-12','2026-11-13']) {
     const daily=getDaily(date), state=createGame(daily);
-    assert.equal(state.items.filter((item)=>item.type==='companion').length,1);
+    assert.deepEqual(recruitsOn(state),[]);
     assert.equal(validateSave(state,date),true);
     assert.deepEqual(createGame(daily).items,state.items);
   }
+});
+
+test('saves from before the change keep their floor-one recruit, on the board or recruited',()=>{
+  const daily=getDaily('2026-11-13');const state=createGame(daily);
+  // The validator accepts exactly the recruit the old rules placed, and nothing else.
+  const accepted=[];
+  for(const piece of PIECES) for(let y=0;y<8;y++) for(let x=0;x<8;x++) {
+    const old=structuredClone(state);old.items.push({type:'companion',piece,x,y});
+    if(validateSave(old,old.date)) accepted.push(old);
+  }
+  assert.equal(accepted.length,1);
+  const [old]=accepted;const pickup=old.items.find((item)=>item.type==='companion');
+  assert.ok(legalMoves(old).some((tile)=>tile.x===pickup.x&&tile.y===pickup.y));
+  const recruited=act(old,move(pickup.x,pickup.y));
+  assert.equal(recruited.companion.basePiece,pickup.piece);assert.deepEqual(recruitsOn(recruited),[]);
+  assert.equal(validateSave(JSON.parse(JSON.stringify(recruited)),recruited.date),true);
+  const forged=structuredClone(recruited);forged.companion.basePiece=forged.companion.piece=pickup.piece==='rook'?'queen':'rook';
+  assert.equal(validateSave(forged,forged.date),false);
 });
 
 test('a white recruit moves after its player, captures the objective for no gold, then enemies respond',()=>{
@@ -132,15 +166,17 @@ test('floor changes and exhausted lives clear the active companion',()=>{
   const state=scenario('queen');state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
   const cleared=act(state,move(4,2));const downstairs=act(cleared,{type:'descend'});
   assert.equal(downstairs.floor,1);assert.equal(downstairs.companion,null);
-  assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,1);
+  assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,0);
   const doomed=scenario('king','white',4,5);doomed.companion=ally('pawn',0,7);
   doomed.enemies=[{...foe('attacker','rook',4,0),phase:'aim',target:{x:4,y:4},intent:[{x:4,y:4}]}];
   const reset=act(doomed,move(4,4));
   assert.equal(reset.turns,0);assert.equal(reset.companion,null);assert.ok(reset.events.some((event)=>event.type==='restart'));
 });
 
-test('real recruited companions survive save and resume, and invalid companion data is rejected',()=>{
-  const state=createGame(getDaily('2026-11-13'));
+test('real final-floor recruits survive save and resume, and invalid companion data is rejected',()=>{
+  const daily=getDaily('2026-11-13');let state=createGame(daily);
+  for(const action of daily.generation.certificate.actions) {if(state.floor===2)break;state=act(state,action);}
+  assert.equal(state.floor,2);
   const pickup=state.items.find((item)=>item.type==='companion');
   const recruited=act(state,move(pickup.x,pickup.y));
   assert.ok(recruited.companion);assert.equal(validateSave(recruited,recruited.date),true);
