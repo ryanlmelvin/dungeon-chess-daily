@@ -380,7 +380,7 @@ function showResult() {
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
-  $('next-edition').textContent=shareable ? '💔 Lives lost on each floor · ❤️ None lost\nNext edition at 00:00 UTC.' : 'Next edition at 00:00 UTC.';
+  $('next-edition').textContent=shareable ? '💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost\nNext edition at 00:00 UTC.' : 'Next edition at 00:00 UTC.';
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }

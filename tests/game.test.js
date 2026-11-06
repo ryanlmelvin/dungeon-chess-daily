@@ -202,21 +202,23 @@ test('moves remain available beyond sixty and final-floor extraction still works
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
-test('share text shows lives lost per floor and today\'s try, without spoilers', () => {
+test('share text is one line of lives lost per floor, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
   const share = getShareText(state);
-  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n🏆 Escaped on try 1\n1️⃣ ❤️\n2️⃣ 💔💔\n3️⃣ 💔\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n❤️💔💔💔🏆\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!share.includes(spoiler));
+  state.tries = 3; state.replayUnlocked = true;
+  assert.match(getShareText(state), /\n💀💀❤️💔💔💔🏆\n/u);
 });
 
-test('share text marks a trapped floor and counts restarts as tries', () => {
+test('share text marks a trapped floor and counts legacy restarts as one earlier try', () => {
   const state = createGame(daily);
-  state.status = 'lost'; state.tries = 3; state.replayUnlocked = true;
-  assert.match(getShareText(state), /💀 Trapped on floor 1, try 3\n1️⃣ ❤️ 💀\nhttps/u);
-  delete state.tries;
-  assert.match(getShareText(state), /try 2\+/u);
+  state.status = 'lost';
+  assert.match(getShareText(state), /\n❤️🔒\n/u);
+  state.replayUnlocked = true;
+  assert.match(getShareText(state), /\n💀❤️🔒\n/u);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -366,7 +368,7 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
-  assert.match(getShareText(restart),/try 2\n/u);
+  assert.match(getShareText(restart),/\n💀❤️⏳\n/u);
 });
 
 

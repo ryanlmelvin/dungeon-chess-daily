@@ -518,24 +518,22 @@ export function act(previous, action) {
   return state;
 }
 
-// A spoiler-free result: lives lost on each floor reached, and today's try count.
+// A spoiler-free result on one line: a 💀 for each earlier try that ran out of
+// lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
+// then 🏆 for escaping, 🔒 when trapped without moves, or ⏳ while still playing.
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
-  const keycaps = ['1️⃣', '2️⃣', '3️⃣'];
-  const rows = [];
+  // Saves from before the tries counter only know that a restart happened.
+  const earlier = (state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1)) - 1;
+  let line = '💀'.repeat(earlier);
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
     const after = record ? record.hp : state.player.hp;
-    const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : null;
-    const hearts = lost === null ? '❔' : lost ? '💔'.repeat(lost) : '❤️';
-    rows.push(`${keycaps[floor]} ${hearts}${!record && state.status === 'lost' ? ' 💀' : ''}`);
+    const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
+    line += lost ? '💔'.repeat(lost) : '❤️';
   }
-  const tries = state.tries ?? (state.replayUnlocked && !state.practice ? '2+' : 1);
-  const ordinal = `try ${tries}`;
-  const headline = state.status === 'won' ? `🏆 Escaped on ${ordinal}`
-    : state.status === 'lost' ? `💀 Trapped on floor ${state.floor + 1}, ${ordinal}`
-    : `⏳ Floor ${state.floor + 1}, ${ordinal}`;
-  return `Dungeon Chess Daily #${state.edition}\n${headline}\n${rows.join('\n')}\n${url}`;
+  line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
+  return `Dungeon Chess Daily #${state.edition}\n${line}\n${url}`;
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
