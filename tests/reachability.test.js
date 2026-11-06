@@ -25,7 +25,8 @@ function mapWithOpenSquares(squares) {
 // survivability is checked independently by replaying the full winning route.
 test('all fallback floors have reachable stationary pickups for every piece and difficulty', () => {
   let floors = 0;
-  assert.equal(Object.keys(FALLBACKS).length, 15);
+  // Plain play plus the two rule-changing room modifiers (ice, collapse).
+  assert.equal(Object.keys(FALLBACKS).length, 45);
   for (const [identity, fallback] of Object.entries(FALLBACKS)) {
     const [difficulty, piece, color] = identity.split(':');
     const daily = generateDaily(fallback.date, { difficulty, maxAttempts: 0 });
@@ -56,7 +57,7 @@ test('all fallback floors have reachable stationary pickups for every piece and 
     assert.equal(state.status, 'won');
     assert.deepEqual([...visitedFloors], [0, 1, 2]);
   }
-  assert.equal(floors, 45);
+  assert.equal(floors, 135);
 });
 
 test('a bishop cannot reach coins, relics or recruits on the opposite square color', () => {
