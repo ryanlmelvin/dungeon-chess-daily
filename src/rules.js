@@ -537,16 +537,17 @@ export function act(previous, action) {
   return state;
 }
 
-// A spoiler-free result on one line: the starting piece, a 💀 for each earlier try that ran out of
+// A spoiler-free result on one line: a 💀 for each earlier try that ran out of
 // lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
-// then 🏆 for escaping, 🔒 when trapped without moves, or ⏳ while still playing.
+// then 🏆 for escaping, 🔒 when trapped without moves, or ⏳ while still playing,
+// and last the day's starting piece.
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   // Saves from before the tries counter only know that a restart happened.
   const earlier = (state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1)) - 1;
   // The day's starting piece in its color. The text-presentation selector keeps
   // the black pawn from switching to its gray emoji form beside the others.
   const glyphs = { white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' }, black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' } };
-  let line = `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E` + '💀'.repeat(earlier);
+  let line = '💀'.repeat(earlier);
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
@@ -555,6 +556,7 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
     line += lost ? '💔'.repeat(lost) : '❤️';
   }
   line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
+  line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
   return `Dungeon Chess Daily #${state.edition}\n${line}\n${url}`;
 }
 

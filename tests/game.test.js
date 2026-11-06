@@ -207,18 +207,18 @@ test('share text is one line of lives lost per floor, without spoilers', () => {
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
   const share = getShareText(state);
-  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n${state.playerColor === 'white' ? '♙' : '♟'}\uFE0E❤️💔💔💔🏆\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n❤️💔💔💔🏆${state.playerColor === 'white' ? '♙' : '♟'}\uFE0E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!share.includes(spoiler));
   state.tries = 3; state.replayUnlocked = true;
-  assert.match(getShareText(state), /\n[♙♟]\uFE0E💀💀❤️💔💔💔🏆\n/u);
+  assert.match(getShareText(state), /\n💀💀❤️💔💔💔🏆[♙♟]\uFE0E\n/u);
 });
 
 test('share text marks a trapped floor and counts legacy restarts as one earlier try', () => {
   const state = createGame(daily);
   state.status = 'lost';
-  assert.match(getShareText(state), /\n[♔-♟]\uFE0E❤️🔒\n/u);
+  assert.match(getShareText(state), /\n❤️🔒[♔-♟]\uFE0E\n/u);
   state.replayUnlocked = true;
-  assert.match(getShareText(state), /\n[♔-♟]\uFE0E💀❤️🔒\n/u);
+  assert.match(getShareText(state), /\n💀❤️🔒[♔-♟]\uFE0E\n/u);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -368,7 +368,7 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
-  assert.match(getShareText(restart),/\n[♔-♟]\uFE0E💀❤️⏳\n/u);
+  assert.match(getShareText(restart),/\n💀❤️⏳[♔-♟]\uFE0E\n/u);
 });
 
 

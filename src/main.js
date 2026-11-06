@@ -398,7 +398,7 @@ function showResult() {
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
-  $('next-edition').textContent=shareable ? `Your piece · 💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost\n${next}` : next;
+  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · Your piece last\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
