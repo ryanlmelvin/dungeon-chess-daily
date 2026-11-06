@@ -8,6 +8,8 @@ const WHITE = 0xeee8e1;
 const RED = 0xd13959;
 const MINT = 0x8af4d5;
 const MOVE_COLOR = 0x56dcff;
+// How long an attacker's lunge toward the player lasts.
+const STRIKE_MS = 300;
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -267,7 +269,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (companion) tileRing(group, 0, 0, 0.23, 0.27, MINT, 0.6, 0.035);
     group.position.set(origin.x, 0, origin.y);
     actors.add(group);
-    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(origin.x, 0, origin.y), pendingTarget: null, moveAt: 0, removeAt: 0, spawnAt: 0, player, companion, flash: 0, flashAt: 0, flashPosition: null };
+    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(origin.x, 0, origin.y), pendingTarget: null, moveAt: 0, removeAt: 0, spawnAt: 0, player, companion, flash: 0, flashAt: 0, flashPosition: null, strikeAt: 0, strikeTo: null, strikeFrom: null, strikeOffset: new THREE.Vector3() };
     entities.set(key, entity);
     return entity;
   }
@@ -456,16 +458,27 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       }
     }
     const damage = events.find((event) => event.type === 'damage');
+    const hitAt = now + enemyDelay + 145;
     if (damage) {
       const player = entities.get('player');
       if (player) {
         if (animateTurn) {
-          player.flashAt = now + enemyDelay + 145;
+          player.flashAt = hitAt;
           player.flashPosition = { x: damage.x, y: damage.y };
         }
         else player.flash = 0.4;
       }
       if (!animateTurn) burst(next.player.x, next.player.y);
+    }
+    // Show who struck: the attacker lunges at the player's square and back,
+    // tinted red, peaking as the player flashes. A shield block lunges too.
+    const strike = events.find((event) => (event.type === 'damage' || event.type === 'shield') && event.by);
+    // A restart rebuilds the room, where the same id may name a different monster.
+    const attacker = strike && !changedBoard && !events.some((event) => event.type === 'restart') && entities.get(strike.by);
+    if (attacker) {
+      attacker.strikeAt = animateTurn ? hitAt - 130 : now;
+      attacker.strikeTo = { x: strike.x, y: strike.y };
+      attacker.strikeFrom = strike.from ?? { x: attacker.target.x, y: attacker.target.z };
     }
     if (animateTurn) {
       clear(hints);
@@ -539,7 +552,21 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         burst(entity.flashPosition?.x ?? entity.target.x, entity.flashPosition?.y ?? entity.target.z);
         entity.flashPosition = null;
       }
+      entity.group.position.sub(entity.strikeOffset);
       entity.group.position.lerp(entity.target, reducedMotion ? 1 : Math.min(1, dt * 19));
+      entity.strikeOffset.set(0, 0, 0);
+      if (entity.strikeAt && timestamp >= entity.strikeAt) {
+        const t = (timestamp - entity.strikeAt) / STRIKE_MS;
+        if (t >= 1) entity.strikeAt = 0;
+        else {
+          entity.flash = Math.max(entity.flash, 0.12);
+          if (!reducedMotion) {
+            const reach = Math.sin(Math.PI * t) * 0.6;
+            entity.strikeOffset.set((entity.strikeTo.x - entity.strikeFrom.x) * reach, 0.18 * Math.sin(Math.PI * t), (entity.strikeTo.y - entity.strikeFrom.y) * reach);
+            entity.group.position.add(entity.strikeOffset);
+          }
+        }
+      }
       entity.flash = Math.max(0, entity.flash - dt);
       entity.art.material.color.set(entity.flash ? 0xff6889 : 0xffffff);
       if (entity.player && entity.flash) playerPulse.value = 0;

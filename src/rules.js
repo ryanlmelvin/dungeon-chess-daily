@@ -82,7 +82,9 @@ export function legalMoves(state) {
  */
 export function closeAttacker(state, square) {
   if (state.powers?.freeze > 0) return null;
-  const board = { ...state, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
+  // A companion sharing the player's square never shields it.
+  const companion = state.companion && !same(state.companion, square) ? state.companion : null;
+  const board = { ...state, companion, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
   return board.enemies.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
     && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
 }
@@ -264,17 +266,21 @@ function returnToPawn(state) {
 
 // One capture of the player: a shield absorbs it, otherwise a life is lost.
 // Returns 'shield', 'damage' or 'restart' (the last life ended the run).
-function hitPlayer(state, foe) {
+// Events name the attacker (`by`, its square and name) so the board can show
+// which monster struck, even after a restart clears the room.
+function hitPlayer(state, foe, close = false) {
+  const attacker = { by: foe.id, from: { x: foe.x, y: foe.y }, name: foe.name };
+  const how = close ? 'was guarding that square and struck at once' : 'struck along its red path';
   if (state.powers.shield > 0) {
     state.powers.shield--; foe.phase = 'ready'; foe.intent = []; foe.target = null;
-    state.events.push({ type: 'shield', x: state.player.x, y: state.player.y });
-    state.message = 'Your bone ward shattered and blocked the capture.';
+    state.events.push({ type: 'shield', x: state.player.x, y: state.player.y, ...attacker });
+    state.message = `${foe.name} ${how}, but your bone ward blocked it.`;
     return 'shield';
   }
   state.player.hp--;
-  const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
+  const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1, ...attacker, close };
   if (state.player.hp === 0) {
-    restartRun(state, [damage], 'Out of lives. Back to the start of today’s dungeon.');
+    restartRun(state, [damage], `${foe.name} ${how}. Out of lives. Back to the start of today’s dungeon.`);
     return 'restart';
   }
   // Clear the committed attack so
@@ -283,7 +289,7 @@ function hitPlayer(state, foe) {
   const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
   if (demoted) returnToPawn(state);
   state.events.push(damage);
-  state.message = `${foe.name} took a life. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
+  state.message = `${foe.name} ${how}. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
   return 'damage';
 }
 
@@ -701,7 +707,7 @@ export function act(previous, action) {
   if (close) {
     const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y };
     state.events.push(event);
-    if (hitPlayer(state, close) === 'restart') { state.events.unshift(event); return state; }
+    if (hitPlayer(state, close, true) === 'restart') { state.events.unshift(event); return state; }
   }
   companionTurn(state);
   if (state.playerColor === 'white' && !close) enemyTurn(state);

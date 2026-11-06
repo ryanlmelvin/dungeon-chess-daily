@@ -430,7 +430,9 @@ function showDeath() {
   $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
   const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
   $('result-title').textContent=trapped?'Cornered.':'Captured.';
-  $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':'Out of lives. The story isn’t over yet.';
+  const fatal = state.events.find(event => event.type === 'damage' && event.name);
+  const culprit = fatal ? `${fatal.name} ${fatal.close ? 'was guarding the square you stepped onto' : 'caught you on its red path'}. ` : '';
+  $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
   $('next-edition').textContent='This counts as an earlier try 💀 on your share card.';
   $('retry-button').focus({preventScroll:true});
 }

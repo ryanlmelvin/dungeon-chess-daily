@@ -146,3 +146,12 @@ test('an instant hit on the last life restarts the run and keeps the capture eve
   assert.equal(next.player.hp,PIECE_LIVES.rook); assert.equal(next.floor,0);
   assert.deepEqual(next.events.map((event)=>event.type),['close-capture','damage','restart']);
 });
+
+test('a companion sharing the player square does not shield a close-range capture',()=>{
+  const state=scenario('rook','white',4,6);
+  state.enemies=[monster('king','king',5,3)];
+  state.companion={piece:'rook',basePiece:'rook',x:4,y:4,moved:false,sharing:false};
+  const next=act(state,move(4,4));
+  assert.ok(next.events.some((event)=>event.type==='close-capture'));
+  assert.equal(next.player.hp,state.player.hp-1);
+});
