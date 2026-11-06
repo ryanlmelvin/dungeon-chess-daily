@@ -489,6 +489,8 @@ function openEdition(date) {
   try { if (archiveMode) sessionStorage.setItem(archiveSessionKey, daily.date); else sessionStorage.removeItem(archiveSessionKey); } catch {}
   try { practice = localStorage.getItem(practiceModeKey()) === 'true'; } catch { practice = false; }
   rolloverNotice = '';
+  // Notices describe the edition being left; load() may post one for the new one.
+  notify('');
   showMoves = false; cursor = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('result-paper-button').textContent = 'Read the paper';
