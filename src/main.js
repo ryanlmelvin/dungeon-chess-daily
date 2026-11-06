@@ -98,12 +98,14 @@ function renderPaper() {
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = new Date(`${daily.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
   $('headline').textContent = theme.headline;
-  $('deck').textContent = theme.deck;
+  $('deck').replaceChildren(createPrintLines(0));
   $('art-caption').textContent = "Artist's impression";
   $('side-stories').replaceChildren(...theme.stories.map((story, index) => {
     const article = document.createElement('article');
     const h = document.createElement('h3'); h.textContent = story.title;
-    const p = document.createElement('p'); p.textContent = story.body;
+    const p = document.createElement('p');
+    p.setAttribute('aria-hidden', 'true');
+    p.append(createPrintLines(index + 1));
     const creature = daily.species[index + 1];
     const portrait = document.createElement('canvas'); portrait.width=40;portrait.height=40;portrait.className='story-portrait';portrait.setAttribute('aria-label',creature.name);portrait.setAttribute('role','img');
     drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
@@ -112,6 +114,23 @@ function renderPaper() {
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? 'Resume your descent ' : 'Read your result ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
   drawPaperArt(theme);
+}
+// Decorative, unreadable print: the headlines and colored portraits carry the clues.
+function createPrintLines(variant) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 180; canvas.height = 26; canvas.className = 'print-lines';
+  canvas.setAttribute('aria-hidden', 'true');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#696969';
+  for (let row = 0; row < 3; row++) {
+    const width = row === 2 ? 108 + variant * 18 : 180;
+    for (let x = 0; x < width; x += 3) {
+      const ink = (x * 11 + row * 17 + variant * 23) % 13;
+      if (ink < 3) continue;
+      ctx.fillRect(x, row * 10 + ink % 2, 2, 3 + ink % 3);
+    }
+  }
+  return canvas;
 }
 function drawPaperArt() {
   const ctx = $('paper-art').getContext('2d');
