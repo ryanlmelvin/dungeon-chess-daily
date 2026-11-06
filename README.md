@@ -2,7 +2,7 @@
 
 [Play Dungeon Chess Daily](https://ryanlmelvin.github.io/dungeon-chess-daily/) · [Source](https://github.com/ryanlmelvin/dungeon-chess-daily)
 
-A short daily dungeon played with chess moves. A twirling pixel newspaper introduces three of the day's monsters, with illustrated stories that hint at how they move. Take one chess piece through three compact rooms, decide when to capture and when to escape, then share a spoiler-free emoji result. Designed for a complete daily run in five minutes or less.
+A short daily dungeon played with chess moves. A twirling pixel newspaper hints at three disguised targets through colorful tabloid headlines. Take one chess piece through three crowded rooms, identify your targets, collect powerups, and share a spoiler-free emoji result. Designed for a complete daily run in five minutes or less.
 
 By [Ryan L. Melvin](https://ryanlmelvin.com).
 
@@ -10,10 +10,13 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 
 - Your daily piece is selected from pawn, knight, bishop, rook, queen, and king with equal probability. It moves and captures like that chess piece. Tap your piece to see legal destinations, then tap a destination to move.
 - Capture a monster by landing on its square. A pawn advances into empty squares and captures diagonally; reaching the far rank promotes it to a queen.
-- The dungeon has eighteen original monster species. Their chess movement roles change with the daily seed and are hidden behind their monster appearances. Read the newspaper's three clues, observe their moves, and learn the threats.
+- Each edition draws nine monster species from twenty-six original sprites, with six randomized color palettes. Each floor mixes three species. Their chess roles stay hidden behind those appearances; read the newspaper's three clues and watch their moves.
+- Seven to nine pillars, crates, barrels, and rocks fill each floor. They block movement and attack lanes; knights jump over them. Layouts preserve movement connectivity and pawn promotion lanes.
 - Monsters respond after your move. A threatened capture winds up before it lands, showing its full attack path so you can escape or capture the attacker.
-- Capture at least one monster in a room to unlock its stairs. You may leave while other monsters are alive; taking extra captures is a choice.
-- Reach the stairs in all three 8×8 rooms within sixty moves. A monster capture ends your run. There is no real-time countdown.
+- Floors one and two each ask you to capture all enemies of a particular chess role; the third always asks for the king. Every target group has the exact starting chess-army count: eight matching pawns, two matching rooks, knights, or bishops, or one queen or king. Other roles never exceed those limits. Capturing a different role earns gold but does not complete the challenge. The stairs stay hidden until every target is captured. Then click the stairs or the exit button from anywhere to leave, without spending a move.
+- Coins and captures each earn one gold. Tap your gold to buy a Bone ward (3 gold, blocks one hit), Frost hourglass (2 gold, freezes monsters for three moves), or Coin magnet (4 gold, collects coins within two orthogonal steps). Relic pickups activate the same powers for free. Powers carry between floors; buying them costs no moves.
+- Complete all three 8×8 rooms within sixty moves. There is no real-time countdown.
+- Lives match the number of that piece in a chess army: eight pawns, two rooks, knights, or bishops, and one queen or king. A hit costs one life unless a shield absorbs it. A promoted pawn keeps its remaining lives but becomes a pawn again after losing one, returning to a safe square if needed. Losing all lives restarts the same daily dungeon from floor one, resetting gold and powers.
 
 Everyone gets the same UTC-dated edition. Your first attempt is the daily result; unlimited practice is labeled separately. Emoji sharing reveals your result without exposing the newspaper clues, monster movement roles, or route.
 
@@ -23,7 +26,7 @@ The mobile game gives the board the screen. Open the in-game menu for the paper,
 
 Use **Install** from the newspaper or result screen. The installation dialog includes instructions for Safari on iPhone/iPad, Chrome on Android, and desktop browsers. After its first complete download, the game and future deterministic daily editions work offline. Three.js, sprites, and other runtime assets are bundled locally.
 
-Progress stays on the device. Export/import in the menu transfers saved editions between browsers or installed apps; there is no account or automatic cloud synchronization.
+Progress stays on the device. Export/import in the menu transfers saved editions between browsers or installed apps; there is no account or automatic cloud synchronization. Earlier ruleset saves remain archived and included in exports; new capture-challenge runs use separate save keys.
 
 Updates download in the background. **Update available**, including in the game menu, saves progress before reloading and refuses activation if saving fails. Other open windows keep their own reload choice. [Update recovery](https://ryanlmelvin.github.io/dungeon-chess-daily/update.html) works independently of the main app and preserves stored progress. Service-worker caches and saves are scoped to this project's path.
 

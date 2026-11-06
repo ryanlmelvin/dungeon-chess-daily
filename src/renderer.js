@@ -1,20 +1,21 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
 const RED = 0xd13959;
 
-function pixelTexture(rows) {
+function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(...rows.map((row) => row.length));
   canvas.height = rows.length;
   const context = canvas.getContext('2d');
+  const palette = { ...PALETTE, ...paletteOverride };
   rows.forEach((row, y) => [...row].forEach((key, x) => {
-    if (!PALETTE[key]) return;
-    context.fillStyle = PALETTE[key];
+    if (!palette[key]) return;
+    context.fillStyle = palette[key];
     context.fillRect(x, y, 1, 1);
   }));
   const texture = new THREE.CanvasTexture(canvas);
@@ -96,8 +97,10 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   let pendingHints = null;
   let stairMaterial = null;
   let stairGlow = null;
+  let stairs = null;
   let itemKey = '';
   let pendingItems = null;
+  let lastEvents = null;
 
   function basic(color, extra = {}) {
     const material = new THREE.MeshBasicMaterial({ color, ...extra });
@@ -122,6 +125,24 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     return mesh;
   }
 
+  function spriteTexture(id, palette) {
+    if (!SPRITES[id]) id = 'skull';
+    if (!palette) return textures.get(id);
+    const key = `${id}:${palette}`;
+    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], spritePalette(palette)));
+    return textures.get(key);
+  }
+
+  function propSprite(parent, id, x, y, size = 0.84, height = 0.25) {
+    const material = new THREE.SpriteMaterial({ map: spriteTexture(id), transparent: true, alphaTest: 0.1, depthWrite: false });
+    materials.add(material);
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(size, size, 1);
+    sprite.position.set(x, height, y);
+    parent.add(sprite);
+    return sprite;
+  }
+
   function release(object) {
     object.traverse((child) => {
       const owned = Array.isArray(child.material) ? child.material : [child.material];
@@ -136,6 +157,9 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   }
 
   function buildBoard(next) {
+    pendingTransition = null;
+    pendingHints = null;
+    pendingItems = null;
     clear(board);
     clear(actors);
     clear(hints);
@@ -162,15 +186,31 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       const tile = block(board, x, -0.035, y, 0.975, 0.07, 0.975, tileMaterials[index]);
       tile.userData.tile = { x, y };
       targets.push(tile);
+      if (next.map[y][x] === '#') {
+        const prop = next.props?.find((entry) => entry.x === x && entry.y === y);
+        const type = prop?.type || ['pillar', 'crate', 'barrel', 'rock'][(x * 3 + y + next.floor) % 4];
+        // A raised, dark footprint makes blocked squares clear at phone scale.
+        block(board, x, 0.045, y, 0.78, 0.14, 0.78, basic(0x19151c));
+        propSprite(board, `prop-${type}`, x, y, type === 'pillar' ? 0.95 : 0.9, type === 'pillar' ? 0.35 : 0.27);
+      } else if ((x * 13 + y * 7 + next.seed) % 7 === 0 && !(x === next.exit.x && y === next.exit.y)) {
+        // Loose chips and bone fragments stay at the edge of walkable tiles.
+        const chip = basic((x + y) % 2 ? 0x544958 : 0x8a6268);
+        tileMark(board, x - 0.32, y + 0.3, 0.11, 0.045, chip, 0.015);
+        tileMark(board, x - 0.21, y + 0.35, 0.055, 0.03, chip, 0.015);
+        if (x % 2) tileMark(board, x + 0.32, y - 0.29, 0.065, 0.035, chip, 0.015);
+      }
     }
-    // A captured monster lights the stairs without adding another HUD element.
+    // The stairwell itself is concealed until the floor's capture is complete.
     const exit = next.exit || { x: 4, y: 0 };
-    tileMark(board, exit.x, exit.y, 0.66, 0.72, basic(0x0d0910), 0.014);
-    stairMaterial = basic(next.exit?.open ? WHITE : 0x625365);
-    stairGlow = basic(WHITE, { transparent: true, opacity: next.exit?.open ? 0.12 : 0, depthWrite: false });
-    tileMark(board, exit.x, exit.y, 0.85, 0.85, stairGlow, 0.015);
+    stairs = new THREE.Group();
+    stairs.visible = !!next.exit?.open;
+    board.add(stairs);
+    tileMark(stairs, exit.x, exit.y, 0.76, 0.84, basic(0x0d0910), 0.014);
+    stairMaterial = basic(WHITE);
+    stairGlow = basic(0xc3efdc, { transparent: true, opacity: 0.2, depthWrite: false });
+    tileMark(stairs, exit.x, exit.y, 0.9, 0.9, stairGlow, 0.015);
     for (let i = 0; i < 4; i++) {
-      tileMark(board, exit.x, exit.y - 0.25 + i * 0.16, 0.25 + i * 0.1, 0.045, stairMaterial, 0.018);
+      tileMark(stairs, exit.x, exit.y - 0.25 + i * 0.16, 0.25 + i * 0.1, 0.055, stairMaterial, 0.018);
     }
     resize();
   }
@@ -178,7 +218,8 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   function makeEntity(key, data, player) {
     const group = new THREE.Group();
     const id = player ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
-    const texture = textures.get(id) || textures.get(player ? 'piece-pawn' : 'skull') || textures.values().next().value;
+    const palette = player ? null : data.palette;
+    const texture = spriteTexture(id, palette);
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
     materials.add(material);
     const art = new THREE.Sprite(material);
@@ -191,23 +232,25 @@ export function createDungeonRenderer(container, { onTile } = {}) {
     tileMark(group, 0, 0, player ? 0.46 : 0.42, 0.26, basic(0x09070c, { transparent: true, opacity: 0.8 }), 0.012);
     group.position.set(data.x, 0, data.y);
     actors.add(group);
-    const entity = { group, art, spriteId: id, target: new THREE.Vector3(data.x, 0, data.y), pendingTarget: null, moveAt: 0, removeAt: 0, player, flash: 0, flashAt: 0 };
+    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(data.x, 0, data.y), pendingTarget: null, moveAt: 0, removeAt: 0, player, flash: 0, flashAt: 0 };
     entities.set(key, entity);
     return entity;
   }
 
   function updateItems(items) {
-    const key = items.map((item) => `${item.x}:${item.y}:${item.type}`).join('|');
+    const key = items.map((item) => `${item.x}:${item.y}:${item.type}:${item.power || ''}`).join('|');
     if (key === itemKey) return;
     itemKey = key;
     clear(collectibles);
     for (const item of items) {
-      const material = new THREE.SpriteMaterial({ map: textures.get('coin'), transparent: true, alphaTest: 0.1, depthWrite: false });
+      const power = item.type === 'powerup';
+      const material = new THREE.SpriteMaterial({ map: power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin'), transparent: true, alphaTest: 0.1, depthWrite: false });
       materials.add(material);
       const coin = new THREE.Sprite(material);
-      coin.scale.set(0.3, 0.3, 1);
-      coin.position.set(item.x, 0.13, item.y);
+      coin.scale.set(power ? 0.55 : 0.3, power ? 0.55 : 0.3, 1);
+      coin.position.set(item.x, power ? 0.22 : 0.13, item.y);
       collectibles.add(coin);
+      if (power) tileMark(collectibles, item.x, item.y, 0.44, 0.44, basic(0x83c5bd, { transparent: true, opacity: 0.2, depthWrite: false }), 0.02);
     }
   }
 
@@ -235,6 +278,13 @@ export function createDungeonRenderer(container, { onTile } = {}) {
 
   function updateHints(next) {
     clear(hints);
+    if (next.powers?.shield) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.39, 16), basic(0xa7dfff, { transparent: true, opacity: 0.85, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(next.player.x, 0.065, next.player.y);
+      hints.add(ring);
+    }
+    if (next.powers?.freeze) for (const enemy of next.enemies) cornerMarks(enemy.x, enemy.y, 0xa7dfff, 0.35, 0.1);
     const danger = next.danger || next.enemies.flatMap((enemy) => enemy.phase === 'aim' ? enemy.intent || [] : []);
     const seen = new Set();
     for (const tile of danger) {
@@ -277,8 +327,12 @@ export function createDungeonRenderer(container, { onTile } = {}) {
   function render(next, afterTransition = false) {
     if (disposed) return;
     const now = performance.now();
-    const key = `${next.date}:${next.floor}:${next.map?.join('')}`;
-    const changedBoard = key !== boardKey;
+    const key = `${next.date}:${next.seed}:${next.floor}:${next.map?.join('')}`;
+    // UI-only paints reuse the event array. Consume an action's effects once,
+    // including a restart whose floor, board, and turn match a previous start.
+    const freshEvents = next.events !== lastEvents;
+    const restarted = freshEvents && next.events?.some((event) => event.type === 'restart');
+    const changedBoard = key !== boardKey || restarted;
     if (changedBoard && state && state.date === next.date && next.floor > state.floor && !reducedMotion && !afterTransition) {
       const player = entities.get('player');
       if (player) player.target.set(state.exit.x, 0, state.exit.y);
@@ -290,8 +344,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       boardKey = key;
       buildBoard(next);
     }
-    stairMaterial?.color.set(next.exit?.open ? WHITE : 0x625365);
-    if (stairGlow) stairGlow.opacity = next.exit?.open ? 0.12 : 0;
+    if (stairs) stairs.visible = !!next.exit?.open;
     const animateTurn = !changedBoard && !reducedMotion && next.turns > currentTurn;
     if (animateTurn) pendingItems = { items: next.items || [], at: now + 145 };
     else if (!pendingItems) updateItems(next.items || []);
@@ -308,9 +361,11 @@ export function createDungeonRenderer(container, { onTile } = {}) {
         entity.pendingTarget = null;
       }
       entity.art.userData.tile = { x: data.x, y: data.y };
-      const spriteId = player ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
-      if (spriteId !== entity.spriteId && textures.has(spriteId)) {
-        entity.art.material.map = textures.get(spriteId);
+      const spriteName = player ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
+      const palette = player ? null : data.palette;
+      const spriteId = `${spriteName}:${palette || ''}`;
+      if (spriteId !== entity.spriteId) {
+        entity.art.material.map = spriteTexture(spriteName, palette);
         entity.art.material.needsUpdate = true;
         entity.spriteId = spriteId;
       }
@@ -324,7 +379,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
         entities.delete(id);
       }
     }
-    if (next.status === 'lost' && next.turns !== currentTurn) {
+    if (freshEvents && next.events?.some((event) => event.type === 'damage')) {
       const player = entities.get('player');
       if (player) {
         if (animateTurn) player.flashAt = now + 320;
@@ -341,6 +396,7 @@ export function createDungeonRenderer(container, { onTile } = {}) {
       updateHints(next);
     }
     currentTurn = next.turns;
+    lastEvents = next.events;
     state = next;
   }
 

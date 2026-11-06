@@ -4,6 +4,8 @@
 const DAY = 86_400_000;
 const EPOCH = Date.UTC(2026, 10, 5);
 export const PIECES = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
+export const PIECE_COUNTS = Object.freeze({ pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 });
+export const PIECE_LIVES = PIECE_COUNTS;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -14,22 +16,31 @@ const SPECIES = [
   ['gargoyle', 'Gargoyle', 'Gargoyles'], ['imp', 'Imp', 'Imps'], ['mimic', 'Mimic', 'Mimics'],
   ['eye', 'Floating eye', 'Floating eyes'], ['worm', 'Worm', 'Worms'], ['moth', 'Moth', 'Moths'],
   ['crab', 'Crab', 'Crabs'], ['wraith', 'Wraith', 'Wraiths'], ['golem', 'Golem', 'Golems'],
+  ['clown', 'Clown', 'Clowns'], ['frog', 'Frog', 'Frogs'], ['scorpion', 'Scorpion', 'Scorpions'],
+  ['pumpkin', 'Pumpkin', 'Pumpkins'], ['jellyfish', 'Jellyfish', 'Jellyfish'], ['goblin', 'Goblin', 'Goblins'],
+  ['dragon', 'Dragon', 'Dragons'], ['cyclops', 'Cyclops', 'Cyclopes'],
 ];
+const PALETTE_NAMES = ['ice', 'ember', 'moss', 'violet', 'gold', 'rose'];
+export const POWERUPS = Object.freeze([
+  { id: 'shield', name: 'Bone ward', cost: 3, max: 3, description: 'Block one capture. Stacks up to three.' },
+  { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, description: 'Freeze every monster for three moves.' },
+  { id: 'magnet', name: 'Coin magnet', cost: 4, max: 1, description: 'Collect coins within two tiles after every move.' },
+]);
 const HEADLINES = {
-  pawn: (name) => `${name} march on. Trouble at their flanks.`,
+  pawn: (name) => `${name} join the front line`,
   rook: (name) => `${name} demand straighter streets`,
-  knight: (name) => `${name} take an L-shaped shortcut`,
+  knight: (name) => `${name} saddle up after dark`,
   bishop: (name) => `${name} insist on a diagonal commute`,
-  queen: (name) => `Queenly ${name.toLowerCase()} occupy the dungeon`,
-  king: (name) => `${name} take things one step at a time`,
+  queen: (name) => `${name} rules the royal court`,
+  king: (name) => `${name} takes town crown`,
 };
 const HINTS = {
-  pawn: 'Witnesses report a steady march south, with trouble on the two forward corners. Reaching the far rank seems to go to their heads.',
-  rook: 'They travel as far as they please along straight aisles. Corners are strictly out of the question.',
-  knight: 'Two paces one way, one pace sideways. They have been seen vaulting clean over the other residents.',
-  bishop: 'Always cutting diagonally across the floor, they seem oddly attached to just one color of tile.',
-  queen: 'Straight aisles or diagonal shortcuts: nothing slows these ambitious residents except another body in the way.',
-  king: 'In any direction, but only one tile at a time. A surprisingly modest commute for such self-important residents.',
+  pawn: 'A humble recruit has made the evening roll call. Ambition is cheap in this town.',
+  rook: 'Neighbors complain about the new battlements. The owner declined to lower the drawbridge for our reporter.',
+  knight: 'Hoofprints were found outside the inn. Nobody remembers seeing a horse check in.',
+  bishop: 'The bells rang at midnight. A new tenant is taking confessions, though nobody has seen a lease.',
+  queen: 'The court has a new favorite. Even the palace guards seem reluctant to question her invitation.',
+  king: 'A coronation with no witnesses, a throne with no receipt. The former mayor has gone into hiding.',
 };
 
 function hash(text) {
@@ -54,17 +65,24 @@ export function getDaily(date = new Date()) {
   const seed = hash(value);
   const rng = random(seed);
   const playerPiece = PIECES[Math.floor(rng() * PIECES.length)];
+  const targetsPool = PIECES.filter((piece) => piece !== 'king');
+  const targets = [targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], 'king'];
   const pool = [...SPECIES];
-  const species = Array.from({ length: 3 }, () => {
-    const [id, name, plural] = pool.splice(Math.floor(rng() * pool.length), 1)[0];
-    return { id, name, plural, piece: PIECES[Math.floor(rng() * PIECES.length)] };
+  const decoyRoles = targets.map((target) => PIECES.filter((piece) => piece !== target));
+  const species = Array.from({ length: 9 }, (_, index) => {
+    const [id, baseName, plural] = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    const palette = PALETTE_NAMES[Math.floor(rng() * PALETTE_NAMES.length)];
+    const allowed = index < 3 ? [targets[index]] : decoyRoles[Math.floor((index - 3) / 2)];
+    return { id, name: `${palette[0].toUpperCase() + palette.slice(1)} ${baseName.toLowerCase()}`, baseName, plural, palette, piece: allowed.splice(Math.floor(rng() * allowed.length), 1)[0] };
   });
+  const headline = (creature) => HEADLINES[creature.piece](PIECE_COUNTS[creature.piece] > 1 ? `${creature.palette[0].toUpperCase() + creature.palette.slice(1)} ${creature.plural.toLowerCase()}` : creature.name);
   return {
-    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, species,
+    date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, species, targets,
     theme: {
-      name: 'The Midnight Board', headline: HEADLINES[species[0].piece](species[0].plural),
+      name: 'The Midnight Board', headline: headline(species[0]),
       deck: HINTS[species[0].piece], boss: species[2].name, accent: '#b75652',
-      stories: species.slice(1).map((creature) => ({ title: HEADLINES[creature.piece](creature.plural), body: HINTS[creature.piece], species: creature.id })),
+      species: species[0].id, palette: species[0].palette,
+      stories: species.slice(1, 3).map((creature) => ({ title: headline(creature), body: HINTS[creature.piece], species: creature.id, palette: creature.palette })),
     },
   };
 }
@@ -72,7 +90,7 @@ export function getDaily(date = new Date()) {
 function same(a, b) { return a.x === b.x && a.y === b.y; }
 function distance(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 function inside(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < 8 && y < 8; }
-export function walkable(_state, x, y) { return inside(x, y); }
+export function walkable(state, x, y) { return inside(x, y) && state.map?.[y]?.[x] !== '#'; }
 export function enemyAt(state, x, y) { return state.enemies.find((foe) => foe.x === x && foe.y === y); }
 
 function rays(piece) {
@@ -91,7 +109,7 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
     return null;
   };
   const push = (x, y, requireCapture = false) => {
-    if (!inside(x, y)) return false;
+    if (!walkable(state, x, y)) return false;
     const occupied = occupant(x, y);
     if (occupied === 'friend') return false;
     if (!requireCapture || occupied === 'opponent' || attacksOnly) moves.push({ x, y, capture: occupied === 'opponent' });
@@ -99,7 +117,7 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
   };
   if (unit.piece === 'pawn') {
     const forward = enemy ? 1 : -1;
-    if (!attacksOnly && inside(unit.x, unit.y + forward) && !occupant(unit.x, unit.y + forward)) {
+    if (!attacksOnly && walkable(state, unit.x, unit.y + forward) && !occupant(unit.x, unit.y + forward)) {
       push(unit.x, unit.y + forward);
       if (!unit.moved && unit.y === (enemy ? 1 : 6) && !occupant(unit.x, unit.y + 2 * forward)) push(unit.x, unit.y + 2 * forward);
     }
@@ -116,7 +134,7 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
 
 /** The player's legal chess destinations. A pawn captures only diagonally. */
 export function legalMoves(state) {
-  if (!state || state.status !== 'playing') return [];
+  if (!state || state.status !== 'playing' || state.turns >= state.maxTurns) return [];
   return movesFor(state, state.player);
 }
 
@@ -134,7 +152,7 @@ function attackPath(state, foe, target) {
   const path = [];
   for (let step = 1; step < 8; step++) {
     const x = foe.x + dx * step, y = foe.y + dy * step;
-    if (!inside(x, y) || enemyAt(state, x, y)) break;
+    if (!walkable(state, x, y) || enemyAt(state, x, y)) break;
     path.push({ x, y });
   }
   return path;
@@ -176,17 +194,50 @@ function moveMonster(state, foe) {
   aimAtPlayer(state, foe);
 }
 
+function returnToPawn(state) {
+  state.player.piece = 'pawn';
+  state.player.moved = false;
+  // A queen may be on the far rank when hit. Start the replacement pawn near
+  // the entrance, skipping occupied squares and positions with no pawn move.
+  // Pawn editions reserve the central files, so a live room has room to reenter.
+  for (let y = 6; y >= 1; y--) for (const x of [4, 3, 5, 2, 6, 1, 7, 0]) {
+    if (!walkable(state, x, y) || enemyAt(state, x, y)) continue;
+    const candidate = { ...state.player, x, y };
+    if (!movesFor(state, candidate).length) continue;
+    state.player.x = x; state.player.y = y;
+    return;
+  }
+}
+
 function enemyTurn(state) {
+  if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   for (const foe of state.enemies) {
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
+      if (capture && state.powers.shield > 0) {
+        state.powers.shield--; foe.phase = 'ready'; foe.intent = []; foe.target = null;
+        state.events.push({ type: 'shield', x: state.player.x, y: state.player.y });
+        state.message = 'Your bone ward shattered and blocked the capture.';
+        continue;
+      }
       if (capture) {
-        foe.x = state.player.x; foe.y = state.player.y; foe.moved = true;
-        promoteMonster(state, foe);
-        state.player.hp = 0; state.status = 'lost';
-        state.events.push({ type: 'damage', x: foe.x, y: foe.y, amount: 1 });
-        state.message = `${foe.name} caught your piece.`;
+        state.player.hp--;
+        const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
+        if (state.player.hp === 0) {
+          const fresh = createGame({ ...state, playerPiece: state.startingPiece });
+          Object.assign(state, fresh);
+          state.events = [damage, { type: 'restart', x: state.player.x, y: state.player.y }];
+          state.message = 'Out of lives. Back to the start of today’s dungeon.';
+        } else {
+          // Clear the committed attack so
+          // the monster must give another full turn of warning before a hit.
+          foe.phase = 'ready'; foe.intent = []; foe.target = null;
+          const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
+          if (demoted) returnToPawn(state);
+          state.events.push(damage);
+          state.message = `${foe.name} took a life. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
+        }
         return;
       }
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
@@ -199,33 +250,74 @@ function enemyTurn(state) {
   }
 }
 
+function connectedBoard(state) {
+  const piece = state.startingPiece === 'pawn' ? 'queen' : state.startingPiece;
+  const visited = new Set(['4,6']);
+  const queue = [{ x: 4, y: 6 }];
+  const board = { ...state, enemies: [] };
+  for (let i = 0; i < queue.length; i++) {
+    for (const tile of movesFor(board, { ...queue[i], piece })) {
+      const key = `${tile.x},${tile.y}`;
+      if (!visited.has(key)) { visited.add(key); queue.push(tile); }
+    }
+  }
+  // Bishops need every open square of their own color; other pieces need all.
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    if (walkable(state, x, y) && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited.has(`${x},${y}`)) return false;
+  }
+  return true;
+}
+
 function setFloor(state) {
+  const rng = random(hash(`${state.seed}:room:${state.floor}`));
   state.map = Array(8).fill('........');
   state.player.x = 4; state.player.y = 6; state.player.moved = false;
   state.exit = { x: 4, y: 0, open: false };
+  state.objective = { piece: state.targets[state.floor], complete: false };
   state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure };
-  const species = state.species[state.floor];
-  const mirror = (state.seed >>> (state.floor + 2)) % 2 === 0;
-  const coordinates = state.player.piece === 'pawn'
-    ? [[mirror ? 3 : 5, 2], [mirror ? 6 : 1, 3], [mirror ? 1 : 6, 1]]
-    : [[4, 2], [mirror ? 6 : 1, 3], [mirror ? 1 : 6, 1]];
-  if (state.player.piece === 'bishop' && species.piece === 'bishop') {
-    for (const point of coordinates) if ((point[0] + point[1]) % 2 !== 0) point[0] += point[0] < 7 ? 1 : -1;
+  const target = state.species[state.floor];
+  const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), state.species[3 + state.floor * 2], state.species[4 + state.floor * 2]];
+  const mirror = rng() < 0.5;
+  const targetTiles = target.piece === 'pawn'
+    ? [[3, 3], [5, 3], [2, 2], [6, 2], [1, 1], [7, 1], [0, 2], [6, 0]]
+    : state.startingPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]];
+  const coordinates = [...targetTiles.slice(0, PIECE_COUNTS[target.piece]), [0, 0], [7, 0]];
+  state.enemies = coordinates.map(([initialX, y], index) => {
+    const creature = residents[index];
+    // Keep pawn editions' starting file free; a bishop target shares its color.
+    let x = mirror && initialX ? 8 - initialX : initialX;
+    return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
+      piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
+  });
+  const powerTile = state.startingPiece === 'bishop' ? [3, 5] : state.startingPiece === 'knight' ? [3, 4] : [4, 5];
+  state.items = [
+    { x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' },
+    { x: powerTile[0], y: powerTile[1], type: 'powerup', power: target.piece === 'pawn' ? 'freeze' : ['shield', 'freeze', 'magnet'][Math.floor(rng() * 3)] },
+  ];
+  state.props = [];
+  const reserved = [...state.enemies, ...state.items, state.player, state.exit];
+  const candidates = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    if ((state.startingPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (state.startingPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;
+    candidates.push({ x, y, order: rng() });
   }
-  state.enemies = coordinates.slice(0, state.floor === 2 ? 3 : 2).map(([x, y], index) => ({
-    id: `f${state.floor}-${index}`, species: species.id, name: species.name, piece: species.piece,
-    x, y, moved: false, phase: 'ready', intent: [], target: null,
-  }));
-  state.items = [{ x: 4, y: 4, type: 'coin' }, { x: state.player.piece === 'pawn' ? 4 : 6, y: 2, type: 'coin' }];
+  candidates.sort((a, b) => a.order - b.order);
+  for (const tile of candidates) {
+    const previous = state.map[tile.y];
+    state.map[tile.y] = previous.slice(0, tile.x) + '#' + previous.slice(tile.x + 1);
+    if (!connectedBoard(state)) { state.map[tile.y] = previous; continue; }
+    state.props.push({ x: tile.x, y: tile.y, type: ['pillar', 'crate', 'barrel', 'rock'][Math.floor(rng() * 4)] });
+    if (state.props.length === 7 + state.floor) break;
+  }
   for (const foe of state.enemies) aimAtPlayer(state, foe);
 }
 
 export function createGame(daily = getDaily()) {
   const state = {
-    schema: 2, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species),
-    startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: 1, maxHp: 1, moved: false },
-    turns: 0, maxTurns: 60, status: 'playing', captures: 0, treasure: 0, records: [], events: [],
-    message: 'Capture one monster to unlock the stairs. Glowing paths warn of the next attack.',
+    schema: 3, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
+    startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
+    turns: 0, maxTurns: 60, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
+    message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   setFloor(state);
   return state;
@@ -234,47 +326,71 @@ export function createGame(daily = getDaily()) {
 function finishFloor(state) {
   const captures = state.captures - state.floorStart.captures;
   const treasure = state.treasure - state.floorStart.treasure;
-  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, grade: treasure === 2 ? 'gold' : captures > 1 ? 'silver' : 'bronze' });
+  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
   } else {
     state.floor++; setFloor(state);
-    state.message = 'Another room. These residents move differently.';
+    state.message = `Capture all enemy ${state.objective.piece}s. New faces, new clues.`;
     state.events.push({ type: 'descend', x: state.player.x, y: state.player.y });
+    if (state.turns >= state.maxTurns) { state.status = 'lost'; state.message = 'The presses have rolled. You missed the deadline.'; }
   }
 }
 
+function grantPower(state, id) {
+  const power = POWERUPS.find((entry) => entry.id === id);
+  state.powers[id] = Math.min(power.max, state.powers[id] + (id === 'freeze' ? 3 : 1));
+  state.events.push({ type: 'powerup', power: id, x: state.player.x, y: state.player.y });
+  state.message = `${power.name} acquired.`;
+}
+
 export function act(previous, action) {
-  if (!previous || previous.status !== 'playing' || action?.type !== 'move') return previous;
-  if (!legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
+  if (!previous || previous.status !== 'playing' || !action) return previous;
+  if (action.type === 'descend') {
+    if (!previous.exit.open || !previous.objective.complete) return previous;
+    const state = structuredClone(previous); state.events = []; finishFloor(state); return state;
+  }
+  if (action.type === 'buy') {
+    const power = POWERUPS.find((entry) => entry.id === action.id);
+    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || previous.turns >= previous.maxTurns) return previous;
+    const state = structuredClone(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
+  }
+  if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
   const state = structuredClone(previous);
   state.events = []; state.turns++; state.message = '';
   // The player's entire move and capture happen before any monster responds.
   const captured = enemyAt(state, action.x, action.y);
   if (captured) {
     state.enemies = state.enemies.filter((foe) => foe.id !== captured.id);
-    state.captures++; state.exit.open = true;
+    state.captures++; state.gold++;
     state.events.push({ type: 'capture', x: action.x, y: action.y });
-    state.message = `${captured.name} captured. The stairs are open.`;
+    if ((captured.role ?? captured.piece) === state.objective.piece) {
+      state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
+      state.exit.open = state.objective.complete;
+      state.message = state.exit.open ? 'Challenge complete. Tap the stairs to leave.' : `${captured.name} captured. Keep hunting.`;
+    } else state.message = `${captured.name} captured. +1 gold.`;
   }
   state.player.x = action.x; state.player.y = action.y; state.player.moved = true;
   state.events.push({ type: 'move', x: action.x, y: action.y });
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: action.x, y: action.y });
-    state.message = 'Promoted to queen. Your new moves carry into the next room.';
+    if (!state.exit.open) state.message = 'Promoted to queen. Your new moves carry into the next room.';
   }
-  const item = state.items.find((entry) => same(entry, state.player));
-  if (item) {
-    state.items = state.items.filter((entry) => entry !== item); state.treasure++;
-    state.events.push({ type: 'pickup', x: action.x, y: action.y });
+  // Pick up the relic before applying the magnet, so it works immediately.
+  const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
+  if (relic) { state.items = state.items.filter((item) => item !== relic); grantPower(state, relic.power); }
+  const coins = state.items.filter((item) => item.type === 'coin' && (same(item, state.player) || (state.powers.magnet && distance(item, state.player) <= 2)));
+  for (const coin of coins) {
+    state.items = state.items.filter((item) => item !== coin); state.treasure++; state.gold++;
+    state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
   enemyTurn(state);
-  if (state.status === 'playing' && state.exit.open && same(state.player, state.exit)) finishFloor(state);
-  if (state.status === 'playing' && state.turns >= state.maxTurns) {
+  // The last move may solve the final floor; extraction does not spend a turn.
+  if (state.status === 'playing' && state.turns >= state.maxTurns && !(state.floor === 2 && state.exit.open)) {
     state.status = 'lost'; state.message = 'The presses have rolled. You missed the deadline.';
-  } else if (state.status === 'playing' && legalMoves(state).length === 0) {
+  } else if (state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0) {
     state.status = 'lost'; state.message = 'No legal moves. The dungeon has the last word.';
   }
   return state;
@@ -291,35 +407,46 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
 export function validateSave(value, date) {
   try {
     const integer = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
-    if (!value || value.schema !== 2 || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
+    const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    if (!value || value.schema !== 3 || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
     const daily = getDaily(date);
-    if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || JSON.stringify(value.species) !== JSON.stringify(daily.species)) return false;
-    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, 60) || value.maxTurns !== 60 || !integer(value.captures, 0, 7) || !integer(value.treasure, 0, 6)) return false;
-    if (!value.player || !inside(value.player.x, value.player.y) || value.player.maxHp !== 1 || ![0, 1].includes(value.player.hp) || typeof value.player.moved !== 'boolean') return false;
+    if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
+    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2;
+    const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
+    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, 60) || value.maxTurns !== 60 || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
+    if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
     if (value.player.piece !== value.startingPiece && !(value.startingPiece === 'pawn' && value.player.piece === 'queen')) return false;
-    if (value.status === 'playing' && (value.player.hp !== 1 || value.turns === 60)) return false;
-    if (value.status === 'won' && (value.player.hp !== 1 || value.floor !== 2)) return false;
-    if (JSON.stringify(value.map) !== JSON.stringify(Array(8).fill('........')) || value.exit?.x !== 4 || value.exit?.y !== 0 || value.exit.open !== (value.captures > value.floorStart?.captures)) return false;
-    if (!value.theme || typeof value.theme.headline !== 'string' || value.theme.headline.length > 1000 || !Array.isArray(value.theme.stories) || value.theme.stories.length !== 2) return false;
-    if (!Array.isArray(value.enemies) || value.enemies.length > (value.floor === 2 ? 3 : 2) || !Array.isArray(value.items) || value.items.length > 2 || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 16) return false;
-    const species = value.species[value.floor];
+    if (value.status === 'playing' && (value.player.hp < 1 || (value.turns === 60 && !(value.floor === 2 && value.exit.open)))) return false;
+    if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
+    if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id], 0, power.max))) return false;
+    if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor((totalPopulation + 9) / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
+    if (value.gold !== value.treasure + value.captures - value.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0)) return false;
+    const template = createGame(daily); template.floor = value.floor;
+    // Layout depends only on the edition and original piece, never on promotion.
+    setFloor(template);
+    if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
+    if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
+    if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > 4 || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 24) return false;
     if (!value.enemies.every((foe) => {
-      const validPiece = foe.piece === species.piece || (species.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true);
-      if (!new RegExp(`^f${value.floor}-[0-${value.floor === 2 ? 2 : 1}]$`).test(foe.id) || foe.species !== species.id || foe.name !== species.name || !validPiece || !inside(foe.x, foe.y) || typeof foe.moved !== 'boolean') return false;
-      if (same(foe, value.player) && value.player.hp !== 0) return false;
-      if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => inside(tile.x, tile.y))) return false;
+      const original = template.enemies.find((entry) => entry.id === foe.id);
+      if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
+      if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
+      if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
+      if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
       return foe.phase === 'aim' ? foe.intent.length > 0 && inside(foe.target?.x, foe.target?.y) : foe.intent.length === 0 && foe.target === null;
     })) return false;
     if (new Set(value.enemies.map((foe) => foe.id)).size !== value.enemies.length || new Set(value.enemies.map((foe) => `${foe.x},${foe.y}`)).size !== value.enemies.length) return false;
-    if (!value.items.every((item) => item.type === 'coin' && ((item.x === 4 && item.y === 4) || ([4, 6].includes(item.x) && item.y === 2))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
+    const capturedTarget = !value.enemies.some((foe) => foe.role === value.objective.piece);
+    if (value.objective.complete !== capturedTarget) return false;
+    if (!value.items.every((item) => template.items.some((original) => equal(original, item))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, 60) && integer(record.captures, 1, index === 2 ? 3 : 2) && integer(record.treasure, 0, 2) && record.grade === (record.treasure === 2 ? 'gold' : record.captures > 1 ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, 60) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
-    if (value.captures !== value.floorStart.captures + (value.floor === 2 ? 3 : 2) - value.enemies.length || value.treasure !== value.floorStart.treasure + 2 - value.items.length) return false;
-    if (value.status === 'won' && (!same(value.player, value.exit) || ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key]))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'descend', 'win', 'promotion', 'enemy-promotion', 'miss'].includes(event.type) && inside(event.x, event.y))) return false;
+    if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + 3 - value.items.filter((item) => item.type === 'coin').length) return false;
+    if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'miss', 'restart'].includes(event.type) && inside(event.x, event.y))) return false;
     return true;
   } catch { return false; }
 }

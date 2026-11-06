@@ -1,9 +1,9 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
-import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave } from './game.js';
+import { getDaily, createGame, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
-import { drawSprite } from './sprites.js';
+import { drawSprite, spritePalette, SPRITE_SIZE } from './sprites.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -20,7 +20,8 @@ let lastSaved = null;
 let noticeTimer;
 let sound = true;
 let audio;
-const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}${daily.date}`;
+// Different rulesets never overwrite each other's runs, including in older tabs.
+const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v3:${daily.date}`;
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
 
@@ -33,7 +34,10 @@ function notify(message, persistent = false) {
 function load() {
   try {
     lastSaved = localStorage.getItem(key());
-    if (!lastSaved) return null;
+    if (!lastSaved) {
+      if (!practice && localStorage.getItem(`${prefix}daily:${daily.date}`)) notify('New dungeon rules are here. Your earlier run is preserved in Export progress.');
+      return null;
+    }
     const parsed = JSON.parse(lastSaved);
     if (validateSave(parsed, daily.date)) return parsed;
     notify('This save could not be read. Export it from the menu before starting again.', true);
@@ -90,13 +94,14 @@ function renderPaper() {
   $('paper-date').textContent = new Date(`${daily.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
   $('headline').textContent = theme.headline;
   $('deck').textContent = theme.deck;
-  $('art-caption').textContent = `${daily.species[0].name} · Artist's impression`;
+  $('art-caption').textContent = "Artist's impression";
   $('side-stories').replaceChildren(...theme.stories.map((story, index) => {
     const article = document.createElement('article');
     const h = document.createElement('h3'); h.textContent = story.title;
     const p = document.createElement('p'); p.textContent = story.body;
-    const portrait = document.createElement('canvas'); portrait.width=40;portrait.height=40;portrait.className='story-portrait';portrait.setAttribute('aria-label',daily.species[index+1].id);portrait.setAttribute('role','img');
-    drawSprite(portrait.getContext('2d'), daily.species[index+1].id, 0, 0, 2);
+    const creature = daily.species[index + 1];
+    const portrait = document.createElement('canvas'); portrait.width=40;portrait.height=40;portrait.className='story-portrait';portrait.setAttribute('aria-label',creature.name);portrait.setAttribute('role','img');
+    drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
     article.append(portrait,h,p); return article;
   }));
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? 'Resume your descent ' : 'Read your result ' : "Enter today's dungeon "));
@@ -110,7 +115,7 @@ function drawPaperArt() {
   // An inked chess floor and the actual monster pictured in this story.
   for(let y=0;y<4;y++)for(let x=0;x<6;x++){ctx.fillStyle=(x+y)%2?'#743f47':'#201d25';ctx.fillRect(x*30,110+y*10,30,10);}
   ctx.fillStyle='#1c1921';ctx.fillRect(5,0,18,115);ctx.fillRect(157,0,18,115);
-  drawSprite(ctx,daily.species[0].id,40,14,5);
+  drawSprite(ctx,daily.species[0].id,40,14,5,spritePalette(daily.species[0].palette));
 }
 $('newspaper').addEventListener('animationend', () => $('newspaper').classList.remove('arriving'), {once:true});
 if (state || matchMedia('(prefers-reduced-motion: reduce)').matches) $('newspaper').classList.remove('arriving');
@@ -122,6 +127,7 @@ function ensureRenderer() {
   try {
     renderer = createDungeonRenderer($('dungeon'), { onTile: ({x,y}) => {
       if (!state || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
+      if(state.exit.open&&x===state.exit.x&&y===state.exit.y){takeAction({type:'descend'});return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
       else {showMoves=true;cursor=null;paintBoard();}
@@ -138,15 +144,22 @@ let feedbackTimer;
 function showGameFeedback() {
   clearTimeout(feedbackTimer);
   const events = state.events || [];
-  let text = '';
-  if (events.some(e=>e.type==='damage')) text = 'Hit!';
-  else if (events.some(e=>e.type==='descend')) text = `Room ${state.floor+1}`;
-  else if (events.some(e=>e.type==='pickup')) text = 'Picked up';
-  else if (events.some(e=>e.type==='promotion')) text = 'Promoted to queen';
-  else if (events.some(e=>e.type==='capture')) text = state.captures-state.floorStart.captures===1 ? 'Stairs open' : 'Captured';
+  const text = events.length ? state.message : '';
   $('game-message').textContent = text;
   $('game-message').hidden = !text;
-  if (text) feedbackTimer = setTimeout(()=>{$('game-message').hidden=true;},1400);
+  if (text) feedbackTimer = setTimeout(()=>{$('game-message').hidden=true;},3000);
+}
+function renderLives() {
+  const { hp, maxHp } = state.player;
+  const markers = $('lives');
+  markers.setAttribute('aria-label', `${hp} of ${maxHp} ${state.startingPiece} ${hp === 1 ? 'life' : 'lives'} remaining`);
+  markers.replaceChildren(...Array.from({ length: hp }, () => {
+    const marker = document.createElement('canvas');
+    marker.width = marker.height = SPRITE_SIZE;
+    marker.setAttribute('aria-hidden', 'true');
+    drawSprite(marker.getContext('2d'), `piece-${state.startingPiece}`);
+    return marker;
+  }));
 }
 function updateGame() {
   if (!state) return;
@@ -154,10 +167,21 @@ function updateGame() {
   $('practice-label').hidden = !practice;
   $('turns').textContent = `◷ ${state.maxTurns - state.turns}`;
   $('turns').setAttribute('aria-label', `${state.maxTurns - state.turns} moves left`);
+  renderLives();
+  $('shop-button').textContent = `${state.gold} gold`;
+  $('shop-button').setAttribute('aria-label', `${state.gold} gold. Buy powerups`);
+  $('freeze-status').hidden = !state.powers.freeze;
+  $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
+  $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
+  $('objective').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
+  $('objective').hidden = state.exit.open;
+  $('descend-button').hidden = !state.exit.open;
+  $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
   $('treasure').textContent = ` · ${state.captures} captures`;
   $('news-button').hidden = false;
   $('treasure').setAttribute('aria-label', `${state.captures} enemies captured`);
   showGameFeedback();
+  if ($('shop-dialog').open) renderShop();
   $('first-tip').hidden = state.turns > 0;
   paintBoard();
 }
@@ -174,14 +198,16 @@ function enterGame() {
 $('start-button').addEventListener('click', enterGame);
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
 function takeAction(action) {
-  if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || document.querySelector('dialog[open]')) return;
-  if (refreshFromOtherWindow()) return;
+  const shopping = action.type === 'buy' && $('shop-dialog').open;
+  if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || (!shopping && document.querySelector('dialog[open]'))) return false;
+  if (refreshFromOtherWindow()) return false;
   const next = act(state, action);
-  if (next === state) return;
-  turnLocked=true;
+  if (next === state) return false;
+  turnLocked=!shopping;
   state = next;showMoves=false;cursor=null;save();updateGame();playSound(state.events);
-  setTimeout(()=>{turnLocked=false;},400);
+  if (!shopping) setTimeout(()=>{turnLocked=false;},400);
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, 400);
+  return true;
 }
 const directions={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
 window.addEventListener('keydown',event=>{
@@ -189,9 +215,42 @@ window.addEventListener('keydown',event=>{
   if(screen!=='game'||!state||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};cursor={x:Math.max(0,Math.min(7,cursor.x+dx)),y:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
-  else if(name==='Enter'&&cursor){event.preventDefault();takeAction({type:'move',...cursor});}
+  else if(name==='Enter'&&cursor){event.preventDefault();takeAction(state.exit.open&&cursor.x===state.exit.x&&cursor.y===state.exit.y?{type:'descend'}:{type:'move',...cursor});}
   else if(name==='Escape'){showMoves=false;cursor=null;paintBoard();}
 });
+function renderShop() {
+  $('shop-gold').textContent = `${state.gold} gold`;
+  for (const power of POWERUPS) {
+    let button = document.querySelector(`[data-power="${power.id}"]`);
+    if (!button) {
+      button = document.createElement('button');
+      button.dataset.power = power.id;
+      const title = document.createElement('strong');
+      const detail = document.createElement('span');
+      button.append(title, detail);
+      button.addEventListener('click', () => {
+        if (takeAction({type:'buy', id:power.id})) {
+          $('shop-feedback').hidden = false;
+          $('shop-feedback').textContent = `${power.name} purchased.`;
+        }
+      });
+      $('shop-items').append(button);
+    }
+    const owned = state.powers[power.id];
+    button.disabled = state.gold < power.cost || owned >= power.max;
+    button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
+    button.lastElementChild.textContent = `${power.description}${owned ? ` (${power.id === 'freeze' ? `${owned} moves left` : power.id === 'magnet' ? 'Active' : `${owned} left`})` : ''}`;
+  }
+}
+$('shop-button').addEventListener('click', () => {
+  if (!state || state.status !== 'playing' || turnLocked) return;
+  refreshFromOtherWindow();
+  if (screen !== 'game' || state.status !== 'playing') return;
+  renderShop();
+  $('shop-feedback').hidden = true;
+  $('shop-dialog').showModal();
+});
+$('descend-button').addEventListener('click', () => takeAction({type:'descend'}));
 function playSound(events=[]) {
   if(!sound)return;
   try {
@@ -203,15 +262,16 @@ function playSound(events=[]) {
 }
 function shareText(){const text=getShareText(state);return practice ? text.replace('Dungeon Chess Daily','Dungeon Chess Daily · PRACTICE') : text;}
 function showResult() {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
   const won=state.status==='won';
   $('result-date').textContent=daily.date;
   $('result-kicker').hidden=!practice;
   $('result-kicker').textContent='PRACTICE EDITION';
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
-  $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured in room ${state.floor+1}. Tomorrow is another story.`:'Sixty moves, and the presses have rolled. Your next assignment arrives tomorrow.';
+  $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured in room ${state.floor+1}. Tomorrow is another story.`:state.message;
   $('share-preview').textContent=shareText().split('\n').slice(0,-1).join('\n');
-  $('next-edition').textContent='🟨 Both coins · ⬜ Extra captures · 🟫 Escaped\nNext edition at 00:00 UTC.';
+  $('next-edition').textContent='🟨 All three coins · ⬜ Extra captures · 🟫 Escaped\nNext edition at 00:00 UTC.';
   $('share-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -235,7 +295,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:'))saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice)saves[`daily:v3:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);notify('Progress export requested.');
 });
@@ -247,11 +307,24 @@ $('import-file').addEventListener('change',async(event)=>{
     const data=JSON.parse(await file.text());
     if(data.app!=='dungeon-chess-daily'||data.schema!==1||!data.saves||typeof data.saves!=='object')throw new Error('Choose a Dungeon Chess Daily progress export.');
     const entries=Object.entries(data.saves);
-    for(const [name,value] of entries){if(name==='sound'){if(!['on','off'].includes(value))throw new Error('Invalid sound preference.');continue;}if(!/^daily:\d{4}-\d{2}-\d{2}$/.test(name)||typeof value!=='string'||!validateSave(JSON.parse(value),name.slice(6)))throw new Error('This export contains an unreadable save.');}
+    let archived = false;
+    for (const [name, value] of entries) {
+      if (name === 'sound') { if (!['on','off'].includes(value)) throw new Error('Invalid sound preference.'); continue; }
+      const match = /^daily:(v3:)?(\d{4}-\d{2}-\d{2})$/.exec(name);
+      if (!match || typeof value !== 'string') throw new Error('This export contains an unreadable save.');
+      const entry = JSON.parse(value);
+      if (match[1]) {
+        if (!validateSave(entry, match[2])) throw new Error('This export contains an unreadable save.');
+      } else {
+        // Earlier rules are archived as data; they are never loaded into this engine.
+        if (!entry || ![2,3].includes(entry.schema) || entry.date !== match[2] || !['playing','won','lost'].includes(entry.status)) throw new Error('This export contains an unreadable earlier edition.');
+        archived = true;
+      }
+    }
     if(!confirm('Import this progress? Matching saved days on this device will be replaced.'))return;
     for(const [name,value]of entries)localStorage.setItem(`${prefix}${name}`,value);
     practice=false;state=load();sound=localStorage.getItem(`${prefix}sound`)!=='off';$('sound-toggle').checked=sound;
-    $('menu-dialog').close();renderPaper();switchScreen('paper');notify('Progress imported.');
+    $('menu-dialog').close();renderPaper();switchScreen('paper');notify(archived ? 'Progress imported. Earlier ruleset runs are archived for export.' : 'Progress imported.');
   }catch(error){notify(error.message||'Progress could not be imported.',true);}
 });
 window.addEventListener('storage',event=>{if(event.key===key())refreshFromOtherWindow();});
