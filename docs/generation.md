@@ -102,6 +102,21 @@ Search and verification share `src/rules.js` with live gameplay, avoiding a seco
 implementation of combat. `rules.createGame()` is the internal candidate builder
 for search, authoring, and rule fixtures; application code uses `game.createGame()`.
 
+## Monster habits
+
+`src/monster-ai.js` ranks a monster's ordinary (non-attacking) steps by role,
+adding soft preferences to the original approach score (distance to the player,
+a small travel cost and the seeded hash tie-break): knights keep a jump's
+distance, prefer squares that attack the player or cover its destinations, and
+avoid capturable squares unless a strike plus a fork outweighs the risk; rooks,
+bishops and queens prefer open lines that cut off the player's destinations;
+pawns prefer squares another monster pawn guards; and any monster the player
+threatens without a guard prefers a guarded square. Wind-ups, `closeIn`, the
+pawn-lane rule, en passant, promotion and the royal floor's king and guard rules
+are unchanged. Weights live in `HABITS`; knights that never accept exposure made
+knight days hard to certify (110 of 120 audited dates instead of 118), so the
+exposure penalty stays below a strike-plus-fork bonus.
+
 ## Difficulty and chess learning
 
 `src/difficulty.js` defines three authoring presets: `gentle` starts with five
