@@ -5,6 +5,7 @@ Generated with the built-in image_gen tool. Project license: GPL-3.0-only.
 
 The installed app and browser icons share the same knight-and-dungeon artwork.
 The maskable variant adds padding to keep the knight inside circular crops.
+Manifest icon URLs carry a version so installed apps can detect the new artwork.
 The high-resolution source stays outside public/ so it is not downloaded offline.
 
 To export the shipped sizes on macOS, run from the repository root:
