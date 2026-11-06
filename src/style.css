@@ -123,3 +123,11 @@ body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px
 .modifier-bulletin{margin:10px 0 0;padding:6px 10px;border:2px solid var(--ink);font:400 21px/1.05 'VT323','Courier New',monospace;display:flex;gap:8px;align-items:baseline}.modifier-bulletin b{font-weight:400;text-transform:uppercase;letter-spacing:1px;white-space:nowrap}.modifier-emoji{font-size:19px}
 #modifier-status{color:#d7d1e4;font-size:11px}
 @media(max-width:600px){.modifier-bulletin{font-size:17px;padding:5px 8px}}
+/* Tactics (tactics.js): the combo counter and the brief Fork!/Combo! stamp. */
+.combo-status{color:#a5e2cc;white-space:nowrap}.combo-status.hot{color:#ff9a4a}
+.tactic-callout{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);margin:0;padding:6px 14px;font-family:'VT323','Courier New',monospace;font-size:34px;line-height:1;color:var(--gold);background:#100f14c9;border:2px solid #d5b16e;box-shadow:3px 3px #030208;pointer-events:none;white-space:nowrap;z-index:2}
+.tactic-callout.combo{color:#ff9a4a;border-color:#ff9a4a}
+.tactic-callout.pop{animation:tactic-pop 1.6s ease-out forwards}
+@keyframes tactic-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}12%{transform:translate(-50%,-50%) scale(1.15);opacity:1}22%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{transform:translate(-50%,-60%);opacity:0}}
+@media(max-width:600px){.tactic-callout{font-size:26px;max-width:calc(100% - 32px)}}
+body.replaying .tactic-callout{display:none!important}

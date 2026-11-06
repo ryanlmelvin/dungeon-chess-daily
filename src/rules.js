@@ -4,6 +4,7 @@ import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
 import { getRawDaily } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState, modifierOf } from './modifiers.js';
+import { breakTactics, scoreTactics, tacticGold, tacticMarks, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 5;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -499,6 +500,7 @@ function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null; state.enPassant = null;
+  breakTactics(state);
   state.map = Array(8).fill('........');
   // Promotion lasts only for the room it happened in; each floor starts with the original piece.
   state.player.piece = state.startingPiece;
@@ -737,7 +739,7 @@ function nextState(previous) {
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
-  state.paidCaptures ??= state.gold - state.treasure + spentGold(state);
+  state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - tacticGold(state.feats);
   // Older saves only recorded exhaustion in the last action's events.
   if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
@@ -768,7 +770,7 @@ export function act(previous, action) {
       if (state.events.some((event) => event.type === 'restart')) return state;
     }
     // Waiting is the player's move, so it spends any en passant window.
-    state.awaitingPlayer = false; state.turns++; state.enPassant = null;
+    state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state);
     companionTurn(state);
     if (state.playerColor === 'white') enemyTurn(state);
     collapseTick(state);
@@ -812,6 +814,8 @@ export function act(previous, action) {
   // Castling is decided on the board the move is played on (after black's prelude).
   const castle = castleFor(state);
   state.awaitingPlayer = false; state.turns++;
+  // A fork set up by the previous move pays off only on this one.
+  const pendingFork = state.fork;
   // The en passant window lasts exactly this move: take it now or lose it.
   const passed = action.y === 2 && state.enPassant?.x === action.x ? enPassantVictim(state, state.enPassant) : null;
   state.enPassant = null;
@@ -873,6 +877,7 @@ export function act(previous, action) {
     state.events.push(event);
     if (hitPlayer(state, close, true, passing) === 'restart') { state.events.unshift(event); return state; }
   }
+  scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   if (!castle) companionTurn(state);
   if (state.playerColor === 'white' && !close) enemyTurn(state);
   collapseTick(state);
@@ -883,7 +888,7 @@ export function act(previous, action) {
 // A spoiler-free result on one line: a 💀 for each earlier try that ran out of
 // lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
 // each followed by 🇫🇷 for every en passant and 🏰 for every castle the player
-// made on that floor, in order, then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
+// made on that floor, in order, then 🍴 per fork and 🔥 per combo (tactics.js), then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
 // and last the day's starting piece, then a won run's total par stars (⭐N).
 const FEAT_EMOJI = { 'en-passant': '\u{1F1EB}\u{1F1F7}', castle: '🏰' };
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
@@ -901,6 +906,7 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
     const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
     line += lost ? '💔'.repeat(lost) : '❤️';
     for (const feat of state.feats ?? []) if (feat.floor === floor) line += FEAT_EMOJI[feat.kind] ?? '';
+    line += tacticMarks(state.feats, floor);
   }
   line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
   line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
@@ -929,13 +935,15 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2 + extraPopulation(value.modifier);
     const reinforced = value.reinforcements ?? 0;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
-    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
+    // Each capture may also pay a fork and a combo bonus (tactics.js).
+    const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1);
+    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, maxGold)) return false;
     if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
     if (value.player.piece !== value.startingPiece && !(value.startingPiece === 'pawn' && value.player.piece === 'queen')) return false;
     if (value.status === 'playing' && value.player.hp < 1) return false;
     if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
     if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id], 0, power.max))) return false;
-    if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor((totalPopulation + 9) / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
+    if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor(maxGold / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
     // Schema-5 saves made before companion reservations have no ledger yet.
     const orders = value.companionOrders === undefined ? [] : value.companionOrders;
     if (!Array.isArray(orders) || orders.length > 2 || !orders.every((entry, index) => entry && Object.keys(entry).length === 2 && integer(entry.floor, 1, 2) && entry.floor <= value.floor + 1 && COMPANIONS.some((recruit) => recruit.piece === entry.piece) && (!index || orders[index - 1].floor < entry.floor))) return false;
@@ -944,12 +952,13 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!Array.isArray(value.records) || !Array.isArray(value.enemies) || !Array.isArray(value.species)) return false;
     // Gold comes from coins and optional captures. Runs through the 2026-11-06 edition began
     // under the old rule that paid every capture, so they may hold up to one gold per capture.
-    const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent : value.paidCaptures;
+    const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent - tacticGold(value.feats) : value.paidCaptures;
     const bonus = bonusCaptures(value);
-    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid - spent) return false;
+    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent) return false;
     // Special moves the player made: absent in older saves.
-    if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
-      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle'].includes(feat.kind)))) return false;
+    // Forks and combos are bounded by captures (validTactics), the rest by 30.
+    if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.filter((feat) => !TACTIC_KINDS.includes(feat?.kind)).length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
+      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle', ...TACTIC_KINDS].includes(feat.kind)))) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
     // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
     // a king may hold that king, on the board or at their side.
@@ -988,6 +997,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Par stars: absent in older saves and on runs without a par.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
+    if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
     if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - value.items.filter((item) => item.type === 'coin').length) return false;
@@ -1001,7 +1011,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement'].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

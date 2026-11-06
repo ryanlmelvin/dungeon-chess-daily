@@ -36,11 +36,12 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="modifier-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="combo-status" class="combo-status" hidden></span><span id="modifier-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
       <p id="game-message" class="game-message" aria-live="polite"></p>
+      <p id="tactic-callout" class="tactic-callout" aria-live="polite" hidden></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
       <div id="replay-bar" class="replay-bar" role="region" aria-label="Bot replay controls" hidden>
         <p id="replay-label" class="replay-label" aria-live="polite"></p>
@@ -119,6 +120,7 @@
           <li><button data-guide-page="3">Pickups <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="4">Special moves <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="5">Room modifiers <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="6">Forks &amp; combos <span aria-hidden="true">→</span></button></li>
         </ol>
       </nav>
       <article class="guide-page" hidden>
@@ -198,6 +200,15 @@
         <h3>⏳ Collapse</h3>
         <p>Every 10 moves on a floor, one more monster (never the floor’s target, never a pawn) walks in on the square in front of the door if it’s free; otherwise it waits there. At most 3 per floor, and none once the stairs are open. The top of the board counts down to the next arrival.</p>
         <p>Your share line starts with the day’s modifier emoji.</p>
+      </article>
+      <article class="guide-page" hidden>
+        <h3 id="guide-fork-title">Fork 🍴</h3>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="fork" width="200" height="200" role="img" aria-label="Animated board: a knight hops to a square that attacks two monsters at once, then captures one of them."></canvas></figure>
+        <p>End a move where your piece attacks two or more monsters at once and they light up gold: that’s a fork. Walls and other monsters still block lines; knights jump. Capture one of them on your very next move for <b>+2 bonus gold</b>.</p>
+        <h3 id="guide-combo-title">Combo 🔥</h3>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="combo" width="200" height="200" role="img" aria-label="Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three."></canvas></figure>
+        <p>Capture on moves in a row to build a combo; the counter appears beside your gold. The third capture in a row, and every one after it, pays <b>+1 bonus gold</b>. Waiting, a move without a capture, or a new floor ends it.</p>
+        <p>Each fork you win adds 🍴 and each combo capture adds 🔥 to that floor on your share line.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>

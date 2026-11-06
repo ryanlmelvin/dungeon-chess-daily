@@ -16,6 +16,8 @@ assert.equal(earned.exit.open,true);
 // Legacy-order tests need every companion affordable. Saves from before optional-only capture
 // gold banked every capture, and that legacy ledger stays valid.
 earned.paidCaptures=earned.captures;earned.gold=earned.treasure+earned.captures;
+// Old-rule saves predate fork and combo bonuses.
+earned.feats=earned.feats.filter((feat)=>!['fork','combo'].includes(feat.kind));
 assert.ok(earned.gold>=8);
 assert.equal(validateSave(earned,earned.date),true);
 const bank=()=>structuredClone(earned);
