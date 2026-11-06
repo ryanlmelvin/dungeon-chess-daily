@@ -22,6 +22,8 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 
 Everyone gets the same UTC-dated edition. After winning or losing all lives, choose any of the six pieces in white or black for unlimited practice. The rooms stay identical to the official challenge; alternate pieces are not checked for solvability and may be unable to win. Only runs using the official starting piece and color offer emoji sharing, including labeled practice replays. Pawn promotion does not change sharing eligibility. Practice saves separately from the daily run and resumes after reloading; use **Return to daily challenge** in the menu to revisit official progress or results. Emoji sharing reveals your result without exposing the newspaper clues, monster movement roles, or route.
 
+Open **Archive** in the menu to play any edition you missed. It lists every past edition back to No. 001 with this device's result for each: won, lost, in progress, or not played. A past edition is the same certified dungeon everyone got that day and keeps its own save, practice runs included. Its shared result is labeled **ARCHIVE** so it never passes for today's. Use **Back to today** to return to the current edition.
+
 The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, saved progress, or a downloaded update.
 
 ## Install and offline use

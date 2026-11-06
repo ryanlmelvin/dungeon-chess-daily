@@ -20,6 +20,7 @@
   </header>
   <main>
     <section id="paper-screen" class="paper-screen" aria-label="Today's newspaper">
+      <p id="archive-banner" class="archive-banner" hidden><span>From the archive</span><button id="archive-today-button" type="button">Back to today ↗</button></p>
       <article id="newspaper" class="newspaper arriving">
         <div class="paper-dateline"><span id="edition"></span><time id="paper-date"></time></div>
         <h1>Dungeon Chess Daily</h1>
@@ -64,6 +65,8 @@
     <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p>
     <div class="menu-actions">
     <button id="news-button" hidden>Read today’s paper</button>
+    <button id="today-button" hidden>Back to today’s edition</button>
+    <button id="archive-button">Archive</button>
     <button id="change-piece-button" hidden>Change piece</button>
     <button id="daily-button" hidden>Return to daily challenge</button>
     <button id="reset-floor-button" hidden>Restart this floor</button>
@@ -143,6 +146,11 @@
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
+  </dialog>
+  <dialog id="archive-dialog" aria-labelledby="archive-title">
+    <div class="dialog-heading"><h2 id="archive-title">Archive</h2><button class="icon-button" data-close aria-label="Close archive">✕</button></div>
+    <p id="archive-summary"></p>
+    <ol id="archive-list" class="archive-list"></ol>
   </dialog>
   <dialog id="piece-dialog" aria-labelledby="piece-title">
     <div class="dialog-heading"><h2 id="piece-title">Choose piece</h2><button class="icon-button" data-close aria-label="Cancel piece selection">✕</button></div>

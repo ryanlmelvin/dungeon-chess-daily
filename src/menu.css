@@ -241,3 +241,23 @@ body:has(.pwa-bar button:not([hidden])) { padding-bottom: calc(var(--pwa-bar-h) 
 body.playing:has(.pwa-bar button:not([hidden])) { padding-bottom: 0; }
 body.playing:has(.pwa-bar button:not([hidden])) .game-screen { bottom: var(--pwa-bar-h); }
 body:has(.pwa-bar button:not([hidden])) .notice { bottom: calc(var(--pwa-bar-h) + 12px); }
+
+/* Archive: past editions with this device's saved result for each. */
+.archive-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: min(60vh, 520px); overflow-y: auto; }
+.archive-entry { width: 100%; margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; }
+.archive-status { font-size: 18px; color: #bdb1bf; white-space: nowrap; }
+.archive-entry.is-won .archive-status { color: var(--gold); }
+.archive-entry.is-playing .archive-status { color: #9fd6c2; }
+.archive-entry.is-unplayed .archive-title { color: var(--paper); }
+.archive-entry[aria-current] { border-color: var(--gold); }
+.archive-banner {
+  max-width: 780px; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  font: 400 22px/1.1 'VT323', monospace; color: var(--gold);
+}
+.archive-banner[hidden] { display: none; }
+.archive-banner button {
+  color: #eee8e1; font: inherit; font-size: 20px; min-height: 44px; padding: 8px 12px; border-radius: 0; cursor: pointer;
+  border: 2px solid var(--menu-edge); border-right-color: #443642; border-bottom-color: #443642;
+  background: var(--menu-stone); box-shadow: 2px 2px 0 var(--menu-shadow);
+}
+.archive-banner button:hover { background: #653942; }
