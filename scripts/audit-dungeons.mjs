@@ -14,7 +14,9 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start))
   || !Object.hasOwn(DIFFICULTY_PROFILES, difficulty)) {
   throw new Error('Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days] [gentle|standard|expert]');
 }
-const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, livesLost: {}, maxGenerationMs: 0 };
+const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, livesLost: {}, modifiers: {}, maxGenerationMs: 0 };
+// Per room modifier: certification source and the certified routes' measurements.
+const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, generated: 0, fallback: 0, brokenFallback: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, livesLost: 0, slides: 0, reinforcements: 0 };
 const tally = (bucket, key) => { bucket[key] = (bucket[key] ?? 0) + 1; };
 for (let offset = 0; offset < count; offset++) {
   const date = new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -28,6 +30,7 @@ for (let offset = 0; offset < count; offset++) {
     // count those days as fallbacks so the generator's own rate stays visible.
     if (!/certif/i.test(error.message)) throw error;
     summary.fallback++; summary.brokenFallback++;
+    const entry = byModifier(raw.modifier); entry.days++; entry.fallback++; entry.brokenFallback++;
     tally(summary.fallbacksBy, `${raw.playerPiece}:${raw.playerColor}`);
     continue;
   }
@@ -38,10 +41,16 @@ for (let offset = 0; offset < count; offset++) {
   const proof = verifyWinningRoute(initial, actions);
   assert.equal(proof.valid, true, `${date}: ${proof.reason}`);
   let state = initial;
+  const entry = byModifier(daily.modifier ?? 'none');
   for (const action of actions) {
     state = act(state, action);
     assert.equal(validateSave(state, date, daily), true, `${date}: save after ${JSON.stringify(action)}`);
+    entry.slides += state.events.filter((event) => event.type === 'slide').length;
+    entry.reinforcements += state.events.filter((event) => event.type === 'reinforcement').length;
   }
+  entry.days++; entry[daily.generation.source]++;
+  entry.totalTurns += state.turns; entry.longestRoute = Math.max(entry.longestRoute, state.turns);
+  entry.threatenedDecisions += proof.metrics.threatenedDecisions; entry.livesLost += proof.metrics.livesLost;
   summary[daily.generation.source]++;
   summary.longestRoute = Math.max(summary.longestRoute, state.turns);
   summary.promotedRoutes += Number(proof.metrics.promotion);
@@ -49,5 +58,11 @@ for (let offset = 0; offset < count; offset++) {
   summary.pieces[daily.playerPiece] = (summary.pieces[daily.playerPiece] ?? 0) + 1;
   summary.colors[daily.playerColor] = (summary.colors[daily.playerColor] ?? 0) + 1;
   if ((offset + 1) % 50 === 0) console.log(`Certified ${offset + 1}/${count} editions.`);
+}
+for (const entry of Object.values(summary.modifiers)) {
+  const certified = entry.days - entry.brokenFallback;
+  entry.certified = `${certified}/${entry.days}`;
+  entry.meanTurns = certified ? Math.round(entry.totalTurns / certified * 10) / 10 : null;
+  entry.meanThreatenedDecisions = certified ? Math.round(entry.threatenedDecisions / certified * 10) / 10 : null;
 }
 console.log(JSON.stringify(summary, null, 2));

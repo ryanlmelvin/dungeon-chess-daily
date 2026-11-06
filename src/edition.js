@@ -7,6 +7,7 @@ const EPOCH = Date.UTC(2026, 10, 5);
 export const FIRST_EDITION_DATE = new Date(EPOCH).toISOString().slice(0, 10);
 import { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
 import { hash, random } from './random.js';
+import { modifierFor } from './modifiers.js';
 const SPECIES = [
   ['bat', 'Bat', 'Bats'], ['rat', 'Rat', 'Rats'], ['slime', 'Slime', 'Slimes'],
   ['spider', 'Spider', 'Spiders'], ['ghost', 'Ghost', 'Ghosts'], ['mushroom', 'Mushroom', 'Mushrooms'],
@@ -156,6 +157,8 @@ export function getRawDaily(date = new Date()) {
   return {
     date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: DAILY_COLOR, species, targets,
     theme: buildTheme(species),
+    // The day's room modifier (src/modifiers.js) draws from its own hash stream.
+    modifier: modifierFor(value),
   };
 }
 
