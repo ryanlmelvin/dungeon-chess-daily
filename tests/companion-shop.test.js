@@ -61,6 +61,8 @@ test('unaffordable, duplicate, final-floor, finished-run and unknown orders are 
   const first=buy(bank(),'pawn');assert.equal(buy(first,'queen'),first);assert.equal(buy(first,'pawn'),first);
   for(const status of ['won','lost']) {const done={...bank(),status};assert.equal(buy(done,'pawn'),done);}
   const last={...bank(),floor:2};assert.equal(buy(last,'pawn'),last);
+  const uncleared=structuredClone(bank());uncleared.exit.open=false;uncleared.objective.complete=false;assert.equal(buy(uncleared,'pawn'),uncleared);
+  const arrivedMidFloor=act(bank(),{type:'descend'});assert.equal(buy(arrivedMidFloor,'pawn'),arrivedMidFloor,'the next floor must be cleared before shopping again');
   const deadline={...bank(),turns:60};assert.notEqual(buy(deadline,'pawn'),deadline);
   const state=bank();assert.equal(buy(state,'dragon'),state);
 });
@@ -82,11 +84,12 @@ test('a paid companion arrives fresh at the next entrance and replaces only that
 
 test('an order for floor three preserves the current ally, survives saves and delivers exactly once',()=>{
   const arrived=act(buy(bank(),'queen'),{type:'descend'});
-  const nextOrder=buy(arrived,'pawn');
-  assert.deepEqual(nextOrder.companion,arrived.companion);assert.deepEqual(nextOrder.items,arrived.items);
+  const cleared=finishRoom(arrived);
+  const nextOrder=buy(cleared,'pawn');
+  assert.deepEqual(nextOrder.companion,cleared.companion);assert.deepEqual(nextOrder.items,cleared.items);
   assert.deepEqual(nextOrder.companionOrders,[{floor:1,piece:'queen'},{floor:2,piece:'pawn'}]);
   assert.equal(validateSave(nextOrder,nextOrder.date),true);
-  const finished=finishRoom(JSON.parse(JSON.stringify(nextOrder)));
+  const finished=JSON.parse(JSON.stringify(nextOrder));
   const final=act(finished,{type:'descend'});
   assert.equal(final.floor,2);assert.equal(final.companion.basePiece,'pawn');assert.equal(final.companion.piece,'pawn');
   assert.equal(final.companion.moved,false);assert.deepEqual([final.companion.x,final.companion.y],[4,6]);
@@ -113,14 +116,10 @@ test('power purchases and companion reservations both contribute to the gold bal
   assert.equal(validateSave(forged,forged.date),false);
 });
 
-test('black pending selections may reserve a companion without advancing either phase',()=>{
+test('black pending mid-floor selections cannot reserve a companion',()=>{
   const raw=getRawDaily('2026-11-12');let pending=createCandidate(raw);pending=act(pending,move(4,3));
   assert.equal(pending.awaitingPlayer,true);
-  // This focused transition test gives the pending position a shop budget.
-  pending.gold=5;const reserved=buy(pending,'rook');
-  assert.equal(reserved.awaitingPlayer,true);assert.equal(reserved.turns,pending.turns);
-  assert.deepEqual(reserved.enemies,pending.enemies);assert.equal(reserved.companion,pending.companion);
-  assert.ok(!reserved.events.some((event)=>event.type==='enemy-phase'||event.type==='companion-phase'));
+  pending.gold=5;assert.equal(buy(pending,'rook'),pending);
 });
 
 test('older schema-five saves without a reservation ledger remain valid and normalize on their next action',()=>{

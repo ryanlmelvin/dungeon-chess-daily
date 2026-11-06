@@ -390,10 +390,12 @@ export function act(previous, action) {
     const state = nextState(previous); state.events = []; state.awaitingPlayer = false; finishFloor(state); return state;
   }
   if (action.type === 'buy') {
+    // The shop opens only between floors: after a room is cleared, before its stairs.
+    if (previous.floor >= 2 || !previous.exit.open || !previous.objective.complete) return previous;
     const recruit = COMPANIONS.find((entry) => entry.id === action.id);
     if (recruit) {
       const orders = previous.companionOrders ?? [];
-      if (!Array.isArray(orders) || previous.floor >= 2 || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
+      if (!Array.isArray(orders) || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
       const state = nextState(previous);
       state.gold -= recruit.cost; state.companionOrders.push({ floor: state.floor + 1, piece: recruit.piece });
       state.events = [{ type: 'companion-order', piece: recruit.piece, x: state.player.x, y: state.player.y }];

@@ -36,7 +36,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><button id="shop-button" aria-label="Buy powerups with gold"></button><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
@@ -128,7 +128,7 @@
         <p>Each hit costs a life. Zero lives restarts the dungeon. A hit undoes pawn promotion.</p>
       </article>
       <article class="guide-page" hidden>
-        <p>Coins + captures earn gold. Tap gold to buy powerups or reserve a companion for the next floor. Buying costs no moves.</p>
+        <p>Coins + captures earn gold. After each of the first two floors, the stairs open a shop: buy powerups or reserve a companion for the next floor. You start with no gold.</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for 3 moves</dd></div>
@@ -153,7 +153,7 @@
     </form>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
-    <div class="dialog-heading"><h2 id="shop-title">Gold shop</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>
+    <div class="dialog-heading"><h2 id="shop-title">Between floors</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>
     <p id="shop-gold"></p>
     <div id="shop-items" class="shop-items"></div>
     <form id="companion-shop" class="companion-shop">
@@ -164,6 +164,7 @@
       <p id="companion-reserved" role="status" hidden></p>
     </form>
     <p id="shop-feedback" role="status" hidden></p>
+    <button id="shop-descend" class="shop-descend" type="button">Descend ↘</button>
   </dialog>
   <dialog id="copy-dialog" aria-labelledby="copy-title"><div class="dialog-heading"><h2 id="copy-title">Share your edition</h2><button class="icon-button" data-close aria-label="Close sharing">✕</button></div><textarea id="copy-text" readonly rows="8" aria-label="Spoiler-free result to copy"></textarea><p>Select the text and copy it into a message.</p></dialog>
   <script type="module" src="/src/main.js"></script>

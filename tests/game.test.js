@@ -316,10 +316,12 @@ test('a decoy capture leaves the stairs hidden; a promoted target retains its or
   assert.equal(act(next, move(4, 1)).objective.complete, true);
 });
 
-test('coins and captures buy powerups without spending a move; invalid purchases are inert', () => {
+test('coins and captures buy powerups between floors without spending a move; invalid purchases are inert', () => {
   const state = scenario('rook'); state.items = [{x:4,y:5,type:'coin'}]; state.gold = 2;
   const earned = act(state, move(4,5));
   assert.equal(earned.gold, 3); assert.equal(earned.treasure, 1);
+  assert.equal(act(earned, {type:'buy',id:'shield'}), earned, 'the shop is closed until the floor is cleared');
+  earned.objective.complete = true; earned.exit.open = true;
   const ward = act(earned, {type:'buy',id:'shield'});
   assert.equal(ward.gold, 0); assert.equal(ward.powers.shield, 1); assert.equal(ward.turns, earned.turns);
   assert.deepEqual(ward.purchases, ['shield']);

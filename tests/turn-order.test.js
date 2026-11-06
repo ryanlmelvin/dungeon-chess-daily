@@ -109,10 +109,8 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   assert.equal(timedOut.awaitingPlayer,false);
   const shopping=scenario(); shopping.enemies=[monster('blocker','king',4,4)]; shopping.gold=2;
   const awaiting=act(shopping,move(4,4));
-  const frozen=act(awaiting,{type:'buy',id:'freeze'});
-  assert.equal(frozen.awaitingPlayer,true); assert.equal(frozen.powers.freeze,3);
-  const resumed=act(frozen,move(4,5));
-  assert.equal(resumed.powers.freeze,3,'a pending retry must not tick the frozen enemy phase again');
+  assert.equal(awaiting.awaitingPlayer,true);
+  assert.equal(act(awaiting,{type:'buy',id:'freeze'}),awaiting,'a pending mid-floor selection cannot shop');
 });
 
 test('a black promoted pawn hit returns for a fresh selection before any stale move executes',()=>{
@@ -139,7 +137,9 @@ test('black exhaustion discards the stale click, while shields must already be o
   assert.equal(reset.playerColor,'black'); assert.equal(reset.awaitingPlayer,false);
   assert.equal(validateSave(reset,reset.date),true);
   state.gold=3;
-  const ward=act(state,{type:'buy',id:'shield'});
+  assert.equal(act(state,{type:'buy',id:'shield'}),state,'no mid-floor shopping');
+  // A ward bought between floors carries into this room.
+  const ward=structuredClone(state); ward.gold=0; ward.purchases=['shield']; ward.powers.shield=1;
   const protectedMove=act(ward,move(3,6));
   assert.equal(protectedMove.player.hp,1); assert.equal(protectedMove.turns,1);
   assert.equal(protectedMove.powers.shield,1,'the old ward blocks first; the destination pickup replaces it afterward');

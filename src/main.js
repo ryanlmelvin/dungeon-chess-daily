@@ -169,7 +169,7 @@ function ensureRenderer() {
   try {
     renderer = createDungeonRenderer($('dungeon'), { onTile: ({x,y}) => {
       if (!state || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
-      if(state.exit.open&&x===state.exit.x&&y===state.exit.y){takeAction({type:'descend'});return;}
+      if(state.exit.open&&x===state.exit.x&&y===state.exit.y){takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
       else {showMoves=true;cursor=null;paintBoard();}
@@ -209,8 +209,7 @@ function updateGame() {
   $('room-label').textContent = `Room ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
   $('practice-label').hidden = !practice;
   renderLives();
-  $('shop-button').textContent = `${state.gold} gold`;
-  $('shop-button').setAttribute('aria-label', `${state.gold} gold. Open shop`);
+  $('gold-status').textContent = `${state.gold} gold`;
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
@@ -261,11 +260,12 @@ window.addEventListener('keydown',event=>{
   if(screen!=='game'||!state||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};cursor={x:Math.max(0,Math.min(7,cursor.x+dx)),y:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
-  else if(name==='Enter'&&cursor){event.preventDefault();takeAction(state.exit.open&&cursor.x===state.exit.x&&cursor.y===state.exit.y?{type:'descend'}:{type:'move',...cursor});}
+  else if(name==='Enter'&&cursor){event.preventDefault();if(state.exit.open&&cursor.x===state.exit.x&&cursor.y===state.exit.y)takeStairs();else takeAction({type:'move',...cursor});}
   else if(name==='Escape'){showMoves=false;cursor=null;paintBoard();}
 });
 function renderShop() {
-  $('shop-gold').textContent = `${state.gold} gold`;
+  $('shop-gold').textContent = `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
+  $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
   for (const power of POWERUPS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);
     if (!button) {
@@ -314,15 +314,19 @@ $('companion-shop').addEventListener('submit', event => {
   event.preventDefault();
   if (takeAction({type:'buy', id:$('companion-choice').value})) $('shop-feedback').hidden = true;
 });
-$('shop-button').addEventListener('click', () => {
-  if (!state || state.status !== 'playing' || turnLocked) return;
-  refreshFromOtherWindow();
-  if (screen !== 'game' || state.status !== 'playing') return;
+// The shop is offered once a floor is cleared, as the player takes its stairs.
+// The last floor has no shop: its stairs end the run.
+function takeStairs() {
+  if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || !state.exit.open || document.querySelector('dialog[open]')) return;
+  if (refreshFromOtherWindow() || !state.exit.open) return;
+  if (state.floor === 2) { takeAction({type:'descend'}); return; }
   renderShop();
   $('shop-feedback').hidden = true;
   $('shop-dialog').showModal();
-});
-$('descend-button').addEventListener('click', () => takeAction({type:'descend'}));
+  $('shop-descend').focus();
+}
+$('descend-button').addEventListener('click', takeStairs);
+$('shop-descend').addEventListener('click', () => { $('shop-dialog').close(); takeAction({type:'descend'}); });
 function playSound(events=[]) {
   if(!sound)return;
   try {

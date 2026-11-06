@@ -16,10 +16,11 @@ function rook(id, x, y, target) {
   return { id, piece: 'rook', role: 'rook', species: 'bat', name: 'Bat', x, y, moved: false,
     phase: 'aim', target, intent: Array.from({ length: 8 }, (_, i) => horizontal ? { x: i, y } : { x, y: i }).filter((tile) => tile.x !== x || tile.y !== y) };
 }
-function promotedThirdRoom() {
+function promotedThirdRoom(beforeLastStairs) {
   const daily = getDaily('2026-11-19');
   let state = createGame(daily);
   for (const action of daily.generation.certificate.actions) {
+    if (beforeLastStairs && action.type === 'descend' && state.floor === 1) state = beforeLastStairs(state);
     state = act(state, action);
     assert.equal(validateSave(state, state.date), true);
     if (state.floor === 2) break;
@@ -87,8 +88,8 @@ test('losing a promoted pawn life in a later generated room preserves progress a
 });
 
 test('exhaustion on the last move in room three resets the whole run to the same daily dungeon', () => {
-  const initial = promotedThirdRoom();
-  const aimed = act(act(act(initial, move(4, 4)), move(4, 3)), { type: 'buy', id: 'magnet' });
+  const initial = promotedThirdRoom((cleared) => act(cleared, { type: 'buy', id: 'magnet' }));
+  const aimed = act(act(initial, move(4, 4)), move(4, 3));
   assert.deepEqual(aimed.purchases, ['magnet']); assert.equal(aimed.powers.magnet, 1);
   aimed.player.hp = 1; aimed.turns = 59;
   assert.equal(validateSave(aimed, aimed.date), true);
