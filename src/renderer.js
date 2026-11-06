@@ -205,7 +205,13 @@ export function createDungeonRenderer(container, { onTile } = {}) {
         const type = prop?.type || ['pillar', 'crate', 'barrel', 'rock'][(x * 3 + y + next.floor) % 4];
         // A raised, dark footprint makes blocked squares clear at phone scale.
         block(board, x, 0.045, y, 0.78, 0.14, 0.78, basic(0x19151c));
-        propSprite(board, `prop-${type}`, x, y, type === 'pillar' ? 0.95 : 0.9, type === 'pillar' ? 0.35 : 0.27);
+        propSprite(board, `prop-${type}`, x, y, 0.9, 0.27);
+        if (type === 'pillar') {
+          // Fallen chunks around the stump read as ruined masonry, not a piece.
+          const rubble = basic(0x71828e);
+          block(board, x + 0.3, 0.13, y + 0.28, 0.13, 0.05, 0.1, rubble);
+          block(board, x - 0.31, 0.13, y + 0.25, 0.09, 0.05, 0.08, rubble);
+        }
       } else if ((x * 13 + y * 7 + next.seed) % 7 === 0 && !(x === next.exit.x && y === next.exit.y)) {
         // Loose chips and bone fragments stay at the edge of walkable tiles.
         const chip = basic((x + y) % 2 ? 0x544958 : 0x8a6268);
