@@ -188,7 +188,7 @@ function enemyTurn(state) {
         state.player.hp--;
         const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1 };
         if (state.player.hp === 0) {
-          const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
+          const fresh = createGame({ ...state, playerPiece: state.startingPiece });
           Object.assign(state, fresh);
           state.events = [damage, { type: 'restart', x: state.player.x, y: state.player.y }];
           state.message = 'Out of lives. Back to the start of today’s dungeon.';
@@ -219,8 +219,7 @@ function enemyTurn(state) {
 }
 
 function connectedBoard(state) {
-  const layoutPiece = state.layoutPiece ?? state.startingPiece;
-  const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
+  const piece = state.startingPiece === 'pawn' ? 'queen' : state.startingPiece;
   const visited = new Set(['4,6']);
   const queue = [{ x: 4, y: 6 }];
   const board = { ...state, enemies: [] };
@@ -238,7 +237,6 @@ function connectedBoard(state) {
 }
 
 function setFloor(state) {
-  const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null;
   state.map = Array(8).fill('........');
@@ -251,7 +249,7 @@ function setFloor(state) {
   const mirror = rng() < 0.5;
   const targetTiles = target.piece === 'pawn'
     ? [[3, 3], [5, 3], [2, 2], [6, 2], [1, 1], [7, 1], [0, 2], [6, 0]]
-    : layoutPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]];
+    : state.startingPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]];
   const coordinates = [...targetTiles.slice(0, PIECE_COUNTS[target.piece]), [0, 0], [7, 0]];
   state.enemies = coordinates.map(([initialX, y], index) => {
     const creature = residents[index];
@@ -260,7 +258,7 @@ function setFloor(state) {
     return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
       piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
   });
-  const powerTile = layoutPiece === 'bishop' ? [3, 5] : layoutPiece === 'knight' ? [3, 4] : [4, 5];
+  const powerTile = state.startingPiece === 'bishop' ? [3, 5] : state.startingPiece === 'knight' ? [3, 4] : [4, 5];
   state.items = [
     { x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' },
     { x: powerTile[0], y: powerTile[1], type: 'powerup', power: target.piece === 'pawn' ? 'freeze' : ['shield', 'freeze', 'magnet'][Math.floor(rng() * 3)] },
@@ -269,7 +267,7 @@ function setFloor(state) {
   const reserved = [...state.enemies, ...state.items, state.player, state.exit];
   const candidates = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if ((layoutPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (layoutPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;
+    if ((state.startingPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (state.startingPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;
     candidates.push({ x, y, order: rng() });
   }
   candidates.sort((a, b) => a.order - b.order);
@@ -285,10 +283,10 @@ function setFloor(state) {
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
     const piece = PIECES[Math.floor(recruitRng() * PIECES.length)];
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
-    let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
+    let tiles = movesFor(state,{...state.player,piece:state.startingPiece}).filter(clear);
     if (!tiles.length) {
       tiles = [];
-      for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (layoutPiece !== 'bishop' || (x+y)%2===0) && (layoutPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
+      for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (state.startingPiece !== 'bishop' || (x+y)%2===0) && (state.startingPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
     }
     const tile = tiles[Math.floor(recruitRng()*tiles.length)];
     if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
@@ -309,8 +307,6 @@ export function createGame(daily = getRawDaily()) {
     turns: 0, maxTurns: 60, status: 'playing', captures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
-  if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
-  if (daily.replayUnlocked === true) state.replayUnlocked = true;
   setFloor(state);
   return state;
 }
@@ -376,26 +372,18 @@ function grantPower(state, id) {
   state.message = `${power.name} acquired.`;
 }
 
-function nextState(previous) {
-  const state = structuredClone(previous);
-  state.companionOrders ??= [];
-  // Older saves only recorded exhaustion in the last action's events.
-  if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
-  return state;
-}
-
 export function act(previous, action) {
   if (!previous || previous.status !== 'playing' || !action) return previous;
   if (action.type === 'descend') {
     if (!previous.exit.open || !previous.objective.complete) return previous;
-    const state = nextState(previous); state.events = []; state.awaitingPlayer = false; finishFloor(state); return state;
+    const state = structuredClone(previous); state.companionOrders ??= []; state.events = []; state.awaitingPlayer = false; finishFloor(state); return state;
   }
   if (action.type === 'buy') {
     const recruit = COMPANIONS.find((entry) => entry.id === action.id);
     if (recruit) {
       const orders = previous.companionOrders ?? [];
       if (!Array.isArray(orders) || previous.floor >= 2 || previous.turns >= previous.maxTurns || previous.gold < recruit.cost || orders.some((entry) => entry.floor === previous.floor + 1)) return previous;
-      const state = nextState(previous);
+      const state = structuredClone(previous); state.companionOrders ??= [];
       state.gold -= recruit.cost; state.companionOrders.push({ floor: state.floor + 1, piece: recruit.piece });
       state.events = [{ type: 'companion-order', piece: recruit.piece, x: state.player.x, y: state.player.y }];
       state.message = `${recruit.name} reserved for floor ${state.floor + 2}.`;
@@ -403,10 +391,10 @@ export function act(previous, action) {
     }
     const power = POWERUPS.find((entry) => entry.id === action.id);
     if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || previous.turns >= previous.maxTurns) return previous;
-    const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
+    const state = structuredClone(previous); state.companionOrders ??= []; state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
-  const state = nextState(previous);
+  const state = structuredClone(previous); state.companionOrders ??= [];
   state.events = []; state.message = '';
   if (state.playerColor === 'black' && !state.awaitingPlayer) {
     const origin = { x: state.player.x, y: state.player.y, piece: state.player.piece };
@@ -472,10 +460,6 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const integer = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
     const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     if (!value || value.schema !== RULES_VERSION || value.rulesVersion !== RULES_VERSION || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
-    if (value.replayUnlocked !== undefined && typeof value.replayUnlocked !== 'boolean') return false;
-    if (daily.practice === true) {
-      if (value.practice !== true || value.layoutPiece !== daily.layoutPiece || !PIECES.includes(value.layoutPiece)) return false;
-    } else if (value.practice !== undefined || value.layoutPiece !== undefined) return false;
     if (value.legacyTurnOrder !== false || value.playerColor !== daily.playerColor || typeof value.awaitingPlayer !== 'boolean') return false;
     if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing' || value.turns >= value.maxTurns)) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
