@@ -1,18 +1,22 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-import { act, legalMoves, dangerTiles, unreachablePickups } from './rules.js';
+import { act, legalMoves, dangerTiles, unreachablePickups, royalRules } from './rules.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
+// The king floor's own recruit (a rook, queen or king one move
+// from the start) may help certify it; bought companions, powerups and earlier
+// floors' recruits never do.
+const allyFloor = royalRules;
 const hasPowers = (state) => Object.values(state.powers).some((value) => value !== 0)
-  || Boolean(state.companion) || (state.companions?.length ?? 0) > 0
+  || (Boolean(state.companion) && !allyFloor(state)) || (state.companions?.length ?? 0) > 0
   // An undelivered order is already bought assistance. Older schema-5 states
   // omit the ledger; only an absent ledger or an empty array is unpowered.
   || (state.companionOrders !== undefined
     && (!Array.isArray(state.companionOrders) || state.companionOrders.length > 0));
 const hurt = (state) => state.events.some((event) => event.type === 'damage' || event.type === 'restart');
-const relicAt = (state, tile) => state.items.some((item) => ['powerup', 'companion'].includes(item.type) && same(item, tile));
+const relicAt = (state, tile) => state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !allyFloor(state))) && same(item, tile));
 const powered = (state) => hasPowers(state) || state.events.some((event) =>
-  ['powerup', 'shield', 'recruit'].includes(event.type) || event.type.startsWith('companion'));
+  ['powerup', 'shield', 'recruit'].includes(event.type) || (event.type.startsWith('companion') && !allyFloor(state)));
 
 // Time is part of the position: enemy tie-breaking uses the total turn count.
 // Enemy order, pawn history, and complete committed lanes also affect act().
@@ -47,7 +51,8 @@ function score(state) {
   return state.floor * 2000 + (state.exit.open ? 1600 : 0) + state.captures * 35
     - nearest * 8 - state.turns * 0.7
     + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? 50 : 0)
-    + (state.player.piece === 'pawn' ? (6 - state.player.y) * 6 : 0);
+    + (state.player.piece === 'pawn' ? (6 - state.player.y) * 6 : 0)
+    + (allyFloor(state) && state.companion ? 40 : 0);
 }
 
 function actionsFor(state) {
@@ -75,7 +80,8 @@ function routeFor(node) {
 /**
  * Replay a positive certificate through the production engine, without changing
  * its map, residents, pickups, AI, or rules. A valid proof wins all three rooms
- * within the move budget, with no bought/collected powers, allies, or lost lives.
+ * within the move budget, with no bought/collected powers or lost lives, and no
+ * ally except the king floor's own recruit.
  * Metrics describe this witnessed route; they are not shortest-path bounds or
  * claims that its tactical decisions are unavoidable on every winning route.
  */

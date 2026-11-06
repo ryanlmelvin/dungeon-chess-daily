@@ -5,6 +5,7 @@ import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getSh
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
+import { royalRules } from '../src/rules.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -268,7 +269,10 @@ test('100 consecutive certified dates win without powers or damage and preserve 
       state = next;
       assert.equal(validateSave(state, state.date), true, `${state.date} save after move ${state.turns}`);
       assert.equal(state.player.hp, state.player.maxHp);
-      assert.equal(state.companion, null);
+      // Only the king floor's own recruit (a rook, queen or king) may help, under royal rules.
+      if (royalRules(state)) assert.ok(state.companion === null || ['rook', 'queen', 'king'].includes(state.companion.basePiece));
+      else assert.equal(state.companion, null);
+      assert.deepEqual(state.companionOrders, []);
       assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0 });
       assert.deepEqual(state.purchases, []);
     }

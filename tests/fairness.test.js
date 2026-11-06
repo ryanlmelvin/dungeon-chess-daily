@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { act, createGame, dangerTiles, legalMoves, PIECES, validateSave, walkable } from '../src/rules.js';
+import { act, createGame, dangerTiles, legalMoves, PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
 import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { DIFFICULTY_PROFILES, generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 
@@ -34,7 +34,8 @@ function replay(daily) {
     assert.ok(['move', 'descend'].includes(action.type));
     if (action.type === 'move') {
       assert.ok(legalMoves(state).some((tile) => tile.x === action.x && tile.y === action.y));
-      assert.ok(!state.items.some((item) => ['powerup', 'companion'].includes(item.type) && item.x === action.x && item.y === action.y));
+      // Only the king floor's own recruit may help, and only under royal rules.
+      assert.ok(!state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !royalRules(state))) && item.x === action.x && item.y === action.y));
       if (dangerTiles(state).length > 0) threatenedDecisions++;
     }
     const next = act(state, action);
@@ -42,9 +43,11 @@ function replay(daily) {
     assert.equal(next.player.hp, initial.player.hp);
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0 });
     assert.deepEqual(next.purchases, []);
-    assert.equal(next.companion, null);
+    if (royalRules(next)) assert.ok(next.companion === null || ['rook', 'queen', 'king'].includes(next.companion.basePiece));
+    else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
-    assert.ok(!next.events.some((event) => ['damage', 'restart', 'powerup', 'shield', 'recruit'].includes(event.type) || event.type.startsWith('companion')));
+    assert.deepEqual(next.companionOrders, []);
+    assert.ok(!next.events.some((event) => ['damage', 'restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type.startsWith('companion') && !royalRules(next))));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
     if (next.floor !== state.floor && next.status === 'playing') {

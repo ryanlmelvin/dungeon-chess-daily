@@ -30,7 +30,7 @@ if (process.argv.includes('--verify')) {
       checked++;
     }
   }
-  console.log(`Replayed ${checked} fallback certificates: all win without powerups or damage.`);
+  console.log(`Replayed ${checked} fallback certificates: all win without powerups, purchases or damage.`);
 } else {
   const bank = {};
   let remaining = Object.keys(profiles).length * PIECES.length * colors.length;

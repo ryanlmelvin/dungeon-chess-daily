@@ -34,8 +34,11 @@ test('no wall stands on a monster opening move on any floor (Ice crab, 2026-11-0
 // Saved 2026-11-05 runs are validated against regenerated rooms, so its layouts are frozen.
 const LAUNCH_MAPS = {"gentle": [[".......#", "........", "........", "........", "........", "......#.", "#.....#.", ".......#"], ["........", "#.......", ".......#", "........", "........", "......#.", "#.....#.", "..#....."], ["........", "#......#", "........", "#.......", "#.......", "#.......", ".#.....#", "........"]], "standard": [[".......#", "........", "........", "........", "........", "..#...#.", "#.....#.", "#......#"], ["........", "#.......", ".......#", ".......#", "........", "......##", "#.....#.", "..#....."], ["........", "#......#", "........", "#.......", "#......#", "#.......", ".#....##", "........"]], "expert": [[".......#", "........", "........", "..#.....", ".#......", "..#...#.", "#.....#.", "#......#"], ["........", "#.......", "..#....#", ".......#", "........", "......##", "#.....##", "..#....."], ["........", "#......#", "........", "#.......", "#......#", "#.......", ".#....##", "#.#....."]]};
 
-test('the launch edition keeps its published room layouts on every difficulty', () => {
+// Gentle's launch edition now certifies only through a fallback dungeon under the
+// royal king-floor rules, so only the launch seed's own profiles keep these maps.
+test('the launch edition keeps its published room layouts where it still uses the launch seed', () => {
   for (const [difficulty, maps] of Object.entries(LAUNCH_MAPS)) {
+    if (difficulty === 'gentle') continue;
     const daily = getDaily('2026-11-05', { difficulty });
     let state = createGame(daily);
     const seen = [state.map];

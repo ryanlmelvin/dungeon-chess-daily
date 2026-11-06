@@ -156,6 +156,84 @@ function moveMonster(state, foe) {
   aimAtPlayer(state, foe);
 }
 
+// Royal guard (final floor): the king avoids lines the player or companion can
+// capture along, and its guards screen it. Evaluations move a unit
+// hypothetically and always restore it.
+function chebyshev(a, b) { return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); }
+function hypothetically(unit, square, evaluate) {
+  const { x, y } = unit;
+  unit.x = square.x; unit.y = square.y;
+  try { return evaluate(); } finally { unit.x = x; unit.y = y; }
+}
+function kingThreatened(state, king) {
+  const hits = (unit) => movesFor(state, unit).some((move) => move.capture && same(move, king));
+  return (state.player.hp > 0 && hits(state.player)) || Boolean(state.companion && hits(state.companion));
+}
+function monsterMoves(state, foe) {
+  return movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
+}
+function relocate(state, foe, move) {
+  const from = { x: foe.x, y: foe.y };
+  foe.x = move.x; foe.y = move.y; foe.moved = true;
+  state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
+  promoteMonster(state, foe);
+}
+function monsterTie(state, foe, move) {
+  return hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
+}
+function safeKingMoves(state, king) {
+  return monsterMoves(state, king).filter((move) => !hypothetically(king, move, () => kingThreatened(state, king)));
+}
+function moveKing(state, king) {
+  const best = safeKingMoves(state, king).map((move) => hypothetically(king, move, () => {
+    const strikes = movesFor(state, king, true, true).some((m) => m.capture && same(m, state.player));
+    const company = state.enemies.filter((o) => o !== king && chebyshev(o, move) <= 1).length;
+    return {
+      move,
+      score: (strikes ? -4 : 0) - company - 0.5 * safeKingMoves(state, king).length
+        + 0.8 * Math.abs(chebyshev(move, state.player) - 3) + 0.1 * monsterTie(state, king, move),
+    };
+  })).sort((a, b) => a.score - b.score)[0];
+  if (!best) return false;
+  relocate(state, king, best.move);
+  aimAtPlayer(state, king);
+  return true;
+}
+function royalStepOk(state, foe, king, step) {
+  if (foe === king) return !hypothetically(king, step, () => kingThreatened(state, king));
+  return kingThreatened(state, king) || !hypothetically(foe, step, () => kingThreatened(state, king));
+}
+function royalKingTurn(state, king) {
+  if (kingThreatened(state, king)) {
+    if (!moveKing(state, king)) aimAtPlayer(state, king);
+  } else if (!aimAtPlayer(state, king)) moveKing(state, king);
+}
+function royalGuardTurn(state, foe, king) {
+  const threatened = kingThreatened(state, king);
+  const candidates = monsterMoves(state, foe);
+  const keepsKing = (move) => !hypothetically(foe, move, () => kingThreatened(state, king));
+  if (threatened) {
+    const block = candidates.filter(keepsKing)
+      .sort((a, b) => distance(a, foe) + monsterTie(state, foe, a) * 0.1 - distance(b, foe) - monsterTie(state, foe, b) * 0.1)[0];
+    if (block) { relocate(state, foe, block); aimAtPlayer(state, foe); return; }
+  }
+  if (aimAtPlayer(state, foe)) return;
+  const pool = threatened ? candidates : candidates.filter(keepsKing);
+  const between = (m) => {
+    const dx = king.x - state.player.x, dy = king.y - state.player.y;
+    if (!(dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy))) return false;
+    const mx = m.x - state.player.x, my = m.y - state.player.y;
+    const n = Math.max(Math.abs(dx), Math.abs(dy)), k = Math.max(Math.abs(mx), Math.abs(my));
+    return k > 0 && k < n && mx * n === dx * k && my * n === dy * k;
+  };
+  const score = (m) => 0.6 * distance(m, state.player) + 0.4 * distance(m, king) + 0.35 * distance(m, foe)
+    + 0.7 * monsterTie(state, foe, m) - (between(m) ? 2 : 0);
+  const pick = pool.sort((a, b) => score(a) - score(b))[0];
+  if (!pick) return;
+  relocate(state, foe, pick);
+  aimAtPlayer(state, foe);
+}
+
 function returnToPawn(state) {
   state.player.piece = 'pawn';
   state.player.moved = false;
@@ -174,7 +252,9 @@ function returnToPawn(state) {
 function enemyTurn(state) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
-  for (const foe of state.enemies) {
+  const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
+  const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
+  for (const foe of order) {
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
@@ -201,14 +281,14 @@ function enemyTurn(state) {
         return;
       }
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
-      if (destination) {
-        const from = { x: foe.x, y: foe.y };
-        foe.x = destination.x; foe.y = destination.y; foe.moved = true;
-        state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
-        promoteMonster(state, foe);
-      }
+      if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
+      else if (destination) relocate(state, foe, destination);
       foe.phase = 'ready'; foe.intent = []; foe.target = null;
       state.events.push({ type: 'miss', x: foe.x, y: foe.y });
+    } else if (royal && foe === royal) {
+      royalKingTurn(state, foe);
+    } else if (royal && state.enemies.includes(royal)) {
+      royalGuardTurn(state, foe, royal);
     } else if (!aimAtPlayer(state, foe)) {
       moveMonster(state, foe);
     }
@@ -242,6 +322,10 @@ function connectedBoard(state) {
 // layout so its saved runs still validate. Keyed by seed, not date, so a
 // fallback layout plays the same on any date it is certified for.
 const LEGACY_LAYOUT_SEEDS = new Set([1830689584]);
+// The king floor plays by royal rules: a smarter king and guards (enemyTurn)
+// and a stronger recruit (setFloor) that may help certify the room (fairness.js).
+export function royalRules(state) { return state.floor === 2; }
+const KING_FLOOR_RECRUITS = ['rook', 'queen', 'king'];
 function openingSquares(foe) {
   const deltas = foe.piece === 'pawn' ? [[0, 1], ...(foe.y === 1 ? [[0, 2]] : [])]
     : foe.piece === 'knight' ? KNIGHT
@@ -329,7 +413,10 @@ function setFloor(state) {
   if (!state.legacyTurnOrder) {
     // Add the recruit after the layout is fixed; older editions keep their map.
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
-    const piece = PIECES[Math.floor(recruitRng() * PIECES.length)];
+    // Under royal rules the recruit is a rook, queen or king: a second attacker
+    // strong enough to corner a dodging king, even beside a pawn or a bishop.
+    const pool = royalRules(state) ? KING_FLOOR_RECRUITS : PIECES;
+    const piece = pool[Math.floor(recruitRng() * pool.length)];
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
     let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
     if (!tiles.length) {
