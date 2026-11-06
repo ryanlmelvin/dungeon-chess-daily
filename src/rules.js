@@ -255,6 +255,23 @@ function openingSquares(foe) {
   return deltas.map(([dx, dy]) => ({ x: foe.x + dx, y: foe.y + dy })).filter((tile) => inside(tile.x, tile.y));
 }
 
+// A powerup is a prize, not a gift: it never lies on or beside the start
+// square, so it always costs a detour to collect. Earlier editions keep their
+// published layouts so saved runs validate (see LEGACY_LAYOUT_SEEDS).
+function distantPowerTile(state, layoutPiece, rng) {
+  const taken = [...state.enemies, state.exit, { x: 4, y: 4 }, { x: 2, y: 4 }, { x: 6, y: 4 }];
+  const options = [];
+  for (let y = 1; y < 8; y++) for (let x = 0; x < 8; x++) {
+    if (Math.max(Math.abs(x - state.player.x), Math.abs(y - state.player.y)) <= 1) continue;
+    if (layoutPiece === 'bishop' && (x + y) % 2 !== (state.player.x + state.player.y) % 2) continue;
+    if (taken.some((entry) => entry.x === x && entry.y === y)) continue;
+    // A pawn only walks its own file; other pieces get the room's middle band (rows 3-5).
+    if (layoutPiece === 'pawn' ? x !== state.player.x || y < 2 : y < 3 || y > 5) continue;
+    options.push([x, y]);
+  }
+  return options[Math.floor(rng() * options.length)];
+}
+
 function setFloor(state) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
@@ -280,7 +297,9 @@ function setFloor(state) {
     return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
       piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
   });
-  const powerTile = layoutPiece === 'bishop' ? [3, 5] : layoutPiece === 'knight' ? [3, 4] : [4, 5];
+  const powerTile = LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed)
+    ? (layoutPiece === 'bishop' ? [3, 5] : layoutPiece === 'knight' ? [3, 4] : [4, 5])
+    : distantPowerTile(state, layoutPiece, rng);
   state.items = [
     { x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' },
     { x: powerTile[0], y: powerTile[1], type: 'powerup', power: target.piece === 'pawn' ? 'freeze' : ['shield', 'freeze', 'magnet'][Math.floor(rng() * 3)] },
