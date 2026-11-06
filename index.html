@@ -59,14 +59,20 @@
   <dialog id="menu-dialog" aria-labelledby="menu-title">
     <div id="menu-home">
     <div class="dialog-heading"><h2 id="menu-title">Menu</h2><button class="icon-button" data-close aria-label="Close menu">✕</button></div>
-    <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p><button id="news-button" hidden>Read today’s paper</button>
+    <p class="menu-run"><span id="room-label"></span><span id="practice-label" hidden> · Practice</span><span id="treasure"></span></p>
+    <div class="menu-actions">
+    <button id="news-button" hidden>Read today’s paper</button>
     <button id="change-piece-button" hidden>Change piece</button>
     <button id="daily-button" hidden>Return to daily challenge</button>
     <button id="guide-button" class="guide-open">How to play <span aria-hidden="true">→</span></button>
+    </div>
     <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
+    <details class="saved-progress">
+    <summary>Saved progress</summary>
     <p>Moving to an installed app? Use <b>Download backup</b> in your browser, then <b>Restore backup</b> in the app to bring your progress over.</p>
     <div class="backup-controls"><button id="export-button">Download backup</button><button id="import-button">Restore backup</button><button id="persist-button">Enable persistent storage</button><input id="import-file" type="file" accept="application/json,.json" hidden></div>
     <p id="progress-feedback" role="status" hidden></p>
+    </details>
     <p class="credits">By <a href="https://ryanlmelvin.com" target="_blank" rel="noopener">Ryan L. Melvin</a> · <a href="https://github.com/ryanlmelvin/dungeon-chess-daily" target="_blank" rel="noopener">Source · GPLv3</a></p>
 
     <div class="about-bottom"><span id="release">Version 1.0</span><a href="./update.html">Repair updates</a></div>

@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
+import './menu.css';
 import { initGuide } from './guide.js';
 import { headlineFor } from './edition.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
@@ -402,6 +403,7 @@ $('result-paper-button').addEventListener('click',()=>{
 function progressStatus(message) {
   $('progress-feedback').textContent = message;
   $('progress-feedback').hidden = !message;
+  if (message) $('progress-feedback').closest('details').open = true;
 }
 const persistentStorage = initPersistentStorage({ button: $('persist-button'), onStatus: progressStatus });
 function openMenu() {

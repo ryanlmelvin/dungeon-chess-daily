@@ -1,0 +1,201 @@
+/* Match the dungeon's pixel lettering and chiseled stone controls. */
+:root {
+  font-family: 'VT323', 'Courier New', monospace;
+  --menu-stone: #25212a;
+  --menu-edge: #746170;
+  --menu-shadow: #100d12;
+}
+
+button { font-size: 22px; font-weight: 400; }
+button:focus-visible, a:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+dialog {
+  color: #eee8e1;
+  background: #211c26;
+  border: 4px solid #51424f;
+  border-top-color: #746170;
+  border-left-color: #746170;
+  box-shadow: 0 0 0 2px var(--menu-shadow), 6px 6px 0 var(--menu-shadow), inset 0 0 0 2px #302a35;
+  padding: 20px;
+  width: calc(100% - 28px);
+  color-scheme: dark;
+  scrollbar-color: #746170 #211c26;
+}
+dialog::backdrop { background: #100d12b8; backdrop-filter: none; }
+.dialog-heading {
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #51424f;
+}
+.dialog-heading h2, dialog h2, #guide-title {
+  font: 400 36px/1 'Jacquard 24', 'VT323', monospace;
+  color: var(--paper);
+}
+dialog p, .guide-page p, .guide-pickups dd {
+  font-size: 20px;
+  line-height: 1.25;
+}
+dialog b, dialog strong { font-weight: 400; color: var(--gold); }
+dialog button, dialog select, dialog textarea,
+.game-status button, .game-menu-button, .descend-button,
+.app-bar nav button {
+  border: 2px solid var(--menu-edge);
+  border-right-color: #443642;
+  border-bottom-color: #443642;
+  background: var(--menu-stone);
+  box-shadow: 2px 2px 0 var(--menu-shadow);
+  border-radius: 0;
+  font-size: 22px;
+  line-height: 1.1;
+  min-height: 44px;
+  padding: 9px 12px;
+}
+dialog button:hover:not(:disabled), .app-bar nav button:hover:not(:disabled),
+.game-status button:hover, .game-menu-button:hover, .descend-button:hover {
+  background: #653942;
+  border-color: #a16a72;
+}
+dialog button:active:not(:disabled), .app-bar nav button:active,
+.game-status button:active, .game-menu-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+dialog button:disabled { opacity: .5; }
+dialog .icon-button, .app-bar .icon-button {
+  flex: none;
+  width: 44px;
+  min-width: 44px;
+  padding: 6px;
+  font-size: 24px !important;
+}
+.menu-run { font-size: 18px !important; line-height: 1.2; color: #bdb1bf; }
+.menu-run:has(#room-label:empty) { display: none; }
+.menu-actions { display: grid; gap: 8px; }
+.menu-actions button { width: 100%; margin: 0; text-align: left; font-size: 22px; }
+.menu-actions #change-piece-button, .menu-actions #daily-button { margin: 0; }
+.menu-actions .guide-open { margin: 0; }
+.sound-setting {
+  font-size: 22px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 2px solid #51424f;
+  cursor: pointer;
+}
+.sound-setting input {
+  appearance: none;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border: 2px solid var(--menu-edge);
+  border-radius: 0;
+  background: var(--menu-shadow);
+  cursor: pointer;
+  flex: none;
+}
+.sound-setting input::before {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 4px;
+  background: #9b899c;
+}
+.sound-setting input:checked::before { background: var(--gold); transform: translateX(18px); }
+.saved-progress { border-top: 2px solid #51424f; }
+.saved-progress summary, .pwa-dialog summary, .guide-keyboard summary {
+  font-size: 22px;
+  line-height: 1.2;
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.saved-progress summary::marker, .pwa-dialog summary::marker,
+.guide-keyboard summary::marker { color: var(--gold); }
+.saved-progress p { margin: 8px 0 16px; }
+.backup-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.backup-controls button { font-size: 20px; }
+#persist-button { grid-column: 1 / -1; }
+.credits { font-size: 17px !important; line-height: 1.2; margin-top: 16px; padding-top: 14px; }
+.about-bottom { font-size: 16px; line-height: 1.2; flex-wrap: wrap; color: #bdb1bf; }
+.about-bottom a { min-height: 28px; }
+
+/* The illustrated guide and every dynamic dialog use the same controls. */
+#guide .dialog-heading { margin-bottom: 0; }
+dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0; box-shadow: none; }
+#guide-contents ol { padding-left: 24px; }
+#guide-contents li { font-size: 20px; color: var(--gold); }
+#guide-contents button {
+  font-size: 22px;
+  padding: 12px;
+  margin: 6px 0;
+  border: 2px solid var(--menu-edge);
+  color: var(--paper);
+}
+.move-diagrams figcaption, .guide-lives dd { font-size: 20px; }
+.guide-page h3 { font-size: 22px; color: var(--gold); }
+.move-dot { width: 8px; height: 8px; border-radius: 0; }
+.guide-keyboard { font-size: 20px; }
+#guide-pagination { border-top: 2px solid #51424f; }
+.shop-items { gap: 8px; }
+.shop-items button { padding: 12px; }
+.shop-items strong { font-size: 24px; line-height: 1; margin-bottom: 4px; }
+.shop-items span { font-size: 20px; line-height: 1.2; }
+.companion-shop { border-top: 2px solid #51424f; }
+.companion-shop label, .piece-controls label { font-size: 20px; }
+.companion-order-controls select, .piece-controls select {
+  font-size: 22px;
+  line-height: 1.2;
+  min-height: 44px;
+  border: 2px solid var(--menu-edge);
+  background: var(--menu-shadow);
+  padding: 8px;
+}
+dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shadow); }
+.pwa-dialog button { margin-top: 8px; }
+
+/* Keep the controls around the board and results in the same visual language. */
+.app-bar { padding: 10px 20px; }
+.wordmark { font-size: 22px; letter-spacing: 0; }
+.app-bar nav button { font-size: 20px; padding: 8px 10px; }
+.game-status { font-size: 24px; }
+.game-status button { font-size: 22px; padding: 7px 10px; }
+#freeze-status { font-size: 20px; }
+.game-menu-button { padding: 6px; font-size: 26px; }
+.game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
+.first-tip { font-size: 20px; line-height: 1.2; }
+.game-message, .notice, .webgl-error { font-size: 20px; line-height: 1.2; }
+.result-paper { --paper: #c9c9c7; --ink: #252525; }
+.result-paper h2 { font: 400 48px/1 'Jacquard 24', 'VT323', monospace; letter-spacing: 0; }
+.result-paper > p:not(.eyebrow) { font: 400 22px/1.2 'VT323', monospace; }
+.result-paper .eyebrow, .result-paper .paper-rule { font-size: 18px; letter-spacing: 0; }
+.result-paper .paper-rule { flex-wrap: wrap; }
+.result-paper .primary { font-size: 24px; font-weight: 400; box-shadow: 4px 4px 0 #777; }
+.result-actions { flex-wrap: wrap; }
+.result-actions button { font-size: 20px; min-height: 44px; border: 2px solid #777; }
+.result-paper .next-edition { font: 400 18px/1.2 'VT323', monospace !important; }
+
+@media (max-width: 600px) {
+  .app-bar { padding: 8px 12px; }
+  .wordmark { font-size: 20px; gap: 6px; }
+  .app-bar nav button { font-size: 18px; padding: 6px 8px; }
+  dialog, .pwa-dialog, #menu-dialog { padding: 16px; }
+  .dialog-heading h2, dialog h2, #guide-title { font-size: 32px; }
+  .game-status { left: calc(env(safe-area-inset-left, 0px) + 12px); gap: 6px 10px; }
+  .first-tip { font-size: 18px; }
+}
+@media (max-width: 350px) {
+  .wordmark { font-size: 18px; }
+  .wordmark .mark { display: none; }
+  .companion-order-controls { flex-wrap: wrap; }
+  .companion-order-controls select { flex-basis: 100%; }
+}
+@media (forced-colors: active) {
+  .sound-setting input { appearance: auto; }
+  .sound-setting input::before { display: none; }
+}
