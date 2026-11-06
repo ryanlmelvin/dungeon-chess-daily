@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import './style.css';
 import { initGuide } from './guide.js';
+import { headlineFor } from './edition.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
@@ -111,27 +112,25 @@ function switchScreen(next) {
   if (next === 'game') requestAnimationFrame(() => renderer?.resize());
 }
 function renderPaper() {
-  const theme = daily.theme;
   $('edition').textContent = `NO. ${String(Math.max(1, daily.edition)).padStart(3, '0')}`;
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = new Date(`${daily.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
-  $('headline').textContent = theme.headline;
+  $('headline').textContent = headlineFor(daily.species[0], daily.date);
   $('deck').replaceChildren(createPrintLines(0));
   $('art-caption').textContent = "Artist's impression";
-  $('side-stories').replaceChildren(...theme.stories.map((story, index) => {
+  $('side-stories').replaceChildren(...daily.species.slice(1, 3).map((creature, index) => {
     const article = document.createElement('article');
-    const h = document.createElement('h3'); h.textContent = story.title;
+    const h = document.createElement('h3'); h.textContent = headlineFor(creature, daily.date);
     const p = document.createElement('p');
     p.setAttribute('aria-hidden', 'true');
     p.append(createPrintLines(index + 1));
-    const creature = daily.species[index + 1];
     const portrait = document.createElement('canvas'); portrait.width=40;portrait.height=40;portrait.className='story-portrait';portrait.setAttribute('aria-label',creature.name);portrait.setAttribute('role','img');
     drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
     article.append(portrait,h,p); return article;
   }));
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? 'Resume your descent ' : 'Read your result ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
-  drawPaperArt(theme);
+  drawPaperArt();
 }
 // Decorative, unreadable print: the headlines and colored portraits carry the clues.
 function createPrintLines(variant) {
