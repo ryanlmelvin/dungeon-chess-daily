@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -27,11 +27,12 @@ test('daily date is UTC, deterministic, and rejects impossible calendar dates', 
   assert.throws(() => getDaily('2026-02-31'), /Invalid daily date/);
 });
 
-test('daily selections cover all six pieces and all 26 species without duplicate daily species', () => {
-  const counts = Object.fromEntries(PIECES.map((piece) => [piece, 0]));
+test('daily selections cover the five playable pieces, never the king, and all 26 species without duplicate daily species', () => {
+  const counts = Object.fromEntries(PLAYABLE_PIECES.map((piece) => [piece, 0]));
   const species = new Set();
   for (let day = 0; day < 1200; day++) {
     const issue = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
+    assert.notEqual(issue.playerPiece, 'king');
     counts[issue.playerPiece]++;
     assert.equal(new Set(issue.species.map((entry) => entry.id)).size, 9);
     issue.species.forEach((entry) => { species.add(entry.id); assert.ok(PIECES.includes(entry.piece)); });
@@ -39,7 +40,7 @@ test('daily selections cover all six pieces and all 26 species without duplicate
     assert.equal(issue.theme.stories[1].species, issue.species[2].id);
   }
   assert.equal(species.size, 26);
-  for (const count of Object.values(counts)) assert.ok(count > 130 && count < 270, 'uniform selection should not systematically favor a piece');
+  for (const count of Object.values(counts)) assert.ok(count > 170 && count < 310, 'uniform selection should not systematically favor a piece');
 });
 
 test('rook slides straight, captures by landing, and cannot jump a monster', () => {

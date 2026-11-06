@@ -15,9 +15,13 @@ Every returned edition has an explicit sequence of legal actions that:
   captures, piece color, turn order, promotion rules, and automatic pickups from
   the production engine.
 - Collects or purchases no powerups and recruits no companion, except the final
-  floor's own recruit. The king recruits on floors 1 and 2 are never used: the
-  route never steps on them. Castling is an ordinary legal move, so a route may
-  castle with the final floor's recruit.
+  floor's own recruit (a rook, queen or king). The recruits on floors 1 and 2,
+  which may be any piece, are never used: the route never steps on them. No
+  recruit may capture its floor's challenge piece, so on the final floor the
+  capture of the king is the player's. The recruit can block, take guards, and
+  herd the king: the king still flees squares the recruit covers.
+  Castling is an ordinary legal move, so a route may castle with the final
+  floor's recruit.
 - Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
   shield or freeze, and never restarts.
 
@@ -91,7 +95,7 @@ searching the entire game tree for every proposed decoration.
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
 
-The fallback bank covers all 36 combinations of six pieces, two colors, and three
+The fallback bank covers all 30 combinations of five playable pieces, two colors, and three
 profiles. A broken or missing fallback fails closed with an error; it never
 releases an unverified dungeon. The test suite and build check the entire bank.
 Search and verification share `src/rules.js` with live gameplay, avoiding a second

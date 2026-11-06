@@ -6,6 +6,8 @@ import { getRawDaily } from '../src/edition.js';
 
 const wait = { type: 'wait' };
 function dailyFor(piece, color) {
+  // Kings are no longer a daily piece; engine tests borrow a rook day.
+  if (piece === 'king') return { ...dailyFor('rook', color), playerPiece: 'king' };
   for (let day = 0; day < 365; day++) {
     const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
     if (daily.playerPiece === piece && daily.playerColor === color) return daily;

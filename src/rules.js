@@ -3,7 +3,7 @@
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
 import { getRawDaily } from './edition.js';
-export { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
+export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 5;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
@@ -228,8 +228,9 @@ function noteDoubleStep(state, foe, from) {
   if (foe.piece === 'pawn' && from.y === 1 && foe.y === 3) state.enPassant = { id: foe.id, x: foe.x, y: 2 };
 }
 
-// Royal guard (final floor): the king avoids lines the player or companion can
-// capture along, and its guards screen it. Evaluations move a unit
+// Royal guard (final floor): the king avoids lines the player or companion
+// covers, and its guards screen it. The recruit never captures the king, but
+// like a chess rook it still controls squares and herds it toward the player. Evaluations move a unit
 // hypothetically and always restore it.
 function chebyshev(a, b) { return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); }
 function hypothetically(unit, square, evaluate) {
@@ -485,7 +486,7 @@ function powerRoll(roll, coinless) {
   return coinless ? ['shield', 'freeze'][Math.floor(roll * 2)] : ['shield', 'freeze', 'magnet'][Math.floor(roll * 3)];
 }
 
-function setFloor(state, legacyRecruit = false) {
+function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null; state.enPassant = null;
@@ -542,11 +543,11 @@ function setFloor(state, legacyRecruit = false) {
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
     // Under royal rules the recruit is a rook, queen or king: a second attacker
     // strong enough to corner a dodging king, even beside a pawn or a bishop.
-    // Floors 1 and 2 always recruit a king. The piece is still drawn from the
-    // old pool so the tile draw stays put; saves from before keep that piece.
+    // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
+    // a king keep that king; the tile draw is the same either way.
     const pool = royalRules(state) ? KING_FLOOR_RECRUITS : PIECES;
     const drawn = pool[Math.floor(recruitRng() * pool.length)];
-    const piece = royalRules(state) || legacyRecruit ? drawn : 'king';
+    const piece = !royalRules(state) && kingRecruit ? 'king' : drawn;
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
     let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
     if (!tiles.length) {
@@ -674,6 +675,13 @@ function captureEnemy(state, captured, companion = false) {
   } else state.message = `${captured.name} captured. +1 gold.`;
 }
 
+// A recruit never captures the challenge piece: that capture is the player's.
+function recruitMayTake(state, foe) { return !foe || (foe.role ?? foe.piece) !== state.objective.piece; }
+export function challengeName(state) {
+  const piece = state.objective.piece;
+  return PIECE_COUNTS[piece] > 1 ? `${piece}s` : `the ${piece}`;
+}
+
 function companionTurn(state) {
   const unit = state.companion;
   if (!unit) return;
@@ -685,7 +693,7 @@ function companionTurn(state) {
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
   if (!state.enemies.length) return;
-  const candidates = movesFor(state,unit);
+  const candidates = movesFor(state,unit).filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
   const nearest = (move) => Math.min(...state.enemies.map((foe)=>distance(move,foe)));
   const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${state.turns}:${move.x},${move.y}`);
   candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
@@ -823,7 +831,7 @@ export function act(previous, action) {
     state.items = state.items.filter((item)=>item!==recruit);
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
-    state.message = `A ${recruit.piece} joins you for this floor.`;
+    state.message = `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`;
   }
   // Pick up the relic before applying the magnet, so it works immediately.
   const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
@@ -914,12 +922,12 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
       && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle'].includes(feat.kind)))) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
-    // Floors 1 and 2 recruit a king. Runs saved before that may hold the old
-    // recruit, drawn from every piece, on the board or at their side.
-    const legacyRecruit = value.floor < 2 && ((value.companion && value.companion.basePiece !== 'king')
-      || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion' && item.piece !== 'king')));
+    // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
+    // a king may hold that king, on the board or at their side.
+    const kingRecruit = value.floor < 2 && ((value.companion && value.companion.basePiece === 'king')
+      || (Array.isArray(value.items) && value.items.some((item) => item?.type === 'companion' && item.piece === 'king')));
     // Layout depends only on the edition and original piece, never on promotion.
-    setFloor(template, legacyRecruit);
+    setFloor(template, kingRecruit);
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
     if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;

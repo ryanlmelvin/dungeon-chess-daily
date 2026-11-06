@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialPiece, legalMoves, PIECES, PIECE_LIVES, unreachablePickups, validateSave } from '../src/game.js';
 
-const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-12', '2026-11-13'];
+const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
 const move = (x, y) => ({ type: 'move', x, y });
 const roundTrip = (value) => JSON.parse(JSON.stringify(value));
 const layout = (state) => ({

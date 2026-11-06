@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { act, createGame, dangerTiles, legalMoves, PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
+import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
 import { findWinningRoute, livesSpendable, verifyWinningRoute } from '../src/fairness.js';
 import { DIFFICULTY_PROFILES, generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 
@@ -22,7 +22,8 @@ function monster(id, piece, x, y, target = null) {
   };
 }
 function scenario(piece = 'rook', color = 'white') {
-  const state = createGame(getRawDaily(dates.get(`${piece}:${color}`)));
+  // Kings are no longer a daily piece; engine tests borrow a rook day.
+  const state = piece === 'king' ? createGame({ ...getRawDaily(dates.get(`rook:${color}`)), playerPiece: 'king' }) : createGame(getRawDaily(dates.get(`${piece}:${color}`)));
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = [];
   state.objective = { piece: 'king', complete: false };
   return state;

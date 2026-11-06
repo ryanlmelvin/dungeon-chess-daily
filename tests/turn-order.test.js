@@ -10,6 +10,8 @@ const move = (x,y) => ({type:'move',x,y});
 // The first legal move that no monster captures at close range.
 const safeMove = (state) => ({type:'move',...legalMoves(state).find((tile)=>!closeAttacker(state,tile))});
 function dailyFor(piece,color) {
+  // Kings are no longer a daily piece; engine tests borrow a rook day.
+  if (piece === 'king') return { ...dailyFor('rook', color), playerPiece: 'king' };
   for(let day=0;day<365;day++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
     if(daily.playerPiece===piece && daily.playerColor===color) return daily;
@@ -18,6 +20,7 @@ function dailyFor(piece,color) {
 }
 function scenario(piece='rook',color='black',x=4,y=6) {
   const state=createGame(dailyFor(piece,color));
+  if(piece==='king'){state.startingPiece="king";state.player.piece="king";state.player.hp=state.player.maxHp=1;}
   Object.assign(state.player,{x,y});
   state.map=Array(8).fill('........'); state.props=[]; state.items=[]; state.enemies=[];
   state.objective={piece:'king',complete:false};
@@ -97,7 +100,7 @@ test('a blocked black selection waits without spending a move and retries never 
 });
 
 test('black pending turns persist in valid saves, purchases preserve the phase, and play continues beyond sixty completed moves',()=>{
-  const state=createGame(getDaily('2026-11-12'));
+  const state=createGame(getDaily('2026-12-07'));
   const pending=act(state,move(4,5));
   assert.equal(pending.awaitingPlayer,true);
   assert.equal(validateSave(pending,pending.date),true);
@@ -134,7 +137,7 @@ test('a black promoted pawn hit returns for a fresh selection before any stale m
 });
 
 test('black exhaustion discards the stale click, while shields must already be owned before the enemy phase',()=>{
-  const state=scenario('king'); state.enemies=[monster('attacker','rook',4,0,{x:4,y:6})];
+  const state=scenario('queen'); state.enemies=[monster('attacker','rook',4,0,{x:4,y:6})];
   state.items=[{x:3,y:6,type:'powerup',power:'shield'}];
   const reset=act(state,move(3,6));
   assert.deepEqual(reset.events.map((event)=>event.type),['damage','restart']);
@@ -178,7 +181,7 @@ test('older progress stays archived instead of being relabeled as a certified ed
 });
 
 test('turn metadata and archived imports cannot silently change the certified order',()=>{
-  const state=createGame(getDaily('2026-11-12'));
+  const state=createGame(getDaily('2026-12-07'));
   for(const mutate of [
     (s)=>{s.playerColor='purple';}, (s)=>{s.playerColor='white';},
     (s)=>{s.legacyTurnOrder=true;}, (s)=>{s.awaitingPlayer='yes';},

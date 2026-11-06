@@ -154,6 +154,26 @@ export const FALLBACKS = {
         "type": "wait"
       },
       {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 1
+      },
+      {
         "type": "descend"
       }
     ]
@@ -322,7 +342,14 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 0
       },
       {
         "type": "descend"
@@ -493,7 +520,14 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 0
       },
       {
         "type": "descend"
@@ -627,7 +661,9 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 0
       },
       {
         "type": "descend"
@@ -761,7 +797,9 @@ export const FALLBACKS = {
         "y": 2
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 0
       },
       {
         "type": "descend"
@@ -953,7 +991,22 @@ export const FALLBACKS = {
         "y": 1
       },
       {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
         "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 0
       },
       {
         "type": "descend"
@@ -1078,18 +1131,23 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 5
+        "x": 0,
+        "y": 6
       },
       {
         "type": "move",
         "x": 2,
-        "y": 3
+        "y": 7
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
       },
       {
         "type": "descend"
@@ -1213,18 +1271,23 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 5
+        "x": 0,
+        "y": 6
       },
       {
         "type": "move",
         "x": 2,
-        "y": 3
+        "y": 7
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
       },
       {
         "type": "descend"
@@ -1348,12 +1411,74 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 1,
         "y": 5
       },
       {
         "type": "move",
         "x": 2,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "gentle:queen:black": {
+    "date": "2026-11-10",
+    "dungeonSeed": 1813764870,
+    "actions": [
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 1,
         "y": 3
       },
       {
@@ -1362,66 +1487,37 @@ export const FALLBACKS = {
         "y": 4
       },
       {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:king:black": {
-    "date": "2026-11-10",
-    "dungeonSeed": 1813764870,
-    "actions": [
-      {
         "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
+        "x": 1,
         "y": 3
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
       },
       {
         "type": "move",
@@ -1430,18 +1526,18 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 2
+        "x": 2,
+        "y": 6
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 1
+        "x": 3,
+        "y": 6
       },
       {
         "type": "move",
         "x": 4,
-        "y": 1
+        "y": 6
       },
       {
         "type": "move",
@@ -1449,122 +1545,18 @@ export const FALLBACKS = {
         "y": 0
       },
       {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "descend"
       }
     ]
   },
-  "expert:king:black": {
+  "standard:queen:black": {
     "date": "2026-11-10",
     "dungeonSeed": 1813764870,
     "actions": [
       {
         "type": "move",
-        "x": 5,
-        "y": 7
+        "x": 4,
+        "y": 3
       },
       {
         "type": "move",
@@ -1572,23 +1564,66 @@ export const FALLBACKS = {
         "y": 6
       },
       {
+        "type": "descend"
+      },
+      {
         "type": "move",
         "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 2,
         "y": 5
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 4
+        "x": 2,
+        "y": 6
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 4
+        "x": 2,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 0,
         "y": 4
       },
       {
@@ -1596,103 +1631,18 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
+        "x": 2,
         "y": 6
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 1,
+        "x": 0,
         "y": 6
       },
       {
         "type": "move",
         "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
+        "y": 6
       },
       {
         "type": "move",
@@ -1702,61 +1652,17 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 3,
-        "y": 2
+        "y": 6
       },
       {
         "type": "move",
         "x": 4,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
         "y": 6
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "x": 4,
+        "y": 0
       },
       {
         "type": "descend"
@@ -1803,18 +1709,23 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 6,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 5,
         "y": 5
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 3,
         "y": 6
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 7
+        "x": 4,
+        "y": 4
       },
       {
         "type": "descend"
@@ -1860,15 +1771,24 @@ export const FALLBACKS = {
         "type": "descend"
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 6,
         "y": 7
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
       },
       {
         "type": "descend"
@@ -1914,323 +1834,24 @@ export const FALLBACKS = {
         "type": "descend"
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 6,
         "y": 7
       },
       {
-        "type": "descend"
-      }
-    ]
-  },
-  "gentle:queen:black": {
-    "date": "2026-11-12",
-    "dungeonSeed": 1780209632,
-    "actions": [
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
         "type": "move",
         "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:queen:black": {
-    "date": "2026-11-12",
-    "dungeonSeed": 1780209632,
-    "actions": [
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 0,
         "y": 5
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "expert:queen:black": {
-    "date": "2026-11-12",
-    "dungeonSeed": 1780209632,
-    "actions": [
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
         "x": 3,
         "y": 6
       },
       {
         "type": "move",
         "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 3
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 0
-      },
-      {
-        "type": "wait"
+        "y": 4
       },
       {
         "type": "descend"
@@ -2323,340 +1944,50 @@ export const FALLBACKS = {
       }
     ]
   },
-  "gentle:king:white": {
-    "date": "2026-11-21",
-    "dungeonSeed": 85523018,
-    "actions": [
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 7
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:king:white": {
-    "date": "2026-11-21",
-    "dungeonSeed": 85523018,
+  "expert:rook:white": {
+    "date": "2026-11-16",
+    "dungeonSeed": 1847320108,
     "actions": [
       {
         "type": "move",
         "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
         "y": 2
       },
       {
         "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
         "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
         "y": 1
       },
       {
         "type": "move",
         "x": 3,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 2
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 7
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "expert:king:white": {
-    "date": "2026-11-21",
-    "dungeonSeed": 85523018,
-    "actions": [
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 7
       },
       {
         "type": "descend"
@@ -2664,13 +1995,16 @@ export const FALLBACKS = {
     ]
   },
   "gentle:queen:white": {
-    "date": "2026-11-24",
-    "dungeonSeed": 35190161,
+    "date": "2026-11-21",
+    "dungeonSeed": 85523018,
     "actions": [
       {
+        "type": "wait"
+      },
+      {
         "type": "move",
-        "x": 4,
-        "y": 5
+        "x": 6,
+        "y": 4
       },
       {
         "type": "move",
@@ -2680,27 +2014,32 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 3,
-        "y": 3
+        "y": 6
       },
       {
         "type": "move",
-        "x": 5,
+        "x": 6,
         "y": 3
       },
       {
         "type": "move",
         "x": 6,
-        "y": 4
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
       },
       {
         "type": "move",
         "x": 3,
-        "y": 7
+        "y": 5
       },
       {
         "type": "move",
         "x": 4,
-        "y": 7
+        "y": 5
       },
       {
         "type": "move",
@@ -2714,17 +2053,7 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
         "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
         "y": 5
       },
       {
@@ -2733,11 +2062,6 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
         "y": 2
       },
       {
@@ -2754,18 +2078,11 @@ export const FALLBACKS = {
     ]
   },
   "standard:queen:white": {
-    "date": "2026-11-24",
-    "dungeonSeed": 35190161,
+    "date": "2026-11-21",
+    "dungeonSeed": 85523018,
     "actions": [
       {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 3
+        "type": "wait"
       },
       {
         "type": "move",
@@ -2774,13 +2091,43 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 5
+        "x": 6,
+        "y": 3
       },
       {
         "type": "move",
         "x": 3,
-        "y": 5
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
       },
       {
         "type": "move",
@@ -2789,28 +2136,8 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 6
+        "x": 1,
+        "y": 5
       },
       {
         "type": "descend"
@@ -2818,11 +2145,6 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
         "y": 2
       },
       {
@@ -2839,12 +2161,131 @@ export const FALLBACKS = {
     ]
   },
   "expert:queen:white": {
+    "date": "2026-11-21",
+    "dungeonSeed": 85523018,
+    "actions": [
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "standard:bishop:white": {
     "date": "2026-11-24",
     "dungeonSeed": 35190161,
     "actions": [
       {
         "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
         "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
         "y": 4
       },
       {
@@ -2854,8 +2295,373 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "expert:bishop:white": {
+    "date": "2026-11-24",
+    "dungeonSeed": 35190161,
+    "actions": [
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 7
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 4
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "gentle:bishop:white": {
+    "date": "2026-12-01",
+    "dungeonSeed": 3172915599,
+    "actions": [
+      {
+        "type": "move",
+        "x": 3,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 3
+      },
+      {
+        "type": "move",
         "x": 5,
         "y": 1
+      },
+      {
+        "type": "descend"
+      }
+    ]
+  },
+  "expert:queen:black": {
+    "date": "2026-12-06",
+    "dungeonSeed": 3122582742,
+    "actions": [
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
       },
       {
         "type": "move",
@@ -2864,429 +2670,41 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 0,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 0,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
         "x": 4,
         "y": 2
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "gentle:king:black": {
-    "date": "2026-12-02",
-    "dungeonSeed": 3189693218,
-    "actions": [
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
         "x": 4,
         "y": 4
       },
       {
         "type": "move",
-        "x": 2,
+        "x": 4,
         "y": 3
       },
       {
         "type": "descend"
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
         "y": 6
       },
       {
         "type": "move",
         "x": 5,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 6,
         "y": 5
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
+        "x": 6,
         "y": 3
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "gentle:bishop:white": {
-    "date": "2026-12-04",
-    "dungeonSeed": 3089027504,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:bishop:white": {
-    "date": "2026-12-04",
-    "dungeonSeed": 3089027504,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "descend"
-      }
-    ]
-  },
-  "expert:bishop:white": {
-    "date": "2026-12-04",
-    "dungeonSeed": 3089027504,
-    "actions": [
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 6
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 7
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
       },
       {
         "type": "descend"
@@ -3299,71 +2717,17 @@ export const FALLBACKS = {
     "actions": [
       {
         "type": "move",
-        "x": 3,
+        "x": 0,
         "y": 6
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
         "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
+        "y": 6
       },
       {
         "type": "move",
-        "x": 3,
+        "x": 0,
         "y": 6
       },
       {
@@ -3376,8 +2740,21 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 6
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "descend"
       },
       {
         "type": "move",
@@ -3385,108 +2762,19 @@ export const FALLBACKS = {
         "y": 6
       },
       {
-        "type": "descend"
-      }
-    ]
-  },
-  "standard:rook:black": {
-    "date": "2026-12-18",
-    "dungeonSeed": 3391171741,
-    "actions": [
-      {
         "type": "move",
-        "x": 3,
-        "y": 6
+        "x": 6,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 3,
-        "y": 4
+        "x": 5,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
+        "x": 5,
         "y": 2
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 2
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 6
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 6
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 7,
-        "y": 3
-      },
-      {
-        "type": "wait"
       },
       {
         "type": "descend"
@@ -3501,51 +2789,6 @@ export const FALLBACKS = {
         "type": "wait"
       },
       {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
         "type": "move",
         "x": 4,
         "y": 4
@@ -3554,12 +2797,6 @@ export const FALLBACKS = {
         "type": "move",
         "x": 3,
         "y": 3
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
       },
       {
         "type": "move",
@@ -3572,7 +2809,47 @@ export const FALLBACKS = {
         "y": 1
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 1
       },
       {
         "type": "move",
@@ -3581,13 +2858,18 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 6,
-        "y": 0
+        "x": 3,
+        "y": 2
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 0
+        "x": 2,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
       },
       {
         "type": "descend"
@@ -3595,30 +2877,62 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
+        "y": 4
       },
       {
         "type": "move",
         "x": 4,
-        "y": 4
+        "y": 3
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
       },
       {
         "type": "descend"
@@ -3630,49 +2944,6 @@ export const FALLBACKS = {
     "dungeonSeed": 1210331534,
     "actions": [
       {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 5
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 3
-      },
-      {
-        "type": "descend"
-      },
-      {
         "type": "move",
         "x": 4,
         "y": 4
@@ -3680,15 +2951,12 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 4,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
         "y": 3
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 4,
+        "y": 3
       },
       {
         "type": "move",
@@ -3701,15 +2969,86 @@ export const FALLBACKS = {
         "y": 1
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 3,
         "y": 0
       },
       {
+        "type": "move",
+        "x": 3,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
         "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 5,
+        "y": 1
       },
       {
         "type": "move",
@@ -3717,7 +3056,9 @@ export const FALLBACKS = {
         "y": 0
       },
       {
-        "type": "descend"
+        "type": "move",
+        "x": 0,
+        "y": 5
       },
       {
         "type": "move",
@@ -3726,44 +3067,110 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 4
-      },
-      {
-        "type": "wait"
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 4,
-        "y": 3
+        "x": 0,
+        "y": 5
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 5
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 3,
+        "y": 0
       },
       {
         "type": "descend"
       }
     ]
   },
-  "expert:rook:white": {
-    "date": "2026-12-23",
-    "dungeonSeed": 1193553915,
+  "standard:rook:black": {
+    "date": "2027-01-06",
+    "dungeonSeed": 1549232621,
     "actions": [
       {
         "type": "move",
         "x": 4,
-        "y": 2
-      },
-      {
-        "type": "wait"
+        "y": 3
       },
       {
         "type": "move",
-        "x": 6,
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
         "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 0,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 1,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 3,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 2,
+        "y": 5
       },
       {
         "type": "descend"
@@ -3775,64 +3182,46 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 4,
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 0
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
         "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 3,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
+        "y": 5
       },
       {
         "type": "wait"
       },
       {
         "type": "move",
-        "x": 1,
-        "y": 2
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 6,
-        "y": 4
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "move",
         "x": 4,
-        "y": 5
+        "y": 6
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 6
       },
       {
         "type": "descend"
@@ -3960,7 +3349,9 @@ export const FALLBACKS = {
         "y": 6
       },
       {
-        "type": "wait"
+        "type": "move",
+        "x": 7,
+        "y": 6
       },
       {
         "type": "descend"
@@ -4036,18 +3427,23 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 0,
+        "y": 2
+      },
+      {
+        "type": "move",
         "x": 1,
+        "y": 4
+      },
+      {
+        "type": "move",
+        "x": 3,
         "y": 4
       },
       {
         "type": "move",
         "x": 1,
         "y": 5
-      },
-      {
-        "type": "move",
-        "x": 1,
-        "y": 4
       },
       {
         "type": "descend"
@@ -4056,9 +3452,6 @@ export const FALLBACKS = {
         "type": "wait"
       },
       {
-        "type": "wait"
-      },
-      {
         "type": "move",
         "x": 5,
         "y": 5
@@ -4070,7 +3463,49 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 5,
+        "x": 6,
+        "y": 3
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 2
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 1
+      },
+      {
+        "type": "move",
+        "x": 7,
+        "y": 1
+      },
+      {
+        "type": "descend"
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 4,
         "y": 4
       },
       {
@@ -4096,61 +3531,17 @@ export const FALLBACKS = {
       {
         "type": "move",
         "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 2,
-        "y": 1
-      },
-      {
-        "type": "descend"
-      },
-      {
-        "type": "wait"
-      },
-      {
-        "type": "move",
-        "x": 4,
         "y": 5
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 4
+        "x": 3,
+        "y": 5
       },
       {
         "type": "move",
-        "x": 5,
-        "y": 3
-      },
-      {
-        "type": "move",
-        "x": 5,
+        "x": 0,
         "y": 2
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 1
-      },
-      {
-        "type": "move",
-        "x": 5,
-        "y": 0
-      },
-      {
-        "type": "move",
-        "x": 4,
-        "y": 1
-      },
-      {
-        "type": "wait"
       },
       {
         "type": "descend"

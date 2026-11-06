@@ -7,10 +7,14 @@ import {createGame as createCandidate,validateSave as validateCandidate} from '.
 const move=(x,y)=>({type:'move',x,y});
 function scenario(piece='king',color='white',x=4,y=6) {
   let daily;
-  for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===piece&&candidate.playerColor===color){daily=candidate;break;}}
+  // Kings are no longer a daily piece; engine tests borrow a rook day.
+  const wanted=piece==='king'?'rook':piece;
+  for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor===color){daily=candidate;break;}}
   const state=createGame(daily);Object.assign(state.player,{x,y});
+  if(piece==='king'){state.startingPiece="king";state.player.piece="king";state.player.hp=state.player.maxHp=1;}
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
-  state.objective={piece:'king',complete:false};return state;
+  // Knights are the challenge here, so the kings and queens below are fair game for a recruit.
+  state.objective={piece:'knight',complete:false};return state;
 }
 const foe=(id,piece,x,y)=>({id,piece,role:piece,species:'bat',palette:'ice',name:'Ice bat',x,y,moved:false,phase:'ready',target:null,intent:[]});
 const ally=(piece,x,y)=>({piece,basePiece:piece,x,y,moved:false,sharing:false});
@@ -24,26 +28,26 @@ function descend(state) {
   return act(cleared,{type:'descend'});
 }
 
-// Floors one and two recruit a king, on a square one move from the start.
-function kingRecruit(state,label) {
+// Floors one and two recruit any piece, on a square one move from the start.
+function earlyRecruit(state,label,seen) {
   const [recruit,...extra]=recruitsOn(state);
-  assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.equal(recruit.piece,'king',label);
+  assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.ok(PIECES.includes(recruit.piece),label);seen?.add(recruit.piece);
   assert.equal(state.map[recruit.y][recruit.x],'.');
   assert.ok(!state.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
   return recruit;
 }
 
-test('floors one and two hold a king recruit while the final floor keeps its rook, queen or king',()=>{
-  const finalTypes=new Set();
+test('floors one and two recruit any piece while the final floor keeps its rook, queen or king',()=>{
+  const finalTypes=new Set(),earlyTypes=new Set();
   for(let d=0;d<60;d++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
     const state=createCandidate(daily);
-    assert.equal(state.floor,0);kingRecruit(state,`${daily.date}: floor 1`);
+    assert.equal(state.floor,0);earlyRecruit(state,`${daily.date}: floor 1`,earlyTypes);
     assert.equal(state.companion,null);
     assert.equal(validateCandidate(state,state.date,daily),true);
     assert.deepEqual(createCandidate(daily).items,state.items);
     const second=descend(state);
-    assert.equal(second.floor,1);kingRecruit(second,`${daily.date}: floor 2`);assert.equal(second.companion,null);
+    assert.equal(second.floor,1);earlyRecruit(second,`${daily.date}: floor 2`,earlyTypes);assert.equal(second.companion,null);
     const last=descend(second);
     assert.equal(last.floor,2);
     const [recruit,...extra]=recruitsOn(last);
@@ -56,9 +60,10 @@ test('floors one and two hold a king recruit while the final floor keeps its roo
     assert.equal(last.companion,null);
   }
   assert.deepEqual([...finalTypes].sort(),['king','queen','rook']);
+  assert.deepEqual([...earlyTypes].sort(),[...PIECES].sort());
   for(const date of ['2026-11-12','2026-11-13']) {
     const daily=getDaily(date), state=createGame(daily);
-    kingRecruit(state,date);
+    earlyRecruit(state,date);
     assert.equal(validateSave(state,date),true);
     assert.deepEqual(createGame(daily).items,state.items);
   }
@@ -90,12 +95,12 @@ test('saves from before the change keep their floor-one recruit, on the board or
   assert.equal(validateSave(forged,forged.date),false);
 });
 
-test('a white recruit moves after its player, captures the objective for no gold, then enemies respond',()=>{
-  const state=scenario();state.items=[{type:'companion',piece:'rook',x:4,y:5}];state.enemies=[foe('target','king',4,2)];
+test('a white recruit moves after its player, captures a guard for gold, then enemies respond',()=>{
+  const state=scenario();state.items=[{type:'companion',piece:'rook',x:4,y:5}];state.enemies=[foe('guard','king',4,2),foe('target','knight',0,7)];
   const next=act(state,move(4,5));
   assert.equal(next.player.piece,'king');assert.equal(next.startingPiece,'king');
   assert.deepEqual([next.companion.x,next.companion.y],[4,2]);
-  assert.equal(next.captures,1);assert.equal(next.gold,0);assert.equal(next.exit.open,true);assert.equal(next.turns,1);
+  assert.equal(next.captures,1);assert.equal(next.gold,1);assert.equal(next.exit.open,false);assert.equal(next.turns,1);
   const phases=['move','companion-recruit','companion-phase','companion-move','companion-capture','enemy-phase'].map((type)=>next.events.findIndex((event)=>event.type===type));
   assert.ok(phases.every((index,i)=>index>=0&&(!i||index>phases[i-1])));
   assert.deepEqual(act(state,move(4,5)),next,'companion choices replay deterministically');
@@ -180,10 +185,10 @@ test('an immobile recruit may share its recruitment square until the player leav
 });
 
 test('floor changes and exhausted lives clear the active companion',()=>{
-  const state=scenario('queen');state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
+  const state=scenario('queen');state.objective={piece:'king',complete:false};state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
   const cleared=act(state,move(4,2));const downstairs=act(cleared,{type:'descend'});
   assert.equal(downstairs.floor,1);assert.equal(downstairs.companion,null);
-  assert.deepEqual(downstairs.items.filter((item)=>item.type==='companion').map((item)=>item.piece),['king']);
+  assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,1);
   const doomed=scenario('king','white',4,5);doomed.companion=ally('pawn',0,7);
   doomed.enemies=[{...foe('attacker','rook',4,0),phase:'aim',target:{x:4,y:4},intent:[{x:4,y:4}]}];
   const reset=act(doomed,move(4,4));
@@ -221,4 +226,19 @@ test('a pawn recruited on the far rank promotes before its first move, even with
       assert.ok(promotion<movement);assert.equal(next.events[movement].piece,'queen');
     } else assert.deepEqual([next.companion.x,next.companion.y],[3,0]);
   }
+});
+
+test('a recruit never captures the challenge piece, even when it is the only capture on offer',()=>{
+  const state=scenario('queen','white',7,7);state.powers.freeze=3;
+  state.items=[{type:'companion',piece:'rook',x:6,y:7}];state.enemies=[foe('target','knight',6,2)];
+  const next=act(state,move(6,7));
+  assert.equal(next.message,'A rook joins you this floor. It cannot capture knights.');
+  assert.equal(next.captures,0);assert.equal(next.enemies.length,1);
+  assert.ok(!(next.companion.x===6&&next.companion.y===2));
+  // A single challenge piece is named with "the".
+  const royal=scenario('queen','white',7,7);royal.powers.freeze=3;royal.objective={piece:'king',complete:false};
+  royal.items=[{type:'companion',piece:'queen',x:6,y:7}];royal.enemies=[foe('target','king',6,2)];
+  const crowned=act(royal,move(6,7));
+  assert.equal(crowned.message,'A queen joins you this floor. It cannot capture the king.');
+  assert.equal(crowned.captures,0);assert.ok(!(crowned.companion.x===6&&crowned.companion.y===2));
 });

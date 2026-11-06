@@ -25,7 +25,7 @@ function mapWithOpenSquares(squares) {
 // survivability is checked independently by replaying the full winning route.
 test('all fallback floors have reachable stationary pickups for every piece, side and difficulty', () => {
   let floors = 0;
-  assert.equal(Object.keys(FALLBACKS).length, 36);
+  assert.equal(Object.keys(FALLBACKS).length, 30);
   for (const [identity, fallback] of Object.entries(FALLBACKS)) {
     const [difficulty, piece, color] = identity.split(':');
     const daily = generateDaily(fallback.date, { difficulty, maxAttempts: 0 });
@@ -40,10 +40,10 @@ test('all fallback floors have reachable stationary pickups for every piece, sid
       assert.equal(state.items.filter((item) => item.type === 'coin').length, last ? 0 : 3, `${identity}, floor ${state.floor}`);
       assert.ok(state.items.some((item) => item.type === 'powerup'));
       if (last) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${identity}: magnet on the last floor`);
-      // Every floor holds one recruit: a king on floors 1 and 2, a rook, queen or king on the last.
+      // Every floor holds one recruit: any piece on floors 1 and 2, a rook, queen or king on the last.
       const recruits = state.items.filter((item) => item.type === 'companion').map((item) => item.piece);
       assert.equal(recruits.length, 1, `${identity}, floor ${state.floor}`);
-      assert.ok((last ? ['rook', 'queen', 'king'] : ['king']).includes(recruits[0]), `${identity}, floor ${state.floor}: ${recruits[0]}`);
+      assert.ok((last ? ['rook', 'queen', 'king'] : ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king']).includes(recruits[0]), `${identity}, floor ${state.floor}: ${recruits[0]}`);
       visitedFloors.add(state.floor); floors++;
     };
     checkFloor();
@@ -56,7 +56,7 @@ test('all fallback floors have reachable stationary pickups for every piece, sid
     assert.equal(state.status, 'won');
     assert.deepEqual([...visitedFloors], [0, 1, 2]);
   }
-  assert.equal(floors, 108);
+  assert.equal(floors, 90);
 });
 
 test('a bishop cannot reach coins, relics or recruits on the opposite square color', () => {

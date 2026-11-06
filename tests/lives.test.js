@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, getDaily, legalMoves, PIECE_LIVES, validateSave, walkable } from '../src/game.js';
+import { act, createGame, createPracticeGame, getDaily, legalMoves, PIECE_LIVES, validateSave, walkable } from '../src/game.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
-const dates = { pawn: '2026-11-05', bishop: '2026-11-07', knight: '2026-11-08', king: '2026-11-10', queen: '2026-11-12', rook: '2026-11-13' };
+const dates = { pawn: '2026-11-05', bishop: '2026-11-07', knight: '2026-11-08', queen: '2026-11-10', rook: '2026-11-13' };
 function scenario(piece = 'rook', x = 4, y = 6) {
   const state = createGame(getDaily(dates[piece]));
   Object.assign(state.player, { x, y });
@@ -35,19 +35,22 @@ test('each starting piece gets its chess-set life budget and saves each remainin
   const budgets = { pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 };
   assert.deepEqual(PIECE_LIVES, budgets);
   for (const [piece, lives] of Object.entries(budgets)) {
-    const state = createGame(getDaily(dates[piece]));
+    // The king is never the daily piece, only a practice choice.
+    const practice = piece === 'king';
+    const state = practice ? createPracticeGame(getDaily(dates.rook), { piece, color: 'white' }) : createGame(getDaily(dates[piece]));
+    const check = (value) => validateSave(value, value.date, { practice });
     assert.equal(state.startingPiece, piece);
     assert.equal(state.player.hp, lives); assert.equal(state.player.maxHp, lives);
     for (let hp = 1; hp <= lives; hp++) {
       state.player.hp = hp;
-      assert.equal(validateSave(JSON.parse(JSON.stringify(state)), state.date), true, `${piece}: ${hp}`);
+      assert.equal(check(JSON.parse(JSON.stringify(state))), true, `${piece}: ${hp}`);
     }
     for (const hp of [0, -1, 0.5, lives + 1]) {
       state.player.hp = hp;
-      assert.equal(validateSave(state, state.date), false, `${piece}: reject ${hp}`);
+      assert.equal(check(state), false, `${piece}: reject ${hp}`);
     }
     state.player.hp = 1; state.player.maxHp = lives + 1;
-    assert.equal(validateSave(state, state.date), false);
+    assert.equal(check(state), false);
   }
 });
 

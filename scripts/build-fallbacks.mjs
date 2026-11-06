@@ -5,7 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
 import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
-import { PIECES } from '../src/pieces.js';
+import { PLAYABLE_PIECES as PIECES } from '../src/pieces.js';
 import { DIFFICULTY_PROFILES as profiles } from '../src/difficulty.js';
 
 const colors = ['white', 'black'];
@@ -58,5 +58,5 @@ if (process.argv.includes('--verify')) {
     + '// Routes are certificates for the engine, never player-facing hints.\n'
     + `export const FALLBACKS = ${JSON.stringify(bank, null, 2)};\n`;
   await writeFile(new URL('../src/fallbacks.js', import.meta.url), source);
-  console.log('Wrote 36 independently replayed fallback certificates.');
+  console.log(`Wrote ${Object.keys(bank).length} independently replayed fallback certificates.`);
 }

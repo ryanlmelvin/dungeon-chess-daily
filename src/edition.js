@@ -5,7 +5,7 @@ const DAY = 86_400_000;
 const EPOCH = Date.UTC(2026, 10, 5);
 /** Edition #1. The archive lists every edition from this date onward. */
 export const FIRST_EDITION_DATE = new Date(EPOCH).toISOString().slice(0, 10);
-import { PIECES, PIECE_COUNTS } from './pieces.js';
+import { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
 import { hash, random } from './random.js';
 const SPECIES = [
   ['bat', 'Bat', 'Bats'], ['rat', 'Rat', 'Rats'], ['slime', 'Slime', 'Slimes'],
@@ -135,7 +135,9 @@ export function getRawDaily(date = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw new TypeError('Invalid daily date.');
   const seed = hash(value);
   const rng = random(seed);
-  const playerPiece = PIECES[Math.floor(rng() * PIECES.length)];
+  // One draw either way, so the rest of the edition is unchanged. Pawn keeps
+  // index 0, so the pawn editions published before kings left (2026-11-05/06) stay put.
+  const playerPiece = PLAYABLE_PIECES[Math.floor(rng() * PLAYABLE_PIECES.length)];
   const targetsPool = PIECES.filter((piece) => piece !== 'king');
   const targets = [targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], 'king'];
   const pool = [...SPECIES];

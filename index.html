@@ -35,7 +35,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
@@ -138,7 +138,7 @@
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the far edge becomes a queen until the floor ends.</p>
-        <p>Pawns can capture <b>en passant</b>, and kings and rooks can <b>castle</b>: see <b>Special moves</b>.</p>
+        <p>Pawns can capture <b>en passant</b>, and your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too): see <b>Special moves</b>.</p>
         <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p></details>
       </article>
       <article class="guide-page" hidden>
@@ -152,7 +152,7 @@
         <p>Red paths show where monsters strike next. As white, step off them to dodge. As black, strikes land before your move, so a red path on your square will hit. If enemies block the square you chose, pick another; they won’t move again first.</p>
         <h3 id="guide-close-title">Close range</h3>
         <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
-        <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. As in chess, a king can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
+        <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. A king, a practice-only choice, can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
         <p>Tap <b>Wait</b> to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can strike first.</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
@@ -161,7 +161,7 @@
           <div><dt><canvas data-guide-art="piece-rook" width="40" height="40" role="img" aria-label="Rook"></canvas></dt><dd>2</dd></div>
           <div><dt><canvas data-guide-art="piece-bishop" width="40" height="40" role="img" aria-label="Bishop"></canvas></dt><dd>2</dd></div>
           <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
-          <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King"></canvas></dt><dd>1</dd></div>
+          <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King, practice only"></canvas></dt><dd>1</dd></div>
         </dl>
         <p>Each hit costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
@@ -171,7 +171,7 @@
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit. Stacks up to 3.</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it is always a king; on the last floor, a rook, queen or king. A recruit moves after you for that floor, and its captures count. A king recruit with your rook, or a rook recruit with your king, can castle.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. A recruit moves after you for that floor and its captures count, but it can never capture the floor’s challenge piece: that’s yours to take. A king recruit can castle with your rook.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -183,8 +183,8 @@
         <p>It works both ways: jump your own pawn two squares past a monster pawn and it captures you the same way, at once. This is called ‘en passant!’</p>
         <h3 id="guide-castle-title">Castling</h3>
         <figure class="special-moves"><canvas class="hint-art" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook hops over the king to land on the square beside it."></canvas></figure>
-        <p>Your king and a rook recruit, or your rook and a king recruit, can trade places in one move when they stand on one row with exactly two open squares between them. The king slides two squares toward the rook, and the rook hops over to land beside it. Items may lie between, monsters and walls may not.</p>
-        <p>Playing the king, tap its landing square; playing the rook, tap your king. As in chess, your king can’t castle out of, through or into close range. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
+        <p>Your rook and a king recruit (or a practice king and a rook recruit) can trade places in one move when they stand on one row with exactly two open squares between them. The king slides two squares toward the rook, and the rook hops over to land beside it. Items may lie between, monsters and walls may not.</p>
+        <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into close range. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
@@ -208,10 +208,11 @@
     <form id="piece-form">
       <p id="official-piece"></p>
       <div class="piece-controls">
-        <label for="practice-piece">Piece<select id="practice-piece" aria-describedby="piece-warning"></select></label>
+        <label for="practice-piece">Piece<select id="practice-piece" aria-describedby="piece-warning king-warning"></select></label>
         <label for="practice-color">Color<select id="practice-color" aria-describedby="piece-warning"><option value="white">White</option><option value="black">Black</option></select></label>
       </div>
       <p id="piece-warning" role="status" hidden>Changing from today's official piece or color means no completion message to share with friends. Today's challenge may be impossible with your chosen piece.</p>
+      <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, and your recruit can’t capture it, so floor 3 may be impossible.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>
   </dialog>

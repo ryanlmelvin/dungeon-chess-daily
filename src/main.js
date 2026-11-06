@@ -253,6 +253,8 @@ function updateGame() {
   if (state.awaitingPlayer) showMoves = true;
   $('room-label').textContent = `Floor ${state.floor + 1} / 3 · ${state.playerColor} ${state.player.piece} · ${state.playerColor === 'white' ? 'You move first' : 'Enemies move first'}`;
   $('practice-label').hidden = !practice;
+  // A king can't step beside the monster king and its recruit can't take it.
+  $('king-practice-note').hidden = !(practice && state.startingPiece === 'king');
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
   $('move-status').textContent = `${state.turns} ${state.turns === 1 ? 'move' : 'moves'}`;
@@ -525,6 +527,7 @@ $('share-button').addEventListener('click',async()=>{
 });
 function updatePieceWarning() {
   $('piece-warning').hidden = $('practice-piece').value === daily.playerPiece && $('practice-color').value === daily.playerColor;
+  $('king-warning').hidden = $('practice-piece').value !== 'king';
 }
 function openPieceChooser() {
   if (turnLocked || !state || !(practice || canChoosePiece(state))) return;

@@ -13,7 +13,8 @@ function findDaily(match, label) {
   }
   throw Error(`No ${label} edition found`);
 }
-const dailyFor = (piece, color) => findDaily((d) => d.playerPiece === piece && d.playerColor === color, `${color} ${piece}`);
+// Kings are no longer a daily piece; engine tests borrow a rook day.
+const dailyFor = (piece, color) => piece === 'king' ? { ...dailyFor('rook', color), playerPiece: 'king' } : findDaily((d) => d.playerPiece === piece && d.playerColor === color, `${color} ${piece}`);
 function scenario(piece = 'pawn', color = 'white', x = 4, y = 6) {
   const state = createGame(dailyFor(piece, color));
   Object.assign(state.player, { x, y, moved: y !== 6 });
