@@ -42,7 +42,7 @@ dialog p, .guide-page p, .guide-pickups dd {
 }
 dialog b, dialog strong { font-weight: 400; color: var(--gold); }
 dialog button, dialog select, dialog textarea,
-.game-status button, .game-menu-button, .descend-button,
+.game-status button, .game-menu-button, .descend-button, .hint-button,
 .app-bar nav button {
   border: 2px solid var(--menu-edge);
   border-right-color: #443642;
@@ -56,12 +56,12 @@ dialog button, dialog select, dialog textarea,
   padding: 9px 12px;
 }
 dialog button:hover:not(:disabled), .app-bar nav button:hover:not(:disabled),
-.game-status button:hover, .game-menu-button:hover, .descend-button:hover {
+.game-status button:hover, .game-menu-button:hover, .descend-button:hover, .hint-button:hover {
   background: #653942;
   border-color: #a16a72;
 }
 dialog button:active:not(:disabled), .app-bar nav button:active,
-.game-status button:active, .game-menu-button:active {
+.game-status button:active, .game-menu-button:active, .hint-button:active {
   transform: translate(2px, 2px);
   box-shadow: none;
 }
@@ -168,6 +168,11 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 #freeze-status { font-size: 20px; }
 .game-menu-button { padding: 6px; font-size: 26px; }
 .game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
+/* The objective stays click-through except for its hint button. */
+.game-objective { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.hint-button { pointer-events: auto; flex: none; font-size: 20px; min-height: 36px; padding: 4px 10px; color: var(--gold); border-color: var(--gold); }
+.hint-art { display: block; width: min(100%, 240px); height: auto; margin: 0 auto 12px; image-rendering: pixelated; }
+#hint-dialog { max-width: 420px; }
 .first-tip { font-size: 20px; line-height: 1.2; }
 .game-message, .notice, .webgl-error { font-size: 20px; line-height: 1.2; }
 .result-paper { --paper: #c9c9c7; --ink: #252525; }

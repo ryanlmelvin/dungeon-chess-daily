@@ -48,42 +48,83 @@ function capture(ctx, x, y) {
   sprite(ctx, 'skull', x * 40 + 20, y * 40 + 20, 2, spritePalette('rose'));
 }
 
-function movement(ctx, piece) {
-  board(ctx, 5, 5, 40);
-  const center = { x: 2, y: 2 };
+// Destination squares on the 5x5 demo board, centered on (2, 2).
+function moveTargets(piece, enemy = false) {
   if (piece === 'pawn') {
-    destination(ctx, 2, 1);
-    // The top dot is available only for an unobstructed opening double step.
-    destination(ctx, 2, 0);
-    arrow(ctx, 100, 86, 100, 67, MINT, 7);
-    capture(ctx, 1, 1);
-    capture(ctx, 3, 1);
-    arrow(ctx, 87, 87, 76, 76, RED, 7);
-    arrow(ctx, 113, 87, 124, 76, RED, 7);
-  } else if (piece === 'knight') {
-    for (const [dx, dy] of [[-2,-1],[-1,-2],[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1]]) {
-      destination(ctx, center.x + dx, center.y + dy);
-    }
-    sprite(ctx, 'prop-crate', 100, 60);
-  } else if (piece === 'king') {
-    for (let y = 1; y <= 3; y++) for (let x = 1; x <= 3; x++) {
-      if (x !== 2 || y !== 2) destination(ctx, x, y);
-    }
-  } else {
-    const directions = [];
-    if (piece !== 'bishop') directions.push([0,-1],[-1,0],[1,0],[0,1]);
-    if (piece !== 'rook') directions.push([-1,-1],[1,-1],[-1,1],[1,1]);
-    for (const [dx, dy] of directions) {
-      for (let step = 1; step <= 2; step++) {
-        const x = center.x + dx * step;
-        const y = center.y + dy * step;
-        if (piece === 'rook' && x === 3 && y === 2) break;
-        destination(ctx, x, y);
-      }
-    }
-    if (piece === 'rook') sprite(ctx, 'prop-crate', 140, 100);
+    const f = enemy ? 1 : -1;
+    return { moves: [[2, 2 + f], [2, 2 + 2 * f]], captures: [[1, 2 + f], [3, 2 + f]] };
   }
-  sprite(ctx, `piece-${piece}`, 100, 100);
+  if (piece === 'knight') return { moves: [[0,1],[1,0],[3,0],[4,1],[4,3],[3,4],[1,4],[0,3]], captures: [] };
+  if (piece === 'king') {
+    const moves = [];
+    for (let y = 1; y <= 3; y++) for (let x = 1; x <= 3; x++) if (x !== 2 || y !== 2) moves.push([x, y]);
+    return { moves, captures: [] };
+  }
+  const directions = [];
+  if (piece !== 'bishop') directions.push([0,-1],[-1,0],[1,0],[0,1]);
+  if (piece !== 'rook') directions.push([-1,-1],[1,-1],[-1,1],[1,1]);
+  const moves = [];
+  for (const [dx, dy] of directions) {
+    for (let step = 1; step <= 2; step++) {
+      const x = 2 + dx * step;
+      const y = 2 + dy * step;
+      if (piece === 'rook' && x === 3 && y === 2) break;
+      moves.push([x, y]);
+    }
+  }
+  return { moves, captures: [] };
+}
+
+function movement(ctx, piece, { enemy = false, at = null, palette = {}, focus = null } = {}) {
+  board(ctx, 5, 5, 40);
+  const { moves, captures } = moveTargets(piece, enemy);
+  if (focus) {
+    ctx.strokeStyle = MINT;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(focus[0] * 40 + 2, focus[1] * 40 + 2, 36, 36);
+  }
+  // A pawn's far dot is available only for an unobstructed opening double step.
+  for (const [x, y] of moves) destination(ctx, x, y);
+  for (const [x, y] of captures) capture(ctx, x, y);
+  if (piece === 'pawn') {
+    const f = enemy ? 1 : -1;
+    arrow(ctx, 100, 100 + 14 * f, 100, 100 + 33 * f, MINT, 7);
+    arrow(ctx, 87, 100 + 13 * f, 76, 100 + 24 * f, RED, 7);
+    arrow(ctx, 113, 100 + 13 * f, 124, 100 + 24 * f, RED, 7);
+  } else if (piece === 'knight') {
+    sprite(ctx, 'prop-crate', 100, 60);
+  } else if (piece === 'rook') {
+    sprite(ctx, 'prop-crate', 140, 100);
+  }
+  sprite(ctx, `piece-${piece}`, at ? at[0] : 100, at ? at[1] : 100, 2, palette);
+}
+
+const ease = (t) => t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+
+/**
+ * One frame of an animated move demo: the piece repeatedly travels from the
+ * center to each destination in turn and back. Knights arc to show the jump.
+ */
+export function drawMoveDemo(canvas, piece, time, { enemy = false, palette = {} } = {}) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const { moves, captures } = moveTargets(piece, enemy);
+  const targets = [...moves, ...captures];
+  const cycle = 1800;
+  const index = Math.floor(time / cycle) % targets.length;
+  const phase = (time % cycle) / cycle;
+  // Hold, travel out, hold on the destination, travel back.
+  const t = phase < 0.15 ? 0 : phase < 0.45 ? ease((phase - 0.15) / 0.3) : phase < 0.8 ? 1 : 1 - ease((phase - 0.8) / 0.2);
+  const [tx, ty] = targets[index];
+  const x = 100 + (tx * 40 + 20 - 100) * t;
+  const lift = piece === 'knight' ? Math.sin(Math.PI * t) * 26 : 0;
+  const y = 100 + (ty * 40 + 20 - 100) * t - lift;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.scale(canvas.width / 200, canvas.height / 200);
+  movement(ctx, piece, { enemy, at: [x, y], palette, focus: [tx, ty] });
+  ctx.restore();
 }
 
 function goal(ctx) {

@@ -38,7 +38,7 @@
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
       <div class="game-status"><span id="gold-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
-      <p id="objective" class="game-objective"></p>
+      <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
       <p id="game-message" class="game-message" aria-live="polite"></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
@@ -151,6 +151,12 @@
       <p id="piece-warning" role="status" hidden>Changing from today's official piece or color means no completion message to share with friends. Today's challenge may be impossible with your chosen piece.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>
+  </dialog>
+  <dialog id="hint-dialog" aria-labelledby="hint-title">
+    <div class="dialog-heading"><h2 id="hint-title">Hint</h2><button class="icon-button" data-close aria-label="Close hint">✕</button></div>
+    <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
+    <p id="hint-move"></p>
+    <p class="hint-clue"><b>Watch enemy movements to figure out which ones they are.</b> Every monster hides its true piece.</p>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
     <div class="dialog-heading"><h2 id="shop-title">Between floors</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>

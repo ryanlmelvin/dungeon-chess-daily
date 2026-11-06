@@ -2,6 +2,7 @@
 import './style.css';
 import './menu.css';
 import { initGuide } from './guide.js';
+import { drawMoveDemo } from './guide-art.js';
 import { headlineFor } from './edition.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, dangerTiles, legalMoves, getShareText, validateSave, POWERUPS, COMPANIONS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
@@ -213,7 +214,8 @@ function updateGame() {
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
-  $('objective').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
+  $('objective-text').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
+  $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
@@ -237,6 +239,34 @@ function enterGame() {
   updateGame();
 }
 $('start-button').addEventListener('click', enterGame);
+const HINT_MOVES = {
+  pawn: 'An enemy pawn steps one square toward you, or two on its first move. It captures one square diagonally toward you.',
+  knight: 'A knight jumps in an L: two squares one way, then one to the side. It leaps over obstacles.',
+  rook: 'A rook slides any distance in a straight line until something blocks it.',
+  bishop: 'A bishop slides any distance diagonally until something blocks it.',
+  queen: 'A queen slides any distance in a straight line or diagonally until something blocks it.',
+  king: 'A king steps one square in any direction.',
+};
+let hintFrame = 0;
+function openHint() {
+  if (!state || screen !== 'game' || document.querySelector('dialog[open]')) return;
+  const piece = state.objective.piece;
+  const article = piece === 'pawn' ? 'an enemy pawn' : `a ${piece}`;
+  $('hint-title').textContent = `How ${article} moves`;
+  $('hint-move').textContent = HINT_MOVES[piece];
+  $('hint-art').setAttribute('aria-label', `Animated board: ${HINT_MOVES[piece]}`);
+  const options = { enemy: true, palette: piecePalette(state.playerColor === 'white' ? 'black' : 'white') };
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = performance.now();
+  const frame = (now) => {
+    drawMoveDemo($('hint-art'), piece, still ? 1800 * 0.6 : now - start, options);
+    if (!still && $('hint-dialog').open) hintFrame = requestAnimationFrame(frame);
+  };
+  $('hint-dialog').showModal();
+  frame(start);
+}
+$('hint-button').addEventListener('click', openHint);
+$('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
 function takeAction(action) {
   const shopping = action.type === 'buy' && $('shop-dialog').open;
@@ -350,7 +380,7 @@ function showResult() {
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
-  $('next-edition').textContent=shareable ? '🟨 All three coins · ⬜ Extra captures · 🟫 Escaped\nNext edition at 00:00 UTC.' : 'Next edition at 00:00 UTC.';
+  $('next-edition').textContent=shareable ? 'Each floor: 🪙 coins · ⚔️ bonus captures · 💔 lives lost · ✨ perfect\nNext edition at 00:00 UTC.' : 'Next edition at 00:00 UTC.';
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
