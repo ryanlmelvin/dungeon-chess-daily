@@ -259,3 +259,9 @@ body:has(.pwa-bar button:not([hidden])) .notice { bottom: calc(var(--pwa-bar-h) 
   background: var(--menu-stone); box-shadow: 2px 2px 0 var(--menu-shadow);
 }
 .archive-banner button:hover { background: #653942; }
+
+/* En passant explainer: the in-game "What?" button, the dialog, and the death screen link. */
+.game-message .message-what { margin-left: 6px; vertical-align: middle; }
+#en-passant-dialog { max-width: 420px; }
+.en-passant-continue { display: block; width: 100%; margin-top: 16px; color: var(--gold); }
+.result-en-passant { color: var(--ink); background: none; border: 2px solid #777; font-size: 20px; min-height: 44px; padding: 4px 14px; margin: 0 0 8px; }

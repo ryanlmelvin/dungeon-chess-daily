@@ -218,3 +218,135 @@ export function drawGuideArt(root = document) {
     ctx.restore();
   }
 }
+
+const GOLD = '#e6c17a';
+const DANGER_FILL = '#903e5166';
+const center = (v) => v * 40 + 20;
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+// Progress of a beat that runs from `from` to `to` milliseconds into the loop.
+const beat = (time, from, to) => clamp01((time - from) / (to - from));
+
+function burst(ctx, x, y, t, color) {
+  if (t <= 0 || t >= 1) return;
+  ctx.save();
+  ctx.globalAlpha = 1 - t;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4;
+    const inner = 8 + 10 * t;
+    const outer = 14 + 16 * t;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(angle) * inner, y + Math.sin(angle) * inner);
+    ctx.lineTo(x + Math.cos(angle) * outer, y + Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function ghost(ctx, x, y, alpha, palette, color) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.4;
+  sprite(ctx, 'piece-pawn', center(x), center(y), 2, palette);
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 4]);
+  ctx.strokeRect(x * 40 + 3, y * 40 + 3, 34, 34);
+  ctx.restore();
+}
+
+/**
+ * One frame of the en passant explainer on a 4x4 board crop, looping every
+ * 3.5 s. Your pawn always moves up the board and the enemy pawn moves down.
+ * mode 'player': the enemy pawn double-steps past your pawn, then your pawn
+ * captures it by moving diagonally into the square it skipped.
+ * mode 'enemy': your pawn double-steps past an enemy pawn, which captures you
+ * by striking the square you skipped.
+ */
+export function drawEnPassantDemo(canvas, time, { playerPalette = {}, enemyPalette = {}, mode = 'player' } = {}) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const t = ((time % 3500) + 3500) % 3500;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.scale(canvas.width / 160, canvas.height / 160);
+  board(ctx, 4, 4, 40);
+  const lerp = (a, b, p) => a + (b - a) * ease(p);
+  if (mode === 'enemy') {
+    // Enemy waits at (2,1); your pawn jumps (1,3) -> (1,1), skipping (1,2).
+    const jump = beat(t, 400, 1100);
+    const mark = beat(t, 1100, 1400) * (1 - beat(t, 3000, 3300));
+    const strike = beat(t, 1700, 2200);
+    const flash = beat(t, 2200, 2900);
+    if (mark > 0) {
+      ctx.save();
+      ctx.globalAlpha = mark;
+      ctx.fillStyle = DANGER_FILL;
+      ctx.fillRect(40, 80, 40, 40);
+      ctx.restore();
+    }
+    ghost(ctx, 1, 2, mark * (1 - strike), playerPalette, RED);
+    if (mark > 0 && strike < 1) {
+      ctx.save();
+      ctx.globalAlpha = mark * (1 - strike);
+      arrow(ctx, 88, 68, 68, 88, RED, 7);
+      ctx.restore();
+    }
+    const hit = strike >= 1 && flash < 1;
+    if (hit) {
+      ctx.save();
+      ctx.globalAlpha = 1 - flash;
+      ctx.fillStyle = RED;
+      ctx.fillRect(40, 40, 40, 40);
+      ctx.restore();
+    }
+    // Your pawn is caught where it landed and fades out.
+    ctx.save();
+    ctx.globalAlpha = 1 - beat(t, 2300, 2900);
+    sprite(ctx, 'piece-pawn', center(1), lerp(center(3), center(1), jump), 2, playerPalette);
+    ctx.restore();
+    if (flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, flash * 2) * (1 - beat(t, 3200, 3500));
+      sprite(ctx, 'skull', center(1), center(1), 2, spritePalette('rose'));
+      ctx.restore();
+    }
+    burst(ctx, center(1), center(1), beat(t, 2200, 2800), RED);
+    // The enemy lunges into the skipped square.
+    sprite(ctx, 'piece-pawn', lerp(center(2), center(1), strike), lerp(center(1), center(2), strike), 2, enemyPalette);
+  } else {
+    // Your pawn waits at (1,2); the enemy jumps (2,0) -> (2,2), skipping (2,1).
+    const jump = beat(t, 400, 1100);
+    const mark = beat(t, 1100, 1400);
+    const move = beat(t, 1700, 2300);
+    const gone = beat(t, 2300, 2700);
+    ghost(ctx, 2, 1, mark * (1 - move), enemyPalette, MINT);
+    if (mark > 0 && move < 1) {
+      ctx.save();
+      ctx.globalAlpha = mark * (1 - move);
+      arrow(ctx, 72, 92, 92, 72, MINT, 7);
+      ctx.restore();
+    }
+    if (gone < 1) {
+      ctx.save();
+      if (move >= 1) {
+        ctx.strokeStyle = RED;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 1 - gone;
+        ctx.strokeRect(83, 83, 34, 34);
+      }
+      ctx.globalAlpha = 1 - gone;
+      sprite(ctx, 'piece-pawn', center(2), lerp(center(0), center(2), jump), 2, enemyPalette);
+      ctx.restore();
+    }
+    burst(ctx, center(2), center(2), gone, GOLD);
+    sprite(ctx, 'piece-pawn', lerp(center(1), center(2), move), lerp(center(2), center(1), move), 2, playerPalette);
+  }
+  ctx.restore();
+}
+
+/** A representative still for prefers-reduced-motion: the skipped square marked. */
+export const EN_PASSANT_STILL = 1500;

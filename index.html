@@ -56,6 +56,7 @@
       <article class="result-paper">
         <div class="paper-rule"><span>THE EVENING EDITION</span><span id="result-date"></span></div>
         <p id="result-kicker" class="eyebrow"></p><h2 id="result-title"></h2><p id="result-summary"></p>
+        <button id="result-en-passant" class="result-en-passant" type="button" aria-haspopup="dialog" aria-label="What is en passant?" hidden>What?</button>
 
         <pre id="share-preview"></pre>
         <button id="retry-button" class="primary" hidden>Try again <span aria-hidden="true">↻</span></button>
@@ -136,6 +137,7 @@
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the far edge becomes a queen until the floor ends.</p>
+        <p><b>En passant</b> works both ways: when a monster pawn jumps two squares past your pawn, capture it on your very next move as if it had moved one. Jump your own pawn past a monster pawn and it can do the same to you.</p>
         <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p></details>
       </article>
       <article class="guide-page" hidden>
@@ -206,6 +208,12 @@
     <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
     <p id="hint-move"></p>
     <p class="hint-clue"><b>Watch enemy movements to figure out which ones they are.</b> Every monster hides its true piece.</p>
+  </dialog>
+  <dialog id="en-passant-dialog" aria-labelledby="en-passant-title" aria-describedby="en-passant-text">
+    <div class="dialog-heading"><h2 id="en-passant-title">En passant</h2><button class="icon-button" data-close aria-label="Close en passant explainer">✕</button></div>
+    <canvas id="en-passant-art" class="hint-art" width="200" height="200" role="img"></canvas>
+    <p id="en-passant-text"></p>
+    <button id="en-passant-continue" class="en-passant-continue" type="button" data-close>Continue</button>
   </dialog>
   <dialog id="shop-dialog" aria-labelledby="shop-title">
     <div class="dialog-heading"><h2 id="shop-title">Between floors</h2><button class="icon-button" data-close aria-label="Close shop">✕</button></div>
