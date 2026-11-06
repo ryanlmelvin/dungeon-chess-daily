@@ -22,6 +22,11 @@ separate room proofs would not be sufficient. Black's enemy phase can invalidate
 a clicked destination, so a certificate can include a re-selection that costs no
 player move. Extraction also costs no move.
 
+After a daily win with the official piece, `src/bot.js` replays this same
+certificate through `act()` to show the player the bot's per-floor move counts
+and an animated replay. The route stays hidden until then. Its length is the
+length of a witnessed route, not the shortest one, so players can beat it.
+
 This is an existence guarantee from the fresh starting position under this
 version's deterministic rules. It does not mean every move is safe, every
 position is recoverable, or that a human will discover the route. A replayable

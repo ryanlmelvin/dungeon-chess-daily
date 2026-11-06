@@ -12,6 +12,7 @@ import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { createMusic } from './music.js';
+import { botRun, playerRun, verdict } from './bot.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -26,6 +27,8 @@ try {
   if (isArchiveDate(opened, daily.date, FIRST_EDITION_DATE)) { daily = getDaily(opened); archiveMode = true; }
 } catch {}
 let state = null;
+// Set while watching the bot's certified route; the saved run is untouched.
+let replay = null;
 let practice = false;
 let renderer = null;
 let screen = 'paper';
@@ -131,6 +134,7 @@ function renderIncomingProgress() {
 state = load();
 if (practice && !state) { setPracticeMode(false); state = load(); }
 function switchScreen(next) {
+  if (replay && next !== 'game') endReplay();
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
@@ -196,7 +200,7 @@ function ensureRenderer() {
   if (renderer) return true;
   try {
     renderer = createDungeonRenderer($('dungeon'), { onLayout: placeDescendButton, onTile: ({x,y}) => {
-      if (!state || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
+      if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
@@ -238,6 +242,7 @@ function updateGame() {
   $('practice-label').hidden = !practice;
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
+  $('move-status').textContent = `${state.turns} ${state.turns === 1 ? 'move' : 'moves'}`;
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
@@ -269,7 +274,7 @@ function placeDescendButton() {
   button.style.left = `${Math.round(anchor.x)}px`;
   button.style.bottom = 'auto';
 }
-function paintBoard(){if(state)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
+function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
 function enterGame() {
   refreshEdition();
   refreshFromOtherWindow();
@@ -328,7 +333,7 @@ function takeAction(action) {
 const directions={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
 window.addEventListener('keydown',event=>{
   if(event.target instanceof Element && event.target.closest('button,input,textarea,select,a'))return;
-  if(screen!=='game'||!state||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
+  if(screen!=='game'||!state||replay||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
   else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else takeAction({type:'move',...cursor});}
@@ -428,11 +433,13 @@ function showResult() {
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
+  renderBotComparison();
   $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · Your piece last\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
 function showResultActions(finished) {
+  if (!finished) $('bot-compare').hidden = true;
   $('retry-button').hidden = finished;
   $('result-actions').hidden = !finished;
   if (!finished) { $('share-preview').hidden = true; $('share-button').hidden = true; }
@@ -692,3 +699,114 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 setInterval(refreshEdition, 60_000);
 initPWA({installButton:$('install-button'),updateButton:$('update-button'),onBeforeUpdate:async()=>save(),onStatus:notify});
 getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`;}).catch(()=>{});
+
+// WordleBot-style comparison: after beating the daily run with the official
+// piece, set the player's moves beside the fairness checker's certified route.
+// Practice wins never reveal it, so it cannot spoil a daily run still in play.
+let botCache = null;
+function currentBot() {
+  const id = `${daily.date}:${daily.seed}`;
+  if (botCache?.id !== id) botCache = { id, run: botRun(daily) };
+  return botCache.run;
+}
+function renderBotComparison() {
+  const you = !practice && isOfficialPiece(state, daily) ? playerRun(state) : null;
+  const bot = you ? currentBot() : null;
+  $('bot-compare').hidden = !bot;
+  if (!bot) return;
+  $('bot-verdict').textContent = verdict(you, bot);
+  const row = (label, mine, theirs, total = false) => {
+    const tr = document.createElement('tr');
+    if (total) tr.className = 'bot-total';
+    const th = document.createElement('th'); th.scope = 'row'; th.textContent = label;
+    const cells = [mine, theirs].map((value) => { const td = document.createElement('td'); td.textContent = value; return td; });
+    if (typeof mine === 'number' && typeof theirs === 'number') cells[mine <= theirs ? 0 : 1].classList.add('bot-best');
+    tr.append(th, ...cells);
+    return tr;
+  };
+  $('bot-rows').replaceChildren(
+    ...bot.floors.map((moves, index) => row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves)),
+    row('Total moves', you.moves, bot.moves, true),
+    row('Lives lost', you.livesLost, 0),
+    ...(you.tries > 1 ? [row('Tries', you.tries, 1)] : []),
+  );
+}
+
+// Watching the bot reuses the dungeon view without touching the saved run.
+const REPLAY_SPEEDS = [{ label: '1×', ms: 1400 }, { label: '2×', ms: 750 }, { label: '½×', ms: 2400 }];
+function replayFrame() {
+  const frame = replay.run.frames[replay.index];
+  const last = replay.index === replay.run.frames.length - 1;
+  renderer.render({ ...frame, danger: dangerTiles(frame), legalMoves: [], showMoves: false, cursor: null });
+  const total = replay.run.moves;
+  $('replay-label').textContent = last
+    ? `Bot escaped in ${total} moves`
+    : `Bot · Floor ${frame.floor + 1}/3 · Move ${frame.turns} of ${total}`;
+  // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
+  const said = replay.index && !frame.awaitingPlayer ? (frame.message.match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot') : '';
+  $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
+  $('game-message').hidden = !$('game-message').textContent;
+  $('replay-play').textContent = last ? '↻' : replay.playing ? '❚❚' : '▶';
+  $('replay-play').setAttribute('aria-label', last ? 'Watch again' : replay.playing ? 'Pause replay' : 'Play replay');
+  $('replay-step').disabled = last;
+  if (replay.index) playSound(frame.events);
+}
+function scheduleReplay() {
+  clearTimeout(replay.timer);
+  if (!replay.playing || replay.index >= replay.run.frames.length - 1) { replay.playing = false; return; }
+  const frame = replay.run.frames[replay.index];
+  // Hold a little longer on each new floor so the room can be read.
+  const pause = REPLAY_SPEEDS[replay.speed].ms * (replay.index === 0 || frame.events.some((event) => event.type === 'descend') ? 1.6 : 1);
+  replay.timer = setTimeout(() => { replay.index++; replayFrame(); scheduleReplay(); }, pause);
+}
+function startBotReplay() {
+  const run = currentBot();
+  if (!run || !state || state.status !== 'won') return;
+  switchScreen('game');
+  if (!ensureRenderer()) return;
+  replay = { run, index: 0, playing: true, speed: replay?.speed ?? 0, timer: 0 };
+  document.body.classList.add('replaying');
+  $('replay-bar').hidden = false;
+  $('replay-speed').textContent = REPLAY_SPEEDS[replay.speed].label;
+  replayFrame();
+  scheduleReplay();
+  $('replay-play').focus({ preventScroll: true });
+}
+function endReplay() {
+  clearTimeout(replay.timer);
+  replay = null;
+  document.body.classList.remove('replaying');
+  $('replay-bar').hidden = true;
+  $('game-message').hidden = true;
+}
+function stopBotReplay() {
+  if (!replay) return;
+  endReplay();
+  showResult();
+  $('bot-watch').focus({ preventScroll: true });
+}
+$('bot-watch').addEventListener('click', startBotReplay);
+$('replay-exit').addEventListener('click', stopBotReplay);
+$('replay-play').addEventListener('click', () => {
+  if (!replay) return;
+  if (replay.index >= replay.run.frames.length - 1) { replay.index = 0; replay.playing = true; replayFrame(); }
+  else { replay.playing = !replay.playing; replayFrame(); }
+  scheduleReplay();
+});
+$('replay-step').addEventListener('click', () => {
+  if (!replay || replay.index >= replay.run.frames.length - 1) return;
+  replay.playing = false; clearTimeout(replay.timer);
+  replay.index++; replayFrame();
+});
+$('replay-restart').addEventListener('click', () => {
+  if (!replay) return;
+  replay.index = 0; replayFrame(); scheduleReplay();
+});
+$('replay-speed').addEventListener('click', () => {
+  if (!replay) return;
+  replay.speed = (replay.speed + 1) % REPLAY_SPEEDS.length;
+  $('replay-speed').textContent = REPLAY_SPEEDS[replay.speed].label;
+  $('replay-speed').setAttribute('aria-label', `Replay speed ${REPLAY_SPEEDS[replay.speed].label}`);
+  scheduleReplay();
+});
+window.addEventListener('keydown', (event) => { if (replay && event.key === 'Escape') { event.preventDefault(); stopBotReplay(); } });

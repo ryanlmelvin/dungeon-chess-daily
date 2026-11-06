@@ -35,12 +35,22 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="freeze-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
       <p id="game-message" class="game-message" aria-live="polite"></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
+      <div id="replay-bar" class="replay-bar" role="region" aria-label="Bot replay controls" hidden>
+        <p id="replay-label" class="replay-label" aria-live="polite"></p>
+        <div class="replay-controls">
+          <button id="replay-restart" type="button" aria-label="Restart replay">⏮</button>
+          <button id="replay-play" type="button" aria-label="Pause replay">❚❚</button>
+          <button id="replay-step" type="button" aria-label="Next bot move">⏭</button>
+          <button id="replay-speed" type="button" aria-label="Replay speed">1×</button>
+          <button id="replay-exit" type="button">Done</button>
+        </div>
+      </div>
     </section>
     <section id="result-screen" class="result-screen" hidden aria-label="Your result">
       <article class="result-paper">
@@ -50,6 +60,16 @@
         <pre id="share-preview"></pre>
         <button id="retry-button" class="primary" hidden>Try again <span aria-hidden="true">↻</span></button>
         <button id="share-button" class="primary">Share your edition <span aria-hidden="true">↗</span></button>
+        <section id="bot-compare" class="bot-compare" aria-labelledby="bot-title" hidden>
+          <h3 id="bot-title">Dungeon Bot</h3>
+          <p id="bot-verdict" class="bot-verdict"></p>
+          <table class="bot-table">
+            <thead><tr><th scope="col"></th><th scope="col">You</th><th scope="col">Bot</th></tr></thead>
+            <tbody id="bot-rows"></tbody>
+          </table>
+          <p class="bot-note">The bot is the route the fairness checker found when it certified this dungeon: no powerups, no lost lives.</p>
+          <button id="bot-watch" type="button">Watch the bot’s run <span aria-hidden="true">▶</span></button>
+        </section>
         <div id="result-actions" class="result-actions"><button id="practice-button">Practice this dungeon</button><button id="result-paper-button">Read the paper</button></div>
         <p class="next-edition" id="next-edition"></p>
       </article>
