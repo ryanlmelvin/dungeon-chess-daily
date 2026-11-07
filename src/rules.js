@@ -214,7 +214,7 @@ function promoteMonster(state, foe) {
   if (foe.piece === 'pawn' && foe.y === 7) {
     foe.piece = 'queen'; foe.promoted = true;
     state.events.push({ type: 'enemy-promotion', x: foe.x, y: foe.y });
-    state.message = `${foe.name} reached the far rank. Its stride has changed.`;
+    state.message = `${foe.name} reached the last rank and promoted to a queen.`;
   }
 }
 
@@ -333,12 +333,12 @@ function returnToPawn(state) {
 }
 
 // One capture of the player: a shield absorbs it, otherwise a life is lost.
-// Returns 'shield', 'damage' or 'restart' (the last life ended the run).
+// Returns 'shield', 'captured' or 'restart' (the last life ended the run).
 // Events name the attacker (`by`, its square and name) so the board can show
 // which monster struck, even after a restart clears the room.
-function hitPlayer(state, foe, close = false, enPassant = false) {
+function capturePlayer(state, foe, close = false, enPassant = false) {
   const attacker = { by: foe.id, from: { x: foe.x, y: foe.y }, name: foe.name, ...(enPassant && { enPassant: true }) };
-  const how = enPassant ? 'captured you en passant as you passed it' : close ? 'was guarding that square and struck at once' : 'struck along its red path';
+  const how = enPassant ? 'captured you en passant as you passed it' : close ? 'was guarding that square and captured you at once' : 'captured you along its red path';
   if (state.powers.shield > 0) {
     state.powers.shield--; foe.phase = 'ready'; foe.intent = []; foe.target = null;
     state.events.push({ type: 'shield', x: state.player.x, y: state.player.y, ...attacker });
@@ -346,9 +346,9 @@ function hitPlayer(state, foe, close = false, enPassant = false) {
     return 'shield';
   }
   state.player.hp--;
-  const damage = { type: 'damage', x: state.player.x, y: state.player.y, amount: 1, ...attacker, close };
+  const captured = { type: 'player-captured', x: state.player.x, y: state.player.y, amount: 1, ...attacker, close };
   if (state.player.hp === 0) {
-    restartRun(state, [damage], `${foe.name} ${enPassant ? 'captured you en passant' : how}. Out of lives. Back to the start of today’s dungeon.`);
+    restartRun(state, [captured], `${foe.name} ${enPassant ? 'captured you en passant' : how}. Out of lives. Back to the start of today’s dungeon.`);
     return 'restart';
   }
   // Clear the committed attack so
@@ -356,9 +356,9 @@ function hitPlayer(state, foe, close = false, enPassant = false) {
   foe.phase = 'ready'; foe.intent = []; foe.target = null;
   const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
   if (demoted) returnToPawn(state);
-  state.events.push(damage);
+  state.events.push(captured);
   state.message = `${foe.name} ${how}. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
-  return 'damage';
+  return 'captured';
 }
 
 // A distant rook, bishop or queen with the player in its line steps one square
@@ -380,7 +380,7 @@ function enemyTurn(state) {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
       // A shield keeps the phase going; a lost life ends it.
-      if (capture && hitPlayer(state, foe) === 'shield') continue;
+      if (capture && capturePlayer(state, foe) === 'shield') continue;
       if (capture) return;
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
       if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
@@ -915,7 +915,7 @@ export function act(previous, action) {
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: to.x, y: to.y });
-    if (!state.exit.open) state.message = 'Promoted to queen for the rest of this room.';
+    if (!state.exit.open) state.message = 'Promoted to queen for the rest of this floor.';
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
   if (recruit && !state.companion) {
@@ -941,11 +941,11 @@ export function act(previous, action) {
     const passing = !guard;
     const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y, ...(passing && { enPassant: true }) };
     state.events.push(event);
-    const hit = hitPlayer(state, close, true, passing);
+    const hit = capturePlayer(state, close, true, passing);
     if (hit === 'restart') { state.events.unshift(event); return state; }
     // As in chess, an en passant capture lands on the square the pawn skipped.
     const skipped = { x: state.player.x, y: state.player.y + 1 };
-    if (passing && hit === 'damage' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
+    if (passing && hit === 'captured' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
   }
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   if (!castle) companionTurn(state);
@@ -1082,7 +1082,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

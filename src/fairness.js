@@ -14,7 +14,7 @@ const hasPowers = (state) => Object.values(state.powers).some((value) => value !
   // omit the ledger; only an absent ledger or an empty array is unpowered.
   || (state.companionOrders !== undefined
     && (!Array.isArray(state.companionOrders) || state.companionOrders.length > 0));
-const hurt = (state) => state.events.some((event) => event.type === 'damage' || event.type === 'restart');
+const hurt = (state) => state.events.some((event) => event.type === 'player-captured' || event.type === 'restart');
 const relicAt = (state, tile) => state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !allyFloor(state))) && same(item, tile));
 const powered = (state) => hasPowers(state) || state.events.some((event) =>
   ['powerup', 'shield', 'recruit'].includes(event.type) || (event.type.startsWith('companion') && !allyFloor(state)));

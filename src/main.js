@@ -236,7 +236,7 @@ function showGameFeedback() {
   $('game-message').hidden = !text;
   // A monster pawn capturing en passant surprises players, so the message keeps
   // a "What?" explainer button and stays up until the next action.
-  if (text && events.some(event => (event.type === 'damage' || event.type === 'shield') && event.enPassant)) {
+  if (text && events.some(event => (event.type === 'player-captured' || event.type === 'shield') && event.enPassant)) {
     const what = document.createElement('button');
     what.type = 'button';
     what.className = 'hint-button message-what';
@@ -366,13 +366,13 @@ $('hint-button').addEventListener('click', openHint);
 const EN_PASSANT = {
   player: {
     title: 'You captured a pawn en passant!',
-    text: 'A pawn that jumps two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move. This is called ‘en passant!’',
-    art: 'Animated board: an enemy pawn jumps two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped.',
+    text: 'A pawn that advances two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move. This is called ‘en passant!’',
+    art: 'Animated board: an enemy pawn advances two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped.',
   },
   enemy: {
     title: 'What just happened? En passant',
-    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your jump. This is called ‘en passant!’',
-    art: 'Animated board: your pawn jumps two squares past an enemy pawn, which captures it by striking the square your pawn skipped.',
+    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your two-square move. This is called ‘en passant!’',
+    art: 'Animated board: your pawn advances two squares past an enemy pawn, which captures it by moving diagonally into the square your pawn skipped.',
   },
 };
 const CASTLE = {
@@ -540,7 +540,7 @@ function playSound(events=[]) {
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
     if(audio.state==='suspended')audio.resume();
-    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type==='damage') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
+    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type === 'player-captured') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
     notes.forEach((frequency,i)=>{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='square';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.018,audio.currentTime+i*.065);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+i*.065+.07);oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(audio.currentTime+i*.065);oscillator.stop(audio.currentTime+i*.065+.08);});
   } catch {}
 }
@@ -587,8 +587,8 @@ function showDeath() {
   $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
   const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
   $('result-title').textContent=trapped?'Cornered.':'Captured.';
-  const fatal = state.events.find(event => event.type === 'damage' && event.name);
-  const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn jumped past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you stepped onto' : 'caught you on its red path'}. `;
+  const fatal = state.events.find(event => event.type === 'player-captured' && event.name);
+  const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn advanced past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you moved to and captured you' : 'captured you along its red path'}. `;
   $('result-en-passant').hidden = trapped || !fatal?.enPassant;
   $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
   $('next-edition').textContent='This counts as an earlier try 💀 on your share card.';

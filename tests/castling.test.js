@@ -159,7 +159,7 @@ test('feats record the player\'s en passant and castle, never being captured en 
   const victim = scenario('pawn', 'white', 4, 6); victim.player.moved = false;
   victim.enemies = [monster('p', 'pawn', 5, 4), monster('k', 'king', 0, 0)];
   const hit = act(victim, move(4, 4));
-  assert.equal(find(hit, 'damage').enPassant, true);
+  assert.equal(find(hit, 'player-captured').enPassant, true);
   assert.deepEqual(hit.feats, []);
   // Saves from before feats were tracked start an empty list on their next action.
   const legacy = scenario('king'); delete legacy.feats; legacy.companion = ally('rook', 7, 6);

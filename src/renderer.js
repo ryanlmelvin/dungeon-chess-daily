@@ -530,14 +530,14 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         entities.delete(id);
       }
     }
-    const damage = events.find((event) => event.type === 'damage');
+    const captured = events.find((event) => event.type === 'player-captured');
     const hitAt = now + enemyDelay + 145;
-    if (damage) {
+    if (captured) {
       const player = entities.get('player');
       if (player) {
         if (animateTurn) {
           player.flashAt = hitAt;
-          player.flashPosition = { x: damage.x, y: damage.y };
+          player.flashPosition = { x: captured.x, y: captured.y };
         }
         else player.flash = 0.4;
       }
@@ -545,7 +545,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     // Show who struck: the attacker lunges at the player's square and back,
     // tinted red, peaking as the player flashes. A shield block lunges too.
-    const strike = events.find((event) => (event.type === 'damage' || event.type === 'shield') && event.by);
+    const strike = events.find((event) => (event.type === 'player-captured' || event.type === 'shield') && event.by);
     // A restart rebuilds the room, where the same id may name a different monster.
     const attacker = strike && !changedBoard && !events.some((event) => event.type === 'restart') && entities.get(strike.by);
     // An en passant capture is the monster's diagonal step onto the skipped

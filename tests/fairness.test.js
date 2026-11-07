@@ -54,7 +54,7 @@ function replay(daily) {
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.deepEqual(next.companionOrders, []);
-    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'damage' && !livesSpendable(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
+    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'player-captured' && !livesSpendable(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
     if (next.floor !== state.floor && next.status === 'playing') {
@@ -161,7 +161,7 @@ test('life loss and restart are rejected even when moves are legal and spare liv
   state.enemies = [monster('attacker', 'rook', 4, 0, { x: 4, y: 6 })];
   const action = move(4, 5);
   const damaged = act(state, action);
-  assert.ok(damaged.events.some((event) => event.type === 'damage'));
+  assert.ok(damaged.events.some((event) => event.type === 'player-captured'));
   assert.equal(damaged.player.hp, state.player.hp - 1);
   assert.equal(verifyWinningRoute(state, [action]).valid, false);
   state.player.hp = 1;
