@@ -15,6 +15,9 @@ const STRIKE_MS = 300;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
+// The gold stars that circle an off-balance monster's head.
+const STAR = ['...x...', '..xyx..', '.xxyxx.', 'xyywyyx', '.xxyxx.', '..xyx..', '...x...'];
+const STAR_SIZE = 0.26;
 // Screen-up in world space for the board camera (about 72 degrees down), so a
 // crown can sit above a monster's head on screen without leaving its tile.
 const SCREEN_UP = new THREE.Vector3(0, 0.309, -0.951);
@@ -68,6 +71,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const materials = new Set();
   const textures = new Map(Object.entries(SPRITES).map(([id, rows]) => [id, pixelTexture(rows)]));
   textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
+  textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
@@ -326,6 +330,44 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     } else if (!entity.crownAt) entity.crown.visible = true;
   }
 
+  // A monster that lunged and missed is off-balance (rules.js) until the
+  // player's next move ends: gold stars circle its head and it sways. Like the
+  // crown, the stars ride in its group and follow it from the saved flag. Under
+  // reduced motion they stand still and the monster stays upright.
+  function wearStars(entity, dizzy, showAt = 0) {
+    if (!dizzy) {
+      if (entity.stars) entity.stars.visible = false;
+      entity.starsAt = 0;
+      entity.art.material.rotation = 0;
+      return;
+    }
+    if (!entity.stars) {
+      entity.stars = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const material = new THREE.SpriteMaterial({ map: textures.get('star'), transparent: true, alphaTest: 0.1, depthWrite: false, depthTest: false });
+        materials.add(material);
+        const star = new THREE.Sprite(material);
+        star.scale.set(STAR_SIZE, STAR_SIZE, 1);
+        star.renderOrder = 2;
+        entity.stars.add(star);
+      }
+      entity.stars.position.set(0, 0.15, 0).addScaledVector(SCREEN_UP, 0.55);
+      entity.stars.visible = false;
+      entity.group.add(entity.stars);
+      spinStars(entity.stars, 0);
+    }
+    if (showAt) {
+      entity.stars.visible = false;
+      entity.starsAt = showAt;
+    } else if (!entity.starsAt) entity.stars.visible = true;
+  }
+  function spinStars(stars, timestamp) {
+    stars.children.forEach((star, i) => {
+      const angle = timestamp / 260 + i * Math.PI * 2 / 3;
+      star.position.set(Math.cos(angle) * 0.27, 0, Math.sin(angle) * 0.11);
+    });
+  }
+
   function updateItems(items) {
     const key = items.map((item) => `${item.x}:${item.y}:${item.type}:${item.power || item.piece || ''}`).join('|');
     if (key === itemKey) return;
@@ -524,6 +566,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         const worn = data.promoted === true;
         const crowned = worn && !changedBoard && events.some((event) => event.type === 'enemy-promotion' && event.x === data.x && event.y === data.y);
         wearCrown(entity, worn, crowned ? (animateTurn ? now + delay + 145 : now) : 0);
+        // Stars appear as a monster that just missed lands.
+        const lunged = events.some((event) => event.type === 'miss' && event.id === data.id);
+        wearStars(entity, data.offBalance === true, lunged && animateTurn ? now + delay + 145 : 0);
       }
       if (reducedMotion) entity.group.position.copy(entity.target);
     }
@@ -700,6 +745,15 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         if (t >= 1) entity.crownAt = 0;
         entity.crown.visible = true;
         entity.crown.scale.set(CROWN_WIDTH * pop, CROWN_WIDTH * pop * CROWN.length / CROWN[0].length, 1);
+      }
+      if (entity.stars) {
+        if (entity.starsAt && timestamp >= entity.starsAt) {
+          entity.starsAt = 0;
+          entity.stars.visible = true;
+        }
+        const dizzy = entity.stars.visible && !reducedMotion;
+        if (dizzy) spinStars(entity.stars, timestamp);
+        entity.art.material.rotation = dizzy ? Math.sin(timestamp / 170) * 0.12 : 0;
       }
       const glow = entity.glowAt && timestamp >= entity.glowAt ? (timestamp - entity.glowAt) / FORK_GLOW_MS : -1;
       if (glow >= 1) entity.glowAt = 0;

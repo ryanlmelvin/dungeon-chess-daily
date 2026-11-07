@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Turn flow: a close-range hit no longer freezes the board, and the final
-// floor's king keeps out of a held Borrowed move's reach.
+// Turn flow: a close-range hit no longer freezes the board, the final floor's
+// king keeps out of a held Borrowed move's reach, and a monster that lunges and
+// misses is off-balance (it can't capture) until the player's next move ends.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, dangerTiles, legalMoves } from '../src/rules.js';
+import { act, closeAttacker, createGame, dangerTiles, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
@@ -108,4 +109,125 @@ test('the final floor’s king stays off a knight’s borrowed queen lines', () 
   const next = act(state, wait);
   const king = foe(next, 'king');
   assert.ok(!legalMoves(next).some((tile) => tile.capture && tile.x === king.x && tile.y === king.y));
+});
+
+// 3. Off-balance after a missed lunge.
+
+// The bat wound up on (4,5) from (3,4); the rook sidesteps to (4,6).
+function baited(options) {
+  const state = scenario(options);
+  Object.assign(state.player, { x: 4, y: 5 });
+  state.enemies = [monster('bat', 'king', 3, 4, [{ x: 4, y: 5 }])];
+  return state;
+}
+
+test('a monster that lunges and misses lands on its target, off-balance, and says so', () => {
+  const next = act(baited(), move(4, 6));
+  const bat = foe(next, 'bat');
+  assert.deepEqual([bat.x, bat.y], [4, 5], 'it lands on the square you left');
+  assert.equal(bat.offBalance, true);
+  assert.equal(bat.phase, 'ready');
+  assert.deepEqual(next.events.find((event) => event.type === 'miss'), { type: 'miss', id: 'bat', x: 4, y: 5 });
+  assert.equal(next.message, 'Violet bat lunged and missed — it’s off-balance!');
+  assert.equal(next.player.hp, 3);
+});
+
+test('an off-balance monster can’t capture at close range, even when you end beside it', () => {
+  const missed = act(baited(), move(4, 6));
+  assert.equal(closeAttacker(missed, { x: 5, y: 6 }), null);
+  const beside = act(missed, move(5, 6));
+  assert.equal(beside.player.hp, 3);
+  assert.equal(count(beside, 'close-capture'), 0);
+  // Your move is over: it finds its feet and winds up as usual.
+  const bat = foe(beside, 'bat');
+  assert.equal(bat.offBalance, undefined);
+  assert.equal(bat.phase, 'aim');
+});
+
+test('an off-balance monster doesn’t guard: taking a monster beside it is safe', () => {
+  const missed = act(baited(), move(4, 6));
+  missed.enemies.push(monster('prey', 'rook', 5, 6));
+  const taken = act(missed, move(5, 6));
+  assert.equal(taken.captures, 1);
+  assert.equal(taken.player.hp, 3);
+  assert.equal(count(taken, 'close-capture'), 0);
+});
+
+test('punish: the player captures the off-balance monster where it landed', () => {
+  const missed = act(baited(), move(4, 6));
+  assert.ok(legalMoves(missed).some((tile) => tile.capture && tile.x === 4 && tile.y === 5 && foe(missed, 'bat').offBalance));
+  const punished = act(missed, move(4, 5));
+  assert.equal(punished.captures, 1);
+  assert.equal(punished.enemies.length, 0);
+  assert.equal(punished.player.hp, 3);
+});
+
+test('off-balance lasts only until the end of your next move: waiting spends it too', () => {
+  const missed = act(baited(), move(4, 6));
+  assert.equal(foe(missed, 'bat').offBalance, true);
+  const waited = act(missed, wait);
+  const bat = foe(waited, 'bat');
+  assert.equal(bat.offBalance, undefined);
+  // Recovered, it guards again wherever its turn took it: ending beside it is a close-range hit.
+  const beside = { x: bat.x < 7 ? bat.x + 1 : bat.x - 1, y: bat.y };
+  assert.equal(closeAttacker(waited, beside)?.id, 'bat');
+});
+
+test('an off-balance monster pawn can’t capture en passant', () => {
+  const state = scenario({ piece: 'pawn' });
+  state.enemies = [{ ...monster('pawn', 'pawn', 5, 4), offBalance: true }];
+  const next = act(state, move(4, 4));
+  assert.equal(next.player.hp, 3);
+  assert.equal(count(next, 'close-capture'), 0);
+});
+
+test('a royal king that misses and won’t land in danger stays put, off-balance', () => {
+  const state = scenario({ at: [4, 6], floor: 2 });
+  state.enemies = [monster('king', 'king', 3, 5, [{ x: 4, y: 6 }])];
+  // The rook steps back down its file, so the king's target is in its line.
+  const missed = act(state, move(4, 7));
+  const king = foe(missed, 'king');
+  assert.deepEqual([king.x, king.y], [3, 5]);
+  assert.equal(king.offBalance, true);
+  assert.match(missed.message, /lunged and missed/);
+  // Ending beside it is safe for this one move.
+  const beside = act(missed, move(4, 6));
+  assert.equal(beside.player.hp, 3);
+  assert.equal(count(beside, 'close-capture'), 0);
+});
+
+test('black: the miss comes before your move, which it can’t punish; it recovers when your move ends', () => {
+  const state = baited({ color: 'black' });
+  Object.assign(state.player, { x: 4, y: 6 });
+  // Clicked beside the bat's landing square; the bat lunges at (4,5) first.
+  const next = act(state, move(5, 6));
+  assert.equal(next.awaitingPlayer, false);
+  assert.deepEqual([next.player.x, next.player.y], [5, 6]);
+  assert.equal(next.player.hp, 3);
+  assert.equal(count(next, 'close-capture'), 0);
+  assert.equal(foe(next, 'bat').offBalance, undefined);
+  assert.match([...(next.notes ?? []), next.message].join(' '), /lunged and missed/);
+});
+
+test('a Take-back returns to the off-balance position', () => {
+  const state = baited(); state.powers.takeback = 1;
+  const missed = act(state, move(4, 6));
+  const moved = act(missed, move(1, 6));
+  assert.equal(foe(moved, 'bat').offBalance, undefined);
+  const back = act(moved, { type: 'takeback' });
+  assert.equal(foe(back, 'bat').offBalance, true);
+  assert.deepEqual([back.player.x, back.player.y], [4, 6]);
+});
+
+test('saves keep the off-balance flag and reject a malformed one', () => {
+  const daily = dailyFor('rook');
+  const state = createGame(daily);
+  const index = state.enemies.findIndex((entry) => entry.phase === 'ready');
+  state.enemies[index].offBalance = true;
+  assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date, daily), true);
+  for (const bad of [{ offBalance: false }, { offBalance: 1 }, { offBalance: true, phase: 'aim', target: { x: 4, y: 6 }, intent: [{ x: 4, y: 6 }] }]) {
+    const tampered = structuredClone(state);
+    Object.assign(tampered.enemies[index], bad);
+    assert.equal(validateSave(tampered, daily.date, daily), false, JSON.stringify(bad));
+  }
 });

@@ -26,6 +26,9 @@ export const PIN_MOVES = 3;
 /** The piece a Borrowed move moves like: a knight, or a queen for a knight. */
 export const borrowedPiece = (state) => (state.player.piece === 'knight' ? 'queen' : 'knight');
 const pinned = (foe) => foe.pinned > 0;
+// A monster that lunged and missed is off-balance until the player's next move
+// ends (enemyTurn): like a pinned one, it can't capture at all.
+const offBalance = (foe) => foe.offBalance === true;
 /** The state a Take-back returns to, or null when there is nothing to take back. */
 export function takebackTarget(state) {
   return state?.status === 'playing' && state.undo?.powers?.takeback > 0 ? state.undo : null;
@@ -169,12 +172,13 @@ function enPassantVictim(state, ep) {
 // passes (x, 5), which a monster pawn beside the landing square attacks.
 function enPassantStriker(state, square) {
   if (state.powers?.freeze > 0 || square.y !== 4) return null;
-  return state.enemies.find((foe) => !pinned(foe) && foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
+  return state.enemies.find((foe) => !pinned(foe) && !offBalance(foe) && foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
 }
 
 /**
  * The first monster that would capture the player at once on `square`: one
  * adjacent to it, or a knight. Distant sliders still give a turn of warning.
+ * Pinned and off-balance monsters never capture.
  * Evaluated on a copy with the player on `square` and any monster there taken.
  */
 export function closeAttacker(state, square) {
@@ -182,7 +186,7 @@ export function closeAttacker(state, square) {
   // A companion sharing the player's square never shields it.
   const companion = state.companion && !same(state.companion, square) ? state.companion : null;
   const board = { ...state, companion, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
-  const free = board.enemies.filter((foe) => !pinned(foe));
+  const free = board.enemies.filter((foe) => !pinned(foe) && !offBalance(foe));
   return free.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
     && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
 }
@@ -506,6 +510,7 @@ function enemyTurn(state, hit = false) {
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
   const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
+  const missed = [];
   for (const foe of order) {
     if (held.has(foe)) continue;
     if (foe.phase === 'aim') {
@@ -514,12 +519,14 @@ function enemyTurn(state, hit = false) {
       if (capture && hit) continue;
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
-      if (capture) return;
+      if (capture) { announceMisses(state, missed); return; }
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
       if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
       else if (destination) relocate(state, foe, destination);
-      foe.phase = 'ready'; foe.intent = []; foe.target = null;
-      state.events.push({ type: 'miss', x: foe.x, y: foe.y });
+      // The lunge missed: it spent its turn and is off-balance until the player's next move ends.
+      foe.phase = 'ready'; foe.intent = []; foe.target = null; foe.offBalance = true;
+      missed.push(foe);
+      state.events.push({ type: 'miss', id: foe.id, x: foe.x, y: foe.y });
     } else if (royal && foe === royal) {
       royalKingTurn(state, foe);
     } else if (royal && state.enemies.includes(royal)) {
@@ -529,6 +536,21 @@ function enemyTurn(state, hit = false) {
       if (!aimAtPlayer(state, foe)) moveMonster(state, foe);
     }
   }
+  announceMisses(state, missed);
+}
+
+// One line for the phase's missed lunges, after its other news; none once a
+// lost run has cleared the room.
+function announceMisses(state, missed) {
+  const shown = missed.filter((foe) => state.enemies.includes(foe));
+  if (!shown.length) return;
+  settle(state);
+  state.message = shown.length === 1 ? `${shown[0].name} lunged and missed — it’s off-balance!` : `${shown.length} monsters lunged and missed — they’re off-balance!`;
+}
+
+// The player's move (or wait) is over: off-balance monsters find their feet.
+function regainBalance(state) {
+  for (const foe of state.enemies) delete foe.offBalance;
 }
 
 function connectedBoard(state) {
@@ -1135,7 +1157,7 @@ function play(previous, action) {
       settle(state);
     }
     // Waiting is the player's move, so it spends any en passant window.
-    state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state);
+    state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state); regainBalance(state);
     companionTurn(state); settle(state);
     if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
     collapseTick(state); settle(state);
@@ -1253,6 +1275,7 @@ function play(previous, action) {
     const skipped = { x: state.player.x, y: state.player.y + 1 };
     if (passing && hit === 'captured' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
   }
+  regainBalance(state);
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
   if (!castle) { companionTurn(state); settle(state); }
@@ -1368,6 +1391,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
       if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
+      // Saves from before missed lunges unbalanced a monster have no flag; a missed lunge resets its wind-up.
+      if (foe.offBalance !== undefined && !(foe.offBalance === true && foe.phase === 'ready')) return false;
       if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
       return foe.phase === 'aim' ? foe.intent.length > 0 && inside(foe.target?.x, foe.target?.y) : foe.intent.length === 0 && foe.target === null;
     })) return false;

@@ -14,7 +14,7 @@ export function initGuide() {
   function stopAnimation() { cancelAnimationFrame(frame); frame = 0; }
   function animate(element) {
     stopAnimation();
-    if (!element?.querySelector('canvas[data-guide-art^="en-passant"], canvas[data-guide-art="castle"], canvas[data-guide-art="fork"], canvas[data-guide-art="combo"]')) return;
+    if (!element?.querySelector('canvas[data-guide-art^="en-passant"], canvas[data-guide-art="castle"], canvas[data-guide-art="fork"], canvas[data-guide-art="combo"], canvas[data-guide-art="off-balance"]')) return;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const start = performance.now();
     const step = (now) => {
