@@ -18,7 +18,7 @@ import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.
 import { pinUsable, captureGoal, shareDate } from './rules.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
-import { botRun, playerRun, verdict } from './bot.js';
+import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1184,12 +1184,17 @@ initPWA({installButton:$('install-button'),updateButton:$('update-button'),onBef
 getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`;}).catch(()=>{});
 
 // WordleBot-style comparison: after beating the daily run with the official
-// piece, set the player's moves beside the fairness checker's certified route.
+// piece, set the player's moves beside the Dungeon Bot's (src/bot.js): the
+// human-like bot when it cleared every floor, else the certified route.
 // Practice wins never reveal it, so it cannot spoil a daily run still in play.
+const BOT_NOTES = {
+  human: 'This bot plays like a careful player: it sees only what you see and uses no powerups. Its moves on each floor set that floor’s par.',
+  certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, no lost lives (pawn days may spend four), no ally but the floor 3 recruit.',
+};
 let botCache = null;
 function currentBot() {
   const id = `${daily.date}:${daily.seed}`;
-  if (botCache?.id !== id) botCache = { id, run: botRun(daily) };
+  if (botCache?.id !== id) botCache = { id, run: dungeonBot(daily) };
   return botCache.run;
 }
 function renderBotComparison() {
@@ -1198,11 +1203,12 @@ function renderBotComparison() {
   $('bot-compare').hidden = !bot;
   if (!bot) return;
   $('bot-verdict').textContent = verdict(you, bot);
+  $('bot-note').textContent = BOT_NOTES[bot.kind];
   // One column per stat, one row each for you and the bot, so it stays short on a phone.
   const columns = [
     ...bot.floors.map((moves, index) => [`F${index + 1}`, `Floor ${index + 1} moves`, you.floors[index] ?? '–', moves]),
     ['Total', 'Total moves', you.moves, bot.moves, 'bot-total'],
-    ['Lives', 'Lives lost', you.livesLost, 0],
+    ['Lives', 'Lives lost', you.livesLost, bot.livesLost],
     ...(you.tries > 1 ? [['Tries', 'Tries', you.tries, 1]] : []),
   ];
   const cell = (tag, text, className) => { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; };
@@ -1226,9 +1232,11 @@ function replayFrame() {
   renderer.render({ ...frame, danger: dangerTiles(frame), legalMoves: [], showMoves: false, cursor: null });
   // Count as the comparison table does: scored moves, so a step taken after a
   // floor's challenge is complete (walking to the stairs) doesn't add one.
+  // The human-like bot plays each floor from its standard start, so earlier
+  // floors count from the run itself rather than the frame's records.
   const total = replay.run.moves;
   const current = frame.records.find((record) => record.floor === frame.floor);
-  const moves = frame.records.filter((record) => record.floor !== frame.floor).reduce((sum, record) => sum + scoredMoves(record), 0)
+  const moves = replay.run.floors.slice(0, frame.floor).reduce((sum, floor) => sum + floor, 0)
     + (current ? scoredMoves(current) : floorScoredMoves(frame));
   $('replay-label').textContent = last
     ? `Bot escaped in ${total} moves`

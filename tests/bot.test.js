@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getDaily } from '../src/game.js';
-import { botRun, playerRun, verdict } from '../src/bot.js';
+import { botRun, dungeonBot, playerRun, verdict } from '../src/bot.js';
+import { humanSummary } from '../src/par.js';
+import { EDITIONS } from '../src/editions.js';
 
 test('the bot replays the certified route to a win with per-floor move counts', () => {
   for (let day = 0; day < 6; day++) {
@@ -37,4 +39,24 @@ test('playerRun and verdict compare move totals', () => {
   assert.equal(verdict({ moves: 18 }, { moves: 20 }), 'You beat the bot by 2 moves.');
   assert.equal(verdict({ moves: 20 }, { moves: 20 }), 'You matched the bot move for move.');
   assert.equal(verdict({ moves: 21 }, { moves: 20 }), 'The bot found a route 1 move shorter.');
+});
+
+test('the result card shows the human-like bot when it cleared every floor, else the certified route', () => {
+  const daily = getDaily('2026-11-10');
+  const summary = humanSummary(daily);
+  assert.ok(summary.runs.every((run) => run !== null), 'the bot clears every floor of this edition');
+  const human = dungeonBot(daily);
+  assert.equal(human.kind, 'human');
+  assert.deepEqual(human.floors, summary.par, 'its floors are the pars');
+  assert.equal(human.moves, summary.par.reduce((a, b) => a + b, 0));
+  assert.equal(human.frames[0].turns, 0);
+  assert.equal(human.frames.at(-1).status, 'won');
+  assert.ok(Number.isInteger(human.livesLost) && human.livesLost >= 0);
+  const certified = dungeonBot(daily, { ...summary, runs: [summary.runs[0], null, summary.runs[2]] });
+  assert.equal(certified.kind, 'certified');
+  assert.deepEqual(certified.floors, botRun(daily).floors);
+  assert.equal(certified.frames.length, daily.generation.certificate.actions.length + 1);
+  assert.equal(dungeonBot({ ...daily, generation: undefined }), null);
+  const failed = Object.keys(EDITIONS).find((date) => EDITIONS[date].runs.includes(null));
+  assert.equal(dungeonBot(getDaily(failed)).kind, 'certified', failed);
 });
