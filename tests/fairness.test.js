@@ -80,7 +80,7 @@ test('forced fallbacks certify every piece and difficulty with the production ru
       assert.equal(daily.generation.version, GENERATOR_VERSION);
       assert.equal(daily.generation.source, 'fallback');
       assert.equal(daily.generation.attempt, 0);
-      for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards']) assert.equal(daily[knob], profile[knob], knob);
+      for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens']) assert.equal(daily[knob], profile[knob], knob);
       assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= profile.minThreatenedDecisions);
       const { initial } = replay(daily);
       assert.equal(initial.schema, 6);

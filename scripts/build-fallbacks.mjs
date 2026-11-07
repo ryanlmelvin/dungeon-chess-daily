@@ -19,7 +19,7 @@ const colors = ['white'];
 // must carry a modifier with the same bank key (dark days share the plain bank).
 const modifiers = Object.values(MODIFIERS).filter((entry) => entry.id === 'none' || entry.changesRules).map((entry) => entry.id);
 const bankModifier = (modifier) => (MODIFIERS[modifier]?.changesRules ? modifier : 'none');
-const LAYOUT_KNOBS = ['obstacleBase', 'decoys', 'scatter', 'guards'];
+const LAYOUT_KNOBS = ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens'];
 const layoutOf = (knobs) => Object.fromEntries(LAYOUT_KNOBS.map((name) => [name, knobs[name]]));
 const stateFor = (entry, tier, knobs) => createGame({ ...candidateFor(getRawDaily(entry.date), tier, knobs), dungeonSeed: entry.dungeonSeed });
 const wanted = TIER_IDS.flatMap((tier) => PIECES.flatMap((piece) => colors.flatMap((color) => modifiers.map((modifier) => ({ tier, piece, color, modifier, key: fallbackKey(tier, piece, color, modifier) })))));

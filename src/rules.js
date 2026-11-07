@@ -560,6 +560,26 @@ function applyLayoutPressure(state, layoutPiece, targetPiece) {
   }
 }
 
+// How much of the open lines into the floor's targets a wall on `tile` would
+// cut: for each target and each of the eight directions, a wall on that ray
+// hides every square beyond it (up to the next wall or monster) from the target.
+function screenReach(state) {
+  const targets = state.enemies.filter((foe) => foe.piece === state.objective.piece);
+  return (tile) => {
+    let hidden = 0;
+    for (const foe of targets) {
+      const dx = Math.sign(tile.x - foe.x), dy = Math.sign(tile.y - foe.y);
+      const along = dx === 0 || dy === 0 || Math.abs(tile.x - foe.x) === Math.abs(tile.y - foe.y);
+      if (!along || (dx === 0 && dy === 0)) continue;
+      let x = foe.x + dx, y = foe.y + dy, blocked = false;
+      for (; !(x === tile.x && y === tile.y); x += dx, y += dy) if (!walkable(state, x, y) || enemyAt(state, x, y)) { blocked = true; break; }
+      if (blocked) continue;
+      for (x += dx, y += dy; inside(x, y) && walkable(state, x, y) && !enemyAt(state, x, y); x += dx, y += dy) hidden++;
+    }
+    return hidden;
+  };
+}
+
 function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
@@ -607,6 +627,13 @@ function setFloor(state, kingRecruit = false) {
     candidates.push({ x, y, order: rng() });
   }
   candidates.sort((a, b) => a.order - b.order);
+  // Screens go down first: walls on the squares that cut the longest open lines
+  // into this floor's targets. They count toward the room's walls.
+  if (state.screens > 0) {
+    const reach = screenReach(state);
+    const screens = candidates.filter((tile) => reach(tile) > 0).sort((a, b) => reach(b) - reach(a) || a.order - b.order).slice(0, state.screens);
+    candidates.splice(0, candidates.length, ...screens, ...candidates.filter((tile) => !screens.includes(tile)));
+  }
   for (const tile of candidates) {
     const previous = state.map[tile.y];
     state.map[tile.y] = previous.slice(0, tile.x) + '#' + previous.slice(tile.x + 1);
@@ -676,7 +703,7 @@ export function retryLostRun(previous) {
 
 export function createGame(daily = getRawDaily()) {
   const state = {
-    schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
+    schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, screens: daily.screens ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
     turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
@@ -1000,7 +1027,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing')) return false;
     if ((value.modifier ?? 'none') !== (daily.modifier ?? 'none')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
-    if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0)) return false;
+    if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0) || (value.screens ?? 0) !== (daily.screens ?? 0)) return false;
     if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
     // Collapse days may add reinforcements to a floor (up to a cap).
     const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + floorDecoys(daily, floor).length + extraPopulation(value.modifier);

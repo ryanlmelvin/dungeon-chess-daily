@@ -26,7 +26,7 @@ export const candidateSeed = (base, attempt) => (attempt === 0 ? base.seed : has
 export function candidateFor(base, tier, knobs, attempt = 0) {
   return {
     ...base, difficulty: tier, dungeonSeed: candidateSeed(base, attempt),
-    obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards,
+    obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards, screens: knobs.screens,
   };
 }
 

@@ -15,9 +15,10 @@ export const CALIBRATION = {
     },
     "rook": {
       "obstacleBase": 10,
-      "decoys": 3,
-      "scatter": 0,
-      "guards": 0,
+      "decoys": 2,
+      "scatter": 1,
+      "guards": 2,
+      "screens": 3,
       "minThreatenedDecisions": 0
     },
     "knight": {
@@ -35,9 +36,9 @@ export const CALIBRATION = {
       "minThreatenedDecisions": 0
     },
     "queen": {
-      "obstacleBase": 7,
+      "obstacleBase": 13,
       "decoys": 0,
-      "scatter": 0,
+      "scatter": 1,
       "guards": 0,
       "minThreatenedDecisions": 0
     }
@@ -52,83 +53,86 @@ export const CALIBRATION = {
     },
     "rook": {
       "obstacleBase": 10,
-      "decoys": 4,
+      "decoys": 2,
       "scatter": 0,
-      "guards": 0,
+      "guards": 1,
       "minThreatenedDecisions": 0
     },
     "knight": {
       "obstacleBase": 13,
       "decoys": 1,
-      "scatter": 0,
-      "guards": 1,
+      "scatter": 1,
+      "guards": 0,
       "minThreatenedDecisions": 0
     },
     "bishop": {
       "obstacleBase": 13,
       "decoys": 1,
-      "scatter": 0,
-      "guards": 1,
+      "scatter": 1,
+      "guards": 0,
+      "screens": 3,
       "minThreatenedDecisions": 0
     },
     "queen": {
-      "obstacleBase": 13,
+      "obstacleBase": 7,
       "decoys": 0,
-      "scatter": 0,
+      "scatter": 1,
       "guards": 0,
       "minThreatenedDecisions": 0
     }
   },
   "tricky": {
     "pawn": {
-      "obstacleBase": 7,
-      "decoys": 2,
+      "obstacleBase": 10,
+      "decoys": 3,
       "scatter": 0,
       "guards": 2,
       "minThreatenedDecisions": 0
     },
     "rook": {
-      "obstacleBase": 10,
-      "decoys": 4,
-      "scatter": 0,
-      "guards": 0,
+      "obstacleBase": 13,
+      "decoys": 3,
+      "scatter": 1,
+      "guards": 2,
       "minThreatenedDecisions": 0
     },
     "knight": {
-      "obstacleBase": 13,
-      "decoys": 2,
-      "scatter": 0,
-      "guards": 0,
-      "minThreatenedDecisions": 0
-    },
-    "bishop": {
-      "obstacleBase": 13,
+      "obstacleBase": 10,
       "decoys": 1,
       "scatter": 1,
       "guards": 1,
+      "minThreatenedDecisions": 4
+    },
+    "bishop": {
+      "obstacleBase": 10,
+      "decoys": 2,
+      "scatter": 0,
+      "guards": 1,
+      "screens": 1,
       "minThreatenedDecisions": 0
     },
     "queen": {
-      "obstacleBase": 10,
+      "obstacleBase": 13,
       "decoys": 1,
       "scatter": 0,
-      "guards": 0,
+      "guards": 1,
+      "screens": 1,
       "minThreatenedDecisions": 0
     }
   },
   "tough": {
     "pawn": {
-      "obstacleBase": 13,
+      "obstacleBase": 10,
       "decoys": 3,
       "scatter": 0,
       "guards": 2,
       "minThreatenedDecisions": 0
     },
     "rook": {
-      "obstacleBase": 10,
+      "obstacleBase": 13,
       "decoys": 4,
-      "scatter": 0,
-      "guards": 0,
+      "scatter": 1,
+      "guards": 2,
       "minThreatenedDecisions": 0
     },
     "knight": {
@@ -146,10 +150,11 @@ export const CALIBRATION = {
       "minThreatenedDecisions": 0
     },
     "queen": {
-      "obstacleBase": 7,
+      "obstacleBase": 10,
       "decoys": 2,
-      "scatter": 0,
-      "guards": 0,
+      "scatter": 1,
+      "guards": 1,
+      "screens": 3,
       "minThreatenedDecisions": 0
     }
   },
@@ -164,7 +169,7 @@ export const CALIBRATION = {
     "rook": {
       "obstacleBase": 10,
       "decoys": 4,
-      "scatter": 0,
+      "scatter": 1,
       "guards": 1,
       "minThreatenedDecisions": 0
     },
@@ -177,16 +182,17 @@ export const CALIBRATION = {
     },
     "bishop": {
       "obstacleBase": 10,
-      "decoys": 2,
-      "scatter": 0,
-      "guards": 1,
+      "decoys": 3,
+      "scatter": 1,
+      "guards": 3,
       "minThreatenedDecisions": 0
     },
     "queen": {
       "obstacleBase": 10,
-      "decoys": 2,
-      "scatter": 0,
-      "guards": 0,
+      "decoys": 3,
+      "scatter": 1,
+      "guards": 1,
+      "screens": 3,
       "minThreatenedDecisions": 0
     }
   }
@@ -203,6 +209,7 @@ export const CALIBRATION_REPORT = {
         "decoys": 2,
         "scatter": 0,
         "guards": 0,
+        "screens": 0,
         "minThreatenedDecisions": 2
       },
       "n": 10,
@@ -217,6 +224,7 @@ export const CALIBRATION_REPORT = {
         "decoys": 2,
         "scatter": 0,
         "guards": 0,
+        "screens": 0,
         "minThreatenedDecisions": 2
       },
       "n": 10,
@@ -231,6 +239,7 @@ export const CALIBRATION_REPORT = {
         "decoys": 2,
         "scatter": 0,
         "guards": 0,
+        "screens": 0,
         "minThreatenedDecisions": 2
       },
       "n": 10,
@@ -245,6 +254,7 @@ export const CALIBRATION_REPORT = {
         "decoys": 2,
         "scatter": 0,
         "guards": 0,
+        "screens": 0,
         "minThreatenedDecisions": 2
       },
       "n": 10,
@@ -259,6 +269,7 @@ export const CALIBRATION_REPORT = {
         "decoys": 2,
         "scatter": 0,
         "guards": 0,
+        "screens": 0,
         "minThreatenedDecisions": 2
       },
       "n": 10,
@@ -300,29 +311,29 @@ export const CALIBRATION_REPORT = {
       },
       "rook": {
         "n": 10,
-        "mean": 9.4,
-        "sd": 2.3,
-        "min": 6.8,
-        "max": 13.8,
-        "inBand": 0.2,
+        "mean": 10.2,
+        "sd": 1.3,
+        "min": 8.6,
+        "max": 12.6,
+        "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 540.3,
-        "maxMs": 1270,
+        "meanMs": 1486.5,
+        "maxMs": 3455,
         "searches": {
           "searches": 20,
-          "unknown": 0,
+          "unknown": 1,
           "invalid": 0,
           "turns": {
-            "min": 4,
-            "median": 7,
-            "p90": 22,
-            "max": 30
+            "min": 10,
+            "median": 17,
+            "p90": 39,
+            "max": 48
           },
           "explored": {
-            "min": 410,
-            "median": 559,
-            "p90": 2841,
-            "max": 4913
+            "min": 868,
+            "median": 3503,
+            "p90": 8047,
+            "max": 9543
           }
         }
       },
@@ -384,29 +395,29 @@ export const CALIBRATION_REPORT = {
       },
       "queen": {
         "n": 10,
-        "mean": 9.3,
-        "sd": 2.3,
-        "min": 6.3,
-        "max": 12.9,
-        "inBand": 0.3,
+        "mean": 9.4,
+        "sd": 1.1,
+        "min": 7.5,
+        "max": 11.4,
+        "inBand": 0.4,
         "fallback": 0,
-        "meanMs": 3878.5,
-        "maxMs": 10574,
+        "meanMs": 7372.3,
+        "maxMs": 15367,
         "searches": {
           "searches": 20,
-          "unknown": 1,
+          "unknown": 2,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 12,
-            "p90": 14,
-            "max": 14
+            "min": 10,
+            "median": 16,
+            "p90": 19,
+            "max": 20
           },
           "explored": {
-            "min": 1938,
-            "median": 3159,
-            "p90": 10169,
-            "max": 10344
+            "min": 3155,
+            "median": 8703,
+            "p90": 11072,
+            "max": 11100
           }
         }
       }
@@ -442,113 +453,113 @@ export const CALIBRATION_REPORT = {
       },
       "rook": {
         "n": 10,
-        "mean": 10.7,
-        "sd": 2.6,
-        "min": 7.4,
-        "max": 15.1,
-        "inBand": 0.1,
+        "mean": 11.2,
+        "sd": 1.1,
+        "min": 9.3,
+        "max": 13.2,
+        "inBand": 0.6,
         "fallback": 0,
-        "meanMs": 586.3,
-        "maxMs": 1206,
-        "searches": {
-          "searches": 20,
-          "unknown": 0,
-          "invalid": 0,
-          "turns": {
-            "min": 5,
-            "median": 8,
-            "p90": 22,
-            "max": 50
-          },
-          "explored": {
-            "min": 371,
-            "median": 552,
-            "p90": 3242,
-            "max": 4118
-          }
-        }
-      },
-      "knight": {
-        "n": 10,
-        "mean": 11.3,
-        "sd": 1.9,
-        "min": 7.5,
-        "max": 14.7,
-        "inBand": 0.5,
-        "fallback": 0,
-        "meanMs": 499.8,
-        "maxMs": 2077,
+        "meanMs": 2001.6,
+        "maxMs": 4504,
         "searches": {
           "searches": 20,
           "unknown": 1,
           "invalid": 0,
           "turns": {
             "min": 9,
-            "median": 16,
+            "median": 20,
             "p90": 32,
-            "max": 39
+            "max": 37
           },
           "explored": {
-            "min": 377,
-            "median": 691,
-            "p90": 3245,
-            "max": 3670
+            "min": 815,
+            "median": 4391,
+            "p90": 9471,
+            "max": 10927
+          }
+        }
+      },
+      "knight": {
+        "n": 10,
+        "mean": 10.9,
+        "sd": 1.6,
+        "min": 8,
+        "max": 13.7,
+        "inBand": 0.5,
+        "fallback": 0,
+        "meanMs": 926.1,
+        "maxMs": 1605,
+        "searches": {
+          "searches": 20,
+          "unknown": 1,
+          "invalid": 0,
+          "turns": {
+            "min": 10,
+            "median": 21,
+            "p90": 30,
+            "max": 37
+          },
+          "explored": {
+            "min": 509,
+            "median": 1586,
+            "p90": 5152,
+            "max": 5870
           }
         }
       },
       "bishop": {
         "n": 10,
-        "mean": 11.9,
-        "sd": 1.7,
-        "min": 8.6,
-        "max": 15.5,
+        "mean": 11.1,
+        "sd": 1,
+        "min": 8.8,
+        "max": 12.7,
         "inBand": 0.6,
         "fallback": 0,
-        "meanMs": 2158.9,
-        "maxMs": 4605,
+        "meanMs": 2752,
+        "maxMs": 4944,
         "searches": {
           "searches": 20,
           "unknown": 4,
           "invalid": 0,
           "turns": {
-            "min": 13,
-            "median": 21,
-            "p90": 37,
-            "max": 44
+            "min": 14,
+            "median": 23,
+            "p90": 29,
+            "max": 30
           },
           "explored": {
-            "min": 822,
-            "median": 3072,
-            "p90": 8650,
-            "max": 11071
+            "min": 995,
+            "median": 1717,
+            "p90": 7899,
+            "max": 8205
           }
         }
       },
       "queen": {
         "n": 10,
-        "mean": 9.5,
-        "sd": 2.2,
+        "mean": 9.9,
+        "sd": 2,
         "min": 6.7,
-        "max": 13,
-        "inBand": 0.2,
+        "max": 12.9,
+        "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 3926.8,
-        "maxMs": 6923,
+        "meanMs": 6035.7,
+        "maxMs": 8279,
         "searches": {
           "searches": 20,
           "unknown": 2,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 11,
-            "p90": 15,
-            "max": 21
+            "min": 10,
+            "median": 14,
+            "p90": 17,
+            "max": 19
           },
           "explored": {
-            "min": 1466,
-            "median": 2171,
-            "p90": 3608,
-            "max": 3807
+            "min": 3426,
+            "median": 9374,
+            "p90": 11948,
+            "max": 11961
           }
         }
       }
@@ -556,141 +567,141 @@ export const CALIBRATION_REPORT = {
     "tricky": {
       "pawn": {
         "n": 10,
-        "mean": 13.3,
-        "sd": 2.2,
-        "min": 8.6,
-        "max": 18.2,
-        "inBand": 0.5,
+        "mean": 13,
+        "sd": 1.6,
+        "min": 9.4,
+        "max": 15.5,
+        "inBand": 0.6,
         "fallback": 0,
-        "meanMs": 2341,
-        "maxMs": 4680,
-        "searches": {
-          "searches": 20,
-          "unknown": 1,
-          "invalid": 0,
-          "turns": {
-            "min": 10,
-            "median": 22,
-            "p90": 34,
-            "max": 37
-          },
-          "explored": {
-            "min": 266,
-            "median": 5403,
-            "p90": 9388,
-            "max": 11291
-          }
-        }
-      },
-      "rook": {
-        "n": 10,
-        "mean": 10.7,
-        "sd": 2.6,
-        "min": 7.4,
-        "max": 15.1,
-        "inBand": 0.2,
-        "fallback": 0,
-        "meanMs": 687.7,
-        "maxMs": 1795,
+        "meanMs": 3261.6,
+        "maxMs": 6728,
         "searches": {
           "searches": 20,
           "unknown": 0,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 8,
-            "p90": 22,
-            "max": 50
+            "min": 13,
+            "median": 24,
+            "p90": 35,
+            "max": 42
           },
           "explored": {
-            "min": 371,
-            "median": 552,
-            "p90": 3242,
-            "max": 4118
+            "min": 194,
+            "median": 5649,
+            "p90": 9975,
+            "max": 10707
+          }
+        }
+      },
+      "rook": {
+        "n": 10,
+        "mean": 12.3,
+        "sd": 2,
+        "min": 7.4,
+        "max": 15.4,
+        "inBand": 0.6,
+        "fallback": 0,
+        "meanMs": 2230.6,
+        "maxMs": 5058,
+        "searches": {
+          "searches": 20,
+          "unknown": 2,
+          "invalid": 0,
+          "turns": {
+            "min": 13,
+            "median": 21,
+            "p90": 40,
+            "max": 42
+          },
+          "explored": {
+            "min": 715,
+            "median": 2433,
+            "p90": 8622,
+            "max": 8656
           }
         }
       },
       "knight": {
         "n": 10,
-        "mean": 13.3,
-        "sd": 2.3,
-        "min": 10.3,
-        "max": 19.5,
+        "mean": 12.5,
+        "sd": 1.5,
+        "min": 9.5,
+        "max": 14.8,
         "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 705.4,
-        "maxMs": 1669,
+        "meanMs": 922,
+        "maxMs": 2599,
         "searches": {
           "searches": 20,
           "unknown": 1,
           "invalid": 0,
           "turns": {
-            "min": 10,
-            "median": 23,
-            "p90": 31,
-            "max": 38
+            "min": 12,
+            "median": 24,
+            "p90": 34,
+            "max": 42
           },
           "explored": {
-            "min": 353,
-            "median": 1091,
-            "p90": 3613,
-            "max": 4580
+            "min": 377,
+            "median": 1220,
+            "p90": 5413,
+            "max": 5436
           }
         }
       },
       "bishop": {
         "n": 10,
-        "mean": 11.9,
-        "sd": 1.5,
-        "min": 9.3,
-        "max": 14.6,
-        "inBand": 0.5,
+        "mean": 13,
+        "sd": 1.2,
+        "min": 11.4,
+        "max": 15.1,
+        "inBand": 0.4,
         "fallback": 0,
-        "meanMs": 2386.1,
-        "maxMs": 5315,
+        "meanMs": 1924.1,
+        "maxMs": 3485,
         "searches": {
           "searches": 20,
-          "unknown": 6,
+          "unknown": 4,
           "invalid": 0,
           "turns": {
-            "min": 17,
-            "median": 25,
+            "min": 16,
+            "median": 24,
             "p90": 39,
-            "max": 47
+            "max": 46
           },
           "explored": {
-            "min": 1109,
-            "median": 3538,
-            "p90": 8842,
-            "max": 10936
+            "min": 974,
+            "median": 2849,
+            "p90": 7847,
+            "max": 7853
           }
         }
       },
       "queen": {
         "n": 10,
-        "mean": 10.8,
-        "sd": 2.6,
-        "min": 6.5,
-        "max": 14,
-        "inBand": 0.4,
+        "mean": 13.2,
+        "sd": 1.8,
+        "min": 9.7,
+        "max": 16.5,
+        "inBand": 0.3,
         "fallback": 0,
-        "meanMs": 3708,
-        "maxMs": 5714,
+        "meanMs": 14054.1,
+        "maxMs": 25677,
         "searches": {
           "searches": 20,
-          "unknown": 1,
+          "unknown": 2,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 13,
-            "p90": 17,
-            "max": 18
+            "min": 10,
+            "median": 17,
+            "p90": 19,
+            "max": 21
           },
           "explored": {
-            "min": 1441,
-            "median": 2556,
-            "p90": 3518,
-            "max": 3560
+            "min": 2386,
+            "median": 7860,
+            "p90": 11127,
+            "max": 11227
           }
         }
       }
@@ -698,57 +709,57 @@ export const CALIBRATION_REPORT = {
     "tough": {
       "pawn": {
         "n": 10,
-        "mean": 14.1,
-        "sd": 1.6,
-        "min": 11.9,
-        "max": 17.2,
-        "inBand": 0.3,
+        "mean": 13.7,
+        "sd": 1.7,
+        "min": 9.4,
+        "max": 15.5,
+        "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 2748.9,
-        "maxMs": 4944,
+        "meanMs": 3104.1,
+        "maxMs": 5431,
         "searches": {
           "searches": 20,
           "unknown": 0,
           "invalid": 0,
           "turns": {
-            "min": 16,
-            "median": 23,
-            "p90": 34,
+            "min": 13,
+            "median": 24,
+            "p90": 35,
             "max": 42
           },
           "explored": {
-            "min": 1032,
-            "median": 5236,
-            "p90": 9818,
-            "max": 10499
+            "min": 194,
+            "median": 5649,
+            "p90": 9975,
+            "max": 10707
           }
         }
       },
       "rook": {
         "n": 10,
-        "mean": 10.9,
-        "sd": 2.8,
-        "min": 7.4,
-        "max": 15.1,
-        "inBand": 0.2,
+        "mean": 14.1,
+        "sd": 2.2,
+        "min": 11.4,
+        "max": 19.1,
+        "inBand": 0.3,
         "fallback": 0,
-        "meanMs": 671.8,
-        "maxMs": 1795,
+        "meanMs": 2713.1,
+        "maxMs": 4778,
         "searches": {
           "searches": 20,
-          "unknown": 0,
+          "unknown": 1,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 8,
-            "p90": 22,
-            "max": 50
+            "min": 13,
+            "median": 26,
+            "p90": 38,
+            "max": 44
           },
           "explored": {
-            "min": 371,
-            "median": 552,
-            "p90": 3242,
-            "max": 4118
+            "min": 919,
+            "median": 2959,
+            "p90": 8583,
+            "max": 10884
           }
         }
       },
@@ -810,29 +821,29 @@ export const CALIBRATION_REPORT = {
       },
       "queen": {
         "n": 10,
-        "mean": 12.9,
-        "sd": 3.3,
-        "min": 8.7,
-        "max": 19,
-        "inBand": 0.3,
+        "mean": 13.8,
+        "sd": 1.2,
+        "min": 11.9,
+        "max": 15.6,
+        "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 4668.2,
-        "maxMs": 10124,
+        "meanMs": 13732.8,
+        "maxMs": 25663,
         "searches": {
           "searches": 20,
           "unknown": 1,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 14,
-            "p90": 17,
-            "max": 18
+            "min": 11,
+            "median": 20,
+            "p90": 22,
+            "max": 22
           },
           "explored": {
-            "min": 1660,
-            "median": 2806,
-            "p90": 9787,
-            "max": 10619
+            "min": 2856,
+            "median": 9270,
+            "p90": 11690,
+            "max": 11887
           }
         }
       }
@@ -868,29 +879,29 @@ export const CALIBRATION_REPORT = {
       },
       "rook": {
         "n": 10,
-        "mean": 15,
-        "sd": 2.9,
-        "min": 10.7,
-        "max": 19.4,
-        "inBand": 0.3,
+        "mean": 15.5,
+        "sd": 2.2,
+        "min": 13.1,
+        "max": 20.5,
+        "inBand": 0.2,
         "fallback": 0,
-        "meanMs": 1409.4,
-        "maxMs": 2934,
+        "meanMs": 2245.5,
+        "maxMs": 3557,
         "searches": {
           "searches": 20,
-          "unknown": 0,
+          "unknown": 1,
           "invalid": 0,
           "turns": {
             "min": 11,
-            "median": 20,
-            "p90": 31,
-            "max": 37
+            "median": 26,
+            "p90": 35,
+            "max": 44
           },
           "explored": {
-            "min": 850,
-            "median": 2010,
-            "p90": 5858,
-            "max": 9960
+            "min": 1675,
+            "median": 2610,
+            "p90": 8202,
+            "max": 10021
           }
         }
       },
@@ -924,57 +935,57 @@ export const CALIBRATION_REPORT = {
       },
       "bishop": {
         "n": 10,
-        "mean": 15,
-        "sd": 1.3,
-        "min": 11.9,
-        "max": 16.6,
-        "inBand": 0.5,
+        "mean": 15.7,
+        "sd": 1.7,
+        "min": 12.7,
+        "max": 18.6,
+        "inBand": 0.6,
         "fallback": 0,
-        "meanMs": 2386.1,
-        "maxMs": 4770,
+        "meanMs": 2618.9,
+        "maxMs": 3816,
         "searches": {
           "searches": 20,
-          "unknown": 4,
+          "unknown": 3,
           "invalid": 0,
           "turns": {
-            "min": 16,
-            "median": 25,
-            "p90": 39,
-            "max": 46
+            "min": 15,
+            "median": 26,
+            "p90": 44,
+            "max": 44
           },
           "explored": {
-            "min": 1237,
-            "median": 2439,
-            "p90": 8390,
-            "max": 10579
+            "min": 1207,
+            "median": 2366,
+            "p90": 7720,
+            "max": 9239
           }
         }
       },
       "queen": {
         "n": 10,
-        "mean": 13.6,
-        "sd": 3.6,
-        "min": 8.3,
-        "max": 17.9,
-        "inBand": 0.3,
+        "mean": 16.2,
+        "sd": 1.9,
+        "min": 13.2,
+        "max": 20.9,
+        "inBand": 0.5,
         "fallback": 0,
-        "meanMs": 4880.1,
-        "maxMs": 12546,
+        "meanMs": 16849.9,
+        "maxMs": 26427,
         "searches": {
           "searches": 20,
-          "unknown": 0,
+          "unknown": 1,
           "invalid": 0,
           "turns": {
-            "min": 5,
-            "median": 14,
-            "p90": 16,
-            "max": 18
+            "min": 12,
+            "median": 20,
+            "p90": 24,
+            "max": 24
           },
           "explored": {
-            "min": 1373,
-            "median": 2201,
-            "p90": 3717,
-            "max": 9401
+            "min": 2999,
+            "median": 8460,
+            "p90": 11511,
+            "max": 11783
           }
         }
       }
@@ -1012,33 +1023,33 @@ export const CALIBRATION_REPORT = {
       }
     },
     "rook": {
-      "searches": 2400,
-      "solved": 2232,
-      "unknown": 168,
+      "searches": 3680,
+      "solved": 3385,
+      "unknown": 295,
       "invalid": 0,
       "turns": {
         "min": 4,
         "median": 17,
-        "p90": 31,
+        "p90": 32,
         "max": 50
       },
       "explored": {
-        "min": 323,
+        "min": 267,
         "median": 2351,
-        "p90": 8052,
+        "p90": 8004,
         "max": 12000
       },
       "exploredAll": {
-        "min": 323,
-        "median": 2576,
-        "p90": 9746,
+        "min": 267,
+        "median": 2614,
+        "p90": 10114,
         "max": 12000
       },
       "ms": {
-        "min": 104,
-        "median": 657,
-        "p90": 2371,
-        "max": 4296
+        "min": 70,
+        "median": 629,
+        "p90": 2222,
+        "max": 4661
       }
     },
     "knight": {
@@ -1072,63 +1083,63 @@ export const CALIBRATION_REPORT = {
       }
     },
     "bishop": {
-      "searches": 2400,
-      "solved": 1774,
-      "unknown": 626,
+      "searches": 3680,
+      "solved": 2696,
+      "unknown": 984,
       "invalid": 0,
       "turns": {
         "min": 13,
         "median": 25,
-        "p90": 38,
+        "p90": 39,
         "max": 50
       },
       "explored": {
         "min": 645,
-        "median": 3565,
-        "p90": 8099,
+        "median": 3534,
+        "p90": 8092,
         "max": 12000
       },
       "exploredAll": {
         "min": 645,
-        "median": 5604,
+        "median": 5952,
         "p90": 12000,
         "max": 12000
       },
       "ms": {
-        "min": 199,
-        "median": 1534,
-        "p90": 2822,
+        "min": 138,
+        "median": 1450,
+        "p90": 2698,
         "max": 4662
       }
     },
     "queen": {
-      "searches": 2400,
-      "solved": 1873,
-      "unknown": 527,
+      "searches": 3680,
+      "solved": 2975,
+      "unknown": 705,
       "invalid": 0,
       "turns": {
         "min": 5,
-        "median": 15,
-        "p90": 21,
+        "median": 16,
+        "p90": 22,
         "max": 32
       },
       "explored": {
-        "min": 981,
-        "median": 8822,
-        "p90": 11408,
+        "min": 941,
+        "median": 8313,
+        "p90": 11355,
         "max": 12000
       },
       "exploredAll": {
-        "min": 981,
-        "median": 9813,
+        "min": 941,
+        "median": 9486,
         "p90": 12000,
         "max": 12000
       },
       "ms": {
         "min": 734,
-        "median": 6982,
-        "p90": 11435,
-        "max": 19165
+        "median": 7084,
+        "p90": 13033,
+        "max": 33900
       }
     }
   }

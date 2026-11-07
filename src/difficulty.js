@@ -40,7 +40,7 @@ export function tierLabel(date, tier = tierForDate(date)) {
 }
 
 /** Knobs used when a (tier, piece) pair has no calibrated row. */
-export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter: 0, guards: 0, minThreatenedDecisions: 2 });
+export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter: 0, guards: 0, screens: 0, minThreatenedDecisions: 2 });
 
 /**
  * Generation knobs for a tier and the day's piece:
@@ -51,6 +51,8 @@ export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter
  * - scatter (0/1): non-pawn targets start in the back four rows, off every
  *   line the player's piece covers from its start square (src/rules.js).
  * - guards (0-2): decoys moved beside a target, where they strike a player who takes it.
+ * - screens (0-3): walls placed first on the squares that cut the longest open
+ *   lines into the targets, so long-range pieces must close in to capture.
  */
 export function knobsFor(tier, piece) {
   if (!Object.hasOwn(DIFFICULTY_TIERS, tier)) throw new RangeError('Unknown difficulty tier.');

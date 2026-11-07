@@ -6,7 +6,8 @@ import { CALIBRATION, CALIBRATION_REPORT } from '../src/calibration.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
 import { getRawDaily } from '../src/edition.js';
-import { chooseCandidate, generateDaily, getDaily } from '../src/generation.js';
+import { candidateFor, chooseCandidate, generateDaily, getDaily } from '../src/generation.js';
+import { createGame as createCandidate } from '../src/rules.js';
 import { createGame, validateSave, act } from '../src/game.js';
 
 // 2026-11-09 is a Monday.
@@ -90,7 +91,7 @@ test('the public edition takes its tier from the weekday and its knobs from the 
     const tier = tierForDate(date);
     const knobs = knobsFor(tier, daily.playerPiece);
     assert.equal(daily.difficulty, tier);
-    for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards']) assert.equal(daily[knob], knobs[knob], `${date} ${knob}`);
+    for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens']) assert.equal(daily[knob], knobs[knob], `${date} ${knob}`);
     assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= knobs.minThreatenedDecisions);
     assert.equal(daily.generation.certificate.score, difficultyScore(daily.generation.certificate.metrics, daily.playerPiece));
     assert.deepEqual(generateDaily(date), daily, `${date} regenerates identically`);
@@ -113,4 +114,22 @@ test('saves bind to the edition tier and stay valid along the certified route', 
   assert.equal(validateSave(other, date, { difficulty: 'gentle' }), true);
   const tampered = { ...createGame(daily), guards: (daily.guards + 1) % 3 };
   assert.equal(validateSave(tampered, date), false, 'knobs cannot be edited');
+});
+
+test('screens wall off the longest open lines into the targets without adding walls', () => {
+  const base = getRawDaily('2026-11-10');
+  const room = (screens) => createCandidate(candidateFor(base, 'tough', { obstacleBase: 10, decoys: 2, scatter: 0, guards: 1, screens }));
+  const plain = room(0), screened = room(3);
+  assert.equal(screened.props.length, plain.props.length);
+  assert.deepEqual(screened.enemies, plain.enemies);
+  // Squares a target can see along open lines: screens leave fewer.
+  const sight = (state) => state.enemies.filter((foe) => foe.piece === state.objective.piece).reduce((sum, foe) => {
+    let seen = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      for (let x = foe.x + dx, y = foe.y + dy; x >= 0 && y >= 0 && x < 8 && y < 8 && state.map[y][x] !== '#' && !state.enemies.some((other) => other.x === x && other.y === y); x += dx, y += dy) seen++;
+    }
+    return sum + seen;
+  }, 0);
+  assert.ok(sight(screened) < sight(plain), `${sight(screened)} < ${sight(plain)}`);
+  assert.deepEqual(room(3).map, screened.map);
 });

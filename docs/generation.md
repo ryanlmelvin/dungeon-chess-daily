@@ -205,6 +205,11 @@ generated table `src/calibration.js`:
   fixed squares a rook or queen can take on its first move.
 - `guards` (0 up to `decoys`): that many decoys start beside a target, on a
   square from which they would strike a player who takes it.
+- `screens` (0–3, rook, bishop and queen days): before the random walls go
+  down, that many of the room's walls are placed on the squares that cut the
+  longest open lines into the floor's targets (`screenReach` in `src/rules.js`),
+  so a long-range piece has to close in, where guards can strike. Screens count
+  toward the room's walls and pass the same connectivity check.
 - `minThreatenedDecisions`: the certificate's minimum threatened decisions.
 
 Decoys, scatter and guards draw from their own seeded streams, so the rest of
@@ -217,7 +222,7 @@ searches both candidate layouts of ten dates per piece under a grid of knob
 settings, with the runtime search budget, in parallel workers. It then replays
 `chooseCandidate` for every tier, setting and threat minimum, and keeps the
 cheapest setting per (tier, piece): distance outside the band, days outside the
-band, fallbacks (ten times as costly as a missed day, since they repeat a layout) and searches over 1.5 times as slow as the piece's plain layout all cost. It writes `src/calibration.js` (the table plus
+band, and fallbacks (ten times as costly as a missed day, since they repeat a layout) all cost. Search time no longer counts by default, because editions are certified at build time (`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on searches over 1.5 times as slow as the piece's plain layout. It writes `src/calibration.js` (the table plus
 `CALIBRATION_REPORT`, the measured scores behind it) and
 `scripts/calibration-data.json`: one row per search with its status (`solved`,
 `unknown` when the budget ran out, or `invalid` when replay rejected the route),

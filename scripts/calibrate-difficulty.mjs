@@ -52,6 +52,10 @@ if (!isMainThread) {
   let start = option('start', '2026-11-07');
   const jobs = Number(option('jobs', String(Math.max(1, Math.min(8, availableParallelism() - 1)))));
   const gridName = option('grid', 'full');
+  // Editions are certified at build time (scripts/build-editions.mjs), so a slow
+  // search only costs a device that opens a date past the two-year window, once.
+  // Generation time therefore no longer counts against a setting by default.
+  const timeWeight = Number(option('time-weight', '0'));
   const obstacleOption = option('obstacles')?.split(',').map(Number);
   const dataPath = new URL(option('data', 'scripts/calibration-data.json'), new URL(`file://${process.cwd()}/`));
   const { PLAYABLE_PIECES } = await load('src/pieces.js');
@@ -91,11 +95,19 @@ if (!isMainThread) {
     for (const obstacleBase of obstacles) for (const decoys of decoyCounts) for (const scatter of piece === 'pawn' ? [0] : [0, 1]) {
       for (let guards = 0; guards <= Math.min(decoys, 4); guards++) settings.push({ obstacleBase, decoys, scatter, guards });
     }
+    // Screens (walls cutting long lines into targets) only matter to long-range
+    // pieces; a narrower grid keeps the run affordable.
+    if (['rook', 'bishop', 'queen'].includes(piece) && gridName !== 'quick') {
+      for (const screens of [1, 3]) for (const obstacleBase of [10, 13]) for (const decoys of [1, 2, 3]) for (const scatter of [0, 1]) {
+        for (let guards = 0; guards <= Math.min(decoys, 2); guards++) settings.push({ obstacleBase, decoys, scatter, guards, screens });
+      }
+    }
     const plain = { obstacleBase: DEFAULT_KNOBS.obstacleBase, decoys: DEFAULT_KNOBS.decoys, scatter: DEFAULT_KNOBS.scatter, guards: DEFAULT_KNOBS.guards };
     if (!settings.some((entry) => settingKey(entry) === settingKey(plain))) settings.push(plain);
     return settings;
   };
-  const settingKey = ({ obstacleBase, decoys, scatter, guards }) => `${obstacleBase}/${decoys}/${scatter}/${guards}`;
+  // Settings without screens keep their original four-part key, so older data still matches.
+  const settingKey = ({ obstacleBase, decoys, scatter, guards, screens = 0 }) => `${obstacleBase}/${decoys}/${scatter}/${guards}${screens ? `/${screens}` : ''}`;
   const datesFor = (piece) => {
     const dates = [];
     for (let time = Date.parse(start); dates.length < samples; time += 86_400_000) {
@@ -166,14 +178,14 @@ if (!isMainThread) {
     }
     // One row per search, compact: the raw numbers behind the table and the budgets.
     const source = `{"generated":${JSON.stringify(new Date().toISOString())},"start":${JSON.stringify(start)},"samples":${samples},"grid":${JSON.stringify(gridName)},`
-      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards","summary":${JSON.stringify(summary)},\n"rows":[\n`
+      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards[/screens]","summary":${JSON.stringify(summary)},\n"rows":[\n`
       + rows.map((row) => JSON.stringify(row)).join(',\n') + '\n]}\n';
     await writeFile(dataPath, source);
     console.log(`Wrote ${rows.length} searches to ${fileURLToPath(dataPath)}.`);
   }
 
   // Phase 2: replay generateDaily's choice for every tier, setting and minimum.
-  const parse = (key) => { const [obstacleBase, decoys, scatter, guards] = key.split('/').map(Number); return { obstacleBase, decoys, scatter, guards }; };
+  const parse = (key) => { const [obstacleBase, decoys, scatter, guards, screens = 0] = key.split('/').map(Number); return { obstacleBase, decoys, scatter, guards, ...(screens && { screens }) }; };
   const scored = (found, piece) => found.map((entry) => (entry.metrics ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece) } : null));
   const stats = (values) => {
     if (!values.length) return { n: 0, mean: null, sd: null, min: null, max: null };
@@ -204,7 +216,7 @@ if (!isMainThread) {
   };
   // Lower is better: mean distance outside the band (in band widths), missed
   // days, fallbacks (a repeated layout), slow generation (a phone is slower
-  // than this machine) and distance from the band's center.
+  // than this machine, weighted by --time-weight) and distance from the band's center.
   // Time is judged against the same piece's plain layout, measured in the same
   // run, so a busy machine does not skew the choice: over 1.5 times as slow costs.
   const cost = (result, tier, plainMs) => {
@@ -213,7 +225,7 @@ if (!isMainThread) {
     const mean = result.scores.length ? result.scores.reduce((sum, value) => sum + value, 0) / result.scores.length : low;
     // The last term centers otherwise equal settings, so pieces bunch together.
     return result.distance / width + (1 - result.inBandRate) + 10 * result.fallbackRate
-      + Math.max(0, result.ms.mean / plainMs - 1.5) + 0.2 * Math.abs(mean - (low + high) / 2) / width;
+      + timeWeight * Math.max(0, result.ms.mean / plainMs - 1.5) + 0.2 * Math.abs(mean - (low + high) / 2) / width;
   };
   const minimums = [0, 1, 2, 3, 4, 6];
   const calibration = {}, report = { generated: new Date().toISOString().slice(0, 10), start, samples, grid: gridName, uncalibrated: {}, tiers: {} };
