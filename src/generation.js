@@ -35,8 +35,8 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
  * metrics and score), 'unknown' (the budget ran out) or 'invalid' (a route the
  * replay rejected); `explored` counts the search's simulated transitions.
  */
-export function searchCandidate(candidate) {
-  const result = findWinningRoute(createGame(candidate), { maxExpansions: SEARCH_BUDGET });
+export function searchCandidate(candidate, budget = SEARCH_BUDGET) {
+  const result = findWinningRoute(createGame(candidate), { maxExpansions: budget });
   if (result.status !== 'solved') return { status: 'unknown', explored: result.explored };
   const proof = verifyWinningRoute(createGame(candidate), result.actions);
   if (!proof.valid) return { status: 'invalid', explored: result.explored };
