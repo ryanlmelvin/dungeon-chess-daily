@@ -21,7 +21,7 @@ test('the tier rises from Monday to the weekend, by UTC weekday', () => {
   assert.equal(ranks[5], TIER_IDS.length, 'Saturday is the hardest');
   assert.equal(ranks[6], TIER_IDS.length, 'Sunday is the hardest');
   assert.equal(new Set(WEEKDAY_TIERS).size, TIER_IDS.length, 'every tier appears in the week');
-  assert.equal(tierLabel('2026-11-12'), 'Thursday · Tough');
+  assert.equal(tierLabel('2026-11-12'), 'Difficulty: Tough');
   // The edition date is UTC: late Sunday evening in New York is already Monday.
   assert.equal(getRawDaily(new Date('2026-11-08T20:00:00-05:00')).date, '2026-11-09');
 });

@@ -27,16 +27,15 @@ export const TIER_IDS = Object.freeze(Object.keys(DIFFICULTY_TIERS));
 
 /** UTC weekday (0 = Sunday) → tier. Monday is easiest; the weekend is hardest. */
 export const WEEKDAY_TIERS = Object.freeze(['fiendish', 'gentle', 'fair', 'tricky', 'tough', 'tough', 'fiendish']);
-export const WEEKDAY_NAMES = Object.freeze(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
 
 /** The tier of the public edition for a canonical YYYY-MM-DD date. */
 export function tierForDate(date) {
   return WEEKDAY_TIERS[new Date(`${date}T12:00:00Z`).getUTCDay()];
 }
 
-/** Newspaper label, e.g. "Thursday · Tough". */
+/** Newspaper label, e.g. "Difficulty: Tough". */
 export function tierLabel(date, tier = tierForDate(date)) {
-  return `${WEEKDAY_NAMES[new Date(`${date}T12:00:00Z`).getUTCDay()]} · ${DIFFICULTY_TIERS[tier].name}`;
+  return `Difficulty: ${DIFFICULTY_TIERS[tier].name}`;
 }
 
 /** Knobs used when a (tier, piece) pair has no calibrated row. */

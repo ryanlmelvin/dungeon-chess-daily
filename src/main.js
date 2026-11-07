@@ -160,7 +160,7 @@ function switchScreen(next) {
 function renderPaper() {
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = paperDate(daily.date);
-  // The weekday's difficulty tier, e.g. "THURSDAY · TOUGH": no clue about the dungeon itself.
+  // The weekday's difficulty tier, e.g. "DIFFICULTY: TOUGH": no clue about the dungeon itself.
   $('paper-tier').textContent = Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION';
   $('headline').textContent = headlineFor(daily.species[0], daily.date);
   $('deck').replaceChildren(createPrintLines(0));
