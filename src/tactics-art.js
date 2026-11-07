@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 // Animated explainers for the tactic rewards (tactics.js): a knight fork and a
 // three-capture combo, drawn on a 5x5 board crop like the other guide art.
-import { drawSprite, SPRITE_SIZE, spritePalette } from './sprites.js';
+import { drawSprite, SPRITE_SIZE, spritePalette, COMPANION_PALETTE, RECRUIT_GHOST_PALETTE } from './sprites.js';
 
 const MINT = '#a5e2cc';
 const RED = '#ed8b9c';
@@ -152,6 +152,75 @@ export function drawComboDemo(canvas, time, { playerPalette = {}, monsterPalette
 }
 /** A still for reduced motion and the guide: the third capture's payoff. */
 export const COMBO_STILL = 3000;
+
+/**
+ * One frame of the recruit explainer, looping every 5.6 s: a monster's line
+ * passes straight through a faded recruit waiting on its pedestal; your rook
+ * steps onto it, it turns solid and joins you, then moves after you and
+ * blocks the monster's line.
+ */
+export function drawRecruitDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet') } = {}) {
+  const t = ((time % 5600) + 5600) % 5600;
+  frame(canvas, (ctx) => {
+    // Monster (4,2) eyes the row; the rook (0,2) slides to the recruit (2,2),
+    // which then steps to (3,2) between the monster and the rook.
+    const slide = beat(t, 1600, 2200);
+    const join = beat(t, 2200, 2500);
+    const step = beat(t, 3300, 3800);
+    const reset = beat(t, 5300, 5600);
+    const fade = 1 - reset;
+    const rookX = lerp(center(0), center(2), slide);
+    const recruitX = lerp(center(2) + (slide >= 1 ? 9 : 0), center(3), step);
+    const recruitY = center(2) + (slide >= 1 ? 7 : 0) * (1 - step);
+    // The monster's line: through the ghost to the rook, then cut short by the ally.
+    const before = 1 - beat(t, 1400, 1600);
+    const after = beat(t, 3800, 4000);
+    const pulse = 0.65 + 0.35 * Math.sin(t / 120);
+    line(ctx, center(4), center(2), center(0), center(2), RED, before * pulse * fade);
+    line(ctx, center(4), center(2), center(3) + 12, center(2), RED, after * pulse * fade);
+    ctx.globalAlpha = fade;
+    sprite(ctx, 'bat', center(4), center(2), monsterPalette);
+    // The pedestal, ring and + stay until the recruit has joined.
+    const waiting = (1 - join) * fade;
+    if (waiting > 0) {
+      ctx.save();
+      ctx.globalAlpha = waiting;
+      ctx.fillStyle = '#2c3a3a';
+      ctx.beginPath(); ctx.ellipse(center(2), center(2) + 12, 15, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#52716b';
+      ctx.beginPath(); ctx.ellipse(center(2), center(2) + 10, 13, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = MINT;
+      ctx.fillRect(center(2) + 11, center(2) - 17, 9, 3);
+      ctx.fillRect(center(2) + 14, center(2) - 20, 3, 9);
+      ctx.restore();
+      ring(ctx, 2, 2, MINT, waiting * 0.8);
+    }
+    // Ghost, then solid: the recruit is only an ally once you stand on it.
+    const shimmer = 0.45 + 0.08 * Math.sin(t / 300);
+    ctx.globalAlpha = shimmer * (1 - join) * fade;
+    sprite(ctx, 'piece-queen', center(2), center(2) - 4, RECRUIT_GHOST_PALETTE);
+    ctx.globalAlpha = join * fade;
+    if (join > 0) sprite(ctx, 'piece-queen', recruitX, recruitY, COMPANION_PALETTE);
+    ctx.globalAlpha = fade;
+    sprite(ctx, 'piece-rook', rookX, center(2), playerPalette);
+    burst(ctx, center(2), center(2), beat(t, 2200, 2800), MINT);
+    burst(ctx, center(3) + 12, center(2), beat(t, 3800, 4300), MINT);
+    label(ctx, 'NOT AN ALLY YET', 100, 150, RED, beat(t, 200, 500) * before, 22);
+    label(ctx, 'JOINED!', 100, 150, MINT, beat(t, 2300, 2500) * (1 - beat(t, 3200, 3400)), 26);
+    label(ctx, 'BLOCKS THE LINE', 100, 150, MINT, after * fade, 22);
+    ctx.globalAlpha = 1;
+  });
+}
+/** A still for reduced motion: the joined recruit blocking the monster's line. */
+export const RECRUIT_STILL = 4600;
+
+/** The first waiting recruit's explainer, in the same dialog as the tactics. */
+export const RECRUIT_COPY = Object.freeze({
+  title: 'A recruit is waiting',
+  text: 'The faded piece on a pedestal is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes a solid ally that moves after you, and from then on it blocks monster lines. Its captures count, but it can never capture the floor’s challenge piece.',
+  art: 'Animated board: a monster’s line passes through a faded recruit; a rook steps onto it, the recruit turns solid, then steps between the monster and the rook to block the line.',
+  draw: drawRecruitDemo, still: RECRUIT_STILL,
+});
 
 /** Congratulation copy for the first fork and combo, shown with the art above. */
 export const TACTIC_COPY = Object.freeze({

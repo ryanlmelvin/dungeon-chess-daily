@@ -4,7 +4,7 @@ import './menu.css';
 import { initGuide } from './guide.js';
 import { isFirstVisit, markGuideSeen } from './first-visit.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
-import { TACTIC_COPY } from './tactics-art.js';
+import { TACTIC_COPY, RECRUIT_COPY } from './tactics-art.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
@@ -245,15 +245,26 @@ function logState() {
   if (state === loggedState) return;
   if (gameKey(state) !== logGame) { clearMessageLog(); logGame = gameKey(state); }
   loggedState = state;
-  // A purchase or a fresh dungeon says nothing new.
-  if (!state.events?.length) return;
+  // A purchase, or anything else without events, says nothing new. A fresh
+  // dungeon only points out its recruit: the objective is already on screen.
+  const fresh = !state.events?.length && !messageLog.length && state.status === 'playing' && state.turns === state.floorStart?.turns;
+  if (!state.events?.length && !fresh) return;
   const action = ++logAction;
   const par = parFor(state, daily);
   // The engine doesn't know par, so the challenge line gets it here.
-  const lines = [...(state.notes ?? []), state.message].filter(Boolean)
+  const lines = (fresh ? [] : [...(state.notes ?? []), state.message]).filter(Boolean)
     .map((text) => par === null ? text : text.replace(/^(You completed the challenge ✓ in \d+ moves?)\./, `$1, par ${par}.`));
   messageLog.push(...lines.map((text) => ({ text, action })));
+  // A new floor (or a fresh start) points out its waiting recruit.
+  const recruit = waitingRecruit(state);
+  if (recruit && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
+    messageLog.push({ text: `A ${recruit.piece} waits to join you: step onto its square to recruit it.`, action, recruit: true });
+  }
   messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
+}
+/** This floor's recruit while it still waits on its square, or null once it has joined. */
+function waitingRecruit(game) {
+  return game?.companion ? null : game?.items?.find((item) => item.type === 'companion') ?? null;
 }
 function showGameFeedback() {
   logState();
@@ -274,6 +285,17 @@ function showGameFeedback() {
       what.setAttribute('aria-label', 'What is en passant?');
       what.setAttribute('aria-haspopup', 'dialog');
       what.addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
+      line.append(' ', what);
+    }
+    // The recruit line keeps its explainer while that recruit still waits.
+    if (entry.recruit && entry.action === latest && waitingRecruit(state)) {
+      const what = document.createElement('button');
+      what.type = 'button';
+      what.className = 'hint-button message-what';
+      what.textContent = 'What?';
+      what.setAttribute('aria-label', 'What is a recruit?');
+      what.setAttribute('aria-haspopup', 'dialog');
+      what.addEventListener('click', () => openSpecialMove('recruit'));
       line.append(' ', what);
     }
     return line;
@@ -404,10 +426,10 @@ function placeMessageLog() {
   box.style.top = box.style.left = box.style.width = '';
   const board = renderer?.boardRect?.();
   if (!board || replay || box.hidden) return;
-  // Whatever sits low on the screen (the install bar; on short screens the
-  // objective or stairs button) is the floor the log stays above.
+  // Whatever sits low on the screen (the install bar, the first-move tip; on
+  // short screens the objective or stairs button) is the floor the log stays above.
   const origin = $('dungeon').getBoundingClientRect().top;
-  const floor = Math.min(board.height, ...['pwa-bar', 'objective', 'descend-button'].map((id) => {
+  const floor = Math.min(board.height, ...['pwa-bar', 'first-tip', 'objective', 'descend-button'].map((id) => {
     const rect = $(id).getBoundingClientRect();
     return rect.height && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
   })) - 8;
@@ -535,7 +557,7 @@ let specialMoveFrame = 0;
 // capture, 'enemy' after a monster pawn's) or castling.
 function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
-  if (TACTIC_COPY[kind]) return openTactic(kind);
+  if (TACTIC_COPY[kind] || kind === 'recruit') return openTactic(kind);
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
   const canvas = $('special-move-art');
@@ -559,10 +581,10 @@ function openSpecialMove(kind, mode = 'player') {
   $('special-move-continue').focus();
   frame(start);
 }
-// The first fork won and the first combo on this device get the same
-// congratulation dialog, with their own animated explainer (tactics-art.js).
+// The first fork won, the first combo and the first waiting recruit on this
+// device get the same dialog, with their own animated explainer (tactics-art.js).
 function openTactic(kind) {
-  const copy = TACTIC_COPY[kind];
+  const copy = kind === 'recruit' ? RECRUIT_COPY : TACTIC_COPY[kind];
   try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
@@ -620,7 +642,11 @@ function takeAction(action) {
   const castled = state.events.some(event => event.type === 'castle');
   const tactic = state.events.some(event => event.type === 'fork-won') ? 'fork' : state.events.some(event => event.type === 'combo') ? 'combo' : null;
   if (!shopping) showTacticCallout(state.events);
-  const special = enPassant ? 'en-passant' : castled ? 'castle' : tactic && !tacticSeen(tactic) ? tactic : null;
+  // The recruit explainer waits for the player's first move, so it never stacks
+  // on the first-visit guide, and yields to any other explainer this move.
+  const recruitNews = !shopping && state.status === 'playing' && !tacticSeen('recruit')
+    && (waitingRecruit(state) || state.events.some(event => event.type === 'companion-recruit'));
+  const special = enPassant ? 'en-passant' : castled ? 'castle' : tactic && !tacticSeen(tactic) ? tactic : recruitNews ? 'recruit' : null;
   const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   // Congratulate the player's own en passant or castle once the move has settled,
