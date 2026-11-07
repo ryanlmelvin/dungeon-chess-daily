@@ -843,10 +843,14 @@ function showResult() {
   const shareable = isOfficialPiece(state, daily);
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
-  $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
+  // The card without its link. Should a line wrap, it breaks only between the title's
+  // parts or between floors: no-break spaces hold each part and each floor together.
+  const hold = (line, gap) => line.split(gap).map(part => part.replaceAll(' ', '\u00A0')).join(gap);
+  const [title, floors] = shareable ? shareText().split('\n') : [];
+  $('share-preview').textContent=shareable ? `${hold(title, ' · ')}\n${hold(floors, '  ')}` : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 One line per floor: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
+  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }

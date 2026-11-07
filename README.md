@@ -22,12 +22,11 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 - Complete all three 8×8 rooms with unlimited moves.
 - Room modifiers: each edition draws one modifier from its date, applied to all three floors and announced in a newspaper bulletin. About half the days are plain. 🧊 **Ice**: eight floor tiles per room are ice. Your rook, bishop or queen, or your pawn moving straight, that ends a non-capturing move on ice skids one more square the same way if that square is open and empty; the move preview draws an arrow to the landing square. Monsters and recruits never slide. 🧱 **Collapse**: every 10 moves on a floor, one more monster (one of the floor's decoy species, never a pawn or the target) enters on the square in front of the door once it is free, at most three per floor and none after the stairs open. It only comes as a role with room left under a chess army's counts, so the board never holds a second king or queen; when neither decoy species has room, that arrival is called off (it still counts toward the three).
 - Each floor has a **par**: the number of moves the certified winning route (the Dungeon Bot below) spent on it. The status line shows `Par N` from the start of the floor, never the route itself, and clearing a floor shows a toast with your moves against par. Moves count as in the bot comparison: every move and wait on that floor in the current try until its challenge is complete, including moves made before a **Restart this floor** (which restores the lives, gold and powers you arrived with, but not the move count). Losing all lives or restarting today's dungeon starts a new try with fresh counts. Practice runs with a different piece or color have no par.
-- The share card is spoiler-free and golf-style, one line per floor reached: the floor's marker (🟥 ⬛ 👑), its moves against par (`E` for even, `·` without a par), and a 🇫🇷, 🏰 or 🔱 if you took en passant, castled or won a fork on that floor:
+- The share card is spoiler-free and golf-style. Its title gives the edition's date (with the year only for an edition from a past year) and your starting piece as a black chess symbol, whatever your color; archive and practice cards add **ARCHIVE** or **PRACTICE** after the game's name. The next line lists each floor reached, two spaces apart: the floor's marker (🟥 ⬛ 👑), its moves against par (`E` for even, `·` without a par), and a 🇫🇷, 🏰 or 🔱 if you took en passant, castled or won a fork on that floor. A link to the game closes the card:
   ```
-  Dungeon Chess Daily #20
-  🟥 +2
-  ⬛ E 🇫🇷
-  👑 −12 🔱
+  Dungeon Chess Daily · Nov 7 ♝
+  🟥 +2  ⬛ E 🇫🇷  👑 −12 🔱
+  https://ryanlmelvin.github.io/dungeon-chess-daily/
   ```
 - Lives match the number of that piece in a chess army: eight pawns, two rooks, knights, or bishops, and one queen (or king, in practice). Each capture costs one life unless a shield absorbs it. A promoted pawn keeps its remaining lives but becomes a pawn again after losing one, returning to a safe square if needed. Losing all lives restarts the same daily dungeon from floor one, resetting gold and powers.
 

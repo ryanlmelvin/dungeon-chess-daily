@@ -1256,14 +1256,21 @@ function play(previous, action) {
   return state;
 }
 
-// A spoiler-free result card, golf-style, one line per floor reached:
-//   Dungeon Chess Daily #20
-//   🟥 +2          the floor's marker and its moves against par (src/par.js):
-//   ⬛ E 🔱         E for even, · without a par; then 🇫🇷🏰🔱 once each if
-//   👑 −12 🔱       that floor took en passant, castled or won a fork
-// Each line starts with its marker, so the card reads cleanly at any score.
+// A spoiler-free result card, golf-style:
+//   Dungeon Chess Daily · Nov 7 ♝
+//   🟥 +2  ⬛ E 🔱  👑 −12 🔱
+//   https://ryanlmelvin.github.io/dungeon-chess-daily/
+// The title names the edition's UTC date (with the year only when it isn't the
+// current one) and the run's starting piece. Then each floor reached, two spaces
+// apart: its marker, its moves against par (src/par.js; E for even, · without a
+// par), then 🇫🇷🏰🔱 once each if that floor took en passant, castled or won a
+// fork. Every floor starts with its marker, so the line reads cleanly at any score.
 const FLOOR_MARKERS = ['🟥', '⬛', '👑'];
 const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['fork', '🔱']];
+// The black glyph whatever the run's color. Of the six, only ♟ also has an emoji
+// form (since Emoji 11.0), which some phones draw by default; U+FE0E asks for its
+// text form so it matches the other five, which have no emoji form to opt out of.
+const PIECE_MARKS = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟\uFE0E' };
 /**
  * Moves that count toward a floor's score: those until the challenge was
  * complete, plus those spent on the floor before any Restart this floor. Older
@@ -1277,12 +1284,18 @@ export function scoredMoves(record) {
 /** Scored moves on the floor in progress, restarts included: still counting until the challenge is complete. */
 export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0); }
 
-/** The edition's date as shared, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself). */
+/** The edition's full date, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself), as the archive and dialogs name it. */
 export function shareDate(date) {
   return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
+/** The share card's date, e.g. "Nov 7", or "Nov 7, 2026" for an edition from a year other than `now`'s (both UTC). */
+function cardDate(date, now) {
+  const day = new Date(`${date}T12:00:00Z`);
+  return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(day.getUTCFullYear() !== now.getUTCFullYear() && { year: 'numeric' }), timeZone: 'UTC' });
+}
+
+export function getShareText(state, pars = null, { url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/', now = new Date() } = {}) {
   const floors = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
@@ -1291,7 +1304,7 @@ export function getShareText(state, pars = null, url = 'https://ryanlmelvin.gith
     const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind && feat.floor === floor)).map(([, mark]) => mark).join('');
     floors.push([FLOOR_MARKERS[floor], score, feats].filter(Boolean).join(' '));
   }
-  return [`Dungeon Chess Daily · ${shareDate(state.date)}`, ...floors, url].filter(Boolean).join('\n');
+  return [`Dungeon Chess Daily · ${cardDate(state.date, now)} ${PIECE_MARKS[state.startingPiece]}`, floors.join('  '), url].filter(Boolean).join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
