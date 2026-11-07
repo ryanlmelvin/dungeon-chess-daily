@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
-import { getRawDaily } from './edition.js';
+import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove } from './monster-ai.js';
@@ -34,6 +34,10 @@ export function takebackTarget(state) {
 export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. One per shop.' });
 /** What the between-floor shop offers, in display order. */
 export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)).concat(EXTRA_LIFE));
+/** The ids the shop after `floor` offers today (src/edition.js). */
+export function shopOffers(state, floor = state.floor) {
+  return floor >= 2 ? [] : shopStock(state.date, floor);
+}
 // Older saves may hold hourglasses bought before they left the shop.
 const purchaseCost = (id) => (id === EXTRA_LIFE.id ? EXTRA_LIFE : POWERUPS.find((power) => power.id === id))?.cost;
 const livesBought = (purchases) => purchases.filter((id) => id === EXTRA_LIFE.id).length;
@@ -916,6 +920,8 @@ function play(previous, action) {
     if (previous.floor >= 2 || !previous.exit.open || !previous.objective.complete) return previous;
     // Companions are no longer sold; older saves keep the orders they already placed.
     if (COMPANIONS.some((entry) => entry.id === action.id)) return previous;
+    // Only today's four offers are for sale.
+    if (!shopOffers(previous).includes(action.id)) return previous;
     if (action.id === EXTRA_LIFE.id) {
       const thisVisit = previous.purchases.slice(previous.floorSnapshot?.purchases?.length ?? 0);
       if (previous.gold < EXTRA_LIFE.cost || livesBought(thisVisit)) return previous;

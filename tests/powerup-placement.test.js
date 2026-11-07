@@ -44,11 +44,11 @@ test('the last floor holds no coins or coin magnet, and the shop before it sells
       if (action.type === 'descend' && state.floor === 1) {
         const shopper = { ...structuredClone(state), gold: 20 };
         assert.equal(act(shopper, { type: 'buy', id: 'magnet' }), shopper, `${date}: magnet sold before the last floor`);
-        assert.notEqual(act(shopper, { type: 'buy', id: 'shield' }), shopper, `${date}: shop closed before the last floor`);
+        assert.notEqual(act(shopper, { type: 'buy', id: 'life' }), shopper, `${date}: shop closed before the last floor`);
       }
       if (action.type === 'descend' && state.floor === 0) {
         const shopper = { ...structuredClone(state), gold: 20 };
-        assert.notEqual(act(shopper, { type: 'buy', id: 'magnet' }), shopper, `${date}: magnet missing before floor 2`);
+        assert.equal(act(shopper, { type: 'buy', id: 'magnet' }) !== shopper, daily.shops[0].includes('magnet'), `${date}: magnet sold before floor 2 exactly when stocked`);
       }
       state = act(state, action);
       if (action.type !== 'descend' || state.status !== 'playing') continue;

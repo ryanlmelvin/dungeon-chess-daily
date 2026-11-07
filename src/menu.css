@@ -170,8 +170,6 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
 /* The objective stays click-through except for its hint button. */
 .game-objective { display: flex; align-items: center; justify-content: center; gap: 10px; }
-/* Guide entries for shop tools show a word or glyph where pickups show art. */
-.guide-tool { color: var(--gold); font-size: 30px; min-width: 40px; text-align: center; }
 /* Tools bought in the shop sit beside the lives, only while one is held. */
 .life-row { flex-basis: 100%; display: flex; align-items: center; gap: 12px; }
 .life-row .life-markers { flex-basis: auto; }

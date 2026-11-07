@@ -61,7 +61,7 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 .descend-button:active{transform:translateX(-50%) translateY(1px)}
 .game-message{max-width:calc(100% - 32px);width:max-content;white-space:normal;line-height:1.5}
 .shop-items{display:grid;gap:10px}
-.shop-items button{text-align:left;padding:14px;min-height:74px}
+.shop-items button{text-align:left;padding:14px;min-height:74px;display:flex;align-items:center;gap:12px}.shop-icon{flex:none;width:48px;height:48px;image-rendering:pixelated}
 .shop-items strong{display:block;font-size:13px;color:var(--gold);margin-bottom:7px}
 .shop-items span{display:block;font-size:12px;line-height:1.5;color:var(--paper)}
 #shop-gold{color:var(--gold)}
