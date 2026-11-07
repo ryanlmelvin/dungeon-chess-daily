@@ -82,7 +82,8 @@ test('white captures before enemy movement; black enemies can leave the selected
 });
 
 test('black animates a monster moving onto a destination before the player captures it',()=>{
-  const state=scenario(); state.enemies=[monster('target','king',4,3)];
+  // Brave (Gentle) monsters: smarter ones keep off the rook's file.
+  const state=scenario(); state.enemies=[monster('target','king',4,3)]; state.difficulty='gentle';
   const next=act(state,move(4,4));
   const movement=next.events.find((event)=>event.type==='enemy-move');
   assert.deepEqual(movement,{type:'enemy-move',id:'target',from:{x:4,y:3},x:4,y:4});
@@ -91,7 +92,8 @@ test('black animates a monster moving onto a destination before the player captu
 });
 
 test('a blocked black selection waits without spending a move and retries never grant another enemy phase',()=>{
-  const state=scenario(); state.enemies=[monster('blocker','king',4,4)];
+  // Brave (Gentle) monsters: smarter ones keep off the rook's file.
+  const state=scenario(); state.enemies=[monster('blocker','king',4,4)]; state.difficulty='gentle';
   const pending=act(state,move(4,4));
   assert.equal(pending.awaitingPlayer,true); assert.equal(pending.turns,0);
   assert.deepEqual([pending.player.x,pending.player.y],[4,6]);

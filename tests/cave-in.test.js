@@ -147,7 +147,8 @@ test('a Take-back during the countdown rewinds it, even the move that caved it i
 });
 
 test('losing the last life during the countdown starts a fresh run with no cave-in; a held Take-back can return', () => {
-  const state = room({ piece: 'rook', freeze: 0, enemies: [foe('k', 'king', 4, 4), foe('r', 'rook', 0, 4)] });
+  // Gentle monsters: the rook on the player's row winds up even though the player could take it back (Tricky up won't).
+  const state = room({ difficulty: 'gentle', piece: 'rook', freeze: 0, enemies: [foe('k', 'king', 4, 4), foe('r', 'rook', 0, 4)] });
   state.player.hp = state.player.maxHp = 1;
   const cleared = act(state, move(4, 4));
   assert.ok(cleared.caveIn);

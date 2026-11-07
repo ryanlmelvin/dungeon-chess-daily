@@ -107,7 +107,11 @@ searching the entire game tree for every proposed decoration.
 4. If the first candidate fails, or its route's difficulty score lies outside
    the tier's band, a second layout seed is derived from the date and generator
    version and searched the same way. The generator keeps the first candidate in
-   the band, or else the certified one closest to it (`chooseCandidate`).
+   the band, or else the certified one closest to it (`chooseCandidate`). From
+   Tricky on, a candidate whose route clears any floor in fewer than
+   `minFloorMoves` (4) moves is rejected like an unsolved one (no freebie
+   floors); `certify` rejects such a stored or remembered route too, and the
+   fallback bank is built and verified to the same rule.
 5. If neither candidate is accepted, the generator selects a previously certified
    full-dungeon template for the same tier, piece, and color. Date-specific
    appearances remain varied; target roles and gameplay RNG use the template's
@@ -248,6 +252,65 @@ differs widely between pieces, which is what a recalibration on it would fix.
 The bot is software with blind spots too, so a failed floor is evidence that a
 day is hard to figure out, not proof.
 
+### Smarter monsters by tier
+
+Monster smarts are the main difficulty dial. `monsterSmarts(state)` is the
+tier's rank (Gentle 1 to Fiendish 5, from `state.difficulty`); any other value,
+such as legacy saves' `standard`, plays like Gentle. Each tier keeps the ones
+before it, on floors 1 and 2 (the king floor keeps its royal rules):
+
+- **Gentle**: the habits above.
+- **Fair**: every role pays for landing where it is *exposed*: the player could
+  capture there, counting a held Borrowed move (`borrowedPiece`), and the square
+  is not *guarded* (`closeAttacker`: taking it would be an instant hit); or the
+  recruit could capture there, guarded or not, since nothing punishes a recruit.
+  Knights keep their weight of 3 (`knightExposed`, now with that definition);
+  the rest pay 6 (`exposed`), because a slider's plain approach (0.6 a square)
+  pulled a rook from across the room to stand next to a rook player at 3.
+- **Tricky**: a rook, bishop, queen or decoy king closes in (`safeCloseIn`) and
+  winds up (`safeToStrike`) only from a square where it isn't exposed.
+  Otherwise it repositions with its habits. The wind-up warning never changes;
+  only the choice to make one. This answers the playtest finding that lines are
+  two-way: bishop against bishop, rook against rook or anything against a
+  queen, a wind-up handed the piece over, and floor 1 often fell in three moves.
+  The follow-through after a missed wind-up (the lunge onto the square the
+  player left) is unchanged, so the telegraph stays exact; see [Measuring the
+  monsters](#measuring-the-monsters) for what changing it would cost.
+- **Tough**: guards (every monster but the targets) screen the targets like
+  royal guards screen the king. A guard first blocks a line into a target the
+  player or recruit could take (`screenStep`: fewest targets left exposed, then
+  its own safety, then the nearest), before closing in or winding up; its
+  ordinary steps pay 8 per target they leave exposed (`unscreen`, more than its
+  own safety), earn 2 for standing between the player and a target (`screen`),
+  and it never closes in to open a target. Guarding counts as screening:
+  standing beside a target makes taking it an instant hit. Non-pawn targets
+  earn 2 for a guarded square (`huddle`).
+- **Fiendish**: a non-pawn target with a step where it isn't exposed never takes
+  one where it is (a filter, like the royal king's `safeKingMoves`), and guards
+  bait: 2.5 for a guarded square from which they strike, so they wind up where
+  taking them costs the player a life.
+
+Pawns keep their chains and only advance, which keeps pawn floors catchable.
+Monsters still can't pass, so one with no safe step must step into reach
+anyway, and waiting can squeeze it (tests/monster-smarts.test.js). In open
+rooms smarter monsters keep their distance instead; Wait works best in tight
+corners.
+
+**Tie-breaks.** A monster's seeded tie-break (`monsterTie`) hashes the seed,
+floor, monster, destination and the moves made on *this floor*, never the
+whole run's move count, so how long earlier floors took (gold collecting
+included) no longer changes a later floor or its par. Hashing the board alone
+was tried first: in 200 floor-1 rooms with the player waiting 30 times, 51 of
+1,036 monsters ended pacing between two squares for the last 8 waits (44 when
+the hash also covered every unit's square), against 29 to 31 with a move count.
+A board-only loop can never break while the player waits, so a floor-local
+count it is. On floor 1 it is exactly the old tie-break.
+
+`classicMonsters: true` on a candidate (comparisons only, never on an edition)
+restores the old monsters on every tier: Gentle smarts and the whole-run move
+count. `node scripts/measure-monsters.mjs` uses it to show what the new
+monsters cost generation (see [Measuring the monsters](#measuring-the-monsters)).
+
 ## Difficulty and chess learning
 
 ## Weekly difficulty
@@ -267,6 +330,12 @@ The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
 each floor's clue and two suspects (the target's species and one other that can
 appear there, so a lone suspect shows a floor with no other species), nothing
 else about the dungeon.
+
+The tier also sets how smart the monsters are ([Smarter monsters by
+tier](#smarter-monsters-by-tier)), the main step from one tier to the next, and
+from Tricky on its `minFloorMoves` (4) rules out freebie floors: every floor of
+the certified route, and so every par, takes at least four moves. The route
+records them as `metrics.floorMoves`.
 
 **The score.** Every certified edition gets one number from its certificate's
 verifier metrics and its piece (`difficultyScore`):
@@ -324,6 +393,13 @@ again (after editing the score or bands), `--merge` measures only what the file
 lacks, `--pieces`, `--obstacles` and `--grid quick` narrow the grid, and
 `--dry-run` leaves the table alone. A full brute-force run uses every core but
 one (`--jobs N` overrides) and takes well over an hour.
+
+Monsters grow smarter with the tier, so every setting is measured once per
+tier, with that tier's monsters, and competes only for that tier: five times
+the searches of a shared measurement (shortlist screening and dominance work
+per tier too). Setting keys end in `@tier`, and data measured before tiered
+monsters has none, so it can't be reused. Rows keep the route's `floorMoves`,
+so the fit applies the no-freebie-floor rule as generation does.
 
 ### Shortlist, then confirm (the quick way)
 
@@ -407,6 +483,58 @@ npm test
 `verify:fallbacks` fails if a fallback was built for knobs the table no longer
 holds. The script warns when a (tier, piece) mean misses its band; then widen
 the grid, add a knob, or move the bands.
+
+## Measuring the monsters
+
+`node scripts/measure-monsters.mjs` prices smarter monsters and the
+no-freebie-floor rule. For 16 real dates per (tier, piece) (`--samples`), half
+plain and a quarter each ice and collapse, it searches both candidates with
+the current knobs twice: *old* (`classicMonsters`, no minimum floor moves:
+exactly how editions were certified before; its choices matched the shipped
+`src/editions.js` on all 385 sampled dates inside its window) and *new*. It
+replays `chooseCandidate` and prints, per tier and per tier and piece, how
+often each candidate certifies, the fallback share, par per floor, the score
+and how many candidates the freebie rule rejected, plus two what-ifs for the
+new monsters: no freebie rule, and `--attempts N` candidates instead of two.
+It takes about four minutes on seven workers.
+
+Its first run (2026-11-07, 400 dates, knobs still calibrated for the old
+monsters), old → new:
+
+| Tier | Candidate 1 certifies | Candidate 2 certifies | Fallback | No freebie rule | 4 candidates | Median par F1/F2/F3 | Median total par | Mean score |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Gentle | 89% → 86% | 81% → 80% | 5% → 6% | 6% | 0% | 4/4/7 → 4/4/8 | 18.5 → 20 | 9.4 → 9.7 |
+| Fair | 94% → 84% | 89% → 86% | 0% → 5% | 5% | 1% | 5/5/5.5 → 5/6/5 | 19 → 21 | 11 → 11.6 |
+| Tricky | 84% → 38% | 84% → 35% | 5% → 46% | 5% | 30% | 5/5/6 → 7/7/8 | 20.5 → 23 | 12.7 → 13.5 |
+| Tough | 91% → 41% | 84% → 44% | 4% → 38% | 9% | 21% | 5/5/6 → 7.5/7/6.5 | 23 → 24.5 | 14 → 14.8 |
+| Fiendish | 86% → 46% | 91% → 46% | 0% → 35% | 4% | 23% | 6/5.5/7 → 7/7.5/7 | 21.5 → 24.5 | 15 → 15.9 |
+| All | 89% → 59% | 86% → 58% | 3% → 26% | 6% | 15% | 5/5/6 → 6/6/7 | 20 → 22 | 12.4 → 12.7 |
+
+- The smarter monsters cost little certification on their own (6% fallback
+  without the freebie rule, against 3%); the rule costs most. Under the old
+  rules about a quarter of every tier's certified floors took under four
+  moves, and the rule alone would have sent 48–56% of Tricky-and-up days to
+  the bank with the old monsters. Lone queens are most of them: 73% of
+  Tricky-and-up queen floors still fall in two or three moves with the new
+  monsters, against 14% for rooks, 8% for knights and bishops and none for
+  pawns.
+- On Tricky and up (pooled), relaxing the rule trades fallbacks for quick
+  floors: every floor at least 4 moves 40%, at least 3 moves 21%, floor 1 at
+  least 4 moves 21%, no rule 6%. Four candidates instead of two cut those to
+  25%, 11%, 12% and 2%, at up to twice the search.
+- Pawn days pay the most for the smarts themselves (Fair 19%, Tough 13%
+  fallback without the rule): monsters that keep off a pawn's two capture
+  squares are hard to catch.
+- On quick floors a careful target was mostly caught after the follow-through
+  of a missed wind-up, lunging onto the square the player had just left,
+  usually beside the player (116 of 214 captures), or beside a guard that
+  moved off afterwards (78; monsters act one by one, targets first). Holding the lunge back from the player's reach was tried: it
+  cut freebie rejections from 175 to 130 but left more candidates unsolved
+  (Tough 9% → 24% without the rule), so the fallback share did not improve
+  (40% → 39%) and the lunge stays as it was.
+- Scores rise 0.8–0.9 points on Tricky and up. Recalibration will ease those
+  layouts, which should certify more often; rerun this script after it.
+  Searches take about 45% longer (389 → 566 ms).
 
 ## Difficulty and chess learning
 

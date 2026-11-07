@@ -9,7 +9,7 @@ import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
 import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { PLAYABLE_PIECES as PIECES } from '../src/pieces.js';
-import { TIER_IDS, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
+import { TIER_IDS, knobsFor, difficultyScore, bandDistance, freebieFloor } from '../src/difficulty.js';
 import { candidateFor, generateDaily, fallbackKey } from '../src/generation.js';
 import { MODIFIERS } from '../src/modifiers.js';
 
@@ -38,8 +38,8 @@ if (process.argv.includes('--verify')) {
     const state = stateFor(entry, tier, knobs);
     const proof = verifyWinningRoute(state, entry.actions);
     if (state.startingPiece !== piece || state.playerColor !== color || !proof.valid
-      || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) {
-      throw new Error(`Invalid ${key} certificate: ${proof.reason ?? 'profile mismatch'}`);
+      || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions || freebieFloor(proof.metrics, tier)) {
+      throw new Error(`Invalid ${key} certificate: ${proof.reason ?? (freebieFloor(proof.metrics, tier) ? 'a floor cleared under the tier’s minimum moves' : 'profile mismatch')}`);
     }
     // The runtime path: forcing the fallback rebuilds and replays the same dungeon.
     const daily = generateDaily(entry.date, { difficulty: tier, maxAttempts: 0 });
@@ -64,7 +64,8 @@ if (process.argv.includes('--verify')) {
       const found = findWinningRoute(state, { maxExpansions: budget, beamWidth: 48 });
       if (found.status !== 'solved') continue;
       const proof = verifyWinningRoute(state, found.actions);
-      if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) continue;
+      // Tricky and up, no floor may be a freebie (DIFFICULTY_TIERS minFloorMoves).
+      if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions || freebieFloor(proof.metrics, tier)) continue;
       maxExplored = Math.max(maxExplored, found.explored);
       entry.score = difficultyScore(proof.metrics, piece);
       entry.actions = found.actions;

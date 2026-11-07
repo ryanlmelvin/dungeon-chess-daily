@@ -16,13 +16,17 @@ import { HUMAN_MOVE_CAP } from './human-bot.js';
  * boundary. The weekday, not the score, picks an edition's tier. The bands
  * span the scores every piece's knobs can reach (see CALIBRATION_REPORT);
  * a wider spread would leave some pieces unable to land in the outer tiers.
+ * The rank also sets how smart the monsters are (src/monster-ai.js).
+ * `minFloorMoves`: a certified route must spend at least that many moves on
+ * every floor (no freebie floors); generation rejects a candidate that clears
+ * one faster and tries the next, then the fallback bank.
  */
 export const DIFFICULTY_TIERS = Object.freeze({
-  gentle: Object.freeze({ rank: 1, name: 'Gentle', band: Object.freeze([9, 10.5]) }),
-  fair: Object.freeze({ rank: 2, name: 'Fair', band: Object.freeze([10.5, 12]) }),
-  tricky: Object.freeze({ rank: 3, name: 'Tricky', band: Object.freeze([12, 13.5]) }),
-  tough: Object.freeze({ rank: 4, name: 'Tough', band: Object.freeze([13.5, 15]) }),
-  fiendish: Object.freeze({ rank: 5, name: 'Fiendish', band: Object.freeze([15, 16.5]) }),
+  gentle: Object.freeze({ rank: 1, name: 'Gentle', band: Object.freeze([9, 10.5]), minFloorMoves: 0 }),
+  fair: Object.freeze({ rank: 2, name: 'Fair', band: Object.freeze([10.5, 12]), minFloorMoves: 0 }),
+  tricky: Object.freeze({ rank: 3, name: 'Tricky', band: Object.freeze([12, 13.5]), minFloorMoves: 4 }),
+  tough: Object.freeze({ rank: 4, name: 'Tough', band: Object.freeze([13.5, 15]), minFloorMoves: 4 }),
+  fiendish: Object.freeze({ rank: 5, name: 'Fiendish', band: Object.freeze([15, 16.5]), minFloorMoves: 4 }),
 });
 export const TIER_IDS = Object.freeze(Object.keys(DIFFICULTY_TIERS));
 
@@ -102,6 +106,15 @@ export function humanGap({ results, certified }, cap = HUMAN_MOVE_CAP) {
     failed: results.map((runs) => round(runs.filter((run) => !run.won).length / runs.length)),
     total: round(floors.reduce((sum, gap) => sum + gap, 0)),
   };
+}
+
+/**
+ * True when a certified route clears some floor in fewer moves than the
+ * tier's `minFloorMoves`. `floorMoves` (src/fairness.js) lists the moves each
+ * floor took until its challenge was complete, the floor's par.
+ */
+export function freebieFloor(metrics, tier, minimum = DIFFICULTY_TIERS[tier]?.minFloorMoves ?? 0) {
+  return minimum > 0 && (metrics?.floorMoves ?? []).some((moves) => moves < minimum);
 }
 
 /** Distance from a score to a tier's band; 0 inside it. */

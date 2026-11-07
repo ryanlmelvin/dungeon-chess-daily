@@ -16,7 +16,7 @@ import { FIRST_EDITION_DATE, getRawDaily } from '../src/edition.js';
 import { generateDaily, candidateFor } from '../src/generation.js';
 import { createGame } from '../src/rules.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { knobsFor, tierForDate } from '../src/difficulty.js';
+import { knobsFor, tierForDate, freebieFloor } from '../src/difficulty.js';
 import { encodeRoute, decodeRoute } from '../src/route-code.js';
 import { humanPar } from '../src/human-bot.js';
 
@@ -52,6 +52,7 @@ function staleReason(date, entry) {
   const knobs = knobsFor(entry.tier, base.playerPiece);
   const proof = verifyWinningRoute(createGame(candidateFor(base, entry.tier, knobs, entry.attempt)), decodeRoute(entry.route));
   if (!proof.valid) return proof.reason;
+  if (freebieFloor(proof.metrics, entry.tier)) return 'a floor cleared under the tier’s minimum moves';
   return proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions ? 'too few threatened decisions' : null;
 }
 // A stored entry whose certificate is current but whose par isn't.
