@@ -16,8 +16,10 @@ import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
-import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
+import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { pinUsable, captureGoal, shareDate } from './rules.js';
+import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
+import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { caveInStatus, caveInExplain, caveInRunning, goldAtRisk } from './cave-in.js';
@@ -186,32 +188,54 @@ function renderPaper() {
   $('paper-date').textContent = paperDate(daily.date);
   // The weekday's difficulty tier, e.g. "DIFFICULTY: TOUGH": no clue about the dungeon itself.
   $('paper-tier').textContent = Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION';
-  $('headline').textContent = headlineFor(daily.species[0], daily.date);
+  // Each story says how one floor's target moves, never who it is, and lines up that floor's suspects.
+  $('headline').textContent = headlineFor(daily.species[0], daily.date, 0);
   $('deck').replaceChildren(createPrintLines(0));
-  $('art-caption').textContent = "Artist's impression";
+  $('lead-lineup').replaceChildren(createLineup(0));
   // The day's room modifier gets a bulletin under the masthead; plain days none.
   const modifier = MODIFIERS[daily.modifier] ?? MODIFIERS.none;
   $('modifier-bulletin').hidden = modifier.id === 'none';
   $('modifier-emoji').textContent = modifier.emoji;
   $('modifier-kicker').textContent = `${modifier.name}:`;
   $('modifier-headline').textContent = modifier.headline;
-  $('side-stories').replaceChildren(...daily.species.slice(1, 3).map((creature, index) => {
+  $('side-stories').replaceChildren(...[1, 2].map((floor) => {
     const article = document.createElement('article');
-    const h = document.createElement('h3'); h.textContent = headlineFor(creature, daily.date);
+    const h = document.createElement('h3'); h.textContent = headlineFor(daily.species[floor], daily.date, floor);
     const p = document.createElement('p');
     p.setAttribute('aria-hidden', 'true');
-    p.append(createPrintLines(index + 1));
-    const portrait = document.createElement('canvas'); portrait.width=40;portrait.height=40;portrait.className='story-portrait';portrait.setAttribute('aria-label',creature.name);portrait.setAttribute('role','img');
-    drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
-    article.append(portrait,h,p); return article;
+    p.append(createPrintLines(floor));
+    article.append(h, createLineup(floor), p); return article;
   }));
   $('paper-screen').setAttribute('aria-label', archiveMode ? `Archive newspaper, ${shareDate(daily.date)}` : "Today's newspaper");
   $('archive-banner').hidden = !archiveMode;
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode ? 'Enter this dungeon ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
-  drawPaperArt();
 }
-// Decorative, unreadable print: the headlines and colored portraits carry the clues.
+// A police lineup of two suspects (src/rules.js paperSuspects): the floor's
+// target and one other species that can turn up there, by name, so the order
+// never points at the target.
+function createLineup(floor) {
+  const cast = paperSuspects(daily, floor);
+  const figure = document.createElement('figure');
+  figure.className = 'lineup';
+  const caption = document.createElement('figcaption');
+  caption.textContent = cast.length === 1 ? `Floor ${floor + 1}: open-and-shut case` : `Floor ${floor + 1} suspects`;
+  const list = document.createElement('ul');
+  list.append(...cast.map((creature) => {
+    const item = document.createElement('li');
+    const portrait = document.createElement('canvas');
+    portrait.width = portrait.height = SPRITE_SIZE * 2;
+    portrait.setAttribute('aria-hidden', 'true');
+    drawMugshot(portrait.getContext('2d'), creature);
+    const name = document.createElement('span');
+    name.textContent = creature.name;
+    item.append(portrait, name);
+    return item;
+  }));
+  figure.append(caption, list);
+  return figure;
+}
+// Decorative, unreadable print: the headlines and suspect lineups carry the clues.
 function createPrintLines(variant) {
   const canvas = document.createElement('canvas');
   canvas.width = 180; canvas.height = 26; canvas.className = 'print-lines';
@@ -227,15 +251,6 @@ function createPrintLines(variant) {
     }
   }
   return canvas;
-}
-function drawPaperArt() {
-  const ctx = $('paper-art').getContext('2d');
-  ctx.fillStyle='#302a36';ctx.fillRect(0,0,180,150);
-  for(let y=0;y<150;y+=3)for(let x=0;x<180;x+=3)if((x*13+y*7)%19<4){ctx.fillStyle='#49404d';ctx.fillRect(x,y,1,1);}
-  // An inked chess floor and the actual monster pictured in this story.
-  for(let y=0;y<4;y++)for(let x=0;x<6;x++){ctx.fillStyle=(x+y)%2?'#743f47':'#201d25';ctx.fillRect(x*30,110+y*10,30,10);}
-  ctx.fillStyle='#1c1921';ctx.fillRect(5,0,18,115);ctx.fillRect(157,0,18,115);
-  drawSprite(ctx,daily.species[0].id,40,14,5,spritePalette(daily.species[0].palette));
 }
 $('newspaper').addEventListener('animationend', () => $('newspaper').classList.remove('arriving'), {once:true});
 if (state || matchMedia('(prefers-reduced-motion: reduce)').matches) $('newspaper').classList.remove('arriving');
@@ -449,7 +464,7 @@ function updateGame() {
   $('combo-status').setAttribute('aria-label', `${combo} captures in a row${combo < COMBO_START ? `: capture again for bonus gold` : ''}`);
   $('objective-text').textContent = `Floor ${state.floor + 1} · ${captureGoal(state.objective.piece)}`;
   renderTargets();
-  $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
+  renderHintButton();
   $('objective').hidden = state.exit.open;
   // While the recruit waits for its order, Wait keeps it still instead.
   const holding = Boolean(pendingOrder());
@@ -605,8 +620,14 @@ function paintBoard(){
   if(!state||replay)return;
   // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
   const pending=pendingOrder();
-  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false});return;}
-  renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning});
+  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false,...hintMarks(pending.board)});return;}
+  renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
+}
+// Paid hints stay on the board for the rest of the floor: rings around the
+// targets, and the danger map (recomputed every move).
+function hintMarks(game) {
+  const bought = game.hints ?? [];
+  return { suspects: bought.includes('suspects') ? targetSpecies(game).id : null, closeRange: bought.includes('danger') ? closeRangeSquares(game) : null };
 }
 // Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
@@ -657,33 +678,123 @@ function openFirstVisitGuide() {
   guide.openFirstPage();
 }
 $('start-button').addEventListener('click', enterGame);
+// Monster pawns always march down the board, toward the side the player started on.
 const HINT_MOVES = {
-  pawn: 'An enemy pawn steps one square toward you, or two on its first move. It captures one square diagonally toward you.',
-  knight: 'A knight jumps in an L: two squares one way, then one to the side. It leaps over obstacles.',
-  rook: 'A rook slides any distance in a straight line until something blocks it.',
+  pawn: 'An enemy pawn steps one square down the board, toward the side you started on (two from the second row from the top). It captures one square diagonally downward.',
+  knight: 'A knight jumps in an L: two squares one way, then one to the side. It leaps over obstacles and other pieces.',
+  rook: 'A rook slides any distance up, down, left or right until something blocks it.',
   bishop: 'A bishop slides any distance diagonally until something blocks it.',
-  queen: 'A queen slides any distance in a straight line or diagonally until something blocks it.',
+  queen: 'A queen slides any distance up, down, sideways or diagonally until something blocks it.',
   king: 'A king steps one square in any direction.',
 };
+// Hints, per floor (src/rules.js nextHint): the first card, how the target's
+// role moves, is free; each paid one adds a move to the floor's score. The
+// button says "Hint · +1" once the next one would cost a move.
 let hintFrame = 0;
+let hintSeen = '';
+const hintFloor = () => `${gameKey(state)}|${state.tries ?? 1}|${state.floor}`;
+function renderHintButton() {
+  const next = nextHint(state);
+  const free = hintSeen !== hintFloor() && !state.hints?.length;
+  $('hint-button').textContent = free || !next ? '? Hint' : '? Hint · +1';
+  $('hint-button').setAttribute('aria-label', free ? `Hint: how an enemy ${state.objective.piece} moves` : next ? 'Hints: the next one adds a move to this floor' : 'Hints');
+}
+// Every card unlocked on this floor pages, in unlock order (src/rules.js
+// hintCards): the free one first. The dialog opens on the newest; paging is free.
+let hintPage = 0;
 function openHint() {
   if (!state || screen !== 'game' || document.querySelector('dialog[open]')) return;
-  const piece = state.objective.piece;
-  const article = piece === 'pawn' ? 'an enemy pawn' : `a ${piece}`;
-  $('hint-title').textContent = `How ${article} moves`;
-  $('hint-move').textContent = HINT_MOVES[piece];
-  $('hint-art').setAttribute('aria-label', `Animated board: ${HINT_MOVES[piece]}`);
-  const options = { enemy: true, palette: piecePalette(state.playerColor === 'white' ? 'black' : 'white') };
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const start = performance.now();
-  const frame = (now) => {
-    drawMoveDemo($('hint-art'), piece, still ? 1800 * 0.6 : now - start, options);
-    if (!still && $('hint-dialog').open) hintFrame = requestAnimationFrame(frame);
-  };
+  hintSeen = hintFloor();
+  // Open first: the move demo keeps animating only while the dialog is open.
   $('hint-dialog').showModal();
-  frame(start);
+  hintPage = hintCards(state).length - 1;
+  renderHint();
+  renderHintButton();
+}
+// One card, the pager (once there are two), and one button for the next hint.
+// `slide` is the direction it was paged from: -1 back, 1 forward.
+function renderHint(slide = 0) {
+  cancelAnimationFrame(hintFrame);
+  const piece = state.objective.piece;
+  const cards = hintCards(state);
+  hintPage = Math.max(0, Math.min(cards.length - 1, hintPage));
+  const card = cards[hintPage];
+  const art = $('hint-art');
+  $('hint-clue').hidden = card !== 'moves';
+  if (card === 'moves') {
+    const article = piece === 'pawn' ? 'an enemy pawn' : `a ${piece}`;
+    $('hint-title').textContent = `How ${article} moves`;
+    $('hint-move').textContent = HINT_MOVES[piece];
+    art.setAttribute('aria-label', `Animated board: ${HINT_MOVES[piece]}`);
+    const options = { enemy: true, palette: piecePalette(state.playerColor === 'white' ? 'black' : 'white') };
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const start = performance.now();
+    const frame = (now) => {
+      drawMoveDemo(art, piece, still ? 1800 * 0.6 : now - start, options);
+      if (!still && $('hint-dialog').open) hintFrame = requestAnimationFrame(frame);
+    };
+    frame(start);
+  } else if (card === 'suspects') {
+    // The 'suspects' hint identifies the target (the id stays for saved runs).
+    const line = targetLine(state);
+    $('hint-title').textContent = 'The target';
+    $('hint-move').textContent = line[0].toUpperCase() + line.slice(1);
+    art.setAttribute('aria-label', `${targetSpecies(state).name}, the target, in a police lineup`);
+    drawTargetCard(art, targetSpecies(state));
+  } else {
+    $('hint-title').textContent = 'Danger map';
+    $('hint-move').textContent = 'Hatched squares: end your move on one and a monster captures you at once. The map updates after every move.';
+    art.setAttribute('aria-label', 'A monster with the eight squares around it hatched in black and white');
+    drawDangerCard(art, { playerPalette: piecePalette(state.playerColor) });
+  }
+  $('hint-pager').hidden = cards.length < 2;
+  $('hint-page').textContent = `${hintPage + 1} / ${cards.length}`;
+  $('hint-back').disabled = hintPage === 0;
+  $('hint-forward').disabled = hintPage === cards.length - 1;
+  // A short slide from the side it came from (CSS; none under reduced motion).
+  const holder = $('hint-card');
+  holder.classList.remove('from-left', 'from-right');
+  if (slide) { void holder.offsetWidth; holder.classList.add(slide < 0 ? 'from-left' : 'from-right'); }
+  const next = nextHint(state);
+  $('hint-next').hidden = !next;
+  $('hint-next').textContent = next === 'suspects' ? 'Identify the target · +1 move' : 'Show danger map · +1 move';
+}
+function flipHint(step) {
+  const page = hintPage + step;
+  if (!state || !$('hint-dialog').open || page < 0 || page >= hintCards(state).length) return;
+  hintPage = page;
+  renderHint(step);
 }
 $('hint-button').addEventListener('click', openHint);
+$('hint-back').addEventListener('click', () => flipHint(-1));
+$('hint-forward').addEventListener('click', () => flipHint(1));
+$('hint-dialog').addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  flipHint(event.key === 'ArrowLeft' ? -1 : 1);
+});
+// A horizontal swipe on the card flips it: left for the next, right for the previous.
+let hintSwipe = null;
+$('hint-card').addEventListener('pointerdown', (event) => {
+  hintSwipe = event.pointerType === 'mouse' ? null : { id: event.pointerId, x: event.clientX, y: event.clientY };
+});
+$('hint-card').addEventListener('pointerup', (event) => {
+  if (hintSwipe?.id !== event.pointerId) return;
+  const dx = event.clientX - hintSwipe.x, dy = event.clientY - hintSwipe.y;
+  hintSwipe = null;
+  if (Math.abs(dx) >= 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) flipHint(dx < 0 ? 1 : -1);
+});
+$('hint-card').addEventListener('pointercancel', () => { hintSwipe = null; });
+$('hint-next').addEventListener('click', () => {
+  const next = state && nextHint(state);
+  if (!next || !takeAction({ type: 'hint', hint: next })) return;
+  // Straight to the card just bought.
+  hintPage = hintCards(state).length - 1;
+  renderHint(1);
+  // The last hint hides its button: keep focus inside the dialog.
+  if ($('hint-next').hidden) $('hint-dialog').querySelector('[data-close]').focus();
+});
+document.querySelectorAll('canvas[data-clue-art="unmask"]').forEach(drawUnmaskExample);
 const EN_PASSANT = {
   player: {
     title: 'You captured a pawn en passant!',
@@ -790,7 +901,8 @@ $('wait-button').addEventListener('click', () => (pendingOrder() ? giveOrder('ho
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
 function takeAction(action) {
-  const shopping = action.type === 'buy' && $('shop-dialog').open;
+  // Purchases happen inside their own dialog: the shop's, or a paid hint on the hint card.
+  const shopping = (action.type === 'buy' && $('shop-dialog').open) || (action.type === 'hint' && $('hint-dialog').open);
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || (!shopping && document.querySelector('dialog[open]'))) return false;
   if (refreshFromOtherWindow()) return false;
   // Manual recruit control: show the move first, then take the recruit's order.

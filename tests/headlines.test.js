@@ -2,11 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildTheme, getRawDaily, headlineFor } from '../src/edition.js';
+import { buildTheme, getRawDaily, headlineFor, HEADLINE_SUBJECTS } from '../src/edition.js';
 import { createGame, validateSave } from '../src/rules.js';
 
 const roles = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
-const palettes = ['ice', 'ember', 'moss', 'violet', 'gold', 'rose'];
 function creature(piece, palette = 'violet') {
   return {
     id: 'eye', piece, palette, plural: 'Floating eyes',
@@ -14,52 +13,64 @@ function creature(piece, palette = 'violet') {
   };
 }
 const dates = Array.from({ length: 366 }, (_, day) => new Date(Date.UTC(2026, 0, 1 + day)).toISOString().slice(0, 10));
+// A queen or king takes a singular subject ("One resident rules..."), the rest a plural one.
+const subjectsFor = (role) => HEADLINE_SUBJECTS[role === 'queen' || role === 'king' ? 'singular' : 'plural'];
+const subjectOf = (headline, role) => subjectsFor(role).find((subject) => headline.startsWith(`${subject} `));
 
-test('every role offers twelve compact headlines and keeps its colored creature as the subject', () => {
+test('every role offers twelve compact headlines under an anonymous subject', () => {
   for (const role of roles) {
-    const subject = creature(role);
-    const singular = role === 'queen' || role === 'king';
-    const expectedStart = singular ? 'Violet floating eye ' : 'Violet floating eyes ';
-    const choices = new Set(dates.map((date) => headlineFor(subject, date)));
-    assert.equal(choices.size, 12, role);
-    for (const headline of choices) {
-      assert.ok(headline.startsWith(expectedStart), headline);
-      assert.ok(headline.length <= 70, headline);
+    const headlines = new Set(dates.flatMap((date) => [0, 1, 2].map((floor) => headlineFor(creature(role), date, floor))));
+    const clues = new Set();
+    for (const headline of headlines) {
+      const subject = subjectOf(headline, role);
+      assert.ok(subject, headline);
+      clues.add(headline.slice(subject.length + 1));
+      assert.ok(headline.length <= 75, headline);
+      assert.doesNotMatch(headline, /violet|floating|\beyes?\b/i, headline);
     }
-    for (const palette of palettes) {
-      const colored = creature(role, palette);
-      const start = palette[0].toUpperCase() + palette.slice(1);
-      assert.ok(headlineFor(colored, dates[0]).startsWith(`${start} floating eye`));
-    }
+    assert.equal(clues.size, 12, role);
   }
+  // Both lists line up, so the pick says nothing beyond the verb's number.
+  assert.equal(HEADLINE_SUBJECTS.plural.length, HEADLINE_SUBJECTS.singular.length);
 });
 
-test('headline choices are repeatable per edition and role, independent of creature identity and call order', () => {
+test('headline choices are repeatable per edition, floor and role, independent of creature identity and call order', () => {
   for (const role of roles) {
     const first = creature(role);
     const other = { ...first, id: 'rat', name: 'Gold rat', palette: 'gold', plural: 'Rats' };
-    const singular = role === 'queen' || role === 'king';
     const date = '2026-11-06';
-    const original = headlineFor(first, date);
-    for (const otherDate of dates) headlineFor(other, otherDate);
-    assert.equal(headlineFor(first, date), original);
-    const originalSuffix = original.slice((singular ? 'Violet floating eye ' : 'Violet floating eyes ').length);
-    assert.equal(headlineFor(other, date), `${singular ? 'Gold rat' : 'Gold rats'} ${originalSuffix}`);
+    const original = [0, 1, 2].map((floor) => headlineFor(first, date, floor));
+    for (const otherDate of dates) headlineFor(other, otherDate, 1);
+    assert.deepEqual([0, 1, 2].map((floor) => headlineFor(first, date, floor)), original);
+    // Only the role matters, never which creature it hides behind.
+    assert.deepEqual([0, 1, 2].map((floor) => headlineFor(other, date, floor)), original);
+    // The day's three stories never share a subject.
+    assert.equal(new Set(original.map((headline) => subjectOf(headline, role))).size, 3);
   }
 });
+
+// Display names follow the art; ids, palettes and roles never move.
+const RENAMED = { imp: ['Cat', 'Cats'], goblin: ['Imp', 'Imps'], dragon: ['Gremlin', 'Gremlins'] };
+function renamed(species) {
+  if (!RENAMED[species.id]) return species;
+  const [baseName, plural] = RENAMED[species.id];
+  return { ...species, baseName, plural, name: `${species.palette[0].toUpperCase() + species.palette.slice(1)} ${baseName.toLowerCase()}` };
+}
 
 test('display variety preserves legacy edition metadata and valid saved runs', () => {
   const legacy = JSON.parse(readFileSync(new URL('./fixtures/schema3-run.json', import.meta.url), 'utf8'));
   const daily = getRawDaily(legacy.date);
-  for (const key of ['seed', 'edition', 'targets', 'theme']) assert.deepEqual(daily[key], legacy[key], key);
+  for (const key of ['seed', 'edition', 'targets']) assert.deepEqual(daily[key], legacy[key], key);
   // Targets keep their palettes; a decoy's may move so floor-mates never share one.
-  assert.deepEqual(daily.species.slice(0, 3), legacy.species.slice(0, 3));
+  assert.deepEqual(daily.species.slice(0, 3), legacy.species.slice(0, 3).map(renamed));
   assert.deepEqual(daily.species.map(({ id, piece }) => ({ id, piece })), legacy.species.map(({ id, piece }) => ({ id, piece })));
+  // This edition's lead target was the "Ember imp", which the art shows as a cat.
+  assert.deepEqual(daily.theme, buildTheme(legacy.species.map(renamed)));
+  assert.equal(daily.theme.headline, legacy.theme.headline.replace('Ember imps', 'Ember cats'));
   const before = structuredClone(daily);
   const saved = createGame(daily);
   const serialized = JSON.stringify(saved);
-  for (const date of dates) for (const target of daily.species.slice(0, 3)) headlineFor(target, date);
+  for (const date of dates) for (const [floor, target] of daily.species.slice(0, 3).entries()) headlineFor(target, date, floor);
   assert.deepEqual(daily, before);
-  assert.deepEqual(buildTheme(daily.species), legacy.theme);
   assert.equal(validateSave(JSON.parse(serialized), daily.date, getRawDaily(daily.date)), true);
 });

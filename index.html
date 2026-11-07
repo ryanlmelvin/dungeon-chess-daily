@@ -28,7 +28,7 @@
         <p id="modifier-bulletin" class="modifier-bulletin" hidden><span id="modifier-emoji" class="modifier-emoji" aria-hidden="true"></span><b id="modifier-kicker"></b> <span id="modifier-headline"></span></p>
         <div class="lead-story">
           <div class="lead-copy"><h2 id="headline"></h2><p id="deck" class="deck" aria-hidden="true"></p></div>
-          <figure class="paper-figure"><canvas id="paper-art" width="180" height="150" aria-label="Pixel illustration of the dungeon beneath the city" role="img"></canvas><figcaption id="art-caption"></figcaption></figure>
+          <div id="lead-lineup" class="lead-lineup"></div>
         </div>
         <div id="side-stories" class="side-stories"></div>
         <div class="paper-action"><button id="start-button" class="primary">Enter today's dungeon <span aria-hidden="true">↘</span></button></div>
@@ -125,6 +125,7 @@
           <li><button data-guide-page="4">Special moves <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="5">Room modifiers <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="6">Forks &amp; combos <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="7">Clues &amp; hints <span aria-hidden="true">→</span></button></li>
         </ol>
       </nav>
       <article class="guide-page" hidden>
@@ -188,7 +189,7 @@
           <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Squares with a ghosted knight (a ghosted queen if you’re a knight) and gold corners move like that piece. They’re optional: only taking one spends it. Tap Borrow to point them out.</dd></div>
           <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
           <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself; then it can’t capture targets. Once floor 1 or 2 is cleared, it moves itself and hunts for gold while you explore. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself. In auto mode, it can’t capture targets. Once floor 1 or 2 is cleared, it moves itself and hunts for gold while you explore. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -220,6 +221,17 @@
         <h3 id="guide-combo-title">Combo 🔥</h3>
         <figure class="special-moves"><canvas class="hint-art" data-guide-art="combo" width="200" height="200" role="img" aria-label="Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three."></canvas></figure>
         <p>Capture on moves in a row to build a combo; the counter appears beside your gold. The third capture in a row, and every one after it, pays <b>+1 bonus gold</b>. Waiting, a move without a capture, or a new floor ends it.</p>
+      </article>
+      <article class="guide-page" hidden>
+        <h3>The paper</h3>
+        <p>Each story says how one floor’s target moves, never who it is, and lines up two <b>suspects</b>: the target’s kind and one other kind of monster that can turn up there. Watch how they move to tell which is which.</p>
+        <h3>Unmasking</h3>
+        <canvas class="guide-wide" data-clue-art="unmask" width="400" height="100" role="img" aria-label="A captured monster’s rook pops out of its square, and its look-alikes now wear a small rook badge."></canvas>
+        <p>Every capture <b>unmasks</b> a monster: its true piece pops out. A kind of monster keeps one piece all day, so its look-alikes wear that piece as a badge.</p>
+        <h3>Hints</h3>
+        <p>Tap <b>Hint</b> beside the objective. The first is free: how the target moves. The next two each add <b>+1 move</b> to the floor’s score, and the button then reads <b>Hint · +1</b>:</p>
+        <p><b>Identify the target</b> rings the targets on the board and names their kind. <b>Show danger map</b> hatches in black and white every square where ending your move gets you captured at once.</p>
+        <p>Paid hints count like moves: in your move count, against par and on your share card, even after <b>Restart this floor</b>. Flip back through the hints you have with <b>‹ ›</b> or a swipe; that’s free.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
@@ -261,9 +273,13 @@
   </dialog>
   <dialog id="hint-dialog" aria-labelledby="hint-title">
     <div class="dialog-heading"><h2 id="hint-title">Hint</h2><button class="icon-button" data-close aria-label="Close hint">✕</button></div>
-    <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
-    <p id="hint-move"></p>
-    <p class="hint-clue"><b>Watch enemy movements to figure out which ones they are.</b> Every monster hides its true piece.</p>
+    <div id="hint-card" class="hint-card">
+      <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
+      <p id="hint-move"></p>
+      <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper’s suspects. Every monster hides its true piece.</p>
+    </div>
+    <div id="hint-pager" class="hint-pager" hidden><button id="hint-back" type="button" aria-label="Previous hint card">‹</button><span id="hint-page" aria-live="polite"></span><button id="hint-forward" type="button" aria-label="Next hint card">›</button></div>
+    <button id="hint-next" class="hint-next" type="button" hidden></button>
   </dialog>
   <dialog id="special-move-dialog" aria-labelledby="special-move-title" aria-describedby="special-move-text">
     <div class="dialog-heading"><h2 id="special-move-title">Special move</h2><button id="special-move-close" class="icon-button" data-close aria-label="Close explainer">✕</button></div>
