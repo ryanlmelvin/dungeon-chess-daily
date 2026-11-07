@@ -642,6 +642,7 @@ function setFloor(state, kingRecruit = false) {
   state.exit = { x: 4, y: 0, open: false };
   state.objective = { piece: state.targets[state.floor], complete: false };
   state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure };
+  delete state.restartedMoves;
   const target = state.species[state.floor];
   const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), ...floorDecoys(state)];
   const mirror = rng() < 0.5;
@@ -741,6 +742,8 @@ function restartRun(state, events, message) {
   Object.assign(state, fresh);
   // A held Take-back keeps its `undo`: it can take back the move that ended the run.
   state.tries = tries;
+  // A new try starts every floor's move count afresh.
+  delete state.restartedMoves;
   state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
   state.message = message;
   return state;
@@ -771,11 +774,15 @@ export function createGame(daily = getRawDaily()) {
 // Keep the floor exactly as it began, so the player may voluntarily start it over.
 function markFloorStart(state) {
   // Attempt counters belong to the live run, so a restart never rewinds them.
-  const { floorSnapshot, replayUnlocked, tries, ...start } = state;
+  const { floorSnapshot, replayUnlocked, tries, restartedMoves, ...start } = state;
   state.floorSnapshot = structuredClone(start);
 }
 
-/** Return to the start of the current floor: same lives, gold and powers as on arrival, no penalty. */
+/**
+ * Return to the start of the current floor: same lives, gold and powers as on
+ * arrival. The moves already spent on the floor keep counting toward its score
+ * (`restartedMoves`), so a restart can't wipe a floor's count back to zero.
+ */
 export function resetFloor(previous) {
   const snapshot = previous?.floorSnapshot;
   if (!snapshot || previous.status !== 'playing') return previous;
@@ -783,6 +790,8 @@ export function resetFloor(previous) {
   state.floorSnapshot = structuredClone(snapshot);
   if (previous.replayUnlocked === true) state.replayUnlocked = true;
   if (previous.tries !== undefined) state.tries = previous.tries;
+  const spent = floorScoredMoves(previous);
+  if (spent) state.restartedMoves = spent;
   state.message = `Floor ${state.floor + 1} reset. ${snapshot.message}`;
   return state;
 }
@@ -793,7 +802,7 @@ function finishFloor(state) {
   // A life bought in this floor's shop is in `hp` but wasn't lost or kept on the floor.
   const lives = livesBought(state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0));
   const turns = state.turns - state.floorStart.turns;
-  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
@@ -836,7 +845,7 @@ function captureEnemy(state, captured, companion = false) {
     state.exit.open = state.objective.complete;
     // The scored move count stops here: gathering gold afterwards is free.
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
-    const moves = state.objective.moves;
+    const moves = floorScoredMoves(state);
     // The ✓ echoes the paused move counter; the UI adds par where the run has one.
     state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.` : `${captured.name} captured. Keep hunting.`;
   } else state.message = `${captured.name} captured. +1 gold.`;
@@ -1156,53 +1165,37 @@ function play(previous, action) {
   return state;
 }
 
-// A spoiler-free result card, golf-style:
+// A spoiler-free result card, golf-style, one line per floor reached:
 //   Dungeon Chess Daily #20
-//   🟥 ⬛ 👑        one marker per floor reached
-//   −2 +1  E       each floor's moves against par (src/par.js), centered under
-//                  its marker; · without one
-//   🇫🇷🏰🔱         once each if the run took en passant, castled or won a fork
+//   🟥 +2          the floor's marker and its moves against par (src/par.js):
+//   ⬛ E 🔱         E for even, · without a par; then 🇫🇷🏰🔱 once each if
+//   👑 −12 🔱       that floor took en passant, castled or won a fork
+// Each line starts with its marker, so the card reads cleanly at any score.
 const FLOOR_MARKERS = ['🟥', '⬛', '👑'];
 const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['fork', '🔱']];
-// Advance widths in em of Apple's system font (what Messages uses), where an
-// emoji is 1em. Markers are an em and an en space apart, so each column is 2.5em
-// wide (room for +42), and each score is padded with fixed-width spaces to sit
-// centered under its marker.
-const MARKER_GAP = '\u2003\u2002';
-const COLUMN_EM = 2.5;
-const GLYPH_EM = { 0: .606, 1: .443, 2: .566, 3: .592, 4: .604, 5: .585, 6: .617, 7: .547, 8: .6, 9: .617, '+': .604, '\u2212': .604, E: .552, '·': .215 };
-const SPACE_EM = [['\u2003', 1], ['\u2002', .5], ['\u2005', .25], ['\u2006', 1 / 6], ['\u2009', .103], ['\u200A', .051]];
-function padTo(gap) {
-  let pad = '';
-  for (const [space, width] of SPACE_EM) while (gap >= width - .025) { pad += space; gap -= width; }
-  return pad;
+/**
+ * Moves that count toward a floor's score: those until the challenge was
+ * complete, plus those spent on the floor before any Restart this floor. Older
+ * records count every move.
+ */
+export function scoredMoves(record) {
+  const moves = record?.scored ?? record?.turns;
+  return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) : moves;
 }
-function alignedScores(scores) {
-  let line = '', x = 0;
-  scores.forEach((score, index) => {
-    const width = [...score].reduce((sum, ch) => sum + (GLYPH_EM[ch] ?? .6), 0);
-    const pad = padTo(Math.max(0, index * COLUMN_EM + .5 - width / 2 - x));
-    line += pad + score;
-    x += [...pad].reduce((sum, ch) => sum + SPACE_EM.find(([space]) => space === ch)[1], 0) + width;
-  });
-  return line;
-}
-/** Moves that count toward a floor's score: those until the challenge was complete. Older records count every move. */
-export function scoredMoves(record) { return record?.scored ?? record?.turns; }
 
-/** Scored moves on the floor in progress: still counting until the challenge is complete. */
-export function floorScoredMoves(state) { return state.objective?.moves ?? state.turns - state.floorStart.turns; }
+/** Scored moves on the floor in progress, restarts included: still counting until the challenge is complete. */
+export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0); }
 
 export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
-  const markers = [], scores = [];
+  const floors = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const diff = Number.isInteger(scoredMoves(record)) && Number.isInteger(pars?.[floor]) ? scoredMoves(record) - pars[floor] : null;
-    markers.push(FLOOR_MARKERS[floor]);
-    scores.push(diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `\u2212${-diff}`);
+    const score = diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `\u2212${-diff}`;
+    const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind && feat.floor === floor)).map(([, mark]) => mark).join('');
+    floors.push([FLOOR_MARKERS[floor], score, feats].filter(Boolean).join(' '));
   }
-  const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind)).map(([, mark]) => mark).join('');
-  return [`Dungeon Chess Daily #${state.edition}`, markers.join(MARKER_GAP), alignedScores(scores), feats, url].filter(Boolean).join('\n');
+  return [`Dungeon Chess Daily #${state.edition}`, ...floors, url].filter(Boolean).join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
@@ -1212,6 +1205,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!value || value.schema !== RULES_VERSION || value.rulesVersion !== RULES_VERSION || value.date !== date || !['playing', 'won', 'lost'].includes(value.status)) return false;
     if (value.replayUnlocked !== undefined && typeof value.replayUnlocked !== 'boolean') return false;
     if (value.tries !== undefined && !integer(value.tries, 2, Number.MAX_SAFE_INTEGER)) return false;
+    // Saves from before restarts kept counting have none: no earlier moves on this floor.
+    if (value.restartedMoves !== undefined && !integer(value.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) return false;
     if (daily.practice === true) {
       if (value.practice !== true || value.layoutPiece !== daily.layoutPiece || !PIECES.includes(value.layoutPiece)) return false;
     } else if (value.practice !== undefined || value.layoutPiece !== undefined) return false;
@@ -1288,7 +1283,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
@@ -1299,8 +1294,9 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
-      if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
+      if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.restartedMoves !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
     }
+    if (value.status === 'won' && (value.restartedMoves ?? 0) !== (value.records[2]?.restartedMoves ?? 0)) return false;
     if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
     // Saves from before en passant have no window; a present one names a pawn that just double-stepped.
     const ep = value.enPassant;
