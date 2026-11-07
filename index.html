@@ -61,18 +61,20 @@
         <p id="result-kicker" class="eyebrow"></p><h2 id="result-title"></h2><p id="result-summary"></p>
         <button id="result-en-passant" class="result-en-passant" type="button" aria-haspopup="dialog" aria-label="What is en passant?" hidden>What?</button>
 
-        <pre id="share-preview"></pre>
+        <div class="share-row">
+          <pre id="share-preview"></pre>
+          <button id="share-button" class="primary">Share <span aria-hidden="true">↗</span></button>
+        </div>
         <button id="retry-button" class="primary" hidden>Try again <span aria-hidden="true">↻</span></button>
-        <button id="share-button" class="primary">Share your edition <span aria-hidden="true">↗</span></button>
         <section id="bot-compare" class="bot-compare" aria-labelledby="bot-title" hidden>
           <h3 id="bot-title">Dungeon Bot</h3>
           <p id="bot-verdict" class="bot-verdict"></p>
+          <button id="bot-watch" type="button">Watch the bot’s run <span aria-hidden="true">▶</span></button>
           <table class="bot-table">
-            <thead><tr><th scope="col"></th><th scope="col">You</th><th scope="col">Bot</th></tr></thead>
+            <thead><tr id="bot-head"></tr></thead>
             <tbody id="bot-rows"></tbody>
           </table>
-          <p class="bot-note">The bot is the route the fairness checker found when it certified this dungeon: no powerups, and no lost lives except on pawn days, where it may spend up to four.</p>
-          <button id="bot-watch" type="button">Watch the bot’s run <span aria-hidden="true">▶</span></button>
+          <p class="bot-note">The bot’s run certified this dungeon: no powerups, no lost lives (pawn days may spend four), no ally but the floor 3 recruit.</p>
         </section>
         <div id="result-actions" class="result-actions"><button id="practice-button">Practice this dungeon</button><button id="result-paper-button">Read the paper</button></div>
         <p class="next-edition" id="next-edition"></p>
@@ -131,6 +133,7 @@
         <p>Capture them all to open the door behind the back rank. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
         <p>If the targets left end up where your piece can never land (say, pawns stuck against walls on a bishop’s other colour), the game tells you. Choose <b>Restart this floor</b> there or in the menu: you keep the lives, gold and powers you arrived with.</p>
         <p>Each floor shows a <b>Par</b>: the moves the certified route needed to finish that floor’s challenge. Your move count stops the moment you capture the last target, so gathering leftover gold and walking to the stairs is free. Your share card shows how far over or under par you finished each floor. Only the official piece and color have a par.</p>
+        <p><b>Every daily can be won.</b> Before an edition goes out, a bot plays it through with the official piece and color: no powerups, no bought help, no lost lives (pawn days may spend up to four), and no ally but the recruit on floor 3. Each par is that real run’s move count, so it has been done. After you win, <b>Watch the bot’s run</b> to see how.</p>
         <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
       <article class="guide-page" hidden>

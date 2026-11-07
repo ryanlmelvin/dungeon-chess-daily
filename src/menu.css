@@ -273,3 +273,42 @@ body:has(.pwa-bar button:not([hidden])) .notice { bottom: calc(var(--pwa-bar-h) 
 .special-move-continue { display: block; width: 100%; margin-top: 16px; color: var(--gold); }
 .special-moves { margin: 12px 0 8px; }
 .result-en-passant { color: var(--ink); background: none; border: 2px solid #777; font-size: 20px; min-height: 44px; padding: 4px 14px; margin: 0 0 8px; }
+
+/* Result paper: share card beside its button, the bot's replay right under its
+   verdict and a short sideways table, so a phone sees it all without scrolling. */
+.share-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px; border-top: 1px solid #908b92; border-bottom: 1px solid #908b92; }
+.share-row:not(:has(:not([hidden]))) { display: none; }
+.result-paper .share-row pre { border: 0; margin: 0; padding: 12px 0; }
+.result-paper .share-row .primary { width: auto; margin: 0; gap: 14px; }
+.bot-compare { margin: 16px 0 12px; padding-top: 12px; }
+.bot-verdict { margin-bottom: 10px; }
+#bot-watch { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bot-table th, .bot-table td { padding: 3px 4px; }
+.bot-table td { width: auto; }
+.bot-table thead th { font-size: 15px; }
+.bot-table tbody th { width: 3em; }
+.bot-table .bot-total { border-left: 2px solid #6a626f; font-size: 22px; }
+.bot-table thead .bot-total { font-size: 15px; }
+.bot-table tbody tr:last-child > * { border-bottom: 0; }
+.bot-note { margin: 8px 0 0; font-size: 15px; }
+@media (max-width: 600px) {
+  .result-screen { padding: 10px 10px 16px; }
+  .result-paper { padding: 12px 16px 14px; }
+  .result-paper .paper-rule { font-size: 15px; padding: 4px 0; gap: 0 10px; }
+  .result-paper h2 { font-size: 34px; margin: 12px 0 4px; }
+  .result-paper > p:not(.eyebrow) { font-size: 19px; margin: 0 0 10px; }
+  .result-paper > .eyebrow { margin-top: 10px; }
+  .result-paper .share-row pre { font-size: 12px; line-height: 1.45; padding: 8px 0; }
+  .result-paper .primary { font-size: 22px; padding: 10px 14px; }
+  .result-paper #retry-button { margin: 12px 0; }
+  .bot-compare { margin: 12px 0 10px; padding-top: 8px; }
+  .bot-compare h3 { font-size: 24px; margin-bottom: 2px; }
+  .bot-verdict { font-size: 21px; margin-bottom: 8px; }
+  #bot-watch { font-size: 20px; min-height: 42px; }
+  .bot-table { font-size: 19px; }
+  .bot-table tbody .bot-total { font-size: 20px; }
+  .bot-note { font-size: 14px; line-height: 1.1; }
+  .result-actions { gap: 8px; flex-wrap: nowrap; }
+  .result-actions button { font-size: 16px; min-height: 40px; padding: 6px 4px; flex: 1; white-space: nowrap; }
+  .result-paper .next-edition { font-size: 14px !important; line-height: 1.15; margin-top: 8px; }
+}

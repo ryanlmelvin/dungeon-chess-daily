@@ -1198,21 +1198,24 @@ function renderBotComparison() {
   $('bot-compare').hidden = !bot;
   if (!bot) return;
   $('bot-verdict').textContent = verdict(you, bot);
-  const row = (label, mine, theirs, total = false) => {
-    const tr = document.createElement('tr');
-    if (total) tr.className = 'bot-total';
-    const th = document.createElement('th'); th.scope = 'row'; th.textContent = label;
-    const cells = [mine, theirs].map((value) => { const td = document.createElement('td'); td.textContent = value; return td; });
+  // One column per stat, one row each for you and the bot, so it stays short on a phone.
+  const columns = [
+    ...bot.floors.map((moves, index) => [`F${index + 1}`, `Floor ${index + 1} moves`, you.floors[index] ?? '–', moves]),
+    ['Total', 'Total moves', you.moves, bot.moves, 'bot-total'],
+    ['Lives', 'Lives lost', you.livesLost, 0],
+    ...(you.tries > 1 ? [['Tries', 'Tries', you.tries, 1]] : []),
+  ];
+  const cell = (tag, text, className) => { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; };
+  $('bot-head').replaceChildren(cell('td'), ...columns.map(([short, long, , , className]) => {
+    const th = cell('th', short, className); th.scope = 'col'; th.title = long; th.setAttribute('aria-label', long); return th;
+  }));
+  const rows = ['You', 'Bot'].map((label) => { const tr = document.createElement('tr'); const th = cell('th', label); th.scope = 'row'; tr.append(th); return tr; });
+  for (const [, , mine, theirs, className] of columns) {
+    const cells = [mine, theirs].map((value) => cell('td', value, className));
     if (typeof mine === 'number' && typeof theirs === 'number') cells[mine <= theirs ? 0 : 1].classList.add('bot-best');
-    tr.append(th, ...cells);
-    return tr;
-  };
-  $('bot-rows').replaceChildren(
-    ...bot.floors.map((moves, index) => row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves)),
-    row('Total moves', you.moves, bot.moves, true),
-    row('Lives lost', you.livesLost, 0),
-    ...(you.tries > 1 ? [row('Tries', you.tries, 1)] : []),
-  );
+    rows[0].append(cells[0]); rows[1].append(cells[1]);
+  }
+  $('bot-rows').replaceChildren(...rows);
 }
 
 // Watching the bot reuses the dungeon view without touching the saved run.
