@@ -189,7 +189,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         const type = prop?.type || ['pillar', 'crate', 'barrel', 'rock'][(x * 3 + y + next.floor) % 4];
         // A raised, dark footprint makes blocked squares clear at phone scale.
         block(board, x, 0.045, y, 0.78, 0.14, 0.78, basic(0x19151c));
-        propSprite(board, `prop-${type}`, x, y, 0.9, 0.27));
+        propSprite(board, `prop-${type}`, x, y, 0.9, 0.27);
         if (type === 'pillar') {
           // Fallen chunks around the stump read as ruined masonry, not a piece.
           const rubble = basic(0x71828e);
