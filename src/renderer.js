@@ -337,6 +337,17 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
   }
 
+  // A translucent piece standing on a square it could move to.
+  function ghostPiece(piece, x, y, palette) {
+    const material = new THREE.SpriteMaterial({ map: spriteTexture(`piece-${piece}`, palette || 'white'), transparent: true, opacity: 0.4, alphaTest: 0.05, depthWrite: false });
+    materials.add(material);
+    const ghost = new THREE.Sprite(material);
+    ghost.center.set(0.5, 0.42);
+    ghost.scale.set(0.7, 0.7, 1);
+    ghost.position.set(x, 0.15, y);
+    hints.add(ghost);
+  }
+
   function updateHints(next) {
     clear(hints);
     moveMaterial = null;
@@ -380,8 +391,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         // Full squares stay readable around pickups and capture targets. Keep
         // them below the danger-path strokes and the sprites themselves.
         tileMark(hints, tile.x, tile.y, 0.94, 0.94, moveMaterial, 0.04);
-        // A square only the Borrowed move reaches gets gold corners.
-        if (tile.borrowed) cornerMarks(tile.x, tile.y, 0xf2ce80, 0.36, 0.17);
+        // A square only the Borrowed move reaches gets gold corners and a ghost of the borrowed piece.
+        if (tile.borrowed) {
+          cornerMarks(tile.x, tile.y, 0xf2ce80, 0.36, 0.17);
+          ghostPiece(tile.borrowed, tile.x, tile.y, next.playerColor);
+        }
         // Ice: an arrow on to the square the piece will skid to.
         if (tile.slide) {
           const dx = tile.slide.x - tile.x, dy = tile.slide.y - tile.y;

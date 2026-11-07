@@ -413,7 +413,7 @@ function placeDescendButton() {
   button.style.bottom = 'auto';
 }
 function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning});}
-// Shop tools: Pin waits for a tapped monster; Borrow arms one move; Take back undoes one.
+// Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
 function renderTools() {
   const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state);
@@ -424,9 +424,8 @@ function renderTools() {
   $('tool-tray').hidden = !(pin || leap || back);
   $('pin-button').setAttribute('aria-pressed', String(pinning));
   $('pin-button').textContent = pinning ? 'Pick a monster' : 'Pin';
-  $('leap-button').setAttribute('aria-pressed', String(Boolean(state.leaping)));
   $('leap-button').textContent = `Borrow ${BORROW_GLYPH[borrowedPiece(state)]}`;
-  $('leap-button').setAttribute('aria-label', `${state.leaping ? 'Put away' : 'Use'} your borrowed move: move once like a ${borrowedPiece(state)}`);
+  $('leap-button').setAttribute('aria-label', `Show your borrowed move: move once like a ${borrowedPiece(state)}`);
 }
 $('pin-button').addEventListener('click', () => {
   if (!state || turnLocked || replay) return;
@@ -434,11 +433,11 @@ $('pin-button').addEventListener('click', () => {
   if (pinning) notify('Tap a monster to pin it for three moves. Kings can’t be pinned.');
   updateGame();
 });
+// Borrowed squares are always on offer; the button just points them out.
 $('leap-button').addEventListener('click', () => {
-  pinning = false;
-  if (!takeAction({ type: 'leap' })) return;
-  showMoves = Boolean(state.leaping); paintBoard();
-  notify(state.leaping ? `Gold-cornered squares move like a ${borrowedPiece(state)}. Only taking one spends the borrowed move.` : 'Borrowed move put away.');
+  if (!state || turnLocked || replay) return;
+  pinning = false; showMoves = true; cursor = null; updateGame(); paintBoard();
+  notify(`Squares with a ghosted ${borrowedPiece(state)} move like one. Only taking one spends the borrowed move.`);
 });
 $('takeback-button').addEventListener('click', () => { pinning = false; takeAction({ type: 'takeback' }); });
 function enterGame() {

@@ -86,23 +86,23 @@ test('a pinned monster beside you can’t capture at close range', () => {
   assert.equal(safe.player.hp, 2);
 });
 
-test('a Borrowed move adds knight squares for one move, spent only when used', () => {
-  const state = scenario('rook'); state.enemies = [monster('k', 'king', 7, 0)]; state.powers.leap = 1;
+test('a Borrowed move offers knight squares without arming, spent only when used', () => {
+  const state = scenario('rook'); state.enemies = [monster('k', 'king', 7, 0)];
   assert.equal(hasMove(state, 5, 4), false);
-  const armed = act(state, { type: 'leap' });
-  assert.equal(armed.turns, state.turns, 'arming spends no move');
-  assert.equal(hasMove(armed, 5, 4), true);
-  assert.equal(act(armed, { type: 'leap' }).leaping, undefined, 'it can be put away');
-  const ordinary = act(armed, move(4, 5));
-  assert.equal(ordinary.powers.leap, 1, 'a rook move leaves it armed');
-  assert.equal(ordinary.leaping, true);
+  state.powers.leap = 1;
+  assert.equal(hasMove(state, 5, 4), true, 'offered as soon as it is held');
+  assert.equal(legalMoves(state).find((tile) => tile.x === 5 && tile.y === 4).borrowed, 'knight', 'marked with the piece to ghost');
+  assert.equal(legalMoves(state).find((tile) => tile.x === 4 && tile.y === 5).borrowed, undefined, 'own moves are not borrowed');
+  const ordinary = act(state, move(4, 5));
+  assert.equal(ordinary.powers.leap, 1, 'a rook move leaves it held');
   const leapt = act(ordinary, move(5, 3));
   assert.deepEqual([leapt.player.x, leapt.player.y], [5, 3]);
-  assert.equal(leapt.powers.leap, 0); assert.equal(leapt.leaping, undefined);
+  assert.equal(leapt.powers.leap, 0);
+  assert.ok(leapt.events.some((event) => event.type === 'leap'));
   assert.equal(hasMove(leapt, 6, 1), false);
   // A knight borrows a queen's line instead.
   const knight = scenario('knight'); knight.enemies = [monster('k', 'king', 7, 0)]; knight.powers.leap = 1;
-  assert.equal(hasMove(act(knight, { type: 'leap' }), 4, 2), true);
+  assert.equal(hasMove(knight, 4, 2), true);
 });
 
 test('a Take-back undoes the last move, a lost life included, once per purchase', () => {

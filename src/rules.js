@@ -110,10 +110,12 @@ export function legalMoves(state) {
 function chessMoves(state) {
   if (!state || state.status !== 'playing') return [];
   const moves = movesFor(state, state.player);
-  // An armed Borrowed move adds the borrowed piece's squares for one move.
-  if (state.leaping && state.powers?.leap > 0) {
-    for (const move of movesFor(state, { ...state.player, piece: borrowedPiece(state) })) {
-      if (!moves.some((own) => same(own, move))) moves.push({ ...move, borrowed: true });
+  // A held Borrowed move adds the borrowed piece's squares as optional moves;
+  // `borrowed` names that piece so the board can ghost it there.
+  if (state.powers?.leap > 0) {
+    const piece = borrowedPiece(state);
+    for (const move of movesFor(state, { ...state.player, piece })) {
+      if (!moves.some((own) => same(own, move))) moves.push({ ...move, borrowed: piece });
     }
   }
   const passed = enPassantVictim(state, state.enPassant);
@@ -728,7 +730,6 @@ function restartRun(state, events, message) {
   const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
   Object.assign(state, fresh);
   // A held Take-back keeps its `undo`: it can take back the move that ended the run.
-  delete state.leaping;
   state.tries = tries;
   state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
   state.message = message;
@@ -876,6 +877,8 @@ function grantPower(state, id) {
 function nextState(previous) {
   const state = structuredClone(previous);
   delete state.notes;
+  // Saves from when a Borrowed move had to be armed first.
+  delete state.leaping;
   state.companionOrders ??= [];
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
@@ -918,8 +921,8 @@ function play(previous, action) {
   if (action.type === 'descend') {
     if (!previous.exit.open || !previous.objective.complete) return previous;
     const state = nextState(previous); state.events = []; state.awaitingPlayer = false;
-    // An armed Borrowed move stays bought but disarmed; a Take-back can't cross the stairs.
-    delete state.leaping; delete state.undo;
+    // A Take-back can't cross the stairs.
+    delete state.undo;
     finishFloor(state);
     if (state.status === 'playing' && !pinUsable(state) && state.powers.pin) {
       state.powers.pin = 0;
@@ -968,14 +971,6 @@ function play(previous, action) {
     state.powers.pin--;
     state.events = [{ type: 'pin', id: target.id, x: target.x, y: target.y }];
     state.message = `${target.name} is pinned for ${PIN_MOVES} moves.`;
-    return state;
-  }
-  if (action.type === 'leap') {
-    if (!(previous.powers.leap > 0)) return previous;
-    // Arming is free and can be undone; only a borrowed square spends it.
-    const state = nextState(previous); state.events = [];
-    if (state.leaping) { delete state.leaping; state.message = 'Borrowed move put away.'; }
-    else { state.leaping = true; state.message = `Borrowed move ready: this move may go like a ${borrowedPiece(state)}.`; }
     return state;
   }
   if (action.type === 'wait') {
@@ -1034,8 +1029,8 @@ function play(previous, action) {
   // Castling is decided on the board the move is played on (after black's prelude).
   const castle = castleFor(state);
   // Spend the Borrowed move only when the square needed it.
-  if (state.leaping && !chessMoves({ ...state, leaping: false }).some((move) => same(move, action))) {
-    delete state.leaping; state.powers.leap--;
+  if (state.powers.leap > 0 && !chessMoves({ ...state, powers: { ...state.powers, leap: 0 } }).some((move) => same(move, action))) {
+    state.powers.leap--;
     state.events.push({ type: 'leap', x: action.x, y: action.y });
   }
   state.awaitingPlayer = false; state.turns++;
@@ -1193,7 +1188,6 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.status === 'playing' && value.player.hp < 1) return false;
     if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
     if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id] ?? 0, 0, power.max))) return false;
-    if (value.leaping !== undefined && !(value.leaping === true && value.powers.leap > 0)) return false;
     // A Take-back's saved position must itself be a valid save, one deep.
     if (value.undo !== undefined && !(value.undo && typeof value.undo === 'object' && value.undo.undo === undefined && validateSave(value.undo, date, daily))) return false;
     if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor(maxGold / 2) || !value.purchases.every((id) => purchaseCost(id) !== undefined)) return false;
