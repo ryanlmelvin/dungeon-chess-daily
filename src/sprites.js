@@ -842,6 +842,21 @@ export const SPRITES = Object.freeze({
   ]),
 });
 
+// A small crown worn by a monster pawn that promoted to a queen. Bright gold
+// with a crimson jewel band, so it reads at phone size on any monster color
+// and never resembles the player's bone-white or silver-rimmed pieces.
+export const CROWN = Object.freeze([
+  '.x...x...x.',
+  'xwx.xwx.xwx',
+  'xyx.xyx.xyx',
+  'xyyxyyyxyyx',
+  'xyyyyyyyyyx',
+  'xyryyhyyryx',
+  'xooooooooox',
+  'xxxxxxxxxxx',
+]);
+export const CROWN_PALETTE = Object.freeze({ y: '#f6c94c', w: '#fff3c4', o: '#b07a24', r: '#d13959', h: '#ff8fa6' });
+
 /** Draw at integer scale for crisp newspaper thumbnails and Three.js textures. */
 export function drawSprite(ctx, id, x = 0, y = 0, scale = 1, paletteOverride = {}) {
   const sprite = SPRITES[id];
