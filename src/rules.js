@@ -3,7 +3,7 @@
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
 import { getRawDaily, shopStock } from './edition.js';
-import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState } from './modifiers.js';
+import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove } from './monster-ai.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
@@ -1264,8 +1264,10 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;
     if (!value.enemies.every((foe) => {
       const original = template.enemies.find((entry) => entry.id === foe.id)
-        ?? Array.from({ length: reinforced }, (_, n) => reinforcement(value, n)).find((entry) => entry?.id === foe.id);
+        ?? Array.from({ length: reinforced }, (_, n) => reinforcementOptions(value, n)).flat().find((entry) => entry.id === foe.id && entry.species === foe.species);
       if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
+      // A reinforcement only enters while its role has room under a chess army's counts.
+      if (original !== template.enemies.find((entry) => entry.id === foe.id) && value.enemies.filter((entry) => entry.role === foe.role).length > PIECE_COUNTS[foe.role]) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
       if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
