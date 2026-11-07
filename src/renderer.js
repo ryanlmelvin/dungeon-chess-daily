@@ -548,7 +548,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const strike = events.find((event) => (event.type === 'damage' || event.type === 'shield') && event.by);
     // A restart rebuilds the room, where the same id may name a different monster.
     const attacker = strike && !changedBoard && !events.some((event) => event.type === 'restart') && entities.get(strike.by);
-    if (attacker) {
+    // An en passant capture is the monster's diagonal step onto the skipped
+    // square (an enemy-move event), so it needs no lunge of its own.
+    const passedOnto = strike?.enPassant && events.some((event) => event.type === 'enemy-move' && event.id === strike.by);
+    if (attacker && !passedOnto) {
       attacker.strikeAt = animateTurn ? hitAt - 130 : now;
       attacker.strikeTo = { x: strike.x, y: strike.y };
       attacker.strikeFrom = strike.from ?? { x: attacker.target.x, y: attacker.target.z };

@@ -113,6 +113,9 @@ test('a monster pawn captures a double-stepping pawn en passant at once', () => 
   assert.equal(find(next, 'damage').enPassant, true);
   assert.equal(find(next, 'enemy-phase'), undefined);
   assert.match(next.message, /Ice bat captured you en passant as you passed it\./);
+  // As in chess, the capturing pawn lands on the square the double step skipped.
+  assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [4, 5]);
+  assert.deepEqual(find(next, 'enemy-move'), { type: 'enemy-move', id: 'p', from: { x: 5, y: 4 }, x: 4, y: 5 });
 });
 
 test('a single step beside the monster pawn is the ordinary diagonal attack', () => {

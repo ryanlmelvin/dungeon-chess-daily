@@ -172,13 +172,13 @@ test('older progress stays archived instead of being relabeled as a certified ed
   assert.equal(validateSave(legacy,legacy.date),false);
   assert.deepEqual(legacy,original,'validation must preserve the archived stored record');
   const current=createGame(getDaily(legacy.date));
-  assert.equal(current.schema,5);
-  assert.equal(current.rulesVersion,5);
+  assert.equal(current.schema,6);
+  assert.equal(current.rulesVersion,6);
   assert.equal(current.legacyTurnOrder,false);
-  for(const schema of [2,3,4]) {
+  for(const schema of [2,3,4,5]) {
     assert.equal(validateSave({...current,schema},current.date),false);
   }
-  const previousRules={...current,rulesVersion:4};
+  const previousRules={...current,rulesVersion:5};
   assert.equal(validateSave(previousRules,current.date),false);
 });
 

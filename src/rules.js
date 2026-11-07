@@ -941,7 +941,11 @@ export function act(previous, action) {
     const passing = !guard;
     const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y, ...(passing && { enPassant: true }) };
     state.events.push(event);
-    if (hitPlayer(state, close, true, passing) === 'restart') { state.events.unshift(event); return state; }
+    const hit = hitPlayer(state, close, true, passing);
+    if (hit === 'restart') { state.events.unshift(event); return state; }
+    // As in chess, an en passant capture lands on the square the pawn skipped.
+    const skipped = { x: state.player.x, y: state.player.y + 1 };
+    if (passing && hit === 'damage' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
   }
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   if (!castle) companionTurn(state);
