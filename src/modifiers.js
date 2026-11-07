@@ -30,7 +30,7 @@ export const MODIFIERS = Object.freeze({
     explain: 'Ice: a rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square if it’s open. Captures stop you. Monsters never slide.',
   }),
   collapse: Object.freeze({
-    id: 'collapse', emoji: '🪨', name: 'Collapse', changesRules: true,
+    id: 'collapse', emoji: '🧱', name: 'Collapse', changesRules: true,
     headline: 'Ceiling cracks above the crypt: fresh monsters stumble through the door every ten moves',
     explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door, or waits there until it’s free. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
@@ -136,7 +136,7 @@ export function validModifierState(value, template) {
   return Number.isInteger(count) && count >= 0 && count <= collapseDue(value);
 }
 
-/** Short in-game label, e.g. "🧊 Ice" or "🪨 Next arrival in 4". */
+/** Short in-game label, e.g. "🧊 Ice" or "🧱 Next arrival in 4". */
 export function modifierStatus(state) {
   const modifier = modifierOf(state);
   if (modifier.id === 'none') return '';

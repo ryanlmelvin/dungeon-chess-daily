@@ -8,7 +8,7 @@ import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -625,8 +625,8 @@ function renderShop() {
     // Lives bought since this floor began: the shop is the only place to buy one.
     const lifeThisVisit = life && state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0).includes('life');
     const owned = life ? 0 : state.powers[power.id];
-    // A magnet is useless on the coinless final floor, so the shop before it leaves it out.
-    button.hidden = power.id === 'magnet' && coinlessFloor(state, state.floor + 1);
+    // Each shop shows only the day's four offers (src/edition.js).
+    button.hidden = !shopOffers(state).includes(power.id);
     button.disabled = state.gold < power.cost || (life ? lifeThisVisit : owned >= power.max);
     button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
     const held = power.id === 'magnet' ? 'Active' : power.id === 'shield' ? `${owned} left` : 'Held';

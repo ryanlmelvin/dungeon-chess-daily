@@ -136,6 +136,22 @@ const HINTS = {
 // draw, so every edition keeps its layout.
 const DAILY_COLOR = 'white';
 
+/** Everything the between-floor shop can stock, in display order. */
+export const SHOP_STOCK = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet', 'life']);
+/** Items each shop visit offers: the extra life, always, plus three drawn. */
+export const SHOP_SIZE = 4;
+/**
+ * The day's offers for the shop after floor `shop` (0 or 1), the same for
+ * everyone. Its own hash stream, so no other draw of the edition moves. The
+ * second shop leads to the coinless last floor, so it never stocks the magnet.
+ */
+export function shopStock(date, shop) {
+  const pool = SHOP_STOCK.filter((id) => id !== 'life' && (shop === 0 || id !== 'magnet'));
+  const rank = (id) => hash(`${date}:shop:${shop}:${id}`);
+  const chosen = new Set(['life', ...[...pool].sort((a, b) => rank(a) - rank(b)).slice(0, SHOP_SIZE - 1)]);
+  return SHOP_STOCK.filter((id) => chosen.has(id));
+}
+
 export function getRawDaily(date = new Date()) {
   const value = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date(date).toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw new TypeError('Invalid daily date.');
@@ -159,6 +175,8 @@ export function getRawDaily(date = new Date()) {
     theme: buildTheme(species),
     // The day's room modifier (src/modifiers.js) draws from its own hash stream.
     modifier: modifierFor(value),
+    // The two between-floor shops' offers.
+    shops: [shopStock(value, 0), shopStock(value, 1)],
   };
 }
 
