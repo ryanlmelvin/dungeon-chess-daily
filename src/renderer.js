@@ -1,7 +1,8 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
+import { planBoardLayout } from './layout.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -11,10 +12,6 @@ const MOVE_COLOR = 0x56dcff;
 const ICE_COLOR = 0xbfeaff;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
-// Page panels go beside the board when its margin is at least this wide;
-// otherwise the board keeps this much room below it for them.
-export const SIDE_PANEL_MIN = 230;
-const BOTTOM_PANEL_ROOM = 160;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
@@ -129,7 +126,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const piece = id.startsWith('piece-');
     if (!palette || (piece && palette === 'white')) return textures.get(id);
     const key = `${id}:${palette}`;
-    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], palette === 'companion' ? COMPANION_PALETTE : piece ? piecePalette(palette) : spritePalette(palette)));
+    // Black pieces get a pale halo so they read on dark squares.
+    const halo = piece && palette === 'black';
+    if (!textures.has(key)) textures.set(key, pixelTexture(halo ? haloed(SPRITES[id]) : SPRITES[id], palette === 'companion' ? COMPANION_PALETTE : halo ? { ...piecePalette(palette), k: PIECE_HALO } : piece ? piecePalette(palette) : spritePalette(palette)));
     return textures.get(key);
   }
 
@@ -593,10 +592,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     state = next;
   }
 
-  let topInset = 0;
-  // The board's left edge before any shrinking, so page panels can choose a
-  // side placement without feeding back into the board's size.
-  let naturalLeft = 0;
+  // The page's measured panels (null until the page reports them) and the
+  // board placement planned around them.
+  let panels = null;
+  let layout = null;
   function resize() {
     if (disposed) return;
     const bounds = container.getBoundingClientRect();
@@ -615,35 +614,31 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     camera.position.set(x, 18, z + 5.8);
     camera.lookAt(x, 0.14, z);
     camera.updateProjectionMatrix();
-    // Keep the page's panels off the board. Where the board leaves no side
-    // margins for them (a tablet held upright), shrink it a little so a strip
-    // below stays free for the message log and tip. Then slide it down, into
-    // spare room below, when the top panel would otherwise cover the door.
+    // Fit the board around the page's panels (see layout.js): shrink it and
+    // slide it so no panel covers a square or the door.
     const screenY = (z) => (1 - new THREE.Vector3(x, 0, z).project(camera).y) / 2 * height;
     const screenX = (column) => (new THREE.Vector3(column, 0, rows - 0.5).project(camera).x + 1) / 2 * width;
-    naturalLeft = screenX(-0.5);
-    const bottomRoom = naturalLeft < SIDE_PANEL_MIN ? BOTTOM_PANEL_ROOM : 0;
-    if (topInset > 0 || bottomRoom > 0) {
-      let doorTop = screenY(exitTile.y - 1.26);
-      let boardBottom = screenY(rows - 0.5);
-      const room = height - (topInset + 6) - bottomRoom;
-      // Never shrink below three quarters of the natural size.
-      if (boardBottom - doorTop > room && room > 0) {
-        const k = Math.min(4 / 3, (boardBottom - doorTop) / room);
-        camera.left *= k; camera.right *= k; camera.top *= k; camera.bottom *= k;
-        camera.updateProjectionMatrix();
-        doorTop = screenY(exitTile.y - 1.26);
-        boardBottom = screenY(rows - 0.5);
-      }
-      const shift = Math.min(Math.max(0, topInset + 6 - doorTop), height - bottomRoom - boardBottom);
-      if (shift !== 0) {
-        const units = shift / height * (camera.top - camera.bottom);
-        camera.top += units; camera.bottom += units;
-        camera.updateProjectionMatrix();
-      }
+    const natural = {
+      left: screenX(-0.57), right: screenX(columns - 0.43), doorRight: screenX(exitTile.x + 0.56),
+      // The door's frame, the first row's rim (and a piece standing on it), the bottom rim.
+      doorTop: screenY(Math.min(-0.62, exitTile.y - 1.32)), rowTop: screenY(-0.62), bottom: screenY(rows - 0.38),
+    };
+    layout = planBoardLayout({ width, height, natural, panels });
+    if (layout.scale !== 1 || layout.dx || layout.dy) {
+      const k = 1 / layout.scale;
+      camera.left *= k; camera.right *= k; camera.top *= k; camera.bottom *= k;
+      const across = layout.dx / width * (camera.right - camera.left);
+      const down = layout.dy / height * (camera.top - camera.bottom);
+      camera.left -= across; camera.right -= across;
+      camera.top += down; camera.bottom += down;
+      camera.updateProjectionMatrix();
     }
     const internalWidth = Math.min(768, Math.round(width));
-    renderer.setSize(internalWidth, Math.max(1, Math.round(internalWidth / aspect)), false);
+    const internalHeight = Math.max(1, Math.round(internalWidth / aspect));
+    // Re-planning around a panel that changed size (the status corner grows as
+    // gold comes in) must not clear the canvas when its size hasn't changed.
+    const size = renderer.getSize(new THREE.Vector2());
+    if (size.x !== internalWidth || size.y !== internalHeight) renderer.setSize(internalWidth, internalHeight, false);
     onLayout?.();
   }
 
@@ -805,12 +800,14 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     resize,
     exitAnchor,
     boardRect,
-    naturalLeft: () => naturalLeft,
-    // The lowest CSS pixel (from the container's top) the page's top panel covers.
-    setTopInset(pixels) {
-      const next = Math.max(0, Math.round(pixels));
-      if (next === topInset) return;
-      topInset = next;
+    // The planned arrangement ('beside', 'stacked' or 'natural'), where Wait
+    // goes, and the board's box (door and first row included) in CSS pixels.
+    layout: () => layout,
+    // The page's measured panels, in CSS pixels from the container's top-left.
+    setPanels(next) {
+      const key = JSON.stringify(next);
+      if (key === JSON.stringify(panels)) return;
+      panels = next ? JSON.parse(key) : null;
       resize();
     },
     dispose() {

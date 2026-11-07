@@ -70,7 +70,7 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 #shop-gold{color:var(--gold)}
 #shop-feedback{color:var(--gold);margin-bottom:0}
 @media(max-width:600px) and (display-mode:standalone) and (orientation:portrait){.game-status{top:calc(env(safe-area-inset-top,0px) + 34px)}.game-objective,.descend-button{top:calc(env(safe-area-inset-top,0px) + 115px)}}
-@media(max-height:500px){.game-objective,.descend-button{top:auto;bottom:14px}.game-message{bottom:66px}.first-tip{bottom:48px}}
+@media(max-height:500px){.descend-button{top:auto;bottom:14px}}
 
 /* A compact contents page keeps the illustrated rules separate from settings. */
 .guide-open{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:16px;font-size:13px;min-height:44px}
