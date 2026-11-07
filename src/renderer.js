@@ -595,6 +595,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     state = next;
   }
 
+  let topInset = 0;
   function resize() {
     if (disposed) return;
     const bounds = container.getBoundingClientRect();
@@ -613,6 +614,19 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     camera.position.set(x, 18, z + 5.8);
     camera.lookAt(x, 0.14, z);
     camera.updateProjectionMatrix();
+    // Slide the board down, into spare room below it, when the page's top
+    // panel (the objective and its targets row) would otherwise cover the door.
+    if (topInset > 0) {
+      const screenY = (z) => (1 - new THREE.Vector3(x, 0, z).project(camera).y) / 2 * height;
+      const doorTop = screenY(exitTile.y - 1.26);
+      const boardBottom = screenY(rows - 0.5);
+      const shift = Math.max(0, Math.min(topInset + 6 - doorTop, height - boardBottom - 8));
+      if (shift > 0) {
+        const units = shift / height * (camera.top - camera.bottom);
+        camera.top += units; camera.bottom += units;
+        camera.updateProjectionMatrix();
+      }
+    }
     const internalWidth = Math.min(768, Math.round(width));
     renderer.setSize(internalWidth, Math.max(1, Math.round(internalWidth / aspect)), false);
     onLayout?.();
@@ -777,6 +791,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     resize,
     exitAnchor,
     boardRect,
+    // The lowest CSS pixel (from the container's top) the page's top panel covers.
+    setTopInset(pixels) {
+      const next = Math.max(0, Math.round(pixels));
+      if (next === topInset) return;
+      topInset = next;
+      resize();
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

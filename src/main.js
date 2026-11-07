@@ -218,7 +218,7 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe && !takeAction({ type: 'pin', id: foe.id })) notify('Kings can’t be pinned.'); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
@@ -403,6 +403,7 @@ function updateGame() {
   renderTargets();
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
+  reserveObjectiveRoom();
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
   placeDescendButton();
@@ -446,6 +447,16 @@ function placeMessageLog() {
     if (box.offsetHeight > room) { box.style.maxHeight = `${room}px`; box.classList.add('scrollable'); }
     box.style.top = `${Math.round(Math.max(board.top, Math.min(board.bottom, floor) - box.offsetHeight))}px`;
   }
+}
+// Keep the board's door clear of the objective panel. The room is only updated
+// while the panel shows, so the board doesn't jump when the stairs open.
+function reserveObjectiveRoom() {
+  const panel = $('objective');
+  if (!renderer?.setTopInset || panel.hidden || replay) return;
+  const area = $('dungeon').getBoundingClientRect();
+  const rect = panel.getBoundingClientRect();
+  // On short screens the panel sits at the bottom instead; leave the board alone.
+  renderer.setTopInset(rect.top - area.top < area.height / 2 ? rect.bottom - area.top : 0);
 }
 // The stairs button sits just above the exit door, or over the door itself when
 // the board fills the screen, so it never covers a square a piece may need.
