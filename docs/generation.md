@@ -17,10 +17,13 @@ Every returned edition has an explicit sequence of legal actions that:
   the production engine.
 - Collects or purchases no powerups and recruits no companion, except the final
   floor's own recruit (a rook, queen or king). The recruits on floors 1 and 2,
-  which may be any piece, are never used: the route never steps on them. No
-  recruit may capture its floor's challenge piece, so on the final floor the
+  which may be any piece, are never used: the route never steps on them. A
+  route carries no recruit orders, so its recruit plays on Auto, where no
+  recruit may capture its floor's challenge piece: on the final floor the
   capture of the king is the player's. The recruit can block, take guards, and
-  herd the king: the king still flees squares the recruit covers.
+  herd the king: the king still flees squares the recruit covers. Manual
+  recruit control may order any legal recruit move, Auto's included, so a
+  player steering the recruit can always follow the certified route.
   Castling is an ordinary legal move, so a route may castle with the final
   floor's recruit.
 - Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
