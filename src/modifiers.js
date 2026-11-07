@@ -34,16 +34,12 @@ export const MODIFIERS = Object.freeze({
 });
 // Uniform over these, so about one day in four stays plain.
 const DRAW = ['none', 'dark', 'ice', 'collapse'];
-// Editions published before modifiers existed stay plain, so their saved runs
-// (and the fallback dungeons certified on those dates) keep validating.
-export const MODIFIER_START_DATE = '2026-11-07';
 export const ICE_TILES = 8;
 export const COLLAPSE_EVERY = 10;
 export const COLLAPSE_CAP = 3;
 
 /** The date's modifier id. Its own hash stream, so no other daily draw moves. */
 export function modifierFor(date) {
-  if (date < MODIFIER_START_DATE) return 'none';
   return DRAW[Math.floor(random(hash(`modifier:${date}`))() * DRAW.length)];
 }
 

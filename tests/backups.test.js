@@ -5,7 +5,7 @@ import { planBackupMerge } from '../src/backups.js';
 import { act, createGame, getDaily, validateSave } from '../src/game.js';
 
 const date = '2026-11-05';
-const key = `daily:v5:${date}`;
+const key = `daily:v6:${date}`;
 const daily = getDaily(date);
 let state = createGame(daily);
 const initial = JSON.stringify(state);
@@ -19,10 +19,10 @@ assert.equal(validateSave(state, date), true);
 const won = JSON.stringify(state);
 const backup = (saves) => ({ app: 'dungeon-chess-daily', schema: 1, saves });
 const legacy = (status = 'playing', floor = 0, overrides = {}) => JSON.stringify({ schema: 4, date, status, floor, ...overrides });
-const legacyKey = `daily:v4:${date}`;
+const legacyKey = `daily:v5:${date}`;
 
 test('merge adds missing dates while retaining local-only and unknown data without mutating inputs', () => {
-  const previousKey = 'daily:v4:2026-11-04';
+  const previousKey = 'daily:v5:2026-11-04';
   const current = new Map([[previousKey, legacy('playing', 0, { date: '2026-11-04' })], ['future-preference', 'keep']]);
   const data = backup({ [key]: initial });
   const beforeCurrent = [...current];
@@ -38,7 +38,7 @@ test('merge adds missing dates while retaining local-only and unknown data witho
   assert.deepEqual(data, beforeBackup);
 });
 
-test('completed valid v5 runs beat unfinished runs in both directions', () => {
+test('completed valid v6 runs beat unfinished runs in both directions', () => {
   const restoreWin = planBackupMerge(new Map([[key, initial]]), backup({ [key]: won }));
   assert.equal(restoreWin.writes.get(key), won);
   const keepWin = planBackupMerge(new Map([[key, won]]), backup({ [key]: initial }));
@@ -93,7 +93,7 @@ test('existing valid sound preferences stay local; missing or invalid preference
 
 test('an unreadable local collision is preserved and reported while other dates still merge', () => {
   for (const corrupt of ['{broken', JSON.stringify({ ...JSON.parse(initial), gold: 999 })]) {
-    const otherKey = 'daily:v4:2026-11-06';
+    const otherKey = 'daily:v5:2026-11-06';
     const otherRun = legacy('playing', 0, { date: '2026-11-06' });
     const current = new Map([[key, corrupt]]);
     const plan = planBackupMerge(current, backup({ [key]: won, [otherKey]: otherRun }));
@@ -108,7 +108,7 @@ test('invalid envelopes and entries reject the whole plan without inspecting loc
   const badEntries = [
     { sound: 'sometimes' },
     { unknown: 'value' },
-    { [`practice:v5:${date}`]: initial },
+    { [`practice:v6:${date}`]: initial },
     { [key]: JSON.parse(initial) },
     { [key]: '{broken' },
     { [key]: invalidRun },
@@ -116,7 +116,7 @@ test('invalid envelopes and entries reject the whole plan without inspecting loc
     { [`daily:v3:${date}`]: legacy('playing', 0, { schema: 4 }) },
     { [`daily:${date}`]: legacy('playing', 0, { schema: 4 }) },
     { [legacyKey]: legacy('playing', 0, { date: '2026-11-06' }) },
-    { 'daily:v4:2026-02-31': legacy('playing', 0, { date: '2026-02-31' }) },
+    { 'daily:v5:2026-02-31': legacy('playing', 0, { date: '2026-02-31' }) },
     { [legacyKey]: legacy('unknown') },
     { [legacyKey]: legacy(['won']) },
     { [legacyKey]: legacy('playing', 3) },

@@ -4,7 +4,7 @@ import { getDaily } from './generation.js';
 import { createGame as createCandidate, validateSave as validateCandidateSave } from './rules.js';
 import { PIECES, PLAYABLE_PIECES } from './pieces.js';
 
-export { getDaily, DIFFICULTY_PROFILES, GENERATOR_VERSION } from './generation.js';
+export { getDaily, DIFFICULTY_TIERS, GENERATOR_VERSION } from './generation.js';
 export { PLAYABLE_PIECES };
 export { act, resetFloor, retryLostRun, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, coinlessFloor, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, COMPANIONS, RULES_VERSION } from './rules.js';
 
@@ -28,7 +28,7 @@ export function isOfficialPiece(state, daily = getDaily(state?.date)) {
   return !!state && state.startingPiece === daily.playerPiece && state.playerColor === daily.playerColor;
 }
 
-export function validateSave(value, date, { difficulty = 'standard', practice = false } = {}) {
+export function validateSave(value, date, { difficulty, practice = false } = {}) {
   try {
     const daily = getDaily(date, { difficulty });
     if (value?.practice === true) {

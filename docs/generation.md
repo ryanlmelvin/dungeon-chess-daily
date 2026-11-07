@@ -3,8 +3,9 @@
 `src/game.js` is the public game API. `getDaily()` normalizes the date to UTC and
 returns a certified edition. `createGame()` uses that canonical edition; callers
 cannot replace its seed, piece, color, targets, or layout by editing its metadata.
-The published game uses the `standard` profile for everyone. There is no
-personalized difficulty, device-dependent seed, or server dependency.
+Everyone gets the same edition: its difficulty tier comes from the UTC weekday
+(see [Weekly difficulty](#weekly-difficulty)). There is no personalized
+difficulty, device-dependent seed, or server dependency.
 
 ## What is guaranteed
 
@@ -74,7 +75,7 @@ open. The pickup check concerns terrain accessibility; it does not claim that co
 There is no mutate-until-it-passes loop. Each edition gets at most two candidates
 and 12,000 simulated transitions per candidate, then one certified fallback.
 Every rejection, next seed, and fallback choice is a pure function of the date,
-profile, and rules version. The fallback builder is an offline authoring tool
+tier, calibration table, and rules version. The fallback builder is an offline authoring tool
 with its own finite scan; it is not an unbounded runtime repair operation.
 
 For future tactical templates, start with a certified route, make a bounded
@@ -94,14 +95,18 @@ searching the entire game tree for every proposed decoration.
    by gameplay. It rejects illegal actions, incomplete victories, powerup effects,
    damage, restarts, and deadline failures. Automatic pickups remain on the board;
    the route must avoid them rather than simulate a different game.
-4. If needed, a second layout seed is derived from the date and generator version.
+4. If the first candidate fails, or its route's difficulty score lies outside
+   the tier's band, a second layout seed is derived from the date and generator
+   version and searched the same way. The generator keeps the first candidate in
+   the band, or else the certified one closest to it (`chooseCandidate`).
 5. If neither candidate is accepted, the generator selects a previously certified
-   full-dungeon template for the same piece, color, and difficulty. Date-specific
+   full-dungeon template for the same tier, piece, and color. Date-specific
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
 
-The fallback bank covers all 45 combinations of five playable pieces (always white), three
-profiles, and plain, ice or collapse rules. A broken or missing fallback fails closed with an error; it never
+The fallback bank covers all 75 combinations of five difficulty tiers, five
+playable pieces (always white), and plain, ice or collapse rules, each built with that
+tier and piece's calibrated knobs on a template date with the same modifier. A broken or missing fallback fails closed with an error; it never
 releases an unverified dungeon. The test suite and build check the entire bank.
 Search and verification share `src/rules.js` with live gameplay, avoiding a second
 implementation of combat. `rules.createGame()` is the internal candidate builder
@@ -110,8 +115,7 @@ for search, authoring, and rule fixtures; application code uses `game.createGame
 ## Room modifiers
 
 `modifierFor(date)` draws `none`, `dark`, `ice` or `collapse` uniformly from its
-own hash stream (`modifier:<date>`), so no other daily draw moves. Editions
-before 2026-11-07 are plain, keeping their saves valid. The modifier is part of
+own hash stream (`modifier:<date>`), so no other daily draw moves. The modifier is part of
 `getRawDaily()` and is copied into the state by `createGame()`.
 
 - **Ice** picks 8 tiles per floor on the stream `<dungeonSeed>:ice:<floor>`,
@@ -134,7 +138,7 @@ before 2026-11-07 are plain, keeping their saves valid. The modifier is part of
   the renderer's fog and last-seen ghosts.
 
 Ice and collapse change play, so the fallback bank holds a certificate for
-each piece, difficulty and one of `none`, `ice` or `collapse` (45 in all);
+each tier, piece and one of `none`, `ice` or `collapse` (75 in all);
 dark days use the plain certificate. Over the 60 standard editions from
 2026-11-06, every modifier certified at the same rate as the same days
 without it (the same three days needed fallbacks).
@@ -156,12 +160,89 @@ exposure penalty stays below a strike-plus-fork bonus.
 
 ## Difficulty and chess learning
 
-`src/difficulty.js` defines three authoring presets: `gentle` starts with five
-obstacles, `standard` with seven, and `expert` with nine; each later floor adds
-one. Standard and expert also require at least two and four decisions along the
-witness while committed enemy attack lanes are present. Walls can create shelter
-as well as restrictions, so these are tuning presets, not proven rankings of
-human difficulty.
+## Weekly difficulty
+
+Difficulty rises through the week. `src/difficulty.js` defines five tiers, each
+a band of the difficulty score, and maps the UTC weekday to a tier:
+
+| Day | Tier |
+| --- | --- |
+| Monday | Gentle |
+| Tuesday | Fair |
+| Wednesday | Tricky |
+| Thursday, Friday | Tough |
+| Saturday, Sunday | Fiendish |
+
+The newspaper prints the weekday and tier (for example "THURSDAY · TOUGH") and
+nothing else about the dungeon.
+
+**The score.** Every certified edition gets one number from its certificate's
+verifier metrics and its piece (`difficultyScore`):
+
+    pressure = threatenedDecisions + 2 × narrowEscapes + turns / 4 + 20 × unsafeShare
+    score    = pressure / √(lives left at the end of the route)
+
+Threatened decisions are moves made while a committed attack lane is on the
+board, narrow escapes are moves with exactly one safe option, `turns / 4`
+charges for route length, and `unsafeShare` is the fraction of legal
+alternatives along the route that would have lost a life. Lives left are the
+piece's lives (pawn 8, rook/knight/bishop 2, queen 1) minus those the route
+spent: spare lives forgive mistakes, with diminishing returns. Without that
+divisor a pawn's long, life-spending route always out-scores a queen day that
+ends at the first slip, and no knob setting brings them together. The score is
+stored on the certificate (`generation.certificate.score`).
+
+**Knobs.** Generation reads a row of knobs per (tier, piece) from the
+generated table `src/calibration.js`:
+
+- `obstacleBase`: walls on the first floor; each later floor adds one. More
+  walls hinder a rook and shelter a knight.
+- `decoys` (0–4, usually 2): optional residents beside each floor's targets.
+  Extra decoys reuse the floor's two decoy species without exceeding a chess
+  army's count of any role, and start in the back three rows.
+- `scatter` (0/1): non-pawn targets start anywhere in the back four rows that
+  the player's piece does not attack from its start square, instead of the
+  fixed squares a rook or queen can take on its first move.
+- `guards` (0 up to `decoys`): that many decoys start beside a target, on a
+  square from which they would strike a player who takes it.
+- `minThreatenedDecisions`: the certificate's minimum threatened decisions.
+
+Decoys, scatter and guards draw from their own seeded streams, so the rest of
+a room's layout is unchanged; `0`/`2` reproduces the plain layout. Saves record
+every knob, and `validateSave` rejects a save whose knobs differ from the
+edition's.
+
+**Calibration.** `npm run calibrate:difficulty` (`scripts/calibrate-difficulty.mjs`)
+searches both candidate layouts of ten dates per piece under a grid of knob
+settings, with the runtime search budget, in parallel workers. It then replays
+`chooseCandidate` for every tier, setting and threat minimum, and keeps the
+cheapest setting per (tier, piece): distance outside the band, days outside the
+band, fallbacks (ten times as costly as a missed day, since they repeat a layout) and searches over 1.5 times as slow as the piece's plain layout all cost. It writes `src/calibration.js` (the table plus
+`CALIBRATION_REPORT`, the measured scores behind it) and
+`scripts/calibration-data.json`: one row per search with its status (`solved`,
+`unknown` when the budget ran out, or `invalid` when replay rejected the route),
+solver expansions, route moves and wall time, plus min/median/p90/max summaries
+per piece and knob setting. `--reuse` refits from that file without searching
+again (after editing the score or bands), `--merge` measures only what the file
+lacks, `--pieces`, `--obstacles` and `--grid quick` narrow the grid, and
+`--dry-run` leaves the table alone. A full run takes about an hour on eight
+cores.
+
+Monster AI, room modifiers, rules and search changes all shift difficulty.
+After any of them:
+
+```sh
+npm run calibrate:difficulty        # rewrite src/calibration.js
+node scripts/build-fallbacks.mjs     # rebuild the bank for the new knobs
+npm run verify:fallbacks
+npm test
+```
+
+`verify:fallbacks` fails if a fallback was built for knobs the table no longer
+holds. The script warns when a (tier, piece) mean misses its band; then widen
+the grid, add a knob, or move the bands.
+
+## Difficulty and chess learning
 
 Certificates record route length, positioning moves, capture opportunities,
 promotion, warning-lane decisions, and immediately unsafe alternative moves.
@@ -170,7 +251,7 @@ choosing captures, and advancing a pawn to promotion. These are measurements of
 one successful route. They do **not** establish shortest solution length, forced
 tactics, a unique solution, or a minimum difficulty. In particular, the presence
 of a warned lane does not imply that it threatens the player's current square.
-Human playtesting is still needed to calibrate the presets and assess learning.
+Human playtesting is still needed to check the score and tiers against real play.
 The winnability acceptance condition stays unchanged when difficulty is tuned.
 
 ## Changing and auditing content
@@ -178,16 +259,17 @@ The winnability acceptance condition stays unchanged when difficulty is tuned.
 ```sh
 npm test
 npm run verify:fallbacks
-npm run audit:dungeons -- 2026-11-05 365 standard
+npm run audit:dungeons -- 2026-11-05 365
 npm run build
 ```
 
 `audit:dungeons` independently replays every certificate and validates saves after
-every action. Its timing measurements are diagnostic only and never influence the
+every action, and reports the mean score per tier and piece. A tier id as the
+third argument forces that tier on every date. Its timing measurements are diagnostic only and never influence the
 selected dungeon. To author a new fallback bank after a deliberate rules change,
 run `node scripts/build-fallbacks.mjs`, inspect the results, and verify it again.
 
-Any change to gameplay, generation, search budgets/order, profiles, or fallback
+Any change to gameplay, generation, search budgets/order, calibration, or fallback
 selection can change an edition. Bump the generator/rules version and save-key
 version together for such a release. Version 5 archives earlier saved editions
 in backups instead of interpreting their old layouts as certified new games.

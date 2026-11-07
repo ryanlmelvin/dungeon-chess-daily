@@ -4,8 +4,8 @@
 const DAY = 86_400_000;
 const STATUSES = new Set(['playing', 'won', 'lost']);
 
-/** Official v5 save key for a date, relative to the app's storage prefix. */
-export const dailySaveKey = (date) => `daily:v5:${date}`;
+/** Official v6 save key for a date, relative to the app's storage prefix. */
+export const dailySaveKey = (date) => `daily:v6:${date}`;
 
 /** Past editions from `first` up to the day before `today`, newest first. */
 export function archiveDates(today, first) {

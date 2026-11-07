@@ -6,6 +6,8 @@ import { act, createGame, unreachablePickups } from '../src/rules.js';
 import { generateDaily } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
+import { TIER_IDS } from '../src/difficulty.js';
+import { PLAYABLE_PIECES } from '../src/pieces.js';
 
 function scenario(piece, x = 4, y = 6) {
   const state = createGame(getRawDaily('2026-11-05'));
@@ -26,7 +28,7 @@ function mapWithOpenSquares(squares) {
 test('all fallback floors have reachable stationary pickups for every piece and difficulty', () => {
   let floors = 0;
   // Plain play plus the two rule-changing room modifiers (ice, collapse).
-  assert.equal(Object.keys(FALLBACKS).length, 45);
+  assert.equal(Object.keys(FALLBACKS).length, TIER_IDS.length * PLAYABLE_PIECES.length * 3);
   for (const [identity, fallback] of Object.entries(FALLBACKS)) {
     const [difficulty, piece, color] = identity.split(':');
     const daily = generateDaily(fallback.date, { difficulty, maxAttempts: 0 });
@@ -57,7 +59,7 @@ test('all fallback floors have reachable stationary pickups for every piece and 
     assert.equal(state.status, 'won');
     assert.deepEqual([...visitedFloors], [0, 1, 2]);
   }
-  assert.equal(floors, 135);
+  assert.equal(floors, Object.keys(FALLBACKS).length * 3);
 });
 
 test('a bishop cannot reach coins, relics or recruits on the opposite square color', () => {
@@ -124,8 +126,8 @@ test('a blocked pawn cannot assume promotion or capture an empty diagonal pickup
 });
 
 test('certification rejects an unreachable pickup even when the unchanged route still wins', () => {
-  const fallback = FALLBACKS['standard:bishop:white'];
-  const daily = generateDaily(fallback.date, { maxAttempts: 0 });
+  const fallback = FALLBACKS['tough:bishop:white'];
+  const daily = generateDaily(fallback.date, { difficulty: 'tough', maxAttempts: 0 });
   const initial = createGame(daily);
   const actions = daily.generation.certificate.actions;
   assert.equal(verifyWinningRoute(initial, actions).valid, true);

@@ -7,7 +7,7 @@ import { generateDaily, getDaily, fallbackKey } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
-  MODIFIERS, MODIFIER_START_DATE, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
+  MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
   modifierFor, iceSlide, visibleSquares, updateSightings, ghostsFrom,
 } from '../src/modifiers.js';
 
@@ -15,7 +15,7 @@ const day = (offset, start = '2026-11-06') => new Date(Date.parse(start) + offse
 // The first date (from the modifier launch) that draws each modifier.
 const firstDate = (modifier, piece) => {
   for (let offset = 0; offset < 400; offset++) {
-    const date = day(offset, MODIFIER_START_DATE);
+    const date = day(offset, '2026-11-07');
     const raw = getRawDaily(date);
     if (raw.modifier === modifier && (!piece || raw.playerPiece === piece)) return date;
   }
@@ -42,16 +42,13 @@ const strip = (state) => {
 test('the modifier is a pure function of the date, about one plain day in four', () => {
   const counts = { none: 0, dark: 0, ice: 0, collapse: 0 };
   for (let offset = 0; offset < 365; offset++) {
-    const date = day(offset, MODIFIER_START_DATE);
+    const date = day(offset, '2026-11-07');
     const modifier = modifierFor(date);
     assert.equal(modifierFor(date), modifier);
     assert.equal(getRawDaily(date).modifier, modifier);
     counts[modifier]++;
   }
   for (const [id, count] of Object.entries(counts)) assert.ok(count > 60 && count < 125, `${id}: ${count}`);
-  // Editions published before modifiers stay plain, so their saves still validate.
-  assert.equal(getRawDaily('2026-11-05').modifier, 'none');
-  assert.equal(getRawDaily('2026-11-06').modifier, 'none');
   // The draw has its own stream: the rest of the edition is what it was.
   const raw = getRawDaily('2026-12-01');
   assert.equal(raw.seed, getRawDaily('2026-12-01').seed);
@@ -203,7 +200,7 @@ test('collapse stops once the stairs open and other modifiers never reinforce', 
 test('collapse saves validate through a certified route, and bad counts are rejected', () => {
   let checked = false;
   for (let offset = 0; offset < 120 && !checked; offset++) {
-    const date = day(offset, MODIFIER_START_DATE);
+    const date = day(offset, '2026-11-07');
     if (getRawDaily(date).modifier !== 'collapse') continue;
     const daily = getDaily(date);
     let state = createGame(daily);
