@@ -415,7 +415,7 @@ function updateGame() {
   showGameFeedback();
   if ($('shop-dialog').open) renderShop();
   $('first-tip').hidden = state.turns > 0;
-  $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
+  $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves. Or tap Wait to skip a turn.`;
   placeFirstTip();
   paintBoard();
   fitMessageLog();
