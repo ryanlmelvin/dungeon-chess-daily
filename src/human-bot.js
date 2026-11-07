@@ -305,8 +305,9 @@ export function decide(view, legal, memory, rng, style) {
   };
   for (const move of legal) {
     const landing = move.slide ?? { x: move.x, y: move.y };
-    // Relics activate on contact, and the bot plays without powerups.
-    if (view.powerups.some((item) => same(item, landing))) continue;
+    // Relics activate on contact, and the bot plays without powerups. It
+    // leaves castling (rare here, and its landing isn't the square clicked) alone.
+    if (move.castle || view.powerups.some((item) => same(item, landing))) continue;
     const victim = view.monsters.find((foe) => foe.x === move.x && foe.y === (move.enPassant ? move.y + 1 : move.y));
     const gone = victim ? [victim.id] : [];
     const piece = here.piece === 'pawn' && landing.y === 0 ? 'queen' : here.piece;

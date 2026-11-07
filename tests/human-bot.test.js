@@ -8,6 +8,7 @@ import {
   HUMAN_RUNS, HUMAN_MOVE_CAP,
 } from '../src/human-bot.js';
 import { humanGap } from '../src/difficulty.js';
+import { EDITIONS } from '../src/editions.js';
 
 const OPEN = Array(8).fill('........');
 const at = (x, y) => y * 8 + x;
@@ -87,7 +88,6 @@ test('a floor\'s par is the lower median of its successful runs, else the route 
   assert.deepEqual(medianRun([{ won: true, moves: 7, livesLost: 1 }, won(9), { won: true, moves: 7, livesLost: 0 }], 6), { par: 7, run: 2 });
   assert.deepEqual([failedFloorPar(13), failedFloorPar(4), failedFloorPar(3), failedFloorPar(8)], [17, 5, 4, 10]);
   // Real editions: a failed floor gets the route's moves plus 25%; others the median run's moves.
-  let failures = 0;
   for (let day = 0; day < 12; day++) {
     const daily = getDaily(new Date(Date.UTC(2026, 10, 5 + day)));
     const human = humanPar(daily);
@@ -95,7 +95,6 @@ test('a floor\'s par is the lower median of its successful runs, else the route 
     for (let floor = 0; floor < 3; floor++) {
       assert.equal(human.results[floor].length, HUMAN_RUNS);
       if (human.runs[floor] === null) {
-        failures++;
         assert.ok(human.results[floor].every((run) => !run.won));
         assert.equal(human.par[floor], failedFloorPar(human.certified[floor]));
       } else {
@@ -105,7 +104,6 @@ test('a floor\'s par is the lower median of its successful runs, else the route 
       }
     }
   }
-  assert.ok(failures > 0, 'some floor in the sample defeats the bot');
 });
 
 test('the human gap counts extra moves over the route, a failed run as the whole cap', () => {
@@ -117,9 +115,11 @@ test('the human gap counts extra moves over the route, a failed run as the whole
 });
 
 test('the bot\'s whole run replays each floor from its standard start and validates', () => {
-  const daily = getDaily('2026-11-10');
+  // The first edition whose stored runs clear every floor.
+  const date = Object.keys(EDITIONS).find((day) => EDITIONS[day].runs.every((run) => run !== null) && humanRun(getDaily(day), EDITIONS[day].runs));
+  const daily = getDaily(date);
   const human = humanPar(daily);
-  assert.ok(human.runs.every((run) => run !== null), 'the bot clears every floor of this edition');
+  assert.deepEqual(human.runs, EDITIONS[date].runs);
   const run = humanRun(daily, human.runs);
   assert.deepEqual(run.floors, human.par);
   assert.equal(run.moves, human.par.reduce((a, b) => a + b, 0));

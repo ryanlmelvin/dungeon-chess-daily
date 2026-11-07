@@ -223,10 +223,10 @@ and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06):
 | Tier | Runs won F1 / F2 / F3 | Total par / certified (median) | Human gap | Score |
 | --- | --- | --- | --- | --- |
 | Gentle | 95% / 89% / 64% | 27 / 20 | 21.3 | 9.5 |
-| Fair | 88% / 88% / 62% | 31 / 20 | 26.2 | 11.3 |
+| Fair | 88% / 88% / 62% | 31 / 20 | 26.3 | 11.3 |
 | Tricky | 91% / 89% / 64% | 30 / 20 | 25.2 | 12.9 |
 | Tough | 88% / 90% / 64% | 32 / 22 | 25.9 | 13.6 |
-| Fiendish | 86% / 86% / 67% | 32 / 21 | 28.1 | 15.0 |
+| Fiendish | 86% / 86% / 67% | 32 / 21 | 28.0 | 15.0 |
 
 By piece the gap is knight 14.4, queen 15.5, rook 20.0, bishop 30.2 and pawn
 45.5: the bot clears a bishop's king floor in 31% of runs and a pawn's in 42%
