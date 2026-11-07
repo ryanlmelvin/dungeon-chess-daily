@@ -11,7 +11,7 @@ difficulty, device-dependent seed, or server dependency.
 
 Every returned edition has an explicit sequence of legal actions that:
 
-- Completes all three capture objectives and takes the final stairs within 60 moves.
+- Completes all three capture objectives and takes the final stairs within 50 moves (`MAX_ROUTE_MOVES`; the search prunes any line past it).
 - Uses the actual obstacles, enemy movement, attack warnings, close-range
   captures, piece color, turn order, promotion rules, and automatic pickups from
   the production engine.
@@ -70,7 +70,7 @@ must lie on the bishop's starting color and be connected through its diagonals;
 knight pickups must be connected through legal jumps. Pawn graph states advance
 and promote to queen before exploring the remaining squares. Revisiting squares
 is allowed, so this is a reachability problem, not a knight's-tour problem. Enemy movement also keeps an unpromoted player's forward file
-open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 60-move route. These rules reduce the search space; they do not replace combat replay.
+open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 50-move route. These rules reduce the search space; they do not replace combat replay.
 
 There is no mutate-until-it-passes loop. Each edition gets at most two candidates
 and 12,000 simulated transitions per candidate, then one certified fallback.

@@ -83,9 +83,14 @@ export function safeTransition(state, action) {
 
 // Like safeTransition, but damage is allowed while hp stays at or above the
 // day's spendable-lives floor. Restarts, losses, powers and shields still reject.
+// Certified routes finish within this many chess moves. Real routes rarely pass
+// 40, so the search drops any line that runs past the cap instead of exploring it.
+export const MAX_ROUTE_MOVES = 50;
+
 export function routeTransition(state, action) {
   const next = act(state, action);
   if (next === state || next.status === 'lost' || powered(next)) return null;
+  if (next.turns > MAX_ROUTE_MOVES) return null;
   if (next.events.some((event) => event.type === 'restart' || event.type === 'shield')) return null;
   if (next.player.hp < PIECE_LIVES[state.startingPiece] - livesSpendable(state)) return null;
   if (next.player.hp > state.player.hp) return null;
@@ -115,7 +120,7 @@ export function verifyWinningRoute(initial, actions) {
   if (unreachablePickups(initial).length) return { valid: false, reason: 'A pickup is unreachable with this floor’s piece and terrain.' };
   // An enemy-first turn can invalidate its initiating click and require a
   // second destination. Those board-changing actions spend no chess move.
-  if (!Array.isArray(actions) || actions.length > 60 * 2 + 3) {
+  if (!Array.isArray(actions) || actions.length > MAX_ROUTE_MOVES * 2 + 3) {
     return { valid: false, reason: 'Invalid certificate length.' };
   }
   let state = initial;
@@ -160,7 +165,7 @@ export function verifyWinningRoute(initial, actions) {
     if (next.events.some((event) => event.type === 'promotion')) metrics.promotion = true;
     state = next;
   }
-  if (state.status !== 'won' || state.records.length !== 3 || state.turns > 60) {
+  if (state.status !== 'won' || state.records.length !== 3 || state.turns > MAX_ROUTE_MOVES) {
     return { valid: false, reason: 'The route does not complete all three rooms within the move budget.' };
   }
   metrics.turns = state.turns;
@@ -193,7 +198,7 @@ export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 
   };
   const solved = (node) => ({ status: 'solved', actions: routeFor(node), explored });
   // Generation keeps a short route search budget; players have unlimited moves.
-  const horizon = (60 - initial.turns) * 2 + 3 - initial.floor;
+  const horizon = (MAX_ROUTE_MOVES - initial.turns) * 2 + 3 - initial.floor;
 
   // Most ordinary rooms yield to a cheap two-ply rollout. Revisiting a board
   // is penalized only as a heuristic; exact search identity still keeps time.
