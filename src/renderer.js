@@ -358,6 +358,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       hints.add(ring);
     }
     if (next.powers?.freeze) for (const enemy of next.enemies) cornerMarks(enemy.x, enemy.y, 0xa7dfff, 0.35, 0.1);
+    // Pinned monsters wear gold corners; while choosing a pin, every monster that can be pinned is ringed.
+    for (const enemy of next.enemies) {
+      if (enemy.pinned) cornerMarks(enemy.x, enemy.y, 0xf2ce80, 0.36, 0.17);
+      else if (next.pinning && enemy.piece !== 'king' && enemy.role !== 'king') tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
+    }
     const danger = next.danger || next.enemies.flatMap((enemy) => enemy.phase === 'aim' ? enemy.intent || [] : []);
     const seen = new Set();
     for (const tile of danger) {
@@ -386,6 +391,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         // Full squares stay readable around pickups and capture targets. Keep
         // them below the danger-path strokes and the sprites themselves.
         tileMark(hints, tile.x, tile.y, 0.94, 0.94, moveMaterial, 0.04);
+        // A square only the Borrowed move reaches gets gold corners.
+        if (tile.borrowed) cornerMarks(tile.x, tile.y, 0xf2ce80, 0.36, 0.17);
         // Ice: an arrow on to the square the piece will skid to.
         if (tile.slide) {
           const dx = tile.slide.x - tile.x, dy = tile.slide.y - tile.y;

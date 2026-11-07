@@ -48,7 +48,7 @@ function replay(daily) {
     assert.notEqual(next, state, 'every certified action must do something');
     // Only a pawn's route may spend lives, and at most livesSpendable of them.
     assert.ok(next.player.hp >= initial.player.hp - livesSpendable(initial));
-    assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0 });
+    assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
     if (royalRules(next)) assert.ok(next.companion === null || ['rook', 'queen', 'king'].includes(next.companion.basePiece));
     else assert.equal(next.companion, null);

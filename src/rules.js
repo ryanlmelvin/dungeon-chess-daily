@@ -13,9 +13,30 @@ const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
 export const POWERUPS = Object.freeze([
   { id: 'shield', name: 'Bone ward', cost: 3, max: 3, description: 'Block one capture. Stacks up to three.' },
-  { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, description: 'Freeze every monster for three moves.' },
+  // Found in rooms only: sold in the shop, a stack of frozen moves won the last floor before any monster moved.
+  { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, sold: false, description: 'Freeze every monster for three moves.' },
   { id: 'magnet', name: 'Coin magnet', cost: 4, max: 1, description: 'Collect coins within two tiles after every move.' },
+  // Shop-only tools, used when you choose. None ever lies in a room.
+  { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Not a king.' },
+  { id: 'leap', name: 'Borrowed move', cost: 3, max: 1, description: 'Once, move like a knight (a knight moves like a queen).' },
+  { id: 'takeback', name: 'Take-back', cost: 4, max: 1, description: 'Undo one move, even one that cost a life.' },
 ]);
+/** How long a pin holds, in monster turns. */
+export const PIN_MOVES = 3;
+/** The piece a Borrowed move moves like: a knight, or a queen for a knight. */
+export const borrowedPiece = (state) => (state.player.piece === 'knight' ? 'queen' : 'knight');
+const pinned = (foe) => foe.pinned > 0;
+/** The state a Take-back returns to, or null when there is nothing to take back. */
+export function takebackTarget(state) {
+  return state?.status === 'playing' && state.undo?.powers?.takeback > 0 ? state.undo : null;
+}
+/** One life beyond the piece's army count, at most one per shop visit. */
+export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. One per shop.' });
+/** What the between-floor shop offers, in display order. */
+export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)).concat(EXTRA_LIFE));
+// Older saves may hold hourglasses bought before they left the shop.
+const purchaseCost = (id) => (id === EXTRA_LIFE.id ? EXTRA_LIFE : POWERUPS.find((power) => power.id === id))?.cost;
+const livesBought = (purchases) => purchases.filter((id) => id === EXTRA_LIFE.id).length;
 export const COMPANIONS = Object.freeze([
   { id: 'companion-pawn', piece: 'pawn', name: 'Pawn', cost: 2 },
   { id: 'companion-knight', piece: 'knight', name: 'Knight', cost: 4 },
@@ -83,6 +104,12 @@ export function legalMoves(state) {
 function chessMoves(state) {
   if (!state || state.status !== 'playing') return [];
   const moves = movesFor(state, state.player);
+  // An armed Borrowed move adds the borrowed piece's squares for one move.
+  if (state.leaping && state.powers?.leap > 0) {
+    for (const move of movesFor(state, { ...state.player, piece: borrowedPiece(state) })) {
+      if (!moves.some((own) => same(own, move))) moves.push({ ...move, borrowed: true });
+    }
+  }
   const passed = enPassantVictim(state, state.enPassant);
   if (passed) moves.push({ x: passed.x, y: 2, capture: true, enPassant: true });
   const legal = state.player.piece === 'king' ? moves.filter((move) => !closeAttacker(state, move)) : moves;
@@ -134,7 +161,7 @@ function enPassantVictim(state, ep) {
 // passes (x, 5), which a monster pawn beside the landing square attacks.
 function enPassantStriker(state, square) {
   if (state.powers?.freeze > 0 || square.y !== 4) return null;
-  return state.enemies.find((foe) => foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
+  return state.enemies.find((foe) => !pinned(foe) && foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
 }
 
 /**
@@ -147,7 +174,8 @@ export function closeAttacker(state, square) {
   // A companion sharing the player's square never shields it.
   const companion = state.companion && !same(state.companion, square) ? state.companion : null;
   const board = { ...state, companion, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
-  return board.enemies.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
+  const free = board.enemies.filter((foe) => !pinned(foe));
+  return free.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
     && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
 }
 
@@ -372,10 +400,14 @@ function closeIn(state, foe) {
 
 function enemyTurn(state) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
+  // A pinned monster sits out this turn; the pin wears off after PIN_MOVES of them.
+  const held = new Set(state.enemies.filter(pinned));
+  for (const foe of held) if (!--foe.pinned) { delete foe.pinned; state.events.push({ type: 'unpin', id: foe.id, x: foe.x, y: foe.y }); }
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
   const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
   for (const foe of order) {
+    if (held.has(foe)) continue;
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
@@ -689,6 +721,8 @@ function restartRun(state, events, message) {
   // Count today's attempts; saves from before this counter only know a restart happened.
   const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
   Object.assign(state, fresh);
+  // A held Take-back keeps its `undo`: it can take back the move that ended the run.
+  delete state.leaping;
   state.tries = tries;
   state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
   state.message = message;
@@ -705,7 +739,7 @@ export function createGame(daily = getRawDaily()) {
   const state = {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, screens: daily.screens ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
-    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
+    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
@@ -739,7 +773,9 @@ export function resetFloor(previous) {
 function finishFloor(state) {
   const captures = state.captures - state.floorStart.captures;
   const treasure = state.treasure - state.floorStart.treasure;
-  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, hp: state.player.hp, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  // A life bought in this floor's shop is in `hp` but wasn't lost or kept on the floor.
+  const lives = livesBought(state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0));
+  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
@@ -769,7 +805,7 @@ function bonusCaptures(state) {
 function spentGold(state) {
   const orders = state.companionOrders ?? [];
   return orders.reduce((sum, entry) => sum + COMPANIONS.find((recruit) => recruit.piece === entry.piece).cost, 0)
-    + state.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0);
+    + state.purchases.reduce((sum, id) => sum + purchaseCost(id), 0);
 }
 
 function captureEnemy(state, captured, companion = false) {
@@ -821,7 +857,7 @@ function companionTurn(state) {
 
 function grantPower(state, id) {
   const power = POWERUPS.find((entry) => entry.id === id);
-  state.powers[id] = Math.min(power.max, state.powers[id] + (id === 'freeze' ? 3 : 1));
+  state.powers[id] = Math.min(power.max, (state.powers[id] ?? 0) + (id === 'freeze' ? 3 : 1));
   state.events.push({ type: 'powerup', power: id, x: state.player.x, y: state.player.y });
   state.message = `${power.name} acquired.`;
 }
@@ -832,11 +868,20 @@ function nextState(previous) {
   state.companionOrders ??= [];
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
+  // Saves from before the shop tools have no count for them.
+  for (const power of POWERUPS) state.powers[power.id] ??= 0;
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
   state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - tacticGold(state.feats);
   // Older saves only recorded exhaustion in the last action's events.
   if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
+}
+
+// A held Take-back keeps the position before each move or wait, one deep.
+function remember(state, previous) {
+  if (!(previous.powers.takeback > 0)) { delete state.undo; return; }
+  const { undo, notes, ...before } = previous;
+  state.undo = structuredClone(before);
 }
 
 // Each phase of a move (the player's, the recruit's, the monsters', the ceiling's)
@@ -861,21 +906,64 @@ function play(previous, action) {
   if (!previous || previous.status !== 'playing' || !action) return previous;
   if (action.type === 'descend') {
     if (!previous.exit.open || !previous.objective.complete) return previous;
-    const state = nextState(previous); state.events = []; state.awaitingPlayer = false; finishFloor(state); return state;
+    const state = nextState(previous); state.events = []; state.awaitingPlayer = false;
+    // An armed Borrowed move stays bought but disarmed; a Take-back can't cross the stairs.
+    delete state.leaping; delete state.undo;
+    finishFloor(state); return state;
   }
   if (action.type === 'buy') {
     // The shop opens only between floors: after a room is cleared, before its stairs.
     if (previous.floor >= 2 || !previous.exit.open || !previous.objective.complete) return previous;
     // Companions are no longer sold; older saves keep the orders they already placed.
     if (COMPANIONS.some((entry) => entry.id === action.id)) return previous;
+    if (action.id === EXTRA_LIFE.id) {
+      const thisVisit = previous.purchases.slice(previous.floorSnapshot?.purchases?.length ?? 0);
+      if (previous.gold < EXTRA_LIFE.cost || livesBought(thisVisit)) return previous;
+      const state = nextState(previous); delete state.undo; state.events = []; state.gold -= EXTRA_LIFE.cost; state.purchases.push(EXTRA_LIFE.id);
+      state.player.hp++; state.player.maxHp++;
+      state.events.push({ type: 'powerup', power: EXTRA_LIFE.id, x: state.player.x, y: state.player.y });
+      state.message = `Extra life bought. ${state.player.hp} lives.`;
+      return state;
+    }
     const power = POWERUPS.find((entry) => entry.id === action.id);
-    if (!power || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
-    const state = nextState(previous); state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
+    if (!power || power.sold === false || (previous.powers[power.id] ?? 0) >= power.max || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
+    const state = nextState(previous); delete state.undo; state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
+  }
+  if (action.type === 'takeback') {
+    const target = takebackTarget(previous);
+    if (!target) return previous;
+    // Everything the move changed comes back, a lost life or a lost run included.
+    const state = structuredClone(target);
+    delete state.notes; delete state.undo;
+    state.powers.takeback--;
+    state.events = [{ type: 'takeback', x: state.player.x, y: state.player.y }];
+    state.message = 'You took back your last move.';
+    return state;
+  }
+  if (action.type === 'pin') {
+    const foe = previous.enemies.find((entry) => entry.id === action.id);
+    if (!(previous.powers.pin > 0) || !foe || pinned(foe) || foe.piece === 'king' || foe.role === 'king') return previous;
+    // Pinning is free: it spends the tool, not a move.
+    const state = nextState(previous);
+    const target = state.enemies.find((entry) => entry.id === action.id);
+    target.pinned = PIN_MOVES; target.phase = 'ready'; target.intent = []; target.target = null;
+    state.powers.pin--;
+    state.events = [{ type: 'pin', id: target.id, x: target.x, y: target.y }];
+    state.message = `${target.name} is pinned for ${PIN_MOVES} moves.`;
+    return state;
+  }
+  if (action.type === 'leap') {
+    if (!(previous.powers.leap > 0)) return previous;
+    // Arming is free and can be undone; only a borrowed square spends it.
+    const state = nextState(previous); state.events = [];
+    if (state.leaping) { delete state.leaping; state.message = 'Borrowed move put away.'; }
+    else { state.leaping = true; state.message = `Borrowed move ready: this move may go like a ${borrowedPiece(state)}.`; }
+    return state;
   }
   if (action.type === 'wait') {
     // Waiting spends a move without moving: monsters act, the companion acts,
     // and nothing is resolved on the player's square (no close-range capture).
-    const state = nextState(previous);
+    const state = nextState(previous); remember(state, previous);
     state.events = [{ type: 'wait', x: state.player.x, y: state.player.y }]; state.message = '';
     if (state.playerColor === 'black' && !state.awaitingPlayer) {
       enemyTurn(state);
@@ -891,7 +979,7 @@ function play(previous, action) {
     return state;
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
-  const state = nextState(previous);
+  const state = nextState(previous); remember(state, previous);
   state.events = []; state.message = '';
   // A pawn's double step is also exposed to en passant on the square it passes.
   const doubleStep = state.player.piece === 'pawn' && state.player.y === 6 && action.y === 4;
@@ -927,6 +1015,11 @@ function play(previous, action) {
   }
   // Castling is decided on the board the move is played on (after black's prelude).
   const castle = castleFor(state);
+  // Spend the Borrowed move only when the square needed it.
+  if (state.leaping && !chessMoves({ ...state, leaping: false }).some((move) => same(move, action))) {
+    delete state.leaping; state.powers.leap--;
+    state.events.push({ type: 'leap', x: action.x, y: action.y });
+  }
   state.awaitingPlayer = false; state.turns++;
   // A fork set up by the previous move pays off only on this one.
   const pendingFork = state.fork;
@@ -1021,8 +1114,8 @@ export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon
   let line = modifierOf(state).emoji + '💀'.repeat(earlier);
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
-    const after = record ? record.hp : state.player.hp;
+    const before = floor === 0 ? state.player.maxHp - livesBought(state.purchases ?? []) : state.records[floor - 1]?.hp;
+    const after = record ? record.hp - (record.lives ?? 0) : state.player.hp;
     const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
     line += lost ? '💔'.repeat(lost) : '❤️';
     for (const feat of state.feats ?? []) if (feat.floor === floor) line += FEAT_EMOJI[feat.kind] ?? '';
@@ -1059,17 +1152,20 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Each capture may also pay a fork and a combo bonus (tactics.js).
     const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1);
     if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, maxGold)) return false;
-    if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
+    if (!value.player || !walkable(value, value.player.x, value.player.y) || !Array.isArray(value.purchases) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] + livesBought(value.purchases) || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
     if (value.player.piece !== value.startingPiece && !(value.startingPiece === 'pawn' && value.player.piece === 'queen')) return false;
     if (value.status === 'playing' && value.player.hp < 1) return false;
     if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
-    if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id], 0, power.max))) return false;
-    if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor(maxGold / 2) || !value.purchases.every((id) => POWERUPS.some((power) => power.id === id))) return false;
+    if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id] ?? 0, 0, power.max))) return false;
+    if (value.leaping !== undefined && !(value.leaping === true && value.powers.leap > 0)) return false;
+    // A Take-back's saved position must itself be a valid save, one deep.
+    if (value.undo !== undefined && !(value.undo && typeof value.undo === 'object' && value.undo.undo === undefined && validateSave(value.undo, date, daily))) return false;
+    if (!Array.isArray(value.purchases) || value.purchases.length > Math.floor(maxGold / 2) || !value.purchases.every((id) => purchaseCost(id) !== undefined)) return false;
     // Schema-5 saves made before companion reservations have no ledger yet.
     const orders = value.companionOrders === undefined ? [] : value.companionOrders;
     if (!Array.isArray(orders) || orders.length > 2 || !orders.every((entry, index) => entry && Object.keys(entry).length === 2 && integer(entry.floor, 1, 2) && entry.floor <= value.floor + 1 && COMPANIONS.some((recruit) => recruit.piece === entry.piece) && (!index || orders[index - 1].floor < entry.floor))) return false;
     const companionCost = orders.reduce((sum, entry) => sum + COMPANIONS.find((recruit) => recruit.piece === entry.piece).cost, 0);
-    const spent = companionCost + value.purchases.reduce((sum, id) => sum + POWERUPS.find((power) => power.id === id).cost, 0);
+    const spent = companionCost + value.purchases.reduce((sum, id) => sum + purchaseCost(id), 0);
     if (!Array.isArray(value.records) || !Array.isArray(value.enemies) || !Array.isArray(value.species)) return false;
     // Gold comes from coins and optional captures. Runs through the 2026-11-06 edition began
     // under the old rule that paid every capture, so they may hold up to one gold per capture.
@@ -1097,6 +1193,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
+      if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
       if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
       return foe.phase === 'aim' ? foe.intent.length > 0 && inside(foe.target?.x, foe.target?.y) : foe.intent.length === 0 && foe.target === null;
     })) return false;
@@ -1114,7 +1211,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp <= (value.records[index - 1]?.hp ?? value.player.maxHp) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     // Par stars: absent in older saves and on runs without a par.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
@@ -1133,7 +1230,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

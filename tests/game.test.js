@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, SHOP_ITEMS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -280,7 +280,7 @@ test('100 consecutive certified dates win without powers, and only pawn routes s
       if (royalRules(state)) assert.ok(state.companion === null || ['rook', 'queen', 'king'].includes(state.companion.basePiece));
       else assert.equal(state.companion, null);
       assert.deepEqual(state.companionOrders, []);
-      assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0 });
+      assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
       assert.deepEqual(state.purchases, []);
     }
     assert.equal(state.status, 'won', state.date);
@@ -351,6 +351,26 @@ test('coins and captures buy powerups between floors without spending a move; in
   assert.equal(act(ward, {type:'buy',id:'shield'}), ward);
   assert.equal(act(ward, {type:'buy',id:'unknown'}), ward);
   assert.ok(POWERUPS.every((entry) => entry.name && entry.description && entry.cost > 0));
+});
+
+test('an extra life costs 10 gold, one per shop, and lasts the rest of the run', () => {
+  const state = scenario('rook'); state.enemies = [monster('key', 'king', 4, 2)];
+  state.gold = 9; state.floorSnapshot = structuredClone(state);
+  const cleared = act(state, move(4, 2));
+  assert.equal(cleared.exit.open, true);
+  assert.equal(act(cleared, {type:'buy', id:'life'}), cleared, 'needs 10 gold');
+  cleared.gold = 20;
+  const bought = act(cleared, {type:'buy', id:'life'});
+  assert.equal(bought.gold, 10); assert.equal(bought.turns, cleared.turns);
+  assert.equal(bought.player.hp, cleared.player.hp + 1); assert.equal(bought.player.maxHp, cleared.player.maxHp + 1);
+  assert.deepEqual(bought.purchases, ['life']);
+  assert.equal(act(bought, {type:'buy', id:'life'}), bought, 'one per shop visit');
+  const next = act(bought, {type:'descend'});
+  assert.equal(next.floor, 1); assert.equal(next.player.hp, cleared.player.hp + 1);
+  assert.equal(next.records[0].lives, 1); assert.equal(next.records[0].hp, bought.player.hp);
+  // The share line counts the bought life as neither lost nor kept on floor 1.
+  assert.match(getShareText(next).split('\n')[1], /^\S*❤️❤️/u);
+  assert.ok(SHOP_ITEMS.some((item) => item.id === 'life') && !SHOP_ITEMS.some((item) => item.id === 'freeze'));
 });
 
 test('wards block life loss, freeze pauses committed attacks and magnets collect nearby coins', () => {
@@ -533,7 +553,7 @@ test('an older save that ended trapped can be retried, counting as another try',
   assert.equal(retryLostRun(playing), playing);
 });
 
-test('leftover hourglass moves stay on their floor, but shop hourglasses carry to the next', () => {
+test('leftover hourglass moves stay on their floor, but hourglasses older saves bought carry to the next', () => {
   const state = scenario('queen');
   state.enemies = [monster('key', 'king', 4, 2), monster('other', 'pawn', 0, 7)];
   state.powers.freeze = 4; state.powers.shield = 1; state.powers.magnet = 1;
@@ -541,10 +561,11 @@ test('leftover hourglass moves stay on their floor, but shop hourglasses carry t
   assert.equal(cleared.exit.open, true); assert.equal(cleared.powers.freeze, 3);
   const leftover = act(cleared, {type:'descend'});
   assert.equal(leftover.floor, 1);
-  assert.deepEqual(leftover.powers, { shield: 1, freeze: 0, magnet: 1 });
+  assert.deepEqual(leftover.powers, { shield: 1, freeze: 0, magnet: 1, pin: 0, leap: 0, takeback: 0 });
   cleared.gold = 2;
-  const bought = act(cleared, {type:'buy', id:'freeze'});
-  assert.equal(bought.powers.freeze, 6);
+  assert.equal(act(cleared, {type:'buy', id:'freeze'}), cleared, 'the shop no longer sells hourglasses');
+  // A save from when it did keeps the hourglass it bought.
+  const bought = structuredClone(cleared); bought.gold = 0; bought.purchases.push('freeze'); bought.powers.freeze = 6;
   assert.equal(act(bought, {type:'descend'}).powers.freeze, 3, 'only the bought hourglass carries');
   bought.powers.freeze = 1;
   assert.equal(act(bought, {type:'descend'}).powers.freeze, 1, 'moves already spent are not refunded');

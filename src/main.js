@@ -8,7 +8,7 @@ import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, PIECES } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -38,6 +38,7 @@ let practice = false;
 let renderer = null;
 let screen = 'paper';
 let showMoves = false;
+let pinning = false;
 let cursor = null;
 let turnLocked = false;
 let lastSaved = null;
@@ -214,6 +215,7 @@ function ensureRenderer() {
   try {
     renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
+      if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe && !takeAction({ type: 'pin', id: foe.id })) notify('Kings can’t be pinned.'); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
@@ -323,6 +325,10 @@ function updateGame() {
   $('gold-status').textContent = `${state.gold} gold`;
   $('move-status').textContent = `${state.turns} ${state.turns === 1 ? 'move' : 'moves'}`;
   renderPar();
+  renderTools();
+  const pinnedFoe = state.enemies.find((foe) => foe.pinned);
+  $('pin-status').hidden = !pinnedFoe;
+  if (pinnedFoe) { $('pin-status').textContent = `Pinned ${pinnedFoe.pinned}`; $('pin-status').setAttribute('aria-label', `${pinnedFoe.name} pinned for ${pinnedFoe.pinned} more ${pinnedFoe.pinned === 1 ? 'move' : 'moves'}`); }
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
@@ -393,7 +399,35 @@ function placeDescendButton() {
   button.style.left = `${Math.round(anchor.x)}px`;
   button.style.bottom = 'auto';
 }
-function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves,cursor});}
+function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning});}
+// Shop tools: Pin waits for a tapped monster; Borrow arms one move; Take back undoes one.
+const BORROW_GLYPH = { knight: '♘', queen: '♕' };
+function renderTools() {
+  const pin = state.status === 'playing' && state.powers.pin > 0;
+  const leap = state.status === 'playing' && state.powers.leap > 0;
+  const back = Boolean(takebackTarget(state));
+  if (!pin) pinning = false;
+  $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !back;
+  $('tool-tray').hidden = !(pin || leap || back);
+  $('pin-button').setAttribute('aria-pressed', String(pinning));
+  $('pin-button').textContent = pinning ? 'Pick a monster' : 'Pin';
+  $('leap-button').setAttribute('aria-pressed', String(Boolean(state.leaping)));
+  $('leap-button').textContent = `Borrow ${BORROW_GLYPH[borrowedPiece(state)]}`;
+  $('leap-button').setAttribute('aria-label', `${state.leaping ? 'Put away' : 'Use'} your borrowed move: move once like a ${borrowedPiece(state)}`);
+}
+$('pin-button').addEventListener('click', () => {
+  if (!state || turnLocked || replay) return;
+  pinning = !pinning; showMoves = false;
+  if (pinning) notify('Tap a monster to pin it for three moves. Kings can’t be pinned.');
+  updateGame();
+});
+$('leap-button').addEventListener('click', () => {
+  pinning = false;
+  if (!takeAction({ type: 'leap' })) return;
+  showMoves = Boolean(state.leaping); paintBoard();
+  notify(state.leaping ? `Gold-cornered squares move like a ${borrowedPiece(state)}. Only taking one spends the borrowed move.` : 'Borrowed move put away.');
+});
+$('takeback-button').addEventListener('click', () => { pinning = false; takeAction({ type: 'takeback' }); });
 function enterGame() {
   refreshEdition();
   refreshFromOtherWindow();
@@ -561,12 +595,12 @@ window.addEventListener('keydown',event=>{
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
   else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else takeAction({type:'move',...cursor});}
   else if(name===' '||name==='.'){event.preventDefault();takeAction({type:'wait'});}
-  else if(name==='Escape'){showMoves=false;cursor=null;paintBoard();}
+  else if(name==='Escape'){showMoves=false;pinning=false;cursor=null;updateGame();}
 });
 function renderShop() {
   $('shop-gold').textContent = `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
-  for (const power of POWERUPS) {
+  for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);
     if (!button) {
       button = document.createElement('button');
@@ -582,12 +616,16 @@ function renderShop() {
       });
       $('shop-items').append(button);
     }
-    const owned = state.powers[power.id];
+    const life = power.id === 'life';
+    // Lives bought since this floor began: the shop is the only place to buy one.
+    const lifeThisVisit = life && state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0).includes('life');
+    const owned = life ? 0 : state.powers[power.id];
     // A magnet is useless on the coinless final floor, so the shop before it leaves it out.
     button.hidden = power.id === 'magnet' && coinlessFloor(state, state.floor + 1);
-    button.disabled = state.gold < power.cost || owned >= power.max;
+    button.disabled = state.gold < power.cost || (life ? lifeThisVisit : owned >= power.max);
     button.firstElementChild.textContent = `${power.name} · ${power.cost} gold`;
-    button.lastElementChild.textContent = `${power.description}${owned ? ` (${power.id === 'freeze' ? `${owned} moves left` : power.id === 'magnet' ? 'Active' : `${owned} left`})` : ''}`;
+    const held = power.id === 'magnet' ? 'Active' : power.id === 'shield' ? `${owned} left` : 'Held';
+    button.lastElementChild.textContent = `${power.description}${life ? ` (${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} now)` : owned ? ` (${held})` : ''}`;
   }
 }
 // The shop is offered once a floor is cleared, as the player takes its stairs.

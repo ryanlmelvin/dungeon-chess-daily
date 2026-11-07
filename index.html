@@ -36,7 +36,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="combo-status" class="combo-status" hidden></span><span id="modifier-status" hidden></span><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="pin-status" hidden></span><span id="combo-status" class="combo-status" hidden></span><span id="modifier-status" hidden></span><span class="life-row"><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
@@ -171,11 +171,14 @@
         <p>Each capture costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
       <article class="guide-page" hidden>
-        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop to buy powerups. With no shop after it, the last floor holds no coins.</p>
+        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop: a bone ward, a coin magnet, an extra life for 10 gold (one per shop), or one of three tools you use when you choose, from buttons beside your lives. Hourglasses turn up only in rooms. With no shop after it, the last floor holds no coins.</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one capture. Stacks up to 3.</dd></div>
-          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
+          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Found in rooms, never sold. Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
+          <div><dt class="guide-tool" aria-label="Pin">Pin</dt><dd>4 gold. Tap Pin, then a monster: it can’t move or capture for 3 moves. Kings can’t be pinned.</dd></div>
+          <div><dt class="guide-tool" aria-label="Borrowed move">♘</dt><dd>3 gold. Tap Borrow, and squares with gold corners move like a knight (a knight borrows a queen’s move). Only taking one of those squares spends it.</dd></div>
+          <div><dt class="guide-tool" aria-label="Take-back">↶</dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
           <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. A recruit moves after you for that floor and its captures count, but it can never capture the floor’s challenge piece: that’s yours to take. A king recruit can castle with your rook.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>

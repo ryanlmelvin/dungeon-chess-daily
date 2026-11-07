@@ -165,11 +165,20 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .app-bar nav button { font-size: 20px; padding: 8px 10px; }
 .game-status { font-size: 24px; }
 .game-status button { font-size: 22px; padding: 7px 10px; }
-#freeze-status { font-size: 20px; }
+#freeze-status, #pin-status { font-size: 20px; }
 .game-menu-button { padding: 6px; font-size: 26px; }
 .game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
 /* The objective stays click-through except for its hint button. */
 .game-objective { display: flex; align-items: center; justify-content: center; gap: 10px; }
+/* Guide entries for shop tools show a word or glyph where pickups show art. */
+.guide-tool { color: var(--gold); font-size: 30px; min-width: 40px; text-align: center; }
+/* Tools bought in the shop sit beside the lives, only while one is held. */
+.life-row { flex-basis: 100%; display: flex; align-items: center; gap: 12px; }
+.life-row .life-markers { flex-basis: auto; }
+.tool-tray { display: inline-flex; gap: 8px; }
+.game-status .tool-button { font-size: 18px; min-height: 30px; padding: 2px 8px; color: var(--gold); border-color: var(--gold); }
+.tool-tray[hidden] { display: none; }
+.game-status .tool-button[aria-pressed="true"] { color: var(--ink); background: var(--gold); }
 .hint-button { pointer-events: auto; flex: none; font-size: 20px; min-height: 36px; padding: 4px 10px; color: var(--gold); border-color: var(--gold); }
 .hint-art { display: block; width: min(100%, 240px); height: auto; margin: 0 auto 12px; image-rendering: pixelated; }
 #hint-dialog { max-width: 420px; }
