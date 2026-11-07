@@ -218,7 +218,7 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe && !takeAction({ type: 'pin', id: foe.id })) notify('Kings can’t be pinned.'); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
@@ -403,7 +403,9 @@ function updateGame() {
   renderTargets();
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
+  $('wait-button').hidden = state.exit.open || state.status !== 'playing';
   reserveObjectiveRoom();
+  placeWaitButton();
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
   placeDescendButton();
@@ -443,20 +445,61 @@ function placeMessageLog() {
     box.style.width = `${Math.round(Math.min(board.left - 24, 300))}px`;
     box.style.left = `${Math.round(Math.max(12, board.left - 12 - Math.min(board.left - 24, 300)))}px`;
     // A cramped margin trims even the last two lines; they scroll like the rest.
-    const room = Math.max(48, Math.round(Math.min(board.bottom, floor) - board.top));
+    // A beside objective panel holds the margin's top; the log keeps below it.
+    const objective = $('objective');
+    const ceiling = objective.classList.contains('beside') && !objective.hidden ? objective.getBoundingClientRect().bottom - origin + 8 : board.top;
+    const room = Math.max(48, Math.round(Math.min(board.bottom, floor) - ceiling));
     if (box.offsetHeight > room) { box.style.maxHeight = `${room}px`; box.classList.add('scrollable'); }
-    box.style.top = `${Math.round(Math.max(board.top, Math.min(board.bottom, floor) - box.offsetHeight))}px`;
+    box.style.top = `${Math.round(Math.max(ceiling, Math.min(board.bottom, floor) - box.offsetHeight))}px`;
   }
 }
-// Keep the board's door clear of the objective panel. The room is only updated
+// Keep the objective panel off the board. On a wide screen it moves into the
+// margin left of the board, top-aligned with it; otherwise it stays centered on
+// top and the board slides down to keep the door clear. The room is only updated
 // while the panel shows, so the board doesn't jump when the stairs open.
+const OBJECTIVE_BESIDE_MIN = 230;
 function reserveObjectiveRoom() {
   const panel = $('objective');
   if (!renderer?.setTopInset || panel.hidden || replay) return;
+  const board = renderer.boardRect();
+  const beside = board.left >= OBJECTIVE_BESIDE_MIN;
+  panel.classList.toggle('beside', beside);
+  if (beside) {
+    const width = Math.min(board.left - 24, 320);
+    panel.style.width = `${Math.round(width)}px`;
+    panel.style.left = `${Math.round(board.left - 12 - width)}px`;
+    // Below the gold, moves and lives in the top-left corner.
+    const status = document.querySelector('.game-status').getBoundingClientRect().bottom - $('dungeon').getBoundingClientRect().top;
+    panel.style.top = `${Math.round(Math.max(board.top, status + 10))}px`;
+    renderer.setTopInset(0);
+    return;
+  }
+  panel.style.width = panel.style.left = panel.style.top = '';
   const area = $('dungeon').getBoundingClientRect();
   const rect = panel.getBoundingClientRect();
   // On short screens the panel sits at the bottom instead; leave the board alone.
   renderer.setTopInset(rect.top - area.top < area.height / 2 ? rect.bottom - area.top : 0);
+}
+// Wait is the one action button off the board, so it sits on its own just
+// above the board's top-right corner, apart from the informational panels. With
+// no room there (a short screen) it goes beside the corner, or else overlaps
+// the board's edge as little as it can.
+function placeWaitButton() {
+  const button = $('wait-button');
+  const board = renderer?.boardRect?.();
+  if (!board || button.hidden) return;
+  const origin = $('dungeon').getBoundingClientRect();
+  const objective = $('objective').getBoundingClientRect();
+  const above = objective.height && !$('objective').classList.contains('beside') && objective.top - origin.top < board.height / 2 ? objective.bottom - origin.top : 0;
+  const width = button.offsetWidth, height = button.offsetHeight;
+  let top = board.top - height - 6;
+  let left = board.right - width;
+  if (top < above + 4) {
+    if (board.right + 10 + width <= board.width - 8) { left = board.right + 10; top = board.top; }
+    else top = Math.max(above + 4, 4);
+  }
+  button.style.top = `${Math.round(top)}px`;
+  button.style.left = `${Math.round(left)}px`;
 }
 // The stairs button sits just above the exit door, or over the door itself when
 // the board fills the screen, so it never covers a square a piece may need.

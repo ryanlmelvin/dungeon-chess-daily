@@ -38,7 +38,8 @@
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
       <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="pin-status" hidden></span><span id="combo-status" class="combo-status" hidden></span><button id="modifier-status" type="button" hidden></button><span class="life-row"><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
-      <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button><span id="targets" class="target-row"><span class="target-label" aria-hidden="true">Targets left</span><span id="target-markers" class="target-markers" role="img" aria-label="Targets left"></span></span></p>
+      <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><span id="targets" class="target-row"><span class="target-label" aria-hidden="true">Targets left</span><span id="target-markers" class="target-markers" role="img" aria-label="Targets left"></span></span></p>
+      <button id="wait-button" class="wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space" hidden>Wait</button>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
       <div id="game-message" class="game-message" role="log" aria-label="Messages" aria-live="polite" tabindex="-1" hidden></div>
       <p id="tactic-callout" class="tactic-callout" aria-live="polite" hidden></p>
@@ -158,7 +159,7 @@
         <h3 id="guide-close-title">Close range</h3>
         <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
         <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. A king, a practice-only choice, can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
-        <p>Tap <b>Wait</b> to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can capture it first.</p>
+        <p>Tap <b>Wait</b>, just above the board’s top-right corner, to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can capture it first.</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
           <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
