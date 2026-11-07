@@ -370,9 +370,11 @@ function hypothetically(unit, square, evaluate) {
   unit.x = square.x; unit.y = square.y;
   try { return evaluate(); } finally { unit.x = x; unit.y = y; }
 }
+// The player's reach counts a held Borrowed move, which can take the king too.
 function kingThreatened(state, king) {
   const hits = (unit) => movesFor(state, unit).some((move) => move.capture && same(move, king));
-  return (state.player.hp > 0 && hits(state.player)) || Boolean(state.companion && hits(state.companion));
+  const borrowed = () => state.powers?.leap > 0 && hits({ ...state.player, piece: borrowedPiece(state) });
+  return (state.player.hp > 0 && (hits(state.player) || borrowed())) || Boolean(state.companion && hits(state.companion));
 }
 function monsterMoves(state, foe) {
   return movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
