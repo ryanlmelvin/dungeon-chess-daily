@@ -321,6 +321,25 @@ function renderLives() {
     return marker;
   }));
 }
+// Targets still on the board, drawn in the enemy's color inside a red-edged
+// frame under the objective, so they never read as the player's lives (top left).
+function renderTargets() {
+  const piece = state.objective.piece;
+  const left = state.enemies.filter((foe) => (foe.role ?? foe.piece) === piece).length;
+  const done = state.objective.complete || left === 0;
+  $('targets').classList.toggle('done', done);
+  const markers = $('target-markers');
+  markers.setAttribute('aria-label', done ? `All enemy ${piece}s captured` : `${left} ${piece}${left === 1 ? '' : 's'} left`);
+  const enemyPalette = piecePalette(state.playerColor === 'white' ? 'black' : 'white');
+  if (done) { markers.textContent = '✓'; return; }
+  markers.replaceChildren(...Array.from({ length: left }, () => {
+    const marker = document.createElement('canvas');
+    marker.width = marker.height = SPRITE_SIZE;
+    marker.setAttribute('aria-hidden', 'true');
+    drawSprite(marker.getContext('2d'), `piece-${piece}`, 0, 0, 1, enemyPalette);
+    return marker;
+  }));
+}
 function updateGame() {
   if (!state) return;
   if (state.awaitingPlayer) showMoves = true;
@@ -330,12 +349,13 @@ function updateGame() {
   $('king-practice-note').hidden = !(practice && state.startingPiece === 'king');
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
-  // Scored moves: the count pauses once a floor's challenge is complete.
-  const moves = state.records.reduce((total, record) => total + scoredMoves(record), 0) + (state.records.length > state.floor ? 0 : floorScoredMoves(state));
+  // This floor's scored moves, the count its par is measured against. It pauses
+  // once the floor's challenge is complete. Practice runs (no par) show the same.
+  const moves = floorScoredMoves(state);
   $('move-status').textContent = `${moves} ${moves === 1 ? 'move' : 'moves'}`;
   const paused = state.objective.complete;
   $('move-status').classList.toggle('paused', paused);
-  $('move-status').setAttribute('aria-label', paused ? `${$('move-status').textContent}, paused: challenge complete, so gold and stairs are free` : $('move-status').textContent);
+  $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so gold and stairs are free' : ''}`);
   renderPar();
   renderTools();
   const pinnedFoe = state.enemies.find((foe) => foe.pinned);
@@ -354,6 +374,7 @@ function updateGame() {
   $('combo-status').textContent = `🔥 Combo ×${combo}`;
   $('combo-status').setAttribute('aria-label', `${combo} captures in a row${combo < COMBO_START ? `: capture again for bonus gold` : ''}`);
   $('objective-text').textContent = `Floor ${state.floor + 1} · Capture all enemy ${state.objective.piece}s`;
+  renderTargets();
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
   $('descend-button').hidden = !state.exit.open;

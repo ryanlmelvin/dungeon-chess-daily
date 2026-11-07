@@ -56,7 +56,10 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 #gold-status{color:var(--gold)}
 .shop-descend{display:block;width:100%;margin-top:16px;color:var(--gold)}
 .game-objective,.descend-button{position:absolute;top:calc(env(safe-area-inset-top,0px) + 91px);left:50%;transform:translateX(-50%);margin:0;background:#100f14ba;color:var(--paper);font-size:12px;line-height:1.4;text-align:center;white-space:nowrap}
-.game-objective{padding:7px 10px;pointer-events:none}.king-practice-note{flex-basis:100%;color:var(--gold);font-size:10px}
+.game-objective{padding:7px 10px;pointer-events:none}
+/* Remaining targets: enemy-colored icons in a red-edged frame under the objective, unlike the bare lives row. */
+#objective{flex-wrap:wrap;row-gap:6px}
+.target-row{flex-basis:100%;display:flex;align-items:center;justify-content:center;gap:8px}.target-label{color:#ef8b94;font-size:18px}.target-markers{display:flex;align-items:center;gap:1px;min-height:24px;padding:1px 4px;border:2px solid #ef8b94b0;background:#ef8b941f}.target-markers canvas{display:block;width:20px;height:20px;image-rendering:pixelated}.target-row.done .target-label{display:none}.target-row.done .target-markers{color:#f2ce80;border-color:#d5b16e;font-size:18px}.king-practice-note{flex-basis:100%;color:var(--gold);font-size:10px}
 .descend-button{border-color:var(--gold);color:var(--gold);padding:10px 16px}
 .descend-button:active{transform:translateX(-50%) translateY(1px)}
 .game-message{max-width:calc(100% - 32px);width:max-content;white-space:normal;line-height:1.5}
