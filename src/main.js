@@ -11,6 +11,7 @@ import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
+import { recruitChoice } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -70,6 +71,21 @@ let musicOn = false;
 try { musicOn = localStorage.getItem(`${prefix}music`) === 'on'; } catch {}
 $('music-toggle').checked = musicOn;
 music.setEnabled(musicOn);
+// Recruit control is a device preference like sound and music, never part of a
+// save or backup. Manual (the default) asks for the recruit's move every turn;
+// Auto lets it move itself, as certified routes and the Dungeon Bot do.
+let recruitManual = true;
+try { recruitManual = localStorage.getItem(`${prefix}recruit`) !== 'auto'; } catch {}
+$('recruit-control').value = recruitManual ? 'manual' : 'auto';
+// Manual control: a move or wait that reaches the recruit's phase shows your
+// move first and waits here for the recruit's order. The turn is played only
+// with the order, as one action, so a save never holds half a turn. It belongs
+// to the state it began from: any other change of state drops it.
+let ordering = null;
+const pendingOrder = () => (ordering && ordering.from === state ? ordering : null);
+// After an ordered turn the board animates only what followed its preview.
+let shownEvents = null;
+const boardEvents = () => (shownEvents?.state === state ? shownEvents.events : state.events);
 function syncMusic() {
   music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? editionTracks(daily.date)[state.floor] : null);
 }
@@ -228,6 +244,7 @@ function ensureRenderer() {
   try {
     renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeFirstTip(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
+      if (pendingOrder()) { orderAt({ x, y }); return; }
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
@@ -413,9 +430,14 @@ function updateGame() {
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
   $('wait-button').hidden = state.exit.open || state.status !== 'playing';
+  // While the recruit waits for its order, Wait keeps it still instead.
+  const holding = Boolean(pendingOrder());
+  $('wait-button').textContent = holding ? 'Hold' : 'Wait';
+  $('wait-button').setAttribute('aria-label', holding ? 'Hold: keep your recruit where it is' : 'Wait: skip your move and let the monsters act');
   reserveObjectiveRoom();
   placeWaitButton();
   $('descend-button').hidden = !state.exit.open;
+  $('descend-button').disabled = holding;
   $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
   placeDescendButton();
   $('treasure').textContent = ` · ${state.captures} captures`;
@@ -423,7 +445,7 @@ function updateGame() {
   $('treasure').setAttribute('aria-label', `${state.captures} enemies captured`);
   showGameFeedback();
   if ($('shop-dialog').open) renderShop();
-  $('first-tip').hidden = state.turns > 0;
+  $('first-tip').hidden = state.turns > 0 || holding;
   $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves. Or tap Wait to skip a turn.`;
   placeFirstTip();
   paintBoard();
@@ -552,7 +574,13 @@ function placeDescendButton() {
   button.style.left = `${Math.round(anchor.x)}px`;
   button.style.bottom = 'auto';
 }
-function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning});}
+function paintBoard(){
+  if(!state||replay)return;
+  // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
+  const pending=pendingOrder();
+  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,cursor,pinning:false});return;}
+  renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning});
+}
 // Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
 function renderTools() {
@@ -562,6 +590,8 @@ function renderTools() {
   if (!pin) pinning = false;
   $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !back;
   $('tool-tray').hidden = !(pin || leap || back);
+  // Tools wait until the recruit has its order; the tray stays put so the board doesn't move.
+  for (const id of ['pin-button', 'leap-button', 'takeback-button']) $(id).disabled = Boolean(pendingOrder());
   $('pin-button').setAttribute('aria-pressed', String(pinning));
   $('pin-button').textContent = pinning ? 'Pick a monster' : 'Pin';
   $('leap-button').textContent = `Borrow ${BORROW_GLYPH[borrowedPiece(state)]}`;
@@ -718,20 +748,32 @@ function showTacticCallout(events) {
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
 $('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('modifier-status').addEventListener('click', () => { if (state) notify(modifierOf(state).explain); });
-$('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
+$('wait-button').addEventListener('click', () => (pendingOrder() ? giveOrder('hold') : takeAction({ type: 'wait' })));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
 function takeAction(action) {
   const shopping = action.type === 'buy' && $('shop-dialog').open;
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || (!shopping && document.querySelector('dialog[open]'))) return false;
   if (refreshFromOtherWindow()) return false;
+  // Manual recruit control: show the move first, then take the recruit's order.
+  if (recruitManual && (action.type === 'move' || action.type === 'wait') && action.recruit === undefined) {
+    const choice = recruitChoice(state, action);
+    if (choice?.moves.length) return beginOrder(action, choice);
+    // A recruit with nowhere to go just holds.
+    if (choice) action = { ...action, recruit: 'hold' };
+  }
+  const pending = pendingOrder();
   const next = act(state, action);
   if (next === state) return false;
   turnLocked=!shopping;
+  ordering = null;
+  // The preview already played this turn up to the recruit's phase; the board animates the rest.
+  const continues = pending && JSON.stringify(next.events.slice(0, pending.phase)) === JSON.stringify(pending.shown);
+  shownEvents = continues ? { state: next, events: next.events.slice(pending.phase) } : null;
   const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
   // No floor-clear toast once the run ends: the results paper lists every floor.
   const par = cleared && next.status === 'playing' ? runPars(next, daily)?.[cleared.floor] : null;
-  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(state.events);
+  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(boardEvents());
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
@@ -755,14 +797,57 @@ function takeAction(action) {
   }, animationTime);
   return true;
 }
+// The recruit's order under Manual control. Your move is already on the board;
+// a square marked green moves the recruit there, and the recruit itself (or
+// Hold, or Space) keeps it still. The move can't be taken back here: it was played.
+const ORDER_TIP = 'Now move your recruit: tap a square marked green, or tap the recruit (or Hold) to keep it still.';
+function beginOrder(action, choice) {
+  ordering = { from: state, action, board: choice.board, phase: choice.phase, moves: choice.moves, shown: choice.board.events.slice(0, choice.phase) };
+  showMoves = false; pinning = false; cursor = null;
+  // A short pause so a double tap on the destination can't also give the order.
+  turnLocked = true;
+  setTimeout(() => { turnLocked = false; }, 250);
+  updateGame();
+  playSound(ordering.shown);
+  if (!tacticSeen('recruit-order')) notify(ORDER_TIP);
+  return true;
+}
+function giveOrder(recruit) {
+  const pending = pendingOrder();
+  if (!pending || !takeAction({ ...pending.action, recruit })) return false;
+  try { localStorage.setItem(tacticSeenKey('recruit-order'), '1'); } catch {}
+  return true;
+}
+function orderAt({ x, y }) {
+  const pending = pendingOrder();
+  const recruit = pending?.board.companion;
+  if (!recruit) return false;
+  if (x === recruit.x && y === recruit.y) return giveOrder('hold');
+  if (pending.moves.some((tile) => tile.x === x && tile.y === y)) return giveOrder({ x, y });
+  notify(ORDER_TIP);
+  return false;
+}
+// Keyboard: once your move shows, the cursor starts on the recruit.
+function cursorOnRecruit() {
+  const recruit = pendingOrder()?.board.companion;
+  if (recruit) { cursor = { x: recruit.x, y: recruit.y }; paintBoard(); }
+}
+function orderKey(event, name) {
+  const recruit = pendingOrder().board.companion;
+  if (directions[name]) { event.preventDefault(); const [dx, dy] = directions[name]; cursor ??= { x: recruit.x, y: recruit.y }; cursor = { x: Math.max(0, Math.min(7, cursor.x + dx)), y: Math.max(0, Math.min(7, cursor.y + dy)) }; paintBoard(); }
+  else if (name === 'Enter' && cursor) { event.preventDefault(); orderAt(cursor); }
+  else if (name === ' ' || name === '.') { event.preventDefault(); giveOrder('hold'); }
+  else if (name === 'Escape') { cursor = { x: recruit.x, y: recruit.y }; paintBoard(); }
+}
 const directions={ArrowUp:[0,-1],w:[0,-1],ArrowDown:[0,1],s:[0,1],ArrowLeft:[-1,0],a:[-1,0],ArrowRight:[1,0],d:[1,0]};
 window.addEventListener('keydown',event=>{
   if(event.target instanceof Element && event.target.closest('button,input,textarea,select,a'))return;
   if(screen!=='game'||!state||replay||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
+  if(pendingOrder()){orderKey(event,name);return;}
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
-  else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else takeAction({type:'move',...cursor});}
-  else if(name===' '||name==='.'){event.preventDefault();takeAction({type:'wait'});}
+  else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else{takeAction({type:'move',...cursor});cursorOnRecruit();}}
+  else if(name===' '||name==='.'){event.preventDefault();takeAction({type:'wait'});cursorOnRecruit();}
   else if(name==='Escape'){showMoves=false;pinning=false;cursor=null;updateGame();}
 });
 function renderShop() {
@@ -806,7 +891,8 @@ function renderShop() {
 // The shop is offered once a floor is cleared, as the player takes its stairs.
 // The last floor has no shop: its stairs end the run.
 function takeStairs() {
-  if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || !state.exit.open || document.querySelector('dialog[open]')) return;
+  // A move waiting on its recruit's order finishes first.
+  if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || !state.exit.open || pendingOrder() || document.querySelector('dialog[open]')) return;
   if (refreshFromOtherWindow() || !state.exit.open) return;
   if (state.floor === 2) { takeAction({type:'descend'}); return; }
   renderShop();
@@ -961,7 +1047,8 @@ function startOver(next, message) {
 let hopelessShown = null;
 async function offerHopelessRestart() {
   if (replay || screen !== 'game' || !state || state.status !== 'playing' || !state.floorSnapshot || document.querySelector('dialog[open]')) return;
-  if (!hopelessFloor(state)) return;
+  // A recruit under Manual control may still take the targets your piece can't reach.
+  if (!hopelessFloor(state, { manualRecruit: recruitManual })) return;
   const piece = state.objective.piece;
   const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === piece);
   const position = JSON.stringify([daily.date, practice, state.floor, state.player.piece, state.powers.leap, targets.map((foe) => [foe.id, foe.x, foe.y])]);
@@ -969,7 +1056,8 @@ async function offerHopelessRestart() {
   hopelessShown = position;
   const floor = state.floor + 1;
   const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
-  if (!await askConfirm('This floor can’t be finished', `Your piece can never reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
+  const who = recruitManual && (state.companion || waitingRecruit(state)) ? 'Neither your piece nor your recruit can ever' : 'Your piece can never';
+  if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${floor} restarted.`);
@@ -1105,9 +1193,10 @@ $('game-menu-button').addEventListener('click',openMenu);
 document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
 $('sound-toggle').addEventListener('change',()=>{sound=$('sound-toggle').checked;try{localStorage.setItem(`${prefix}sound`,sound?'on':'off');}catch{}});
 $('music-toggle').addEventListener('change',()=>{musicOn=$('music-toggle').checked;try{localStorage.setItem(`${prefix}music`,musicOn?'on':'off');}catch{}music.setEnabled(musicOn);music.unlock();syncMusic();});
+$('recruit-control').addEventListener('change',()=>{recruitManual=$('recruit-control').value!=='auto';try{localStorage.setItem(`${prefix}recruit`,recruitManual?'manual':'auto');}catch{}});
 $('export-button').addEventListener('click',()=>{
   const saves={};
-  try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
+  try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
   if(state&&!practice)saves[`daily:v6:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});

@@ -108,6 +108,8 @@ dialog .icon-button, .app-bar .icon-button {
 }
 .sound-setting input:checked::before { background: var(--gold); transform: translateX(18px); }
 .sound-setting.music-setting { margin-top: 0; }
+.sound-setting.recruit-setting { margin-top: 0; }
+.recruit-setting select { font: inherit; color: inherit; cursor: pointer; }
 .saved-progress { border-top: 2px solid #51424f; }
 .saved-progress summary, .pwa-dialog summary, .guide-keyboard summary {
   font-size: 22px;

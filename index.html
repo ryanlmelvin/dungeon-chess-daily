@@ -102,6 +102,7 @@
     </div>
     <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
     <label class="sound-setting music-setting"><span>Music</span><input id="music-toggle" type="checkbox" role="switch"></label>
+    <label class="sound-setting recruit-setting"><span>Recruit control</span><select id="recruit-control"><option value="manual">Manual</option><option value="auto">Auto</option></select></label>
     <details class="saved-progress">
     <summary>Saved progress</summary>
     <p>Moving to an installed app? Use <b>Download backup</b> in your browser, then <b>Restore backup</b> in the app to bring your progress over.</p>
@@ -149,7 +150,7 @@
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the last rank promotes to a queen until the floor ends.</p>
         <p>Pawns can capture <b>en passant</b>, and your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too): see <b>Special moves</b>.</p>
-        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p></details>
+        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p><p>Then your recruit: arrows + Enter: move it · Space: keep it still</p></details>
       </article>
       <article class="guide-page" hidden>
         <h3 id="guide-order-title">Who moves first</h3>
@@ -185,7 +186,7 @@
           <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Squares with a ghosted knight (a ghosted queen if you’re a knight) and gold corners move like that piece. They’re optional: only taking one spends it. Tap Borrow to point them out.</dd></div>
           <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
           <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. A recruit moves after you for that floor and its captures count, but it can never capture the floor’s challenge piece: that’s yours to take. A king recruit can castle with your rook.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself; then it can’t capture targets. A king recruit can castle with your rook.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -249,7 +250,7 @@
         <label for="practice-color">Color<select id="practice-color" aria-describedby="piece-warning"><option value="white">White</option><option value="black">Black</option></select></label>
       </div>
       <p id="piece-warning" role="status" hidden>Changing from today's official piece or color means no completion message to share with friends. Today's challenge may be impossible with your chosen piece.</p>
-      <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, and your recruit can’t capture it, so floor 3 may be impossible.</p>
+      <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, so floor 3 may be impossible: only your recruit can capture it, and not on Auto.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>
   </dialog>

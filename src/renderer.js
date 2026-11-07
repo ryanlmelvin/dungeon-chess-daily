@@ -105,6 +105,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let recruitSprites = [];
   let lastEvents = null;
   let moveMaterial = null;
+  let recruitMaterial = null;
   const playerPulse = { value: 0 };
   const moveColor = { value: new THREE.Color(MOVE_COLOR) };
 
@@ -417,6 +418,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   function updateHints(next) {
     clear(hints);
     moveMaterial = null;
+    recruitMaterial = null;
     if (next.powers?.shield) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.39, 16), basic(0xa7dfff, { transparent: true, opacity: 0.85, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2;
@@ -469,6 +471,20 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         }
       }
     }
+    // Manual recruit control, waiting for the recruit's order: green dots on its
+    // squares (a ring around a monster it can capture), never your piece's filled
+    // blue squares, and green corners on the recruit itself, which holds it.
+    if (next.recruitMoves && next.companion) {
+      recruitMaterial = basic(MINT, { transparent: true, opacity: 0.85, depthWrite: false });
+      for (const tile of next.recruitMoves) {
+        const mark = new THREE.Mesh(tile.capture ? new THREE.RingGeometry(0.39, 0.47, 20) : new THREE.CircleGeometry(0.15, 16), recruitMaterial);
+        mark.rotation.x = -Math.PI / 2;
+        // Just above a fork's gold ring, so the two never flicker on one monster.
+        mark.position.set(tile.x, 0.055, tile.y);
+        hints.add(mark);
+      }
+      cornerMarks(next.companion.x, next.companion.y, MINT, 0.42, 0.18);
+    }
     if (next.cursor) cornerMarks(next.cursor.x, next.cursor.y, 0xcabfd7, 0.46, 0.2);
     // A pending fork (tactics.js): gold rings under every forked monster.
     for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
@@ -509,8 +525,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // That phase has no turn increment; its marker still drives the animation.
     const animateTurn = !changedBoard && !reducedMotion && (next.turns > currentTurn || enemyPhase || playerMoved || companionPhase);
     const playerDelay = blackPhase && playerMoved ? 175 : 0;
-    const companionDelay = companionPhase ? playerDelay + 175 : 0;
-    const enemyDelay = !blackPhase && enemyPhase && playerMoved ? (companionPhase ? 350 : 175) : 0;
+    // The recruit moves after its player, before the monsters of a white turn.
+    // With no move of yours to show (a wait, or a Manual order whose move was
+    // already shown) it goes first.
+    const companionDelay = companionPhase && (playerMoved || blackPhase) ? playerDelay + 175 : 0;
+    const enemyDelay = !blackPhase && enemyPhase && (playerMoved || companionPhase) ? (playerMoved ? 175 : 0) + (companionPhase ? 175 : 0) : 0;
     const captureAt = now + playerDelay + 145;
     if (animateTurn && playerMoved) pendingItems = { items: next.items || [], at: captureAt };
     else if (!pendingItems) updateItems(next.items || []);
@@ -684,6 +703,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const pulse = reducedMotion ? 0.7 : 0.5 - 0.5 * Math.cos(timestamp * Math.PI * 2 / 1600);
     playerPulse.value = moveHintsVisible ? 0.3 + pulse * 0.45 : 0;
     if (moveMaterial && materials.has(moveMaterial)) moveMaterial.opacity = 0.3 + pulse * 0.35;
+    if (recruitMaterial && materials.has(recruitMaterial)) recruitMaterial.opacity = 0.55 + pulse * 0.4;
     for (const [id, entity] of entities) {
       if (entity.spawnAt && timestamp >= entity.spawnAt) {
         entity.spawnAt = 0;

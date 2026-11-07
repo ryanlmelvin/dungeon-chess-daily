@@ -129,7 +129,8 @@ export function verifyWinningRoute(initial, actions) {
     narrowEscapes: 0, positioningMoves: 0, captureOpportunities: 0, promotion: false, livesLost: 0,
   };
   for (const action of actions) {
-    if (!action || !['move', 'descend', 'wait'].includes(action.type)) {
+    // A certified route leaves its recruit on Auto: it never carries a recruit order.
+    if (!action || !['move', 'descend', 'wait'].includes(action.type) || action.recruit !== undefined) {
       return { valid: false, reason: 'Only chess moves, waiting and stairs are allowed.' };
     }
     if (action.type === 'move') {
