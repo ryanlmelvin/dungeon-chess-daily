@@ -9,10 +9,12 @@
 //   square the same way if that square is open and empty. Monsters and
 //   recruits are sure-footed: only the player's piece slides.
 // - collapse: every few player moves on a floor one more monster (a decoy
-//   role, never a pawn) walks in at the door square, up to a cap per floor.
+//   role, never a pawn, and only while that role has room under a chess
+//   army's counts) walks in at the door square, up to a cap per floor.
 //
 // This module imports nothing from rules.js, so edition.js can use it too.
 import { hash, random } from './random.js';
+import { PIECE_COUNTS } from './pieces.js';
 
 export const MODIFIERS = Object.freeze({
   none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),
@@ -55,7 +57,7 @@ function occupied(state, tile) {
  * Ice uses its own random stream, so the room's layout is unchanged.
  */
 export function setupFloorModifier(state) {
-  if (state.modifier === 'collapse') state.reinforcements = 0;
+  if (state.modifier === 'collapse') { state.reinforcements = 0; state.reinforcementsSkipped = 0; }
   if (state.modifier !== 'ice') return;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:ice:${state.floor}`));
   const candidates = [];
@@ -93,26 +95,51 @@ export function collapseDue(state) {
   return Math.min(COLLAPSE_CAP, Math.floor(moves / COLLAPSE_EVERY));
 }
 
-/** The floor's n-th reinforcement, before it enters: a copy of a decoy species. */
-export function reinforcement(state, n) {
+/**
+ * Who the floor's n-th reinforcement may be, most preferred first: its two
+ * decoy species, alternating, never a pawn (a pawn at the door could never
+ * leave a pawn player's promotion file) or the target. Each is built as the
+ * monster that would enter, so save validation can recognise any of them.
+ */
+export function reinforcementOptions(state, n) {
   const decoys = [state.species[3 + state.floor * 2], state.species[4 + state.floor * 2]]
-    // A pawn at the door could never leave a pawn player's promotion file.
     .filter((creature) => creature && creature.piece !== 'pawn' && creature.piece !== state.targets[state.floor]);
-  const creature = decoys[n % decoys.length];
-  if (!creature) return null;
-  return {
+  const first = n % Math.max(1, decoys.length);
+  return [...decoys.slice(first), ...decoys.slice(0, first)].map((creature) => ({
     id: `f${state.floor}-r${n}`, species: creature.id, palette: creature.palette, name: creature.name,
     piece: creature.piece, role: creature.piece, x: state.exit.x, y: state.exit.y, moved: false, phase: 'ready', intent: [], target: null,
-  };
+  }));
 }
 
-/** End of a player's turn: a due reinforcement enters if the door square is free. */
+// Living monsters already holding this role. Only pawns promote, so a promoted
+// pawn counts against both the pawns and the queens: the board never shows a
+// second queen from the door either.
+function onBoard(state, piece) { return state.enemies.filter((foe) => foe.piece === piece || foe.role === piece).length; }
+
+/**
+ * The floor's n-th reinforcement, before it enters: the first option whose role
+ * still has room under a chess army's counts (one king, one queen, two of each
+ * other piece; the same limit the generator keeps), or null if none has room.
+ */
+export function reinforcement(state, n) {
+  return reinforcementOptions(state, n).find((foe) => onBoard(state, foe.piece) < PIECE_COUNTS[foe.piece]) ?? null;
+}
+
+/**
+ * End of a player's turn: a due reinforcement enters if the door square is
+ * free. If every role it could take is full then, it is called off instead: it
+ * still counts toward the floor's cap, and the next one keeps its own time.
+ */
 export function collapseTick(state) {
   if (state.modifier !== 'collapse' || state.status !== 'playing' || state.exit.open) return;
-  const spawned = state.reinforcements ?? 0;
-  if (spawned >= collapseDue(state) || occupied(state, state.exit)) return;
+  const spawned = state.reinforcements ?? 0, skipped = state.reinforcementsSkipped ?? 0;
+  if (spawned + skipped >= collapseDue(state) || occupied(state, state.exit)) return;
   const foe = reinforcement(state, spawned);
-  if (!foe) return;
+  if (!foe) {
+    state.reinforcementsSkipped = skipped + 1;
+    state.message = `${state.message ? `${state.message} ` : ''}The ceiling groans, but nothing comes through the door.`;
+    return;
+  }
   state.enemies.push(foe);
   state.reinforcements = spawned + 1;
   state.events.push({ type: 'reinforcement', id: foe.id, x: foe.x, y: foe.y });
@@ -125,9 +152,10 @@ export function extraPopulation(modifier) { return modifier === 'collapse' ? COL
 /** Checks the modifier's own save fields against a freshly set-up template floor. */
 export function validModifierState(value, template) {
   if (JSON.stringify(value.ice) !== JSON.stringify(template.ice)) return false;
-  if (value.modifier !== 'collapse') return value.reinforcements === undefined;
-  const count = value.reinforcements;
-  return Number.isInteger(count) && count >= 0 && count <= collapseDue(value);
+  if (value.modifier !== 'collapse') return value.reinforcements === undefined && value.reinforcementsSkipped === undefined;
+  // Saves from before called-off arrivals have no skip count.
+  const count = value.reinforcements, skipped = value.reinforcementsSkipped ?? 0;
+  return Number.isInteger(count) && count >= 0 && Number.isInteger(skipped) && skipped >= 0 && count + skipped <= collapseDue(value);
 }
 
 /** Short in-game label, e.g. "🧊 Ice" or "🧱 Next arrival in 4". */
@@ -135,10 +163,11 @@ export function modifierStatus(state) {
   const modifier = modifierOf(state);
   if (modifier.id === 'none') return '';
   if (modifier.id !== 'collapse' || state.exit?.open) return `${modifier.emoji} ${modifier.name}`;
-  const spawned = state.reinforcements ?? 0;
-  if (spawned >= COLLAPSE_CAP) return `${modifier.emoji} Door quiet`;
+  const spawned = state.reinforcements ?? 0, slots = spawned + (state.reinforcementsSkipped ?? 0);
+  if (slots >= COLLAPSE_CAP) return `${modifier.emoji} Door quiet`;
+  // Every role the next arrival could take is full right now: promise nothing.
+  if (!reinforcement(state, spawned)) return `${modifier.emoji} Door quiet for now`;
   const moves = state.turns - (state.floorStart?.turns ?? 0);
-  const due = collapseDue(state);
-  if (due > spawned) return `${modifier.emoji} Arrival waiting at the door`;
-  return `${modifier.emoji} Next arrival in ${COLLAPSE_EVERY * (spawned + 1) - moves}`;
+  if (collapseDue(state) > slots) return `${modifier.emoji} Arrival waiting at the door`;
+  return `${modifier.emoji} Next arrival in ${COLLAPSE_EVERY * (slots + 1) - moves}`;
 }

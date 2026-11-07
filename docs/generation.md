@@ -128,10 +128,14 @@ own hash stream (`modifier:<date>`), so no other daily draw moves. The modifier 
   and `act()` emits a `slide` event. Monsters and recruits never slide, which
   keeps the monster AI and attack warnings unchanged.
 - **Collapse** counts moves on the current floor. At the end of each player
-  turn, if `floor(moves / 10)` exceeds the reinforcements so far (`state.reinforcements`,
-  capped at 3) and the door square is free, a copy of one of the floor's decoy
-  species (never a pawn, which could block a pawn's promotion file) enters there
-  as `f<floor>-r<n>`. None arrive once the stairs open. Reinforcements are
+  turn, if `floor(moves / 10)` exceeds the arrivals so far (`state.reinforcements`
+  plus called-off `state.reinforcementsSkipped`, capped at 3) and the door square
+  is free, a copy of one of the floor's decoy species (never a pawn, which could
+  block a pawn's promotion file) enters there as `f<floor>-r<n>`: the species
+  `n % 2` first, else the other, whichever role still has room under a chess
+  army's counts (living monsters of that role or piece, so a promoted pawn
+  fills the queen's place). If neither has room the arrival is called off and
+  counted in `state.reinforcementsSkipped`. None arrive once the stairs open. Reinforcements are
   ordinary decoys: capturing one pays a gold, and save validation widens floor
   populations by the cap.
 - **Dark** (retired) hid squares more than two away from the player. It hid the

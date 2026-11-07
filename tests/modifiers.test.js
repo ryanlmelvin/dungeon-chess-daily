@@ -9,7 +9,7 @@ import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
   MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
-  modifierFor, iceSlide,
+  modifierFor, iceSlide, modifierStatus,
 } from '../src/modifiers.js';
 
 const day = (offset, start = '2026-11-06') => new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -217,6 +217,64 @@ test('collapse saves validate through a certified route, and bad counts are reje
     }
   }
   assert.ok(checked, 'some certified collapse route meets a reinforcement');
+});
+
+test('collapse never puts a second king or queen (or a third of any other role) on the board', () => {
+  const PIECE_COUNTS = { pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 };
+  const withinArmy = (state, label) => {
+    for (const [piece, limit] of Object.entries(PIECE_COUNTS)) {
+      assert.ok(state.enemies.filter((entry) => entry.role === piece).length <= limit, `${label}: too many ${piece}s`);
+    }
+  };
+  // Waits out a whole floor's arrivals with the residents frozen in place.
+  const waitOut = (state, date, daily, label) => {
+    state.powers.freeze = 1000;
+    for (let turn = 0; turn < COLLAPSE_EVERY * (COLLAPSE_CAP + 1) && state.status === 'playing'; turn++) {
+      state = act(state, { type: 'wait' });
+      withinArmy(state, `${label} turn ${turn}`);
+      // The test's endless freeze is beyond what a save may hold; the rest must validate.
+      if (daily) assert.equal(validateSave({ ...state, powers: { ...state.powers, freeze: 0 } }, date, daily), true, `${label} turn ${turn}`);
+    }
+    return state;
+  };
+  // The playtest: 2026-11-07's second floor (pawn targets) has a king and a
+  // queen decoy, so neither role has room and every arrival is called off.
+  const date = '2026-11-07';
+  const daily = getDaily(date);
+  let state = createGame(daily);
+  for (const action of daily.generation.certificate.actions) {
+    if (state.floor === 1) break;
+    state = act(state, action);
+  }
+  assert.equal(state.floor, 1);
+  assert.deepEqual([state.species[5].piece, state.species[6].piece].sort(), ['king', 'queen']);
+  assert.equal(modifierStatus(state), '🧱 Door quiet for now');
+  const before = state.enemies.length;
+  state = waitOut(state, date, daily, date);
+  assert.equal(state.enemies.length, before, 'nobody came through the door');
+  assert.equal(state.reinforcements, 0);
+  assert.equal(state.reinforcementsSkipped, COLLAPSE_CAP);
+  assert.equal(modifierStatus(state), '🧱 Door quiet');
+  const saved = { ...state, powers: { ...state.powers, freeze: 0 } };
+  assert.equal(validateSave(saved, date, daily), true);
+  assert.equal(validateSave({ ...saved, reinforcementsSkipped: COLLAPSE_CAP + 1 }, date, daily), false);
+  // A forged second king at the door is rejected.
+  const forged = structuredClone(saved);
+  forged.reinforcements = 1; forged.reinforcementsSkipped = 2; forged.captures -= 1;
+  const king = state.species.slice(5, 7).find((creature) => creature.piece === 'king');
+  forged.enemies.push({ id: 'f1-r0', species: king.id, palette: king.palette, name: king.name, piece: 'king', role: 'king', x: 4, y: 0, moved: false, phase: 'ready', intent: [], target: null });
+  assert.equal(validateSave(forged, date, daily), false);
+  // The first floor of the first collapse days stays within a chess army's counts too.
+  let floors = 0, royal = 0;
+  for (let offset = 0; offset < 120 && floors < 20; offset++) {
+    const other = day(offset, '2026-11-07');
+    const raw = getRawDaily(other);
+    if (raw.modifier !== 'collapse') continue;
+    if ([raw.species[3].piece, raw.species[4].piece].some((piece) => piece === 'king' || piece === 'queen')) royal++;
+    waitOut(createGame(raw), other, null, other);
+    floors++;
+  }
+  assert.ok(royal > 0, 'some first floor has a king or queen decoy');
 });
 
 test('saves must match the day’s modifier and its ice', () => {
