@@ -495,7 +495,10 @@ function closeIn(state, foe) {
   if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))) relocate(state, foe, step);
 }
 
-function enemyTurn(state) {
+// `hit`: the player was already captured this turn (at close range). At most
+// one hit a turn, so no monster captures again: a strike that would land holds,
+// still wound up, and everything else moves and winds up as usual.
+function enemyTurn(state, hit = false) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   // A pinned monster sits out this turn; the pin wears off after PIN_MOVES of them.
   const held = new Set(state.enemies.filter(pinned));
@@ -508,6 +511,7 @@ function enemyTurn(state) {
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
+      if (capture && hit) continue;
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
       if (capture) return;
@@ -1234,7 +1238,7 @@ function play(previous, action) {
     state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
   // Ending a move in close range of a monster is captured at once: no warning
-  // turn. At most one hit per move, so white's enemy phase is then skipped.
+  // turn. At most one hit per move, so white's enemy phase then captures no one.
   // A double step can instead be taken en passant by a pawn beside it.
   const guard = closeAttacker(state, state.player);
   const close = guard ?? (doubleStep ? enPassantStriker(state, state.player) : null);
@@ -1252,7 +1256,7 @@ function play(previous, action) {
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
   if (!castle) { companionTurn(state); settle(state); }
-  if (state.playerColor === 'white' && !close) { enemyTurn(state); settle(state); }
+  if (state.playerColor === 'white') { enemyTurn(state, Boolean(close)); settle(state); }
   collapseTick(state); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Turn flow: the final floor's king keeps out of a held Borrowed move's reach.
+// Turn flow: a close-range hit no longer freezes the board, and the final
+// floor's king keeps out of a held Borrowed move's reach.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, legalMoves } from '../src/rules.js';
+import { act, createGame, dangerTiles, legalMoves } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 
+const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
+const count = (state, type) => state.events.filter((event) => event.type === type).length;
 function dailyFor(piece) {
   for (let day = 0; day < 365; day++) {
     const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
@@ -28,6 +31,60 @@ function monster(id, piece, x, y, lane = null) {
     phase: lane ? 'aim' : 'ready', target: lane ? { ...lane.at(-1) } : null, intent: lane ? lane.map((tile) => ({ ...tile })) : [] };
 }
 const foe = (state, id) => state.enemies.find((entry) => entry.id === id);
+const row4 = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => ({ x: from + i, y: 4 }));
+
+// 1. Close-range hits keep the monster phase.
+
+test('after a close-range hit the monsters still move and wind up, but a strike that would land holds', () => {
+  const state = scenario();
+  state.enemies = [monster('rook', 'rook', 0, 4, row4(1, 4)), monster('guard', 'king', 5, 3), monster('far', 'king', 0, 0)];
+  const next = act(state, move(4, 4));
+  assert.equal(next.player.hp, 2, 'one hit');
+  assert.equal(count(next, 'player-captured'), 1);
+  assert.equal(count(next, 'enemy-phase'), 1);
+  const rook = foe(next, 'rook');
+  assert.equal(rook.phase, 'aim', 'the wound-up rook holds its strike');
+  assert.deepEqual([rook.x, rook.y, rook.target], [0, 4, { x: 4, y: 4 }]);
+  assert.ok(next.events.some((event) => event.type === 'enemy-move' && event.id === 'far'), 'everything else still moves');
+  assert.equal(foe(next, 'guard').phase, 'aim', 'the close attacker winds up again');
+  assert.ok(dangerTiles(next).some((tile) => tile.x === 4 && tile.y === 4));
+  // Staying put next turn, the held strike lands.
+  const stayed = act(next, wait);
+  assert.equal(stayed.player.hp, 1);
+  assert.equal(stayed.events.find((event) => event.type === 'player-captured').by, 'rook');
+});
+
+test('a bone ward absorbs the close-range hit without freezing the board, and no second hit lands', () => {
+  const state = scenario(); state.powers.shield = 2;
+  state.enemies = [monster('rook', 'rook', 0, 4, row4(1, 4)), monster('guard', 'king', 5, 3), monster('far', 'king', 0, 0)];
+  const next = act(state, move(4, 4));
+  assert.equal(next.player.hp, 3);
+  assert.equal(next.powers.shield, 1, 'only one ward spent: no double hit');
+  assert.equal(count(next, 'shield'), 1);
+  assert.equal(foe(next, 'rook').phase, 'aim');
+  assert.equal(foe(next, 'guard').phase, 'aim');
+  assert.ok(next.events.some((event) => event.type === 'enemy-move' && event.id === 'far'));
+});
+
+test('a close-range hit no longer pins the final floor’s king in place', () => {
+  // The rook steps where a knight guard strikes and onto the king's row: the king must flee.
+  const state = scenario({ at: [0, 6], floor: 2 }); state.powers.shield = 1;
+  state.enemies = [monster('king', 'king', 5, 3), monster('guard', 'knight', 1, 1)];
+  const next = act(state, move(0, 3));
+  assert.equal(count(next, 'shield'), 1);
+  const king = foe(next, 'king');
+  assert.notDeepEqual([king.x, king.y], [5, 3]);
+  assert.ok(!legalMoves(next).some((tile) => tile.capture && tile.x === king.x && tile.y === king.y));
+});
+
+test('black’s turn order is unchanged: one enemy phase, before the move, even with a close-range hit', () => {
+  const state = scenario({ color: 'black' });
+  state.enemies = [monster('guard', 'king', 5, 5)];
+  const next = act(state, move(4, 4));
+  assert.equal(next.player.hp, 2);
+  assert.equal(count(next, 'enemy-phase'), 1);
+  assert.ok(next.events.findIndex((event) => event.type === 'enemy-phase') < next.events.findIndex((event) => event.type === 'close-capture'));
+});
 
 // 2. The royal king respects a held Borrowed move.
 
