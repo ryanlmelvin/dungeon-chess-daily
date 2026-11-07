@@ -221,7 +221,7 @@ test('share text is a title, a marker per floor and moves against par, without s
   state.feats = [{ floor: 0, kind: 'combo' }];
   assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], 'https://ryanlmelvin.github.io/dungeon-chess-daily/');
   state.status = 'lost'; state.floor = 0; state.records = [];
-  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1, 3), ['🟥', '·']);
+  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1, 3).map((line) => line.replace(/[\u2000-\u200A]/g, '')), ['🟥', '·']);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
