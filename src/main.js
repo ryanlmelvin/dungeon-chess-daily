@@ -15,7 +15,7 @@ import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { createMusic, editionTracks } from './music.js';
-import { MODIFIERS, modifierStatus } from './modifiers.js';
+import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
 import { parFor, runPars, awardStars, totalStars, starText, MAX_STARS } from './par.js';
 
@@ -334,6 +334,7 @@ function updateGame() {
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);
   $('modifier-status').textContent = modifierStatus(state);
   $('modifier-status').hidden = !$('modifier-status').textContent;
+  $('modifier-status').setAttribute('aria-label', `${$('modifier-status').textContent}. Tap for what ${modifierOf(state).name} does`);
   // The combo counter shows from the second capture in a row; the third pays.
   const combo = state.combo ?? 0;
   $('combo-status').hidden = combo < 2;
@@ -554,6 +555,7 @@ function showTacticCallout(events) {
 }
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
 $('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
+$('modifier-status').addEventListener('click', () => { if (state) notify(modifierOf(state).explain); });
 $('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});

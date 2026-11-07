@@ -17,19 +17,22 @@
 import { hash, random } from './random.js';
 
 export const MODIFIERS = Object.freeze({
-  none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', changesRules: false }),
+  none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),
   // Dark changes only what is drawn, so it shares plain days' fallback dungeons.
   dark: Object.freeze({
     id: 'dark', emoji: '🌑', name: 'Dark', changesRules: false,
     headline: 'Lamps fail below: crawlers see two squares, and only a monster’s wind-up lights the gloom',
+    explain: 'Dark: you see only squares within 2 of your piece. A monster winding up lights itself and its path. The rules don’t change.',
   }),
   ice: Object.freeze({
     id: 'ice', emoji: '🧊', name: 'Ice', changesRules: true,
     headline: 'Cold snap glazes the dungeon: long moves that end on ice skid one square further',
+    explain: 'Ice: a rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square if it’s open. Captures stop you. Monsters never slide.',
   }),
   collapse: Object.freeze({
-    id: 'collapse', emoji: '🏚️', name: 'Collapse', changesRules: true,
+    id: 'collapse', emoji: '🪨', name: 'Collapse', changesRules: true,
     headline: 'Ceiling cracks above the crypt: fresh monsters stumble through the door every ten moves',
+    explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door, or waits there until it’s free. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
 });
 // Uniform over these, so about one day in four stays plain.
@@ -133,7 +136,7 @@ export function validModifierState(value, template) {
   return Number.isInteger(count) && count >= 0 && count <= collapseDue(value);
 }
 
-/** Short in-game label, e.g. "🧊 Ice" or "🏚️ Next arrival in 4". */
+/** Short in-game label, e.g. "🧊 Ice" or "🪨 Next arrival in 4". */
 export function modifierStatus(state) {
   const modifier = modifierOf(state);
   if (modifier.id === 'none') return '';
