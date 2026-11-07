@@ -5,7 +5,7 @@ import { hash, random } from './random.js';
 import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
-import { chooseMonsterMove } from './monster-ai.js';
+import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 6;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -344,15 +344,36 @@ function promoteMonster(state, foe) {
 function moveMonster(state, foe) {
   const candidates = movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
   if (!candidates.length) return;
-  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
   // Each role steps with its own habits (src/monster-ai.js).
-  const step = chooseMonsterMove(state, foe, candidates, { movesFor, closeAttacker, tie });
+  const step = chooseMonsterMove(state, foe, candidates, monsterEngine(state, foe));
   const from = { x: foe.x, y: foe.y };
   foe.x = step.x; foe.y = step.y; foe.moved = true;
   state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
-  aimAtPlayer(state, foe);
+  windUp(state, foe);
+}
+
+// The rules.js internals src/monster-ai.js consults for one monster.
+function monsterEngine(state, foe) {
+  return { movesFor, closeAttacker, borrowedPiece, tie: (move) => monsterTie(state, foe, move), steps: () => monsterMoves(state, foe) };
+}
+
+// Off the king floor, a monster that can strike the player winds up, except
+// that from Tricky on a rook, bishop, queen or decoy king waits for a square
+// where the player can't take it, or a guarded one (src/monster-ai.js).
+function windUp(state, foe) {
+  return movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))
+    && safeToStrike(state, foe, monsterEngine(state, foe)) && aimAtPlayer(state, foe);
+}
+
+// From Tough on, a guard first blocks a line into a target the player could take.
+function screenTarget(state, foe) {
+  const block = screenStep(state, foe, monsterEngine(state, foe));
+  if (!block) return false;
+  relocate(state, foe, block);
+  windUp(state, foe);
+  return true;
 }
 
 // A pawn's double step opens an en passant window on the square it skipped.
@@ -384,8 +405,14 @@ function relocate(state, foe, move) {
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
 }
+// A monster's seeded tie-break between equally good steps, in [0, 1). It counts
+// moves on this floor, not in the whole run, so a floor plays the same however
+// long the earlier ones took, par included. (Hashing only the board left more
+// monsters pacing between two squares for good while the player waited.)
+// Classic monsters (comparisons only) count the whole run, as all once did.
 function monsterTie(state, foe, move) {
-  return hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
+  const clock = state.classicMonsters === true ? state.turns : state.turns - state.floorStart.turns;
+  return hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${clock}:${foe.id}:${move.x},${move.y}`) / 4294967296;
 }
 function safeKingMoves(state, king) {
   return monsterMoves(state, king).filter((move) => !hypothetically(king, move, () => kingThreatened(state, king)));
@@ -486,11 +513,13 @@ function capturePlayer(state, foe, close = false, enPassant = false) {
 
 // A distant rook, bishop or queen with the player in its line steps one square
 // closer along it before aiming, so a line it can already strike is pressed.
+// From Tricky on it only steps where the player can't take it (src/monster-ai.js).
 function closeIn(state, foe) {
   if (!['rook', 'bishop', 'queen'].includes(foe.piece) || chebyshev(foe, state.player) <= 1) return;
   if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return;
   const step = attackPath(state, foe, state.player)[0];
-  if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))) relocate(state, foe, step);
+  if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))
+    && safeCloseIn(state, foe, step, monsterEngine(state, foe))) relocate(state, foe, step);
 }
 
 function enemyTurn(state) {
@@ -518,9 +547,9 @@ function enemyTurn(state) {
       royalKingTurn(state, foe);
     } else if (royal && state.enemies.includes(royal)) {
       royalGuardTurn(state, foe, royal);
-    } else {
+    } else if (!screenTarget(state, foe)) {
       closeIn(state, foe);
-      if (!aimAtPlayer(state, foe)) moveMonster(state, foe);
+      if (!windUp(state, foe)) moveMonster(state, foe);
     }
   }
 }
@@ -809,7 +838,7 @@ function setFloor(state, kingRecruit = false) {
     state.companion = { piece: order.piece, basePiece: order.piece, x: state.player.x, y: state.player.y, moved: false, sharing: true };
     state.events.push({ type: 'companion-recruit', piece: order.piece, x: state.player.x, y: state.player.y });
   }
-  if (state.playerColor === 'white') for (const foe of state.enemies) aimAtPlayer(state, foe);
+  if (state.playerColor === 'white') for (const foe of state.enemies) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
 }
 
 const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
@@ -853,6 +882,8 @@ export function createGame(daily = getRawDaily()) {
   // Plain days carry no modifier field, so their saves keep their shape.
   if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
+  // Old-versus-new comparisons only: Gentle habits on every tier and turn-hashed tie-breaks (src/monster-ai.js).
+  if (daily.classicMonsters === true) state.classicMonsters = true;
   setFloor(state);
   markFloorStart(state);
   return state;

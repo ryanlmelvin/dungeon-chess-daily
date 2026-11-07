@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECE_LIVES } from './pieces.js';
-import { act, legalMoves, dangerTiles, unreachablePickups, royalRules } from './rules.js';
+import { act, legalMoves, dangerTiles, unreachablePickups, royalRules, scoredMoves } from './rules.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 // The king floor's own recruit (a rook, queen or king one move
@@ -170,6 +170,8 @@ export function verifyWinningRoute(initial, actions) {
   }
   metrics.turns = state.turns;
   metrics.livesLost = initial.player.hp - state.player.hp;
+  // Moves each floor took until its challenge was complete: the floor's par.
+  metrics.floorMoves = state.records.map(scoredMoves);
   return { valid: true, state, metrics };
 }
 

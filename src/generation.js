@@ -5,7 +5,7 @@ import { createGame, RULES_VERSION } from './rules.js';
 import { hash } from './random.js';
 import { findWinningRoute, verifyWinningRoute } from './fairness.js';
 import { FALLBACKS } from './fallbacks.js';
-import { DIFFICULTY_TIERS, tierForDate, knobsFor, difficultyScore, bandDistance } from './difficulty.js';
+import { DIFFICULTY_TIERS, tierForDate, knobsFor, difficultyScore, bandDistance, freebieFloor } from './difficulty.js';
 export { DIFFICULTY_TIERS, tierForDate } from './difficulty.js';
 import { MODIFIERS } from './modifiers.js';
 import { EDITIONS } from './editions.js';
@@ -47,13 +47,16 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET) {
  * Which candidate generateDaily keeps: `found` lists each attempt's
  * searchCandidate() result (or null) in order; only solved ones count. The first one inside the
  * tier's band wins; otherwise the one closest to it (the earlier on a tie).
- * Candidates with too few threatened decisions never count. -1 means fallback.
- * Calibration (scripts/calibrate-difficulty.mjs) replays this same choice.
+ * Candidates with too few threatened decisions never count, nor (Tricky and
+ * up) ones whose route clears a floor in under `minFloorMoves` moves (no
+ * freebie floors; tooling may pass 0 to compare without the rule).
+ * -1 means fallback. Calibration (scripts/calibrate-difficulty.mjs) replays
+ * this same choice.
  */
-export function chooseCandidate(found, tier, minThreatenedDecisions) {
+export function chooseCandidate(found, tier, minThreatenedDecisions, minFloorMoves) {
   let best = -1, bestDistance = Infinity;
   for (const [index, entry] of found.entries()) {
-    if (!entry?.metrics || entry.metrics.threatenedDecisions < minThreatenedDecisions) continue;
+    if (!entry?.metrics || entry.metrics.threatenedDecisions < minThreatenedDecisions || freebieFloor(entry.metrics, tier, minFloorMoves)) continue;
     const distance = bandDistance(entry.score, tier);
     if (distance < bestDistance) { best = index; bestDistance = distance; }
     if (distance === 0) break;
@@ -63,7 +66,7 @@ export function chooseCandidate(found, tier, minThreatenedDecisions) {
 
 function certify(daily, actions, source, attempt, knobs) {
   const proof = verifyWinningRoute(createGame(daily), actions);
-  if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) return null;
+  if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions || freebieFloor(proof.metrics, daily.difficulty)) return null;
   return {
     ...daily,
     generation: {

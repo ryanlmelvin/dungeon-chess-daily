@@ -17,14 +17,14 @@ function decoy(id, piece, x, y) {
 
 // Edition 2026-11-07, floor 2 (pawn targets, bishop player): the playtest position.
 // Three target pawns sit on dark squares with a wall in front of each, and a
-// Borrowed move has already put the bishop on light squares.
+// Borrowed move has already put the bishop on light squares. The room is the
+// one played that day (the second candidate, built with that day's knobs),
+// reached by skipping floor 1, so it stays put when the edition is recertified.
 function stuckBishop() {
-  const daily = getDaily('2026-11-07');
-  let state = createGame(daily);
-  for (const action of daily.generation.certificate.actions) {
-    if (state.floor === 1) break;
-    state = act(state, action);
-  }
+  const knobs = { obstacleBase: 10, decoys: 3, scatter: 1, guards: 3, screens: 0 };
+  let state = createRawGame(candidateFor(getRawDaily('2026-11-07'), 'fiendish', knobs, 1));
+  state.objective.complete = true; state.exit.open = true;
+  state = act(state, { type: 'descend' });
   assert.equal(state.floor, 1);
   assert.equal(state.objective.piece, 'pawn');
   assert.equal(state.player.piece, 'bishop');
