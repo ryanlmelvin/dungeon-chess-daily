@@ -5,12 +5,14 @@
 // that opens the door also cracks the ceiling. Gold won on any later move in
 // that room is at risk until the stairs bank it. After a few more moves (waits
 // count; fewer on harder days, CAVE_IN_MOVES) the ceiling caves in: the gold at
-// risk is dropped, the coins still lying there are buried, and nothing more in
-// that room pays. The last floor has no coins and no shop, so its ceiling holds.
+// risk is dropped, the coins and the powerup still lying there are buried, and
+// nothing more in that room pays. A waiting recruit stays: it pays nothing.
+// The last floor has no coins and no shop, so its ceiling holds.
 //
-// The cave-in changes gold and coins only. It never moves a piece or changes a
-// move, so every certified route (some spend up to 30 moves on a cleared floor)
-// replays unchanged; you stay put and the stairs stay open.
+// The cave-in changes gold and pickups only. It never moves a piece or changes
+// a move, so every certified route (some spend up to 30 moves on a cleared
+// floor, and none ever collects a powerup) replays unchanged; you stay put and
+// the stairs stay open.
 //
 // state.caveIn, absent until the door opens and on every new floor:
 //   moves   moves left before the ceiling caves in, 0 once it has
@@ -41,6 +43,10 @@ function drop(state, gold) {
   state.dropped = (state.dropped ?? 0) + gold;
 }
 const lastFloor = (state) => state.floor >= state.targets.length - 1;
+// What a cave-in buries: the room's coins and powerup, never a waiting recruit.
+const buriable = (item) => item.type === 'coin' || item.type === 'powerup';
+// The room powerups' names (POWERUPS in src/rules.js, which this module can't import).
+const POWER_NAMES = Object.freeze({ shield: 'bone ward', freeze: 'frost hourglass', magnet: 'coin magnet' });
 
 /**
  * End of a move or wait (after the monsters and the Collapse door): start,
@@ -70,13 +76,19 @@ export function caveInTick(state, before) {
   }
   const lost = goldAtRisk(state);
   const coins = state.items.filter((item) => item.type === 'coin').length;
+  const power = state.items.find((item) => item.type === 'powerup')?.power;
   drop(state, lost);
   cave.risk = 0;
   cave.buried = coins;
-  if (coins) state.items = state.items.filter((item) => item.type !== 'coin');
-  state.events.push({ type: 'cave-in', x: state.player.x, y: state.player.y, gold: lost, coins });
-  const what = lost ? ` You dropped ${lost} gold${coins ? ', and the coins left are buried' : ''}.` : coins ? ' The coins left are buried.' : '';
-  say(state, `The ceiling caved in!${what} Nothing here pays now: take the stairs.`);
+  state.items = state.items.filter((item) => !buriable(item));
+  state.events.push({ type: 'cave-in', x: state.player.x, y: state.player.y, gold: lost, coins, ...(power && { power }) });
+  const buried = [coins && (coins === 1 ? 'the last coin' : 'the coins left'), power && `the ${POWER_NAMES[power] ?? 'pickup'}`].filter(Boolean);
+  say(state, `The ceiling caved in!${lost ? ` You dropped ${lost} gold.` : ''}${buried.length ? ` The rubble buries ${buried.join(' and ')}.` : ''} Nothing here pays now: take the stairs.`);
+}
+
+/** True while the ceiling is counting down: the room can still pay, and Wait stays on offer. */
+export function caveInRunning(state) {
+  return state?.status === 'playing' && state.caveIn?.moves > 0;
 }
 
 /** Gold a cave-in would take right now: what the stairs would bank. */
@@ -93,14 +105,14 @@ export function caveInStatus(state) {
 
 /** What tapping the chip says, with the day's own count. */
 export function caveInExplain(state) {
-  return `Cave-in: on floors 1 and 2 the open door cracks the ceiling. Today it caves in ${caveInMoves(state)} moves after the door opens (fewer on harder days). Gold you grab before then is at risk until you take the stairs. If it caves in first, you drop that gold, the coins left are buried, and nothing more in that room pays.`;
+  return `Cave-in: on floors 1 and 2 the open door cracks the ceiling. Today it caves in ${caveInMoves(state)} moves after the door opens (fewer on harder days). Gold you grab before then is at risk until you take the stairs. If it caves in first, you drop that gold, the coins and pickup left are buried, and nothing more in that room pays.`;
 }
 
 /**
  * Shape checks for a save's cave-in fields; absent fields belong to older saves
- * (or to a floor whose door is still shut). `coinsLeft` is the coins on the board.
+ * (or to a floor whose door is still shut).
  */
-export function validCaveIn(value, coinsLeft) {
+export function validCaveIn(value) {
   const integer = (n, min, max) => Number.isInteger(n) && n >= min && n <= max;
   if (value.dropped !== undefined && !integer(value.dropped, 1, Number.MAX_SAFE_INTEGER)) return false;
   const cave = value.caveIn;
@@ -112,6 +124,6 @@ export function validCaveIn(value, coinsLeft) {
   // The countdown can't be further along than the moves made since the door opened.
   const cleared = value.objective?.moves;
   if (Number.isInteger(cleared) && total - cave.moves > value.turns - value.floorStart.turns - cleared) return false;
-  // Before the cave-in nothing is buried; after it nothing is at risk and no coin is left.
-  return cave.moves ? cave.buried === 0 : cave.risk === 0 && coinsLeft === 0;
+  // Before the cave-in nothing is buried; after it nothing is at risk and no coin or powerup is left.
+  return cave.moves ? cave.buried === 0 : cave.risk === 0 && !value.items.some(buriable);
 }

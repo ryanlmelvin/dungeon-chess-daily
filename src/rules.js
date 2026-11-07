@@ -1397,7 +1397,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
     const coinsLeft = value.items.filter((item) => item.type === 'coin').length;
-    if (!validCaveIn(value, coinsLeft)) return false;
+    if (!validCaveIn(value)) return false;
     // Coins a cave-in buried were never collected.
     if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - coinsLeft - (value.caveIn?.buried ?? 0)) return false;
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.

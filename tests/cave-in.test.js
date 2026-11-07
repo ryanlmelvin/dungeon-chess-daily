@@ -7,7 +7,7 @@ import { getDaily, createPracticeGame, validateSave as validateGameSave } from '
 import { botRun } from '../src/bot.js';
 import { tacticGold } from '../src/tactics.js';
 import { modifierStatus } from '../src/modifiers.js';
-import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInStatus, goldAtRisk } from '../src/cave-in.js';
+import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInRunning, caveInStatus, goldAtRisk } from '../src/cave-in.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -36,8 +36,12 @@ test('the open door starts a countdown set by the day’s tier, and every move o
   assert.deepEqual({ ...CAVE_IN_MOVES }, { gentle: 7, fair: 6, tricky: 5, tough: 4, fiendish: 4 });
   for (const difficulty of ['gentle', 'fair', 'tricky', 'tough', 'fiendish', 'standard', 'constructor']) {
     const total = Object.hasOwn(CAVE_IN_MOVES, difficulty) ? CAVE_IN_MOVES[difficulty] : CAVE_IN_DEFAULT_MOVES;
-    let state = act(room({ difficulty, enemies: [foe('k', 'king', 3, 4)] }), move(3, 4));
+    const shut = room({ difficulty, enemies: [foe('k', 'king', 3, 4)] });
+    assert.equal(caveInRunning(shut), false);
+    let state = act(shut, move(3, 4));
     assert.equal(state.exit.open, true);
+    // Wait comes back for the countdown (main.js keys it to caveInRunning).
+    assert.equal(caveInRunning(state), true);
     assert.equal(caveInMoves(state), total, difficulty);
     assert.deepEqual(state.caveIn, { moves: total, risk: 0, buried: 0 });
     assert.equal(caveInStatus(state), `🪨 Caving in ${total}`);
@@ -50,9 +54,11 @@ test('the open door starts a countdown set by the day’s tier, and every move o
     assert.equal(state.message, 'The ceiling is about to cave in!');
     // Frozen monsters don't hold the ceiling up.
     assert.ok(state.powers.freeze > 0);
+    assert.equal(caveInRunning(state), true);
     state = act(state, wait);
     assert.equal(state.caveIn.moves, 0);
     assert.equal(caveInStatus(state), '🪨 Caved in');
+    assert.equal(caveInRunning(state), false, 'Wait goes away again once it caves in');
     assert.deepEqual(caveEvent(state), { type: 'cave-in', x: state.player.x, y: state.player.y, gold: 0, coins: 0 });
     // The cave-in never moves you: same floor, same square, the stairs still open.
     assert.deepEqual([state.floor, state.status, state.exit.open], [0, 'playing', true]);
@@ -76,11 +82,13 @@ test('gold won after the door opens is at risk until the stairs bank it; the doo
   assert.equal(below.records[0].treasure, 2);
 });
 
-test('a cave-in drops the gold at risk, tactic bonuses included, buries the coins, and nothing pays after', () => {
+test('a cave-in drops the gold at risk, tactic bonuses included, buries the coins and powerup, and nothing pays after', () => {
   // Taking the king on (3,4) forks two bishops. Taking one pays 1 plus the fork's 2;
   // the next capture is the third in a row and pays 1 plus a combo 1.
   const enemies = [foe('k', 'king', 3, 4), foe('a', 'bishop', 2, 2), foe('b', 'bishop', 5, 3), foe('c', 'rook', 4, 3), foe('d', 'rook', 6, 4)];
-  let state = act(room({ enemies, items: [coin(0, 7), coin(7, 7)] }), move(3, 4));
+  const ward = { x: 5, y: 5, type: 'powerup', power: 'shield' };
+  const recruit = { type: 'companion', piece: 'rook', x: 7, y: 0 };
+  let state = act(room({ enemies, items: [coin(0, 7), coin(7, 7), ward, recruit] }), move(3, 4));
   assert.deepEqual(state.fork?.ids.toSorted(), ['a', 'b']);
   state = act(act(state, move(2, 2)), move(4, 3));
   assert.equal(tacticGold(state.feats), 3);
@@ -90,10 +98,14 @@ test('a cave-in drops the gold at risk, tactic bonuses included, buries the coin
   const caved = act(state, wait);
   assert.equal(caved.gold, 0); assert.equal(caved.dropped, 5); assert.equal(goldAtRisk(caved), 0);
   assert.deepEqual(caved.caveIn, { moves: 0, risk: 0, buried: 2 });
-  assert.ok(!caved.items.some((item) => item.type === 'coin'));
-  assert.deepEqual(caveEvent(caved), { type: 'cave-in', x: 4, y: 3, gold: 5, coins: 2 });
-  assert.equal(caved.message, 'The ceiling caved in! You dropped 5 gold, and the coins left are buried. Nothing here pays now: take the stairs.');
+  // The coins and the bone ward are buried; the waiting recruit, which pays nothing, stays.
+  assert.deepEqual(caved.items, [recruit]);
+  assert.deepEqual(caveEvent(caved), { type: 'cave-in', x: 4, y: 3, gold: 5, coins: 2, power: 'shield' });
+  assert.equal(caved.message, 'The ceiling caved in! You dropped 5 gold. The rubble buries the coins left and the bone ward. Nothing here pays now: take the stairs.');
   assert.deepEqual([caved.floor, caved.player.x, caved.player.y], [0, 4, 3]);
+  // Stepping where the ward lay finds nothing.
+  const empty = act(caved, move(5, 5));
+  assert.equal(empty.powers.shield, 0); assert.ok(!empty.events.some((event) => event.type === 'powerup'));
   // A capture after the cave-in still counts, but its gold is lost as well.
   const late = act(caved, move(6, 4));
   assert.equal(late.captures, caved.captures + 1); assert.equal(late.gold, 0); assert.equal(late.dropped, 6);
@@ -108,6 +120,7 @@ test('floor 2 caves in too, but the last floor never does', () => {
   assert.ok(act(room({ floor: 1, enemies: [foe('k', 'king', 3, 4)] }), move(3, 4)).caveIn);
   let last = act(room({ floor: 2, enemies: [foe('k', 'king', 3, 4)], items: [coin(5, 5)] }), move(3, 4));
   assert.equal(last.exit.open, true); assert.equal(last.caveIn, undefined); assert.equal(caveInStatus(last), '');
+  assert.equal(caveInRunning(last), false, 'no countdown, so Wait stays hidden once the door opens');
   for (let n = 0; n < 9; n++) last = act(last, shuffle(last, n));
   assert.equal(last.gold, 1); assert.equal(last.caveIn, undefined); assert.equal(last.dropped, undefined);
   assert.equal(act(last, descend).status, 'won');
@@ -262,6 +275,11 @@ test('countdown and cave-in saves validate; forged cave-in fields do not', () =>
   assert.equal(check(caved, (s) => { delete s.dropped; }), false);
   assert.equal(check(caved, (s) => { s.gold += 1; }), false);
   assert.equal(check(caved, (s) => { s.dropped = 0; }), false);
+  // Certified routes never collect a powerup, so the room's one lay there until the rubble buried it.
+  const power = frames[caveAt - 1].items.find((item) => item.type === 'powerup');
+  assert.ok(power); assert.equal(caveEvent(caved).power, power.power);
+  assert.ok(!caved.items.some((item) => item.type === 'powerup'));
+  assert.equal(check(caved, (s) => { s.items.push(power); }), false, 'a caved-in room keeps no powerup');
   // A save from before the cave-in, its door already open, is fine; its countdown starts on the next move.
   const legacy = JSON.parse(JSON.stringify(counting)); delete legacy.caveIn;
   assert.equal(validateSave(legacy, date, daily), true);

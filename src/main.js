@@ -18,7 +18,7 @@ import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.
 import { pinUsable, captureGoal, shareDate } from './rules.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
-import { caveInStatus, caveInExplain, goldAtRisk } from './cave-in.js';
+import { caveInStatus, caveInExplain, caveInRunning, goldAtRisk } from './cave-in.js';
 import { botRun, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
@@ -416,7 +416,9 @@ function updateGame() {
   renderTargets();
   $('hint-button').setAttribute('aria-label', `Hint: how an enemy ${state.objective.piece} moves`);
   $('objective').hidden = state.exit.open;
-  $('wait-button').hidden = state.exit.open || state.status !== 'playing';
+  // Once the door opens Wait goes away, except while the ceiling counts down:
+  // waiting for a monster to walk into range is a gamble then (src/cave-in.js).
+  $('wait-button').hidden = state.status !== 'playing' || (state.exit.open && !caveInRunning(state));
   reserveObjectiveRoom();
   placeWaitButton();
   $('descend-button').hidden = !state.exit.open;
@@ -724,9 +726,10 @@ $('modifier-status').addEventListener('click', () => { if (state) notify(modifie
 // The cave-in countdown chip sits beside the modifier chip; tapping explains it.
 $('modifier-status').after(Object.assign(document.createElement('button'), { id: 'cave-status', type: 'button', hidden: true }));
 $('cave-status').addEventListener('click', () => { if (state) notify(caveInExplain(state)); });
-// "The ceiling caved in! You dropped 3 gold." pops up as the room shakes (renderer.js).
+// "The ceiling caved in! You dropped 3 gold." pops up as the room shakes (renderer.js);
+// the message log says what the rubble buried.
 function announceCaveIn(event) {
-  notify(`The ceiling caved in!${event.gold ? ` You dropped ${event.gold} gold.` : event.coins ? ' The coins left are buried.' : ''}`);
+  notify(`The ceiling caved in!${event.gold ? ` You dropped ${event.gold} gold.` : ''}`);
   const notice = $('notice');
   notice.classList.remove('cave-toast'); void notice.offsetWidth; notice.classList.add('cave-toast');
 }
