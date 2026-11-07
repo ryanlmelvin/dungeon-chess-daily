@@ -5,6 +5,7 @@ import { initGuide } from './guide.js';
 import { isFirstVisit, markGuideSeen } from './first-visit.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { TACTIC_COPY, RECRUIT_COPY } from './tactics-art.js';
+import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
@@ -45,6 +46,8 @@ let cursor = null;
 let turnLocked = false;
 let lastSaved = null;
 let noticeTimer;
+// The last floor-clear toast's text (announcePar).
+let parToast = null;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
@@ -153,6 +156,8 @@ function switchScreen(next) {
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
+  // A floor-clear toast still up would only cover the results paper.
+  if (next === 'result' && $('notice').textContent === parToast) $('notice').hidden = true;
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (next === 'game') requestAnimationFrame(() => renderer?.resize());
   syncMusic();
@@ -223,7 +228,7 @@ function ensureRenderer() {
   try {
     renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeFirstTip(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
-      if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe && !takeAction({ type: 'pin', id: foe.id })) notify('Kings can’t be pinned.'); updateGame(); return; }
+      if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
@@ -334,7 +339,8 @@ function renderPar() {
 function announcePar(record, par) {
   const moves = scoredMoves(record);
   const diff = moves - par;
-  notify(`Floor ${record.floor + 1} cleared in ${moves} ${moves === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`);
+  parToast = `Floor ${record.floor + 1} cleared in ${moves} ${moves === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`;
+  notify(parToast);
   const notice = $('notice');
   notice.classList.remove('par-toast'); void notice.offsetWidth; notice.classList.add('par-toast');
 }
@@ -564,7 +570,7 @@ function renderTools() {
 $('pin-button').addEventListener('click', () => {
   if (!state || turnLocked || replay) return;
   pinning = !pinning; showMoves = false;
-  if (pinning) notify('Tap a monster to pin it for three moves. Kings can’t be pinned.');
+  if (pinning) notify('Tap any monster to pin it for three moves.');
   updateGame();
 });
 // Borrowed squares are always on offer; the button just points them out.
@@ -667,11 +673,12 @@ function openSpecialMove(kind, mode = 'player') {
   $('special-move-continue').focus();
   frame(start);
 }
-// The first fork won, the first combo and the first waiting recruit on this
-// device get the same dialog, with their own animated explainer (tactics-art.js).
+// The first fork won and the first combo on this device get the same dialog,
+// with their own animated explainer (tactics-art.js), as does a waiting
+// recruit's What? button.
 function openTactic(kind) {
   const copy = kind === 'recruit' ? RECRUIT_COPY : TACTIC_COPY[kind];
-  try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  if (kind !== 'recruit') try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -722,19 +729,12 @@ function takeAction(action) {
   if (next === state) return false;
   turnLocked=!shopping;
   const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
-  const par = cleared ? runPars(next, daily)?.[cleared.floor] : null;
+  // No floor-clear toast once the run ends: the results paper lists every floor.
+  const par = cleared && next.status === 'playing' ? runPars(next, daily)?.[cleared.floor] : null;
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(state.events);
-  const enPassant = state.events.some(event => event.type === 'en-passant');
-  const castled = state.events.some(event => event.type === 'castle');
-  const tactic = state.events.some(event => event.type === 'fork-won') ? 'fork' : state.events.some(event => event.type === 'combo') ? 'combo' : null;
   if (!shopping) showTacticCallout(state.events);
-  // The recruit explainer waits for the player's first move, so it never stacks
-  // on the first-visit guide, and yields to any other explainer this move.
-  // The recruit explainer is only for a recruit still waiting. Someone who
-  // recruits before ever seeing it has worked it out, so it never shows.
-  if (state.events.some(event => event.type === 'companion-recruit')) { try { localStorage.setItem(tacticSeenKey('recruit'), '1'); } catch {} }
-  const recruitNews = !shopping && state.status === 'playing' && !tacticSeen('recruit') && waitingRecruit(state);
-  const special = enPassant ? 'en-passant' : castled ? 'castle' : tactic && !tacticSeen(tactic) ? tactic : recruitNews ? 'recruit' : null;
+  // A waiting recruit's explainer never opens here, only from its line's What? button.
+  const special = autoExplainer(state.events, tacticSeen);
   const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   // Congratulate the player's own en passant or castle once the move has settled,
