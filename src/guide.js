@@ -58,4 +58,6 @@ export function initGuide() {
   $('guide-next').addEventListener('click', () => showPage(page === pages.length - 1 ? -1 : page + 1));
   dialog.addEventListener('close', () => showMenu(false));
   drawGuideArt($('guide'));
+  // Opens the guide on its first section inside an already-open menu dialog.
+  return { openFirstPage: () => showPage(0) };
 }

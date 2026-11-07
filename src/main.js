@@ -2,6 +2,7 @@
 import './style.css';
 import './menu.css';
 import { initGuide } from './guide.js';
+import { isFirstVisit, markGuideSeen } from './first-visit.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { TACTIC_COPY } from './tactics-art.js';
 import { COMBO_START } from './tactics.js';
@@ -70,7 +71,10 @@ function syncMusic() {
   music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? editionTracks(daily.date)[state.floor] : null);
 }
 for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => music.unlock(), { capture: true, passive: true });
-initGuide();
+const guide = initGuide();
+// Decided before anything is saved this visit: entering the dungeon creates a save.
+let guidePending = false;
+try { guidePending = isFirstVisit(localStorage, { prefix, scope }); } catch {}
 
 function notify(message, persistent = false) {
   clearTimeout(noticeTimer);
@@ -449,6 +453,16 @@ function enterGame() {
   if (!ensureRenderer()) return;
   if (!state) { state = createGame(daily); save(); }
   updateGame();
+  openFirstVisitGuide();
+}
+// A brand-new player lands on the board with "How to play" already open, once.
+// Closing it leaves them on the board, ready for their first move.
+function openFirstVisitGuide() {
+  if (!guidePending || screen !== 'game' || state?.status !== 'playing' || document.querySelector('dialog[open]')) return;
+  guidePending = false;
+  try { markGuideSeen(localStorage, scope); } catch {}
+  openMenu();
+  guide.openFirstPage();
 }
 $('start-button').addEventListener('click', enterGame);
 const HINT_MOVES = {

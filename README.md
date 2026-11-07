@@ -37,7 +37,7 @@ Everyone gets the same UTC-dated edition. After winning, losing all lives, or ru
 
 Open **Archive** in the menu to play any edition you missed. It lists every past edition back to No. 001 with this device's result for each: won, lost, in progress, or not played. A past edition is the same certified dungeon everyone got that day and keeps its own save, practice runs included. Its shared result is labeled **ARCHIVE** so it never passes for today's. Use **Back to today** to return to the current edition.
 
-The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, music, saved progress, or a downloaded update.
+The mobile game gives the board the screen. Open the in-game menu for the paper, instructions, sound, music, saved progress, or a downloaded update. On a brand-new device (nothing saved yet), **How to play** opens by itself the first time you enter a dungeon; close it to start playing. It never opens on its own again, and devices with existing saves never see it. The seen flag stays out of backups.
 
 ## Install and offline use
 
