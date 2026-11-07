@@ -757,7 +757,7 @@ export function createGame(daily = getRawDaily()) {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, screens: daily.screens ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
     turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 }, records: [], events: [],
-    message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
+    message: `${captureGoal(daily.targets[0])}. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
   // Plain days carry no modifier field, so their saves keep their shape.
@@ -803,7 +803,7 @@ function finishFloor(state) {
     const bought = state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0).filter((id) => id === 'freeze').length;
     state.powers.freeze = Math.min(state.powers.freeze, bought * 3);
     state.floor++; setFloor(state);
-    state.message = `Capture all enemy ${state.objective.piece}s. New faces, new clues.`;
+    state.message = `${captureGoal(state.objective.piece)}. New faces, new clues.`;
     state.events.push({ type: 'descend', x: state.player.x, y: state.player.y });
     markFloorStart(state);
   }
@@ -847,6 +847,10 @@ function recruitMayTake(state, foe) { return !foe || (foe.role ?? foe.piece) !==
 export function challengeName(state) {
   const piece = state.objective.piece;
   return PIECE_COUNTS[piece] > 1 ? `${piece}s` : `the ${piece}`;
+}
+// "Capture all enemy bishops", but "Capture the enemy king" for a lone target.
+export function captureGoal(piece) {
+  return PIECE_COUNTS[piece] > 1 ? `Capture all enemy ${piece}s` : `Capture the enemy ${piece}`;
 }
 
 function companionTurn(state) {
