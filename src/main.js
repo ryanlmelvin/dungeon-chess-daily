@@ -545,7 +545,7 @@ function showTacticCallout(events) {
   const won = events.find((event) => event.type === 'fork-won');
   const combo = events.find((event) => event.type === 'combo');
   const fork = events.find((event) => event.type === 'fork');
-  const parts = [won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🍴'].filter(Boolean);
+  const parts = [won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱'].filter(Boolean);
   if (!parts.length) return;
   const callout = $('tactic-callout');
   callout.textContent = parts.join(' · ');
@@ -676,7 +676,7 @@ function showResult() {
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3 · moves over or under par · 🇫🇷 En passant · 🏰 Castled · 🍴 Fork won\n${next}` : next;
+  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3 · moves over (+) or under (−) par · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -756,7 +756,7 @@ $('daily-button').addEventListener('click', () => {
   setPracticeMode(false); state = load(); showMoves = false; cursor = null;
   enterGame();
 });
-// Voluntary resets cost nothing: no life, and no extra try on the share card.
+// Voluntary resets cost nothing: no life and no extra try.
 function startOver(next, message) {
   $('menu-dialog').close();
   state = next; showMoves = false; cursor = null; turnLocked = false;

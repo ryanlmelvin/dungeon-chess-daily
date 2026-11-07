@@ -211,13 +211,13 @@ test('share text is a title, a marker per floor and moves against par, without s
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8, turns: 8 }, { floor: 1, hp: 6, turns: 12 }, { floor: 2, hp: 5, turns: 9 }];
   const text = getShareText(state, [10, 11, 9]);
-  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n🟥 ⬛ 👑\n-2 +1 E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n🟥\u2003\u2002⬛\u2003\u2002👑\n\u22122\u2003\u2005\u200A+1\u2003\u2002\u2006\u200AE\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
   // Without a par each floor shows a dot.
-  assert.equal(getShareText(state).split('\n')[2], '· · ·');
+  assert.deepEqual(getShareText(state).split('\n')[2].split(/[\u2000-\u200A]+/).filter(Boolean), ['·', '·', '·']);
   // Special moves add one mark each, in a fixed order, however often they happened.
   state.feats = [{ floor: 2, kind: 'fork' }, { floor: 0, kind: 'combo' }, { floor: 0, kind: 'en-passant' }, { floor: 1, kind: 'fork' }, { floor: 2, kind: 'castle' }];
-  assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], '🇫🇷🏰🍴');
+  assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], '🇫🇷🏰🔱');
   state.feats = [{ floor: 0, kind: 'combo' }];
   assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], 'https://ryanlmelvin.github.io/dungeon-chess-daily/');
   state.status = 'lost'; state.floor = 0; state.records = [];

@@ -48,10 +48,14 @@ test('the certified route matches par on every floor, and older saves carrying s
 test('the share card shows each floor\'s moves against par', () => {
   const won = playRoute();
   const pars = floorPars(daily);
-  assert.deepEqual(getShareText(won, pars).split('\n').slice(0, 3), [`Dungeon Chess Daily #${won.edition}`, '🟥 ⬛ 👑', 'E E E']);
+  const cells = (line) => line.split(/[\u2000-\u200A]+/).filter(Boolean).join(' ');
+  assert.deepEqual(getShareText(won, pars).split('\n').slice(0, 3).map(cells), [`Dungeon Chess Daily #${won.edition}`, '🟥 ⬛ 👑', 'E E E']);
   const off = structuredClone(won); off.records[0].turns = pars[0] + 3; off.records[2].turns = pars[2] - 1;
-  assert.equal(getShareText(off, pars).split('\n')[2], '+3 E -1');
+  assert.equal(cells(getShareText(off, pars).split('\n')[2]), '+3 E \u22121');
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
-  assert.deepEqual(getShareText(playing, pars).split('\n').slice(1, 3), ['🟥 ⬛ 👑', 'E E ·']);
+  assert.deepEqual(getShareText(playing, pars).split('\n').slice(1, 3).map(cells), ['🟥 ⬛ 👑', 'E E ·']);
+  // Each score is centered under its marker in Apple's system font, even at two digits.
+  const wide = structuredClone(won); wide.records.forEach((record, floor) => { record.turns = pars[floor] + 42; });
+  assert.equal(cells(getShareText(wide, pars).split('\n')[2]), '+42 +42 +42');
 });

@@ -1101,20 +1101,44 @@ function play(previous, action) {
 // A spoiler-free result card, golf-style:
 //   Dungeon Chess Daily #20
 //   🟥 ⬛ 👑        one marker per floor reached
-//   -2 +1 E        each floor's moves against its par (src/par.js); · without one
-//   🇫🇷🏰🍴         once each if the run took en passant, castled or won a fork
+//   −2 +1  E       each floor's moves against par (src/par.js), centered under
+//                  its marker; · without one
+//   🇫🇷🏰🔱         once each if the run took en passant, castled or won a fork
 const FLOOR_MARKERS = ['🟥', '⬛', '👑'];
-const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['fork', '🍴']];
+const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['fork', '🔱']];
+// Advance widths in em of Apple's system font (what Messages uses), where an
+// emoji is 1em. Markers are an em and an en space apart, so each column is 2.5em
+// wide (room for +42), and each score is padded with fixed-width spaces to sit
+// centered under its marker.
+const MARKER_GAP = '\u2003\u2002';
+const COLUMN_EM = 2.5;
+const GLYPH_EM = { 0: .606, 1: .443, 2: .566, 3: .592, 4: .604, 5: .585, 6: .617, 7: .547, 8: .6, 9: .617, '+': .604, '\u2212': .604, E: .552, '·': .215 };
+const SPACE_EM = [['\u2003', 1], ['\u2002', .5], ['\u2005', .25], ['\u2006', 1 / 6], ['\u2009', .103], ['\u200A', .051]];
+function padTo(gap) {
+  let pad = '';
+  for (const [space, width] of SPACE_EM) while (gap >= width - .025) { pad += space; gap -= width; }
+  return pad;
+}
+function alignedScores(scores) {
+  let line = '', x = 0;
+  scores.forEach((score, index) => {
+    const width = [...score].reduce((sum, ch) => sum + (GLYPH_EM[ch] ?? .6), 0);
+    const pad = padTo(Math.max(0, index * COLUMN_EM + .5 - width / 2 - x));
+    line += pad + score;
+    x += [...pad].reduce((sum, ch) => sum + SPACE_EM.find(([space]) => space === ch)[1], 0) + width;
+  });
+  return line;
+}
 export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   const markers = [], scores = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const diff = Number.isInteger(record?.turns) && Number.isInteger(pars?.[floor]) ? record.turns - pars[floor] : null;
     markers.push(FLOOR_MARKERS[floor]);
-    scores.push(diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`);
+    scores.push(diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `\u2212${-diff}`);
   }
   const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind)).map(([, mark]) => mark).join('');
-  return [`Dungeon Chess Daily #${state.edition}`, markers.join(' '), scores.join(' '), feats, url].filter(Boolean).join('\n');
+  return [`Dungeon Chess Daily #${state.edition}`, markers.join(MARKER_GAP), alignedScores(scores), feats, url].filter(Boolean).join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
