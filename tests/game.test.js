@@ -314,6 +314,19 @@ test('objectives, palettes, obstacles and mixed residents vary deterministically
   assert.ok(layouts.size > 25);
 });
 
+test('species that share a floor never share a palette', () => {
+  for (let day = 0; day < 1500; day++) {
+    const { species, date } = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
+    for (let floor = 0; floor < 3; floor++) {
+      const mates = [species[floor], species[3 + floor * 2], species[4 + floor * 2]];
+      assert.equal(new Set(mates.map((entry) => entry.palette)).size, 3, `${date} floor ${floor + 1}: ${mates.map((entry) => entry.name).join(', ')}`);
+    }
+  }
+  // The playtest clash: Ember imp (floor 1 target) beside an Ember dragon decoy.
+  const floorOne = getRawDaily('2026-11-07').species;
+  assert.notEqual(floorOne[0].palette, floorOne[4].palette);
+});
+
 test('walls block sliding, pawn double steps and attack lanes, while knights jump over walls', () => {
   const state = scenario('rook');
   state.map[4] = '....#...';

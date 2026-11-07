@@ -54,7 +54,10 @@ test('every daily is white, and a black practice game begins without committed a
     assert.ok(flipped.enemies.every((foe)=>foe.phase==='ready' && foe.intent.length===0));
   }
   const raw=getRawDaily(legacy.date);
-  for(const key of ['seed','edition','species','targets','theme']) assert.deepEqual(raw[key],legacy[key]);
+  for(const key of ['seed','edition','targets','theme']) assert.deepEqual(raw[key],legacy[key]);
+  // Same creatures and roles; a decoy's palette may move so floor-mates never share one.
+  const cast=(species)=>species.map(({id,piece})=>({id,piece}));
+  assert.deepEqual(cast(raw.species),cast(legacy.species));
   const practice=createPracticeGame(getDaily('2026-11-13'),{piece:'rook',color:'black'});
   assert.equal(practice.playerColor,'black');
   assert.equal(validateSave(practice,practice.date,{practice:true}),true);
