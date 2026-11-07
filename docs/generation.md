@@ -132,13 +132,19 @@ own hash stream (`modifier:<date>`), so no other daily draw moves. The modifier 
   keeps the monster AI and attack warnings unchanged.
 - **Collapse** counts moves on the current floor. At the end of each player
   turn, if `floor(moves / 10)` exceeds the arrivals so far (`state.reinforcements`
-  plus called-off `state.reinforcementsSkipped`, capped at 3) and the door square
-  is free, a copy of one of the floor's decoy species (never a pawn, which could
-  block a pawn's promotion file) enters there as `f<floor>-r<n>`: the species
+  plus called-off `state.reinforcementsSkipped`, capped at 3), a copy of one of
+  the floor's decoy species (never a pawn, which could block a pawn's promotion
+  file) enters at once as `f<floor>-r<n>`. It never waits: it enters on the door
+  square, or, if the player, the recruit or a monster stands there, on the
+  nearest walkable square holding none of them (king steps from the door
+  square; ties by the hash of `<dungeonSeed>:arrival:<floor>:<n>:<x>,<y>`,
+  `arrivalSquare`). Like any monster coming into range, it winds up on its next
+  turn rather than striking as it lands. It is the species
   `n % 2` first, else the other, whichever role still has room under a chess
   army's counts (living monsters of that role or piece, so a promoted pawn
-  fills the queen's place). If neither has room the arrival is called off and
-  counted in `state.reinforcementsSkipped`. None arrive once the stairs open. Reinforcements are
+  fills the queen's place). If neither has room (or, on a packed board, no
+  square is empty) the arrival is called off and counted in
+  `state.reinforcementsSkipped`. None arrive once the stairs open. Reinforcements are
   ordinary decoys: capturing one pays a gold, and save validation widens floor
   populations by the cap.
 - **Dark** (retired) hid squares more than two away from the player. It hid the
