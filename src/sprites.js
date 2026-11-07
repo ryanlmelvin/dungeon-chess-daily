@@ -50,6 +50,19 @@ export const COMPANION_PALETTE = Object.freeze({
 
 export function piecePalette(color) { return color === 'black' ? BLACK_PIECE_PALETTE : {}; }
 
+// A black piece on the board also wears a one-pixel pale halo just outside its
+// silhouette (key 'k', in the frame's empty border), so it stands out on dark
+// squares as well as light ones. White pieces need none.
+export const PIECE_HALO = '#e6e1d7';
+export function haloed(rows) {
+  const filled = (x, y) => rows[y]?.[x] !== undefined && rows[y][x] !== '.';
+  return Object.freeze(rows.map((row, y) => [...row].map((key, x) => {
+    if (key !== '.') return key;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (filled(x + dx, y + dy)) return 'k';
+    return '.';
+  }).join('')));
+}
+
 // Each hand-drawn 16-pixel silhouette sits inside a 20-pixel texture.
 // The transparent border keeps neighboring tiles and point sampling clean.
 function framed(rows) {
