@@ -10,9 +10,7 @@
 //   recruits are sure-footed: only the player's piece slides.
 // - collapse: every few player moves on a floor one more monster (a decoy
 //   role, never a pawn, and only while that role has room under a chess
-//   army's counts) walks in at the door square, up to a cap per floor. If
-//   someone stands there it comes in on the nearest empty square instead: an
-//   arrival never waits.
+//   army's counts) walks in at the door square, up to a cap per floor.
 //
 // This module imports nothing from rules.js, so edition.js can use it too.
 import { hash, random } from './random.js';
@@ -28,7 +26,7 @@ export const MODIFIERS = Object.freeze({
   collapse: Object.freeze({
     id: 'collapse', emoji: '🧱', name: 'Collapse', changesRules: true,
     headline: 'Ceiling cracks above the crypt: fresh monsters stumble through the door every ten moves',
-    explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door. If someone is standing there, it drops in on the nearest empty square instead. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
+    explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door, or waits there until it’s free. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
 });
 // Uniform over these, so about half the days stay plain. The second slot was
@@ -128,49 +126,24 @@ export function reinforcement(state, n) {
 }
 
 /**
- * Where the floor's n-th reinforcement comes in: the door square, or, when the
- * player, the recruit or a monster stands there, the nearest square (in king
- * steps from the door square) that is open and holds none of them, a tie
- * settled by the day's seed. Null only on a board with no such square left.
- */
-export function arrivalSquare(state, n) {
-  const door = { x: state.exit.x, y: state.exit.y };
-  if (open(state, door.x, door.y) && !occupied(state, door)) return door;
-  let best = null;
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if (!open(state, x, y) || occupied(state, { x, y })) continue;
-    const steps = Math.max(Math.abs(x - door.x), Math.abs(y - door.y));
-    const tie = hash(`${state.dungeonSeed ?? state.seed}:arrival:${state.floor}:${n}:${x},${y}`);
-    if (!best || steps < best.steps || (steps === best.steps && tie < best.tie)) best = { x, y, steps, tie };
-  }
-  return best && { x: best.x, y: best.y };
-}
-
-/**
- * End of a player's turn: a due reinforcement enters at once, at the door
- * square or the nearest empty one (arrivalSquare); it never waits. It doesn't
- * strike as it lands: like any monster that comes into range, it only winds up
- * on its next turn. If every role it could take is full then (or, on a packed
- * board, no square is empty), it is called off instead: it still counts toward
- * the floor's cap, and the next one keeps its own time.
+ * End of a player's turn: a due reinforcement enters if the door square is
+ * free. If every role it could take is full then, it is called off instead: it
+ * still counts toward the floor's cap, and the next one keeps its own time.
  */
 export function collapseTick(state) {
   if (state.modifier !== 'collapse' || state.status !== 'playing' || state.exit.open) return;
   const spawned = state.reinforcements ?? 0, skipped = state.reinforcementsSkipped ?? 0;
-  if (spawned + skipped >= collapseDue(state)) return;
+  if (spawned + skipped >= collapseDue(state) || occupied(state, state.exit)) return;
   const foe = reinforcement(state, spawned);
-  const square = foe && arrivalSquare(state, spawned);
-  if (!square) {
+  if (!foe) {
     state.reinforcementsSkipped = skipped + 1;
     state.message = `${state.message ? `${state.message} ` : ''}The ceiling groans, but nothing comes through the door.`;
     return;
   }
-  const blocked = !same(square, state.exit);
-  foe.x = square.x; foe.y = square.y;
   state.enemies.push(foe);
   state.reinforcements = spawned + 1;
   state.events.push({ type: 'reinforcement', id: foe.id, x: foe.x, y: foe.y });
-  state.message = `${state.message ? `${state.message} ` : ''}${blocked ? `The ceiling groans: the door is blocked, so ${foe.name} drops in nearby.` : `The ceiling groans: ${foe.name} stumbles in through the door.`}`;
+  state.message = `${state.message ? `${state.message} ` : ''}The ceiling groans: ${foe.name} stumbles in through the door.`;
 }
 
 /** Extra monsters a floor may hold under this modifier (for save bounds). */
@@ -195,7 +168,6 @@ export function modifierStatus(state) {
   // Every role the next arrival could take is full right now: promise nothing.
   if (!reinforcement(state, spawned)) return `${modifier.emoji} Door quiet for now`;
   const moves = state.turns - (state.floorStart?.turns ?? 0);
-  // Arrivals never wait at the door any more. One already due (a save from when
-  // they did) comes in at the end of your next move.
-  return `${modifier.emoji} Next arrival in ${Math.max(1, COLLAPSE_EVERY * (slots + 1) - moves)}`;
+  if (collapseDue(state) > slots) return `${modifier.emoji} Arrival waiting at the door`;
+  return `${modifier.emoji} Next arrival in ${COLLAPSE_EVERY * (slots + 1) - moves}`;
 }
