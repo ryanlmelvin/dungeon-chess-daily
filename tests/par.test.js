@@ -95,20 +95,24 @@ test('awarding stars is idempotent and skips runs without a par', () => {
   assert.deepEqual(slow.records.map((record) => record.stars), [2, 1, 3]);
 });
 
-test('the share line ends with the total stars once the run is won', () => {
+test('the share card shows each floor\'s stars and the total once the run is won', () => {
   const won = playRoute();
-  const line = share(won).split('\n')[1];
-  assert.ok(line.endsWith('︎ ⭐9'), line);
+  const lines = share(won).split('\n');
+  assert.ok(lines[1].includes(' · ⭐ 9/9 · '), lines[1]);
+  assert.ok(lines.slice(2, 5).every((row) => row.startsWith('🟨🟨🟨')), lines.join('\n'));
   won.records[0].stars = 2; won.records[2].stars = 1;
-  assert.ok(share(won).split('\n')[1].endsWith(' ⭐6'));
-  // Segments before the stars are unchanged.
+  const scored = share(won).split('\n');
+  assert.ok(scored[1].includes(' · ⭐ 6/9 · '));
+  assert.deepEqual(scored.slice(2, 5).map((row) => Array.from(row).slice(0, 3).join('')), ['🟨🟨⬛', '🟨🟨🟨', '🟨⬛⬛']);
   const glyph = { white: { pawn: '♙', knight: '♘', bishop: '♗', rook: '♖', queen: '♕' }, black: { pawn: '♟', knight: '♞', bishop: '♝', rook: '♜', queen: '♛' } }[won.playerColor][won.startingPiece];
-  assert.match(share(won).split('\n')[1], new RegExp(`^[❤️💔]+.*🏆${glyph}︎ ⭐6$`, 'u'));
-  // Unscored or unfinished runs have no star segment.
+  assert.ok(scored[1].startsWith(`${glyph}︎ 🏆 Escaped`));
+  // Unscored or unfinished runs have no star total.
   const legacy = structuredClone(won); delete legacy.records[1].stars;
   assert.ok(!share(legacy).includes('⭐'));
+  assert.ok(share(legacy).split('\n')[3].startsWith('✅'));
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
   assert.equal(playing.records[0].stars, 3);
   assert.ok(!share(playing).includes('⭐'));
+  assert.equal(share(playing).split('\n')[4], '⬛⬛⬛');
 });

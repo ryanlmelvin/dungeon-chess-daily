@@ -282,16 +282,16 @@ test('dark remembers monsters it has seen as ghosts until their square is seen a
   assert.deepEqual(ghostsFrom(updateSightings(memory, state), state), []);
 });
 
-test('the share line leads with the modifier emoji, and plain days add nothing', () => {
+test('the share card title names the modifier, and plain days add nothing', () => {
   for (const modifier of Object.keys(MODIFIERS)) {
     const state = createGame({ ...getRawDaily(firstDate('none')), modifier });
-    const line = getShareText(state).split('\n')[1];
-    if (modifier === 'none') assert.ok(line.startsWith('❤️'), line);
-    else assert.ok(line.startsWith(MODIFIERS[modifier].emoji + '❤️'), line);
+    const title = getShareText(state).split('\n')[0];
+    if (modifier === 'none') assert.equal(title, `Dungeon Chess Daily #${state.edition}`);
+    else assert.equal(title, `Dungeon Chess Daily #${state.edition} · ${MODIFIERS[modifier].emoji} ${MODIFIERS[modifier].name}`);
   }
   const retried = createGame({ ...getRawDaily(firstDate('none')), modifier: 'ice' });
   retried.tries = 2;
-  assert.ok(getShareText(retried).split('\n')[1].startsWith('🧊💀'));
+  assert.ok(getShareText(retried).split('\n')[1].endsWith(' · 2 tries'));
 });
 
 test('every modifier certifies: generated and forced-fallback editions replay under it', () => {

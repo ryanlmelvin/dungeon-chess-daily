@@ -123,15 +123,15 @@ test('a new floor starts without a combo or a fork', () => {
   assert.equal(below.fork, null);
 });
 
-test('share text adds forks then combos after each floor\'s special moves', () => {
+test('share text adds forks then combos after each floor row\'s special moves', () => {
   const state = scenario('pawn', 4, 6, []);
   state.status = 'won'; state.floor = 2; state.player.hp = 7;
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 7 }, { floor: 2, hp: 7 }];
   state.feats = [{ floor: 0, kind: 'combo' }, { floor: 0, kind: 'en-passant' }, { floor: 0, kind: 'fork' }, { floor: 0, kind: 'combo' },
     { floor: 2, kind: 'fork' }, { floor: 2, kind: 'castle' }];
-  assert.equal(share(state).split('\n')[1], '❤️🇫🇷🍴🔥🔥💔❤️🏰🍴🏆♙︎');
+  assert.deepEqual(share(state).split('\n').slice(2, 5), ['✅ 🇫🇷🍴🔥🔥', '✅ 💔', '✅ 🏰🍴']);
   state.feats = [];
-  assert.equal(share(state).split('\n')[1], '❤️💔❤️🏆♙︎');
+  assert.deepEqual(share(state).split('\n').slice(2, 5), ['✅', '✅ 💔', '✅']);
 });
 
 test('real runs with forks and combos save, resume and validate', () => {

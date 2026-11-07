@@ -635,7 +635,7 @@ function showResult() {
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `💀 Earlier try · ❤️ Floor without a lost life · 💔 Life lost · 🇫🇷 En passant · 🏰 Castled · Your piece · ⭐ Par stars\n${next}` : next;
+  $('next-edition').textContent=shareable ? `One row per floor: 🟨 Par star · 💔 Life lost · 🇫🇷 En passant · 🏰 Castled · 🍴 Fork · 🔥 Combo\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -659,7 +659,7 @@ function showDeath() {
   const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn advanced past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you moved to and captured you' : 'captured you along its red path'}. `;
   $('result-en-passant').hidden = trapped || !fatal?.enPassant;
   $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
-  $('next-edition').textContent='This counts as an earlier try 💀 on your share card.';
+  $('next-edition').textContent='This counts as another try on your share card.';
   $('retry-button').focus({preventScroll:true});
 }
 $('retry-button').addEventListener('click',()=>{

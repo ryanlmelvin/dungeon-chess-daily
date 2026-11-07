@@ -208,23 +208,24 @@ test('moves remain available beyond sixty and final-floor extraction still works
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
-test('share text is one line of lives lost per floor, without spoilers', () => {
+test('share text is a grid with one row per floor, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
   const text = share(state);
-  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n❤️💔💔💔🏆${state.playerColor === 'white' ? '♙' : '♟'}\uFE0E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  const glyph = state.playerColor === 'white' ? '♙' : '♟';
+  assert.equal(text.replace(/^(Dungeon Chess Daily #\d+).*$/m, '$1'), `Dungeon Chess Daily #${state.edition}\n${glyph}︎ 🏆 Escaped · 1 try\n✅\n✅ 💔💔\n✅ 💔\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
   state.tries = 3; state.replayUnlocked = true;
-  assert.match(share(state), /\n💀💀❤️💔💔💔🏆[♙♟]\uFE0E\n/u);
+  assert.ok(share(state).split('\n')[1].endsWith(' · 3 tries'));
 });
 
 test('share text marks a trapped floor and counts legacy restarts as one earlier try', () => {
   const state = createGame(daily);
   state.status = 'lost';
-  assert.match(share(state), /\n❤️🔒[♔-♟]\uFE0E\n/u);
+  assert.match(share(state), /\n[♔-♟]︎ 🔒 Trapped on floor 1 · 1 try\n⬛⬛⬛\n/u);
   state.replayUnlocked = true;
-  assert.match(share(state), /\n💀❤️🔒[♔-♟]\uFE0E\n/u);
+  assert.match(share(state), /\n[♔-♟]︎ 🔒 Trapped on floor 1 · 2 tries\n/u);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -381,7 +382,7 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
-  assert.match(share(restart),/\n💀❤️⏳[♔-♟]\uFE0E\n/u);
+  assert.match(share(restart),/\n[♔-♟]\uFE0E ⏳ Floor 1 · 2 tries\n⬛⬛⬛\n/u);
 });
 
 
@@ -520,7 +521,7 @@ test('running out of legal moves restarts the dungeon and counts another try, li
   assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
   assert.equal(validateSave(trapped, trapped.date), true);
-  assert.match(share(trapped), /\n💀❤️⏳[♔-♟]\uFE0E\n/u);
+  assert.match(share(trapped), /\n[♔-♟]\uFE0E ⏳ Floor 1 · 2 tries\n⬛⬛⬛\n/u);
 });
 
 test('an older save that ended trapped can be retried, counting as another try', () => {

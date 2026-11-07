@@ -1005,35 +1005,40 @@ function play(previous, action) {
   return state;
 }
 
-// A spoiler-free result on one line: a 💀 for each earlier try that ran out of
-// lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
-// each followed by 🇫🇷 for every en passant and 🏰 for every castle the player
-// made on that floor, in order, then 🍴 per fork and 🔥 per combo (tactics.js), then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
-// and last the day's starting piece, then a won run's total par stars (⭐N).
+// A spoiler-free result card, one row per floor like a Wordle grid:
+//   Dungeon Chess Daily #20 · 🧊 Ice        (title, then the day's modifier)
+//   ♙︎ Escaped · ⭐ 7/9 · 2 tries            (starting piece, outcome, par stars, tries)
+//   🟨🟨🟨 🇫🇷🍴                              (a floor: its par stars, then marks)
+//   🟨🟨⬛ 💔💔
+// Each row's three squares are its par stars (src/par.js), or ✅ for a cleared
+// floor with no par. The floor still in play has ⬛⬛⬛. Marks: 💔 per life lost,
+// 🇫🇷 per en passant, 🏰 per castle, then 🍴 per fork and 🔥 per combo (tactics.js).
+// 🔒 marks an older save that ended trapped without moves.
 const FEAT_EMOJI = { 'en-passant': '\u{1F1EB}\u{1F1F7}', castle: '🏰' };
+export const SHARE_GLYPHS = Object.freeze({ white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' }, black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' } });
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   // Saves from before the tries counter only know that a restart happened.
-  const earlier = (state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1)) - 1;
-  // The day's starting piece in its color. The text-presentation selector keeps
-  // the black pawn from switching to its gray emoji form beside the others.
-  const glyphs = { white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' }, black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' } };
-  // The day's modifier emoji leads the line; plain days add nothing.
-  let line = modifierOf(state).emoji + '💀'.repeat(earlier);
+  const tries = state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1);
+  // The text-presentation selector keeps the black pawn from switching to its gray emoji form.
+  const glyph = `${SHARE_GLYPHS[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
+  const modifier = modifierOf(state);
+  const title = `Dungeon Chess Daily #${state.edition}${modifier.emoji ? ` · ${modifier.emoji} ${modifier.name}` : ''}`;
+  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
+  const outcome = state.status === 'won' ? '🏆 Escaped' : state.status === 'lost' ? `🔒 Trapped on floor ${state.floor + 1}` : `⏳ Floor ${state.floor + 1}`;
+  const summary = [`${glyph} ${outcome}`, stars !== null && `⭐ ${stars}/9`, `${tries} ${tries === 1 ? 'try' : 'tries'}`].filter(Boolean).join(' · ');
+  const rows = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
     const before = floor === 0 ? state.player.maxHp : state.records[floor - 1]?.hp;
     const after = record ? record.hp : state.player.hp;
     const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
-    line += lost ? '💔'.repeat(lost) : '❤️';
-    for (const feat of state.feats ?? []) if (feat.floor === floor) line += FEAT_EMOJI[feat.kind] ?? '';
-    line += tacticMarks(state.feats, floor);
+    const meter = !record ? '⬛⬛⬛' : Number.isInteger(record.stars) ? '🟨'.repeat(record.stars) + '⬛'.repeat(3 - record.stars) : '✅';
+    let marks = '💔'.repeat(lost);
+    for (const feat of state.feats ?? []) if (feat.floor === floor) marks += FEAT_EMOJI[feat.kind] ?? '';
+    marks += tacticMarks(state.feats, floor);
+    rows.push(marks ? `${meter} ${marks}` : meter);
   }
-  line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
-  line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
-  // Par stars (src/par.js) close a won line once every floor has been scored.
-  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
-  if (stars !== null) line += ` ⭐${stars}`;
-  return `Dungeon Chess Daily #${state.edition}\n${line}\n${url}`;
+  return [title, summary, ...rows, url].join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
