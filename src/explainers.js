@@ -6,7 +6,9 @@
  * first fork won and the first combo open theirs once per device (`seen(kind)`
  * is true once it has shown). A waiting recruit never opens one by itself: a
  * dialog popping up after a move swallowed the next tap. The floor's opening
- * message names the recruit, with a What? button for its explainer.
+ * message names the recruit, with a What? button for its explainer. The bishop
+ * pair's hop ('bishop-pair') likewise offers its explainer from its "Holy duo!"
+ * line's What? button only.
  */
 export function autoExplainer(events, seen) {
   if (events.some((event) => event.type === 'en-passant')) return 'en-passant';

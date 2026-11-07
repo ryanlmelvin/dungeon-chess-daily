@@ -275,10 +275,71 @@ export function drawRecruitDemo(canvas, time, { playerPalette = {}, monsterPalet
 /** A still for reduced motion: the joined recruit blocking the monster's line. */
 export const RECRUIT_STILL = 4600;
 
+function dot(ctx, x, y, color, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(center(x), center(y), 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * One frame of the bishop pair explainer, looping every 5.6 s: your bishop
+ * steps onto a bishop recruit waiting on its own colour, and only that colour
+ * lights up: half the board. The recruit hops one square sideways onto the
+ * other colour, and the other half lights up too.
+ */
+export function drawBishopPairDemo(canvas, time, { playerPalette = {} } = {}) {
+  const t = ((time % 5600) + 5600) % 5600;
+  frame(canvas, (ctx) => {
+    // Your bishop (0,4) -> (2,2), onto the recruit; the recruit hops (2,2) -> (3,2).
+    const slide = beat(t, 300, 900);
+    const join = beat(t, 900, 1100);
+    const half = beat(t, 1200, 1600);
+    const hop = beat(t, 2300, 2800);
+    const whole = beat(t, 2800, 3200);
+    const fade = 1 - beat(t, 5300, 5600);
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+      const yours = (x + y) % 2 === 0;
+      dot(ctx, x, y, yours ? GOLD : MINT, (yours ? half : whole) * fade);
+    }
+    ctx.globalAlpha = fade;
+    // The ring and + until your bishop arrives, as on the board.
+    if (join < 1) {
+      ctx.save();
+      ctx.globalAlpha = (1 - join) * fade;
+      ctx.fillStyle = MINT;
+      ctx.fillRect(center(2) + 9, center(2) + 12, 9, 3);
+      ctx.fillRect(center(2) + 12, center(2) + 9, 3, 9);
+      ctx.restore();
+      ring(ctx, 2, 2, MINT, (1 - join) * 0.8 * fade);
+    }
+    const shared = join > 0 ? 1 - hop : 0;
+    sprite(ctx, 'piece-bishop', lerp(center(2), center(3), hop) + 9 * shared, center(2) + 7 * shared - Math.sin(Math.PI * hop) * 24, COMPANION_PALETTE);
+    sprite(ctx, 'piece-bishop', lerp(center(0), center(2), slide), lerp(center(4), center(2), slide), playerPalette);
+    burst(ctx, center(2), center(2), beat(t, 900, 1400), MINT);
+    burst(ctx, center(3), center(2), beat(t, 2800, 3300), MINT);
+    label(ctx, 'HALF THE BOARD', 100, 176, GOLD, half * (1 - beat(t, 2200, 2400)) * fade, 22);
+    label(ctx, 'HOLY DUO!', 100, 176, MINT, beat(t, 2800, 3000) * fade, 28);
+    ctx.globalAlpha = 1;
+  });
+}
+/** A still for reduced motion and the guide: the recruit on the other colour, every square lit. */
+export const BISHOP_PAIR_STILL = 4200;
+
+/** The bishop pair's explainer, from its line's What? button, in the same dialog as the tactics. */
+export const BISHOP_PAIR_COPY = Object.freeze({
+  title: 'Holy duo!',
+  text: 'A bishop stays on one square colour all game, so a bishop recruit on your colour could only reach squares you already can. So the turn it joins your bishop, its move is a hop to a side square on the other colour. Now your two bishops stand on opposite colours, and together they cover every square. Chess players call this the ‘bishop pair!’',
+  art: 'Animated board: your bishop steps onto a waiting bishop recruit and the squares of its colour light up, half the board. The recruit hops one square sideways onto the other colour, and the rest of the board lights up too.',
+  draw: drawBishopPairDemo, still: BISHOP_PAIR_STILL,
+});
+
 /** A waiting recruit's explainer, from its line's What? button, in the same dialog as the tactics. */
 export const RECRUIT_COPY = Object.freeze({
   title: 'A recruit is waiting',
-  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. Or set Recruit control to Auto in the menu to let it move itself. In auto mode, it can’t capture targets.',
+  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. Once floor 1 or 2 is cleared, it hunts on its own. Or set Recruit control to Auto in the menu to let it move itself. In auto mode, it can’t capture targets.',
   art: 'Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line.',
   draw: drawRecruitDemo, still: RECRUIT_STILL,
 });

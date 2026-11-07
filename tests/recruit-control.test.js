@@ -8,11 +8,14 @@ import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { botRun } from '../src/bot.js';
 import { decodeRoute, encodeRoute } from '../src/route-code.js';
+import { goldAtRisk } from '../src/cave-in.js';
 
 const move = (x, y, recruit) => (recruit === undefined ? { type: 'move', x, y } : { type: 'move', x, y, recruit });
 const wait = (recruit) => (recruit === undefined ? { type: 'wait' } : { type: 'wait', recruit });
 const at = (unit) => [unit.x, unit.y];
 const types = (state) => state.events.map((event) => event.type);
+// Everything a move said, oldest first (later phases file earlier lines in notes).
+const said = (state) => [...(state.notes ?? []), state.message].join(' ');
 function dailyFor(piece) {
   for (let day = 0; day < 365; day++) {
     const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
@@ -100,7 +103,7 @@ test('an ordered recruit may capture the challenge piece, and it counts toward t
   // The scored move count stops on the recruit's capture as on yours.
   assert.equal(second.objective.moves, 2);
   // The completion line is filed in notes; the cave-in's crack line (src/cave-in.js) follows it in the log.
-  assert.ok((second.notes ?? []).includes('You completed the challenge ✓ in 2 moves. Your score is locked in: explore for gold or take the stairs.'));
+  assert.ok((second.notes ?? []).includes('You completed the challenge ✓ in 2 moves. Your score is locked in: explore for gold or take the stairs. Your recruit will automatically watch your back while you explore.'));
   assert.match(second.message, /^The ceiling starts to crack!/);
 });
 
@@ -330,4 +333,95 @@ test('runs played with orders keep valid saves on every floor', () => {
     state = act(state, wait(order === 'hold' ? order : { x: order.x, y: order.y }));
     assert.equal(validateSave(JSON.parse(JSON.stringify(state)), state.date), true, `turn ${turn}`);
   }
+});
+
+// Once floor 1's or 2's challenge is complete, the recruit hunts on its own for
+// the rest of that room: Manual has no order step there, and orders are ignored.
+test('once floor 1 or 2 is cleared the recruit hunts on its own: no order step, and orders are ignored', () => {
+  const state = scenario('rook', { x: 7, y: 7 }); state.powers.freeze = 6;
+  state.companion = ally('rook', 0, 7);
+  // Your rook takes the last knight; the recruit's column holds a decoy bishop, and a king behind it.
+  state.enemies = [foe('target', 'knight', 7, 2), foe('decoy', 'bishop', 0, 3), foe('king', 'king', 0, 0)];
+  assert.ok(recruitChoice(state, wait()), 'before the clear you still give orders');
+  assert.equal(recruitChoice(state, move(7, 2)), null, 'the clearing move has no order step');
+  const cleared = act(state, move(7, 2));
+  assert.equal(cleared.exit.open, true);
+  // It moved itself as Auto does: it took the bishop.
+  assert.deepEqual(at(cleared.companion), [0, 3]);
+  assert.equal(cleared.captures, 2); assert.equal(cleared.gold, state.gold + 1);
+  // An order the move still carries is ignored (a malformed one is still no action).
+  for (const recruit of ['hold', { x: 0, y: 5 }, { x: 3, y: 7 }]) assert.deepEqual(act(state, move(7, 2, recruit)), cleared, JSON.stringify(recruit));
+  assert.equal(act(state, move(7, 2, 'stay')), state);
+  // From then on no move or wait of yours has an order step.
+  assert.equal(recruitChoice(cleared, wait()), null);
+  assert.equal(recruitChoice(cleared, move(7, 4)), null);
+  // It still captures, and that gold is at risk until the stairs, like yours.
+  const hunted = act(cleared, wait());
+  assert.deepEqual(at(hunted.companion), [0, 0]);
+  assert.equal(hunted.captures, 3); assert.equal(hunted.gold, cleared.gold + 1);
+  assert.equal(goldAtRisk(hunted), 1);
+  assert.deepEqual(act(cleared, wait('hold')), hunted);
+  assert.deepEqual(act(cleared, wait({ x: 0, y: 1 })), hunted);
+  assert.equal(act(cleared, wait('stay')), cleared);
+});
+
+test('the challenge-complete message mentions your recruit on floors 1 and 2, only once it has joined', () => {
+  const line = 'Your recruit will automatically watch your back while you explore.';
+  const clear = (setup) => {
+    const state = scenario('rook', { x: 7, y: 7 }); state.powers.freeze = 6;
+    state.enemies = [foe('target', 'knight', 7, 2)];
+    setup(state);
+    return act(state, move(7, 2));
+  };
+  const done = 'You completed the challenge ✓ in 1 move. Your score is locked in: explore for gold or take the stairs.';
+  for (const floor of [0, 1]) {
+    const joined = clear((state) => { state.floor = floor; state.companion = ally('knight', 0, 0); });
+    assert.ok(said(joined).includes(`${done} ${line}`), `floor ${floor + 1}`);
+  }
+  // Not while the recruit still waits on its square, and not without one.
+  const waiting = clear((state) => { state.items = [{ type: 'companion', piece: 'knight', x: 0, y: 0 }]; });
+  assert.ok(said(waiting).includes(done)); assert.ok(!said(waiting).includes(line));
+  assert.ok(!said(clear(() => {})).includes(line));
+});
+
+test('a recruit that joins after the clear hunts on its own from its first move', () => {
+  const state = scenario('rook', { x: 7, y: 7 }); state.powers.freeze = 6;
+  state.items = [{ type: 'companion', piece: 'knight', x: 0, y: 4 }];
+  state.enemies = [foe('target', 'knight', 0, 7), foe('decoy', 'bishop', 2, 3)];
+  const cleared = act(state, move(0, 7));
+  assert.equal(cleared.exit.open, true);
+  assert.ok(!said(cleared).includes('watch your back'), 'it hasn’t joined yet');
+  assert.equal(recruitChoice(cleared, move(0, 4)), null);
+  const joined = act(cleared, move(0, 4));
+  assert.ok(said(joined).includes('A knight joins you and hunts on its own for the rest of this room.'));
+  assert.deepEqual(at(joined.companion), [2, 3]);
+  assert.equal(joined.captures, cleared.captures + 1);
+  assert.deepEqual(act(cleared, move(0, 4, 'hold')), joined);
+  // Taking the last target where it stood on the waiting recruit clears the floor
+  // and recruits in one move: both lines stay in the log.
+  const both = scenario('rook', { x: 7, y: 7 }); both.powers.freeze = 6;
+  both.items = [{ type: 'companion', piece: 'knight', x: 7, y: 2 }];
+  both.enemies = [foe('target', 'knight', 7, 2), foe('decoy', 'bishop', 5, 3)];
+  const swept = act(both, move(7, 2));
+  assert.equal(swept.exit.open, true);
+  assert.ok(said(swept).includes('You completed the challenge ✓ in 1 move. Your score is locked in: explore for gold or take the stairs. A knight joins you and hunts on its own for the rest of this room.'), said(swept));
+});
+
+test('the last floor is unchanged: after the king falls you still steer the recruit, and the message adds nothing', () => {
+  let state = lastFloor();
+  const pickup = state.items.find((item) => item.type === 'companion');
+  state = act(state, move(pickup.x, pickup.y, 'hold'));
+  const square = recruitChoice(state, wait()).moves.find((tile) => !tile.capture);
+  const king = state.enemies.find((monster) => monster.role === 'king');
+  Object.assign(king, { x: square.x, y: square.y });
+  const taken = act(state, wait({ x: square.x, y: square.y }));
+  assert.equal(taken.exit.open, true);
+  const lines = [...(taken.notes ?? []), taken.message];
+  assert.ok(lines.some((text) => /^You completed the challenge ✓ in \d+ moves?\. Your score is locked in: take the stairs to finish\.$/.test(text)), lines.join(' | '));
+  assert.ok(!said(taken).includes('watch your back'));
+  const choice = recruitChoice(taken, wait());
+  assert.ok(choice?.moves.length > 0, 'an order step still follows your move');
+  const next = choice.moves.find((tile) => !tile.capture);
+  assert.deepEqual(at(act(taken, wait({ x: next.x, y: next.y })).companion), [next.x, next.y]);
+  assert.deepEqual(at(act(taken, wait('hold')).companion), at(taken.companion));
 });

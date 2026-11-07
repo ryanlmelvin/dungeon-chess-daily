@@ -256,7 +256,10 @@ function hopelessPosition(state, manualRecruit = false) {
 // Every square a recruit under Manual control could ever land on: the one at the
 // player's side from where it stands, or a waiting one from its square once the
 // player could step there. Fixed walls only, as for the player's piece; a pawn
-// may always take diagonally, and promotes on the far rank.
+// may always take diagonally, and promotes on the far rank. A bishop recruit on
+// your bishop's colour hops to the other one (pairHop), so it may reach any open
+// square of that colour as well, and a held Borrowed move could put your bishop
+// on its colour later and make it hop the other way.
 function recruitLandingSquares(state, playerLanding) {
   const recruit = state.companion ?? (state.items ?? []).find((item) => item.type === 'companion' && playerLanding.has(squareKey(item.x, item.y)));
   if (!recruit) return [];
@@ -275,6 +278,12 @@ function recruitLandingSquares(state, playerLanding) {
       const moved = { ...unit, x: tile.x, y: tile.y, moved: true };
       if (moved.piece === 'pawn' && moved.y === 0) moved.piece = 'queen';
       if (!visited.has(key(moved))) { visited.add(key(moved)); queue.push(moved); }
+    }
+  }
+  if (state.player.piece === 'bishop' && recruit.piece === 'bishop') {
+    const own = (recruit.x + recruit.y) % 2, paired = own === (state.player.x + state.player.y) % 2, leap = state.powers?.leap > 0;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      if (walkable(state, x, y) && ((paired || leap) && (x + y) % 2 !== own || (paired && leap))) squares.add(squareKey(x, y));
     }
   }
   return squares;
@@ -1015,8 +1024,9 @@ function captureEnemy(state, captured, companion = false) {
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
     const moves = floorScoredMoves(state);
     // The ✓ echoes the paused move counter; the UI adds par where the run has one.
+    // A recruit already at your side hunts on its own from here (huntsAlone).
     if (state.exit.open) { state.message = unmasked; settle(state); }
-    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.` : `${unmasked} Keep hunting.`;
+    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.${state.floor < 2 && state.companion ? ' Your recruit will automatically watch your back while you explore.' : ''}` : `${unmasked} Keep hunting.`;
   } else state.message = `${unmasked} +1 gold.`;
 }
 
@@ -1126,30 +1136,77 @@ export function closeRangeSquares(state) {
 const RECRUIT_PROBE = Symbol('recruit probe');
 const validOrder = (order) => order === 'hold' || (order !== null && typeof order === 'object' && inside(order.x, order.y));
 const squareOrder = (order) => order !== undefined && order !== 'hold' && order !== RECRUIT_PROBE;
+// Once floor 1's or 2's challenge is complete the recruit hunts on its own for
+// the rest of that room, as on Auto, so it keeps winning gold while you collect
+// coins: no order step, and an order a move or wait still carries is ignored.
+// The last floor keeps your orders.
+const huntsAlone = (state) => state.exit.open && state.floor < state.targets.length - 1;
 // Thrown by companionTurn for recruitChoice: the turn stops as the recruit's phase begins.
 class RecruitPhase {
-  constructor(board, phase, moves) { this.board = board; this.phase = phase; this.moves = moves; }
+  constructor(board, phase, moves, hop) { this.board = board; this.phase = phase; this.moves = moves; this.hop = hop; }
 }
 
 /**
  * Where the recruit could move this turn if the player plays `action` (a move
  * or a wait, without an order), for Manual recruit control. Null when the turn
  * has no recruit phase: no recruit yet, castling (that was its move), a black
- * move the monsters' first move sends back for a new choice, or a run-ending
- * capture. Otherwise `board` is the position as its phase begins (after your
- * move, a close-range hit and, as black, the monsters' first move;
- * `board.events[phase]` is its 'companion-phase'), and `moves` its legal
- * squares, captures of any monster included. Changes nothing.
+ * move the monsters' first move sends back for a new choice, a run-ending
+ * capture, or a cleared floor 1 or 2 (huntsAlone). Otherwise `board` is the
+ * position as its phase begins (after your move, a close-range hit and, as
+ * black, the monsters' first move; `board.events[phase]` is its
+ * 'companion-phase'), and `moves` its legal squares, captures of any monster
+ * included. On the bishop pair's turn `hop` is true: `moves` are then the
+ * squares of the other colour it may hop to, and it may not hold unless there
+ * are none. Changes nothing.
  */
 export function recruitChoice(previous, action) {
   if (action?.type !== 'move' && action?.type !== 'wait') return null;
   try {
     play(previous, { ...action, recruit: RECRUIT_PROBE });
   } catch (stop) {
-    if (stop instanceof RecruitPhase) return { board: stop.board, phase: stop.phase, moves: stop.moves };
+    if (stop instanceof RecruitPhase) return { board: stop.board, phase: stop.phase, moves: stop.moves, ...(stop.hop && { hop: true }) };
     throw stop;
   }
   return null;
+}
+
+// The bishop pair. A bishop never leaves its square colour, and a recruit waits
+// one move from your start, so a bishop recruit joining your bishop shares your
+// colour and could only ever reach squares you already cover. Instead, its move
+// that turn hops it onto the other colour: two bishops on opposite colours
+// cover every square between them. It hops to a side square of its own (up,
+// down, left or right, always the other colour) that is open and holds no
+// monster; with all four blocked, to any such square of the other colour. Your
+// bishop is on your colour, so it is never offered, and the hop never captures.
+// The rule is the position, not the turn: a bishop recruit standing on your
+// bishop's colour always hops. That is the turn it joins, and again only if a
+// Borrowed (knight) move later puts your bishop on its colour. The door square
+// needs no exception: an arrival never waits there (src/modifiers.js).
+// Returns the squares, `blocked` when no side square was free, or null when
+// the bishop pair doesn't apply.
+function pairHop(state, unit) {
+  const colour = (tile) => (tile.x + tile.y) % 2;
+  if (state.player.piece !== 'bishop' || unit.piece !== 'bishop' || colour(unit) !== colour(state.player)) return null;
+  const free = (tile) => walkable(state, tile.x, tile.y) && !enemyAt(state, tile.x, tile.y);
+  const sides = ORTHOGONAL.map(([dx, dy]) => ({ x: unit.x + dx, y: unit.y + dy })).filter(free);
+  if (sides.length) return { squares: sides, blocked: false };
+  const squares = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (colour({ x, y }) !== colour(unit) && free({ x, y })) squares.push({ x, y });
+  return { squares, blocked: true };
+}
+// Auto's hop: the side square whose diagonals reach the most squares from
+// there, or with all four blocked the nearest square in king steps; a tie goes
+// by the day's seed.
+function autoHop(state, unit, { squares, blocked }) {
+  const rank = blocked ? (tile) => chebyshev(tile, unit) : (tile) => -hypothetically(unit, tile, () => movesFor(state, unit).length);
+  const tie = (tile) => hash(`${state.dungeonSeed ?? state.seed}:bishop-pair:${state.floor}:${tile.x},${tile.y}`);
+  return squares.map((tile) => ({ tile, rank: rank(tile), tie: tie(tile) })).sort((a, b) => a.rank - b.rank || a.tie - b.tie)[0].tile;
+}
+function hopToOtherColour(state, unit, square) {
+  state.events.push({ type: 'bishop-pair', from: { x: unit.x, y: unit.y }, x: square.x, y: square.y });
+  moveCompanion(state, unit, square);
+  state.feats.push({ floor: state.floor, kind: 'bishop-pair' });
+  state.message = 'Holy duo! Your recruit hopped to the other colour, so your two bishops cover every square.';
 }
 
 // The recruit's move, once per turn after the player's. Returns false for an
@@ -1165,7 +1222,19 @@ function companionTurn(state, order) {
     unit.piece='queen';
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
-  if (order === RECRUIT_PROBE) throw new RecruitPhase(state, phase, movesFor(state,unit).map(({x,y,capture}) => ({x,y,capture})));
+  const hop = pairHop(state, unit);
+  if (order === RECRUIT_PROBE) {
+    const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : movesFor(state,unit).map(({x,y,capture}) => ({x,y,capture}));
+    throw new RecruitPhase(state, phase, moves, Boolean(hop));
+  }
+  // The bishop pair's hop is its move this turn: it may only stay put (or be
+  // left to Auto) on a board with nowhere to hop.
+  if (hop) {
+    if (!hop.squares.length) return !squareOrder(order);
+    const square = order === undefined ? autoHop(state, unit, hop) : order === 'hold' ? null : hop.squares.find((tile) => same(tile, order));
+    if (square) hopToOtherColour(state, unit, square);
+    return Boolean(square);
+  }
   if (order === 'hold') return true;
   if (order !== undefined) {
     const ordered = movesFor(state,unit).find((move) => same(move,order));
@@ -1361,7 +1430,7 @@ function play(previous, action) {
     }
     // Waiting is the player's move, so it spends any en passant window.
     state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state); regainBalance(state);
-    if (!companionTurn(state, action.recruit)) return previous;
+    if (!companionTurn(state, huntsAlone(state) ? undefined : action.recruit)) return previous;
     settle(state);
     if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
     collapseTick(state); settle(state);
@@ -1457,7 +1526,11 @@ function play(previous, action) {
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
     // An action with a recruit order is played under Manual recruit control.
-    state.message = action.recruit === undefined
+    // On a cleared floor 1 or 2 it takes no orders either way (huntsAlone). A
+    // monster you took on the recruit's square keeps its line (maybe the clear).
+    settle(state);
+    state.message = huntsAlone(state) ? `A ${recruit.piece} joins you and hunts on its own for the rest of this room.`
+      : action.recruit === undefined
       ? `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`
       : `A ${recruit.piece} joins you this floor. You move it after each of your moves, and it can capture ${challengeName(state)} too.`;
   }
@@ -1489,7 +1562,9 @@ function play(previous, action) {
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
   // Castling was the recruit's move, so an order to move it again is no action.
-  if (castle ? squareOrder(action.recruit) : !companionTurn(state, action.recruit)) return previous;
+  // A cleared floor 1 or 2 ignores orders: the recruit hunts on its own there.
+  const order = huntsAlone(state) ? undefined : action.recruit;
+  if (castle ? squareOrder(order) : !companionTurn(state, order)) return previous;
   if (!castle) settle(state);
   if (state.playerColor === 'white') { enemyTurn(state, Boolean(close)); settle(state); }
   collapseTick(state); settle(state);
@@ -1597,7 +1672,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Special moves the player made: absent in older saves.
     // Forks and combos are bounded by captures (validTactics), the rest by 30.
     if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.filter((feat) => !TACTIC_KINDS.includes(feat?.kind)).length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
-      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle', ...TACTIC_KINDS].includes(feat.kind)))) return false;
+      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle', 'bishop-pair', ...TACTIC_KINDS].includes(feat.kind)))) return false;
     const template = createGame({...daily,legacyTurnOrder:value.legacyTurnOrder}); template.floor = value.floor; template.companionOrders = orders;
     // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
     // a king may hold that king, on the board or at their side.
@@ -1671,7 +1746,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }
