@@ -83,8 +83,8 @@ test('forced fallbacks certify every piece and difficulty with the production ru
       for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards']) assert.equal(daily[knob], profile[knob], knob);
       assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= profile.minThreatenedDecisions);
       const { initial } = replay(daily);
-      assert.equal(initial.schema, 5);
-      assert.equal(initial.rulesVersion, 5);
+      assert.equal(initial.schema, 6);
+      assert.equal(initial.rulesVersion, 6);
       const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
       assert.equal(proof.valid, true, `${difficulty}:${identity}: ${proof.reason}`);
       assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);

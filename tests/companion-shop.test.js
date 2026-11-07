@@ -130,9 +130,9 @@ test('older reservations and power purchases both count toward the gold balance'
   assert.equal(validateSave(forged,forged.date),false);
 });
 
-test('older schema-five saves without a reservation ledger remain valid and normalize on their next action',()=>{
+test('older saves without a reservation ledger remain valid and normalize on their next action',()=>{
   const old=bank();delete old.companionOrders;
-  assert.equal(old.schema,5);assert.equal(validateSave(old,old.date),true);
+  assert.equal(old.schema,6);assert.equal(validateSave(old,old.date),true);
   assert.equal(buy(old,'pawn'),old);
   const powered=act(old,{type:'buy',id:'shield'});assert.deepEqual(powered.companionOrders,[]);
   assert.equal(validateSave(powered,powered.date),true);assert.equal(old.companionOrders,undefined);

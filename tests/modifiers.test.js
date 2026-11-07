@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, legalMoves, getShareText, validateSave } from '../src/rules.js';
 import { generateDaily, getDaily, fallbackKey } from '../src/generation.js';
+import { TIER_IDS } from '../src/difficulty.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
@@ -306,14 +307,14 @@ test('every modifier certifies: generated and forced-fallback editions replay un
     const forced = generateDaily(date, { maxAttempts: 0 });
     assert.equal(forced.generation.source, 'fallback');
     assert.equal(forced.modifier, modifier);
-    assert.ok(FALLBACKS[fallbackKey('standard', forced.playerPiece, forced.playerColor, modifier)]);
+    assert.ok(FALLBACKS[fallbackKey(forced.difficulty, forced.playerPiece, forced.playerColor, modifier)]);
     assert.equal(verifyWinningRoute(createGame(forced), forced.generation.certificate.actions).valid, true, modifier);
   }
 });
 
 test('the fallback bank covers every piece and difficulty under each rule-changing modifier', () => {
   for (const modifier of ['ice', 'collapse']) {
-    for (const difficulty of ['gentle', 'standard', 'expert']) {
+    for (const difficulty of TIER_IDS) {
       for (const piece of ['pawn', 'knight', 'bishop', 'rook', 'queen']) {
         const entry = FALLBACKS[fallbackKey(difficulty, piece, 'white', modifier)];
         assert.ok(entry, `${difficulty}:${piece}:${modifier}`);
@@ -321,5 +322,5 @@ test('the fallback bank covers every piece and difficulty under each rule-changi
     }
   }
   // Dark plays by plain rules, so it shares plain days' certificates.
-  assert.equal(fallbackKey('standard', 'rook', 'white', 'dark'), fallbackKey('standard', 'rook', 'white'));
+  assert.equal(fallbackKey('tough', 'rook', 'white', 'dark'), fallbackKey('tough', 'rook', 'white'));
 });

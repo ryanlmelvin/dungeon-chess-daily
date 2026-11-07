@@ -76,21 +76,40 @@ test('a demoted pawn skips an occupied entrance and blocked replacement squares'
   assert.ok(legalMoves(next).length > 0);
 });
 
+// The shortest line of moves (at most three) after which a monster's hit lands
+// in this room, so the checks below don't depend on one edition's layout.
+function lineToHit(initial, prepare = (state) => state) {
+  let frontier = [{ state: initial, line: [] }];
+  for (let depth = 0; depth < 3; depth++) {
+    const next = [];
+    for (const { state, line } of frontier) {
+      for (const square of legalMoves(state)) {
+        const before = prepare(structuredClone(state));
+        const after = act(before, move(square.x, square.y));
+        if (after.events.some((event) => event.type === 'damage')) return { aimed: before, last: move(square.x, square.y), line };
+        if (after.floor !== 2) continue;
+        next.push({ state: after, line: [...line, move(square.x, square.y)] });
+      }
+    }
+    frontier = next.slice(0, 400);
+  }
+  throw new Error('No hit within three moves in this room.');
+}
+
 test('losing a promoted pawn life in a later generated room preserves progress and a valid resumable save', () => {
   const initial = promotedThirdRoom();
-  // Steer clear of the room's frost hourglass on (4,3). The king keeps its
-  // distance; the queen aims down the long diagonal and hits the player on (3,3).
-  const aimed = [move(4, 4)].reduce(act, initial);
-  const next = act(aimed, move(3, 3));
+  const { aimed, last } = lineToHit(initial);
+  const next = act(aimed, last);
   assert.equal(next.floor, 2); assert.equal(next.player.piece, 'pawn');
   // The certified pawn route may already have spent lives on earlier floors.
   assert.equal(next.player.hp, aimed.player.hp - 1); assert.equal(next.player.maxHp, 8);
-  assert.deepEqual([next.player.x, next.player.y], [4, 6]);
+  assert.equal(walkable(next, next.player.x, next.player.y), true);
   assert.deepEqual(next.records, initial.records); assert.deepEqual(next.map, initial.map); assert.deepEqual(next.props, initial.props);
   assert.equal(next.turns, aimed.turns + 1);
   const saved = JSON.parse(JSON.stringify(next));
   assert.equal(validateSave(saved, saved.date), true);
-  const resumed = act(saved, move(4, 5));
+  const step = legalMoves(saved)[0];
+  const resumed = act(saved, move(step.x, step.y));
   assert.equal(resumed.turns, saved.turns + 1);
   assert.equal(validateSave(resumed, resumed.date), true);
 });
@@ -98,11 +117,10 @@ test('losing a promoted pawn life in a later generated room preserves progress a
 test('exhaustion on the last move in room three resets the whole run to the same daily dungeon', () => {
   // Companions are no longer sold; a save from before then may still hold a paid pawn order.
   const initial = promotedThirdRoom((cleared) => ({ ...cleared, gold: cleared.gold - 2, companionOrders: [{ floor: 2, piece: 'pawn' }] }));
-  const aimed = [move(4, 4)].reduce(act, initial);
+  const { aimed, last } = lineToHit(initial, (state) => { state.player.hp = 1; state.turns = 59; return state; });
   assert.deepEqual(aimed.companionOrders, [{ floor: 2, piece: 'pawn' }]);
-  aimed.player.hp = 1; aimed.turns = 59;
   assert.equal(validateSave(aimed, aimed.date), true);
-  const restarted = act(aimed, move(3, 3));
+  const restarted = act(aimed, last);
   assert.equal(restarted.status, 'playing');
   // The hit may land along a lane or at close range, depending on the tier's layout.
   assert.deepEqual(restarted.events.map((event) => event.type).filter((type) => type !== 'close-capture'), ['damage', 'restart']);

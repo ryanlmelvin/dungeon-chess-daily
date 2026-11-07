@@ -18,7 +18,7 @@ assert.equal(state.status, 'won');
 assert.equal(validateSave(state, date), true);
 const won = JSON.stringify(state);
 const backup = (saves) => ({ app: 'dungeon-chess-daily', schema: 1, saves });
-const legacy = (status = 'playing', floor = 0, overrides = {}) => JSON.stringify({ schema: 4, date, status, floor, ...overrides });
+const legacy = (status = 'playing', floor = 0, overrides = {}) => JSON.stringify({ schema: 5, date, status, floor, ...overrides });
 const legacyKey = `daily:v5:${date}`;
 
 test('merge adds missing dates while retaining local-only and unknown data without mutating inputs', () => {

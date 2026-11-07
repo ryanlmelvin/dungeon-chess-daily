@@ -3,6 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, getShareText, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+// The day's room-modifier emoji leads the share line; these checks are about what follows it.
+const share = (...args) => getShareText(...args).replace(/(^|\n)(?:🌑|🧊|🏚️)/gu, '$1');
 
 const move = (x, y) => ({ type: 'move', x, y });
 function findDaily(match, label) {
@@ -171,12 +173,12 @@ test('share text puts each floor\'s special moves after its hearts', () => {
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 7 }, { floor: 2, hp: 7 }];
   state.feats = [{ floor: 0, kind: 'en-passant' }, { floor: 2, kind: 'castle' }, { floor: 2, kind: 'en-passant' }];
   const glyph = state.playerColor === 'white' ? '♙' : '♟';
-  assert.equal(getShareText(state).split('\n')[1], `💀❤️🇫🇷💔❤️🏰🇫🇷🏆${glyph}︎`);
+  assert.equal(share(state).split('\n')[1], `💀❤️🇫🇷💔❤️🏰🇫🇷🏆${glyph}︎`);
   // A floor still in play carries its feats before the hourglass.
   state.status = 'playing'; state.floor = 1; state.records = state.records.slice(0, 1); state.feats = [{ floor: 1, kind: 'castle' }];
-  assert.equal(getShareText(state).split('\n')[1], `💀❤️💔🏰⏳${glyph}︎`);
+  assert.equal(share(state).split('\n')[1], `💀❤️💔🏰⏳${glyph}︎`);
   delete state.feats;
-  assert.equal(getShareText(state).split('\n')[1], `💀❤️💔⏳${glyph}︎`);
+  assert.equal(share(state).split('\n')[1], `💀❤️💔⏳${glyph}︎`);
 });
 
 test('saves with feats and castle events validate; malformed feats do not; old saves still do', () => {

@@ -6,6 +6,8 @@ import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getSh
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { royalRules, floorDecoys } from '../src/rules.js';
+// The day's room-modifier emoji leads the share line; these checks are about what follows it.
+const share = (...args) => getShareText(...args).replace(/(^|\n)(?:🌑|🧊|🏚️)/gu, '$1');
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -210,19 +212,19 @@ test('share text is one line of lives lost per floor, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
-  const share = getShareText(state);
-  assert.equal(share, `Dungeon Chess Daily #${state.edition}\n❤️💔💔💔🏆${state.playerColor === 'white' ? '♙' : '♟'}\uFE0E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
-  for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!share.includes(spoiler));
+  const text = share(state);
+  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n❤️💔💔💔🏆${state.playerColor === 'white' ? '♙' : '♟'}\uFE0E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
   state.tries = 3; state.replayUnlocked = true;
-  assert.match(getShareText(state), /\n💀💀❤️💔💔💔🏆[♙♟]\uFE0E\n/u);
+  assert.match(share(state), /\n💀💀❤️💔💔💔🏆[♙♟]\uFE0E\n/u);
 });
 
 test('share text marks a trapped floor and counts legacy restarts as one earlier try', () => {
   const state = createGame(daily);
   state.status = 'lost';
-  assert.match(getShareText(state), /\n❤️🔒[♔-♟]\uFE0E\n/u);
+  assert.match(share(state), /\n❤️🔒[♔-♟]\uFE0E\n/u);
   state.replayUnlocked = true;
-  assert.match(getShareText(state), /\n💀❤️🔒[♔-♟]\uFE0E\n/u);
+  assert.match(share(state), /\n💀❤️🔒[♔-♟]\uFE0E\n/u);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -379,7 +381,7 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
-  assert.match(getShareText(restart),/\n💀❤️⏳[♔-♟]\uFE0E\n/u);
+  assert.match(share(restart),/\n💀❤️⏳[♔-♟]\uFE0E\n/u);
 });
 
 
@@ -518,7 +520,7 @@ test('running out of legal moves restarts the dungeon and counts another try, li
   assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
   assert.equal(validateSave(trapped, trapped.date), true);
-  assert.match(getShareText(trapped), /\n💀❤️⏳[♔-♟]\uFE0E\n/u);
+  assert.match(share(trapped), /\n💀❤️⏳[♔-♟]\uFE0E\n/u);
 });
 
 test('an older save that ended trapped can be retried, counting as another try', () => {
