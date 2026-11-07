@@ -3,8 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, dangerTiles, getDaily, legalMoves, SHOP_ITEMS } from '../src/game.js';
-import { PIN_MOVES, takebackTarget, shopOffers } from '../src/rules.js';
-import { shopStock, SHOP_SIZE } from '../src/edition.js';
+import { PIN_MOVES, takebackTarget } from '../src/rules.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -20,35 +19,10 @@ function monster(id, piece, x, y, target = null) {
   return { id, piece, role: piece, species: 'bat', name: 'Bat', x, y, moved: false, phase: target ? 'aim' : 'ready', target, intent: target ? [{ ...target }] : [] };
 }
 
-const dates = Array.from({ length: 60 }, (_, day) => new Date(Date.UTC(2026, 10, 7 + day)).toISOString().slice(0, 10));
-
-test('each shop offers the extra life plus three drawn items, the same for everyone, varying by shop and day', () => {
-  let differ = 0;
-  for (const date of dates) {
-    const [first, second] = [shopStock(date, 0), shopStock(date, 1)];
-    for (const offers of [first, second]) {
-      assert.equal(offers.length, SHOP_SIZE);
-      assert.ok(offers.includes('life'), `${date}: extra life always stocked`);
-      assert.ok(offers.every((id) => SHOP_ITEMS.some((item) => item.id === id)));
-    }
-    assert.ok(!second.includes('magnet'), `${date}: no magnet before the coinless last floor`);
-    assert.deepEqual(getDaily(date).shops, [first, second]);
-    assert.deepEqual(shopStock(date, 0), first, 'deterministic');
-    if (first.join() !== second.join()) differ++;
-  }
-  assert.ok(differ > 30, 'the two shops usually differ');
-  assert.ok(new Set(dates.map((date) => shopStock(date, 0).join())).size > 5, 'offers change from day to day');
-});
-
-test('the shop sells the three tools beside the ward, magnet and extra life, but no hourglass, and only what it stocks', () => {
+test('the shop sells the three tools beside the ward, magnet and extra life, but no hourglass', () => {
   assert.deepEqual(SHOP_ITEMS.map((item) => item.id), ['shield', 'pin', 'leap', 'takeback', 'magnet', 'life']);
   for (const id of ['pin', 'leap', 'takeback']) {
     const state = scenario(); state.enemies = [monster('k', 'king', 4, 2)]; state.gold = 9;
-    state.date = dates.find((date) => shopStock(date, 0).includes(id));
-    const missing = { ...structuredClone(state), date: dates.find((date) => !shopStock(date, 0).includes(id)) };
-    const unstocked = act(missing, move(4, 2));
-    assert.equal(act(unstocked, { type: 'buy', id }), unstocked, `${id}: not for sale when not stocked`);
-    assert.ok(shopOffers(state).includes(id));
     const cleared = act(state, move(4, 2));
     const bought = act(cleared, { type: 'buy', id });
     assert.equal(bought.powers[id], 1, id);

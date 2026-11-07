@@ -6,7 +6,7 @@ import { PIECES, PLAYABLE_PIECES } from './pieces.js';
 
 export { getDaily, DIFFICULTY_TIERS, GENERATOR_VERSION } from './generation.js';
 export { PLAYABLE_PIECES };
-export { act, resetFloor, retryLostRun, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, coinlessFloor, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, SHOP_ITEMS, EXTRA_LIFE, PIN_MOVES, borrowedPiece, takebackTarget, shopOffers, COMPANIONS, RULES_VERSION } from './rules.js';
+export { act, resetFloor, retryLostRun, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, coinlessFloor, PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, SHOP_ITEMS, EXTRA_LIFE, PIN_MOVES, borrowedPiece, takebackTarget, COMPANIONS, RULES_VERSION } from './rules.js';
 
 /** Only canonical certified editions enter the public game. */
 export function createGame(daily = getDaily()) {
