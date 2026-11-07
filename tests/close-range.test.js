@@ -36,7 +36,7 @@ test('white: ending next to a monster king loses a life at once, and only once p
   const next=act(state,move(4,4));
   assert.equal(next.player.hp,hp-1);
   assert.deepEqual(next.events.find((event)=>event.type==='close-capture'),{type:'close-capture',id:'king',x:5,y:3});
-  assert.equal(count(next,'damage'),1);
+  assert.equal(count(next,'player-captured'),1);
   assert.equal(count(next,'enemy-phase'),0);
   assert.deepEqual([next.player.x,next.player.y],[4,4]);
 });
@@ -47,7 +47,7 @@ test('black: a destination close-attacked before and after the enemy phase is an
   assert.ok(closeAttacker(state,{x:4,y:4}));
   const next=act(state,move(4,4));
   assert.equal(next.player.hp,hp-1);
-  assert.equal(count(next,'close-capture'),1); assert.equal(count(next,'damage'),1);
+  assert.equal(count(next,'close-capture'),1); assert.equal(count(next,'player-captured'),1);
   assert.deepEqual([next.player.x,next.player.y],[4,4]);
   assert.equal(next.awaitingPlayer,false);
 });
@@ -148,7 +148,7 @@ test('an instant hit on the last life restarts the run and keeps the capture eve
   state.enemies=[monster('king','king',5,3)];
   const next=act(state,move(4,4));
   assert.equal(next.player.hp,PIECE_LIVES.rook); assert.equal(next.floor,0);
-  assert.deepEqual(next.events.map((event)=>event.type),['close-capture','damage','restart']);
+  assert.deepEqual(next.events.map((event)=>event.type),['close-capture','player-captured','restart']);
 });
 
 test('a companion sharing the player square does not shield a close-range capture',()=>{

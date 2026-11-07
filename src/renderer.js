@@ -530,14 +530,14 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         entities.delete(id);
       }
     }
-    const damage = events.find((event) => event.type === 'damage');
+    const captured = events.find((event) => event.type === 'player-captured');
     const hitAt = now + enemyDelay + 145;
-    if (damage) {
+    if (captured) {
       const player = entities.get('player');
       if (player) {
         if (animateTurn) {
           player.flashAt = hitAt;
-          player.flashPosition = { x: damage.x, y: damage.y };
+          player.flashPosition = { x: captured.x, y: captured.y };
         }
         else player.flash = 0.4;
       }
@@ -545,7 +545,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     // Show who struck: the attacker lunges at the player's square and back,
     // tinted red, peaking as the player flashes. A shield block lunges too.
-    const strike = events.find((event) => (event.type === 'damage' || event.type === 'shield') && event.by);
+    const strike = events.find((event) => (event.type === 'player-captured' || event.type === 'shield') && event.by);
     // A restart rebuilds the room, where the same id may name a different monster.
     const attacker = strike && !changedBoard && !events.some((event) => event.type === 'restart') && entities.get(strike.by);
     // An en passant capture is the monster's diagonal step onto the skipped
@@ -736,10 +736,23 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     return { x: far.x, top: far.y, bottom: near.y };
   }
 
+  // The board's on-screen box, in CSS pixels from the container's top-left
+  // corner, so page panels can sit in the space around it.
+  function boardRect() {
+    const bounds = container.getBoundingClientRect();
+    const corners = [[-0.5, -0.5], [columns - 0.5, -0.5], [-0.5, rows - 0.5], [columns - 0.5, rows - 0.5]].map(([x, z]) => {
+      const projected = new THREE.Vector3(x, 0, z).project(camera);
+      return { x: (projected.x + 1) / 2 * bounds.width, y: (1 - projected.y) / 2 * bounds.height };
+    });
+    const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
+    return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys), width: bounds.width, height: bounds.height };
+  }
+
   return {
     render,
     resize,
     exitAnchor,
+    boardRect,
     dispose() {
       if (disposed) return;
       disposed = true;

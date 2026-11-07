@@ -212,7 +212,7 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: placeDescendButton, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
@@ -227,27 +227,64 @@ function ensureRenderer() {
     return false;
   }
 }
-let feedbackTimer;
+// The message log: every line the engine said this visit, oldest first. A move
+// can say several things (your capture, then a monster's strike), and the engine
+// keeps the earlier ones in state.notes. The last two lines show; scroll for more.
+const MESSAGE_LOG_MAX = 40;
+let messageLog = [], loggedState = null, logGame = '', logAction = 0;
+const gameKey = (game) => [game.date, game.practice ? 'practice' : 'daily', archiveMode, game.startingPiece, game.playerColor].join('|');
+function clearMessageLog() { messageLog = []; loggedState = null; }
+function logState() {
+  if (state === loggedState) return;
+  if (gameKey(state) !== logGame) { clearMessageLog(); logGame = gameKey(state); }
+  loggedState = state;
+  // A purchase or a fresh dungeon says nothing new.
+  if (!state.events?.length) return;
+  const action = ++logAction;
+  const lines = [...(state.notes ?? []), state.message].filter(Boolean);
+  messageLog.push(...lines.map((text) => ({ text, action })));
+  messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
+}
 function showGameFeedback() {
-  clearTimeout(feedbackTimer);
-  const events = state.events || [];
-  const text = events.length ? state.message : '';
-  $('game-message').textContent = text;
-  $('game-message').hidden = !text;
-  // A monster pawn capturing en passant surprises players, so the message keeps
-  // a "What?" explainer button and stays up until the next action.
-  if (text && events.some(event => (event.type === 'damage' || event.type === 'shield') && event.enPassant)) {
-    const what = document.createElement('button');
-    what.type = 'button';
-    what.className = 'hint-button message-what';
-    what.textContent = 'What?';
-    what.setAttribute('aria-label', 'What is en passant?');
-    what.setAttribute('aria-haspopup', 'dialog');
-    what.addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
-    $('game-message').append(' ', what);
-    return;
+  logState();
+  const box = $('game-message');
+  const latest = messageLog.at(-1)?.action;
+  // A monster pawn capturing en passant surprises players, so its line keeps
+  // a "What?" explainer button until the next action.
+  const enPassantHit = state.events?.some(event => (event.type === 'player-captured' || event.type === 'damage' || event.type === 'shield') && event.enPassant);
+  box.replaceChildren(...messageLog.map((entry) => {
+    const line = document.createElement('p');
+    line.textContent = entry.text;
+    line.classList.toggle('stale', entry.action !== latest);
+    if (enPassantHit && entry.action === latest && /en passant/i.test(entry.text)) {
+      const what = document.createElement('button');
+      what.type = 'button';
+      what.className = 'hint-button message-what';
+      what.textContent = 'What?';
+      what.setAttribute('aria-label', 'What is en passant?');
+      what.setAttribute('aria-haspopup', 'dialog');
+      what.addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
+      line.append(' ', what);
+    }
+    return line;
+  }));
+  box.classList.toggle('scrollable', messageLog.length > 2);
+  box.hidden = !messageLog.length;
+  fitMessageLog();
+}
+// Exactly the last two lines fit, however they wrap; the rest is a scroll away.
+function fitMessageLog() {
+  const box = $('game-message');
+  if (replay || box.hidden) return;
+  placeMessageLog();
+  box.style.maxHeight = '';
+  if (box.children.length > 2) {
+    const [a, b] = [...box.children].slice(-2);
+    const pad = parseFloat(getComputedStyle(box).paddingTop) + parseFloat(getComputedStyle(box).paddingBottom);
+    box.style.maxHeight = `${Math.ceil(a.offsetHeight + b.offsetHeight + pad)}px`;
   }
-  if (text) feedbackTimer = setTimeout(()=>{$('game-message').hidden=true;},3000);
+  placeMessageLog();
+  box.scrollTop = box.scrollHeight;
 }
 // Par: the certified route's moves for this floor. Only the number shows, and
 // only for the official piece and color the route was certified for.
@@ -311,7 +348,38 @@ function updateGame() {
   $('first-tip').hidden = state.turns > 0;
   $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
   paintBoard();
+  fitMessageLog();
   syncMusic();
+}
+// The log stays up, so it sits beside the board, never over a square: below it
+// on a tall screen, in the left margin on a wide one. With no room either way it
+// keeps its old spot over the board's bottom edge.
+function placeMessageLog() {
+  const box = $('game-message');
+  box.classList.remove('beside', 'below');
+  box.style.top = box.style.left = box.style.width = '';
+  const board = renderer?.boardRect?.();
+  if (!board || replay || box.hidden) return;
+  // Whatever sits low on the screen (the install bar; on short screens the
+  // objective or stairs button) is the floor the log stays above.
+  const origin = $('dungeon').getBoundingClientRect().top;
+  const floor = Math.min(board.height, ...['pwa-bar', 'objective', 'descend-button'].map((id) => {
+    const rect = $(id).getBoundingClientRect();
+    return rect.height && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
+  })) - 8;
+  const height = Math.max(box.offsetHeight, 64);
+  if (floor - board.bottom - 8 >= height) {
+    box.classList.add('below');
+    box.style.top = `${Math.round(board.bottom + 8)}px`;
+  } else if (board.left >= 170) {
+    box.classList.add('beside');
+    box.style.width = `${Math.round(Math.min(board.left - 24, 300))}px`;
+    box.style.left = `${Math.round(Math.max(12, board.left - 12 - Math.min(board.left - 24, 300)))}px`;
+    // A cramped margin trims even the last two lines; they scroll like the rest.
+    const room = Math.max(48, Math.round(Math.min(board.bottom, floor) - board.top));
+    if (box.offsetHeight > room) { box.style.maxHeight = `${room}px`; box.classList.add('scrollable'); }
+    box.style.top = `${Math.round(Math.max(board.top, Math.min(board.bottom, floor) - box.offsetHeight))}px`;
+  }
 }
 // The stairs button sits just above the exit door, or over the door itself when
 // the board fills the screen, so it never covers a square a piece may need.
@@ -366,13 +434,13 @@ $('hint-button').addEventListener('click', openHint);
 const EN_PASSANT = {
   player: {
     title: 'You captured a pawn en passant!',
-    text: 'A pawn that jumps two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move. This is called ‘en passant!’',
-    art: 'Animated board: an enemy pawn jumps two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped.',
+    text: 'A pawn that advances two squares past an enemy pawn can be captured as if it had moved only one. You get that chance only on the very next move. This is called ‘en passant!’',
+    art: 'Animated board: an enemy pawn advances two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped.',
   },
   enemy: {
     title: 'What just happened? En passant',
-    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your jump. This is called ‘en passant!’',
-    art: 'Animated board: your pawn jumps two squares past an enemy pawn, which captures it by striking the square your pawn skipped.',
+    text: 'Your pawn’s two-square move passed the square a monster pawn attacks, so it captured you as if you had moved only one. It can only do that right after your two-square move. This is called ‘en passant!’',
+    art: 'Animated board: your pawn advances two squares past an enemy pawn, which captures it by moving diagonally into the square your pawn skipped.',
   },
 };
 const CASTLE = {
@@ -540,7 +608,7 @@ function playSound(events=[]) {
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
     if(audio.state==='suspended')audio.resume();
-    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type==='damage') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
+    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type === 'player-captured') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
     notes.forEach((frequency,i)=>{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='square';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.018,audio.currentTime+i*.065);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+i*.065+.07);oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(audio.currentTime+i*.065);oscillator.stop(audio.currentTime+i*.065+.08);});
   } catch {}
 }
@@ -587,8 +655,8 @@ function showDeath() {
   $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
   const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
   $('result-title').textContent=trapped?'Cornered.':'Captured.';
-  const fatal = state.events.find(event => event.type === 'damage' && event.name);
-  const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn jumped past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you stepped onto' : 'caught you on its red path'}. `;
+  const fatal = state.events.find(event => event.type === 'player-captured' && event.name);
+  const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn advanced past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you moved to and captured you' : 'captured you along its red path'}. `;
   $('result-en-passant').hidden = trapped || !fatal?.enPassant;
   $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
   $('next-edition').textContent='This counts as an earlier try 💀 on your share card.';
@@ -651,6 +719,7 @@ $('daily-button').addEventListener('click', () => {
 function startOver(next, message) {
   $('menu-dialog').close();
   state = next; showMoves = false; cursor = null; turnLocked = false;
+  clearMessageLog();
   save(); enterGame(); notify(message);
 }
 $('reset-floor-button').addEventListener('click', () => {
@@ -914,9 +983,10 @@ function replayFrame() {
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${frame.turns} of ${total}`;
   // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? (frame.message.match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot') : '';
+  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
+  $('game-message').classList.remove('scrollable'); $('game-message').style.maxHeight = '';
   $('replay-play').textContent = last ? '↻' : replay.playing ? '❚❚' : '▶';
   $('replay-play').setAttribute('aria-label', last ? 'Watch again' : replay.playing ? 'Pause replay' : 'Play replay');
   $('replay-step').disabled = last;

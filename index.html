@@ -40,7 +40,7 @@
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
-      <p id="game-message" class="game-message" aria-live="polite"></p>
+      <div id="game-message" class="game-message" role="log" aria-label="Messages" aria-live="polite" tabindex="-1" hidden></div>
       <p id="tactic-callout" class="tactic-callout" aria-live="polite" hidden></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
       <div id="replay-bar" class="replay-bar" role="region" aria-label="Bot replay controls" hidden>
@@ -127,7 +127,7 @@
         <p>Clear <b>3 floors.</b></p>
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to open the exit door onto the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last floor targets the king.</p>
-        <p>Capture them all to open the door behind the back row. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
+        <p>Capture them all to open the door behind the back rank. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
         <p>Each floor shows a <b>Par</b>: the moves the certified route needed there. Clear the floor at or under par for ⭐⭐⭐, within 5 over for ⭐⭐, or else ⭐. Only the official piece and color have a par.</p>
         <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
@@ -142,7 +142,7 @@
           <figure><canvas data-guide-art="move-king" width="200" height="200" role="img" aria-label="King: one square in any direction."></canvas><figcaption>King</figcaption></figure>
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
-        <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the far edge becomes a queen until the floor ends.</p>
+        <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the last rank promotes to a queen until the floor ends.</p>
         <p>Pawns can capture <b>en passant</b>, and your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too): see <b>Special moves</b>.</p>
         <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p></details>
       </article>
@@ -154,11 +154,11 @@
           <p><canvas data-guide-art="black-pawn" width="40" height="40" aria-hidden="true"></canvas><span>Black: enemies move, then you</span></p>
         </div>
         <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
-        <p>Red paths show where monsters strike next. As white, step off them to dodge. As black, strikes land before your move, so a red path on your square will hit. If enemies block the square you chose, pick another; they won’t move again first.</p>
+        <p>Red paths show where monsters will capture next. As white, step off them to dodge. As black, monsters capture before your move, so a red path on your square means you’re captured. If enemies block the square you chose, pick another; they won’t move again first.</p>
         <h3 id="guide-close-title">Close range</h3>
         <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
         <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. A king, a practice-only choice, can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
-        <p>Tap <b>Wait</b> to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can strike first.</p>
+        <p>Tap <b>Wait</b> to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can capture it first.</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
           <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
@@ -168,12 +168,12 @@
           <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
           <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King, practice only"></canvas></dt><dd>1</dd></div>
         </dl>
-        <p>Each hit costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
+        <p>Each capture costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
       <article class="guide-page" hidden>
         <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop to buy powerups. With no shop after it, the last floor holds no coins.</p>
         <dl class="guide-pickups">
-          <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one hit. Stacks up to 3.</dd></div>
+          <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one capture. Stacks up to 3.</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
           <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. A recruit moves after you for that floor and its captures count, but it can never capture the floor’s challenge piece: that’s yours to take. A king recruit can castle with your rook.</dd></div>
@@ -182,21 +182,21 @@
       </article>
       <article class="guide-page" hidden>
         <h3 id="guide-en-passant-title">En passant</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-player" width="200" height="200" role="img" aria-label="Animated board: an enemy pawn jumps two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped."></canvas></figure>
-        <p>When a monster pawn jumps two squares past your pawn, capture it on your very next move as if it had moved only one: step diagonally into the square it skipped.</p>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-enemy" width="200" height="200" role="img" aria-label="Animated board: your pawn jumps two squares past an enemy pawn, which captures it by striking the square your pawn skipped."></canvas></figure>
-        <p>It works both ways: jump your own pawn two squares past a monster pawn and it captures you the same way, at once. This is called ‘en passant!’</p>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-player" width="200" height="200" role="img" aria-label="Animated board: an enemy pawn advances two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped."></canvas></figure>
+        <p>When a monster pawn advances two squares past your pawn, capture it on your very next move as if it had moved only one: step diagonally into the square it skipped.</p>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-enemy" width="200" height="200" role="img" aria-label="Animated board: your pawn advances two squares past an enemy pawn, which captures it by moving diagonally into the square your pawn skipped."></canvas></figure>
+        <p>It works both ways: advance your own pawn two squares past a monster pawn and it captures you the same way, at once. This is called ‘en passant!’</p>
         <h3 id="guide-castle-title">Castling</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook hops over the king to land on the square beside it."></canvas></figure>
-        <p>Your rook and a king recruit (or a practice king and a rook recruit) can trade places in one move when they stand on one row with exactly two open squares between them. The king slides two squares toward the rook, and the rook hops over to land beside it. Items may lie between, monsters and walls may not.</p>
-        <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into close range. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook crosses over the king to the square beside it."></canvas></figure>
+        <p>Your rook and a king recruit (or a practice king and a rook recruit) can trade places in one move when they stand on the same rank with exactly two open squares between them. The king slides two squares toward the rook, and the rook crosses over the king to the square beside it. Items may lie between, monsters and walls may not.</p>
+        <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into check. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
       </article>
       <article class="guide-page" hidden>
         <p>Most days add one <b>room modifier</b> to all three floors. The paper’s bulletin and the top of the board name it. About one day in four is plain.</p>
         <h3>🌑 Dark</h3>
         <p>You see only squares within 2 of your piece. A monster winding up lights itself and its red path, so warnings still show. Monsters you’ve seen stay as faded ghosts where you last saw them. The rules don’t change, only what you can see.</p>
         <h3>🧊 Ice</h3>
-        <p>Pale, glinting tiles are ice. A rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square the same way if that square is open and empty. Captures stop you dead. The move preview draws an arrow to where you’ll land. Monsters and recruits are sure-footed: only your piece slides.</p>
+        <p>Pale, glinting squares are ice. A rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square the same way if that square is open and empty. Captures stop you dead. The move preview draws an arrow to where you’ll land. Monsters and recruits are sure-footed: only your piece slides.</p>
         <h3>🏚️ Collapse</h3>
         <p>Every 10 moves on a floor, one more monster (never the floor’s target, never a pawn) walks in on the square in front of the door if it’s free; otherwise it waits there. At most 3 per floor, and none once the stairs are open. The top of the board counts down to the next arrival.</p>
         <p>Your share line starts with the day’s modifier emoji.</p>

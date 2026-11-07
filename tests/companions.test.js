@@ -163,7 +163,7 @@ test('players pass through companions while companions block enemy attack lanes'
   assert.ok(legalMoves(state).some((tile)=>tile.x===4&&tile.y===4));
   assert.ok(legalMoves(state).some((tile)=>tile.x===4&&tile.y===3));
   const next=act(state,move(4,5));
-  assert.equal(next.player.hp,state.player.hp);assert.ok(!next.events.some((event)=>event.type==='damage'));
+  assert.equal(next.player.hp,state.player.hp);assert.ok(!next.events.some((event)=>event.type==='player-captured'));
 });
 
 test('recruiting a pawn in front of a pawn player does not remove its forward move',()=>{

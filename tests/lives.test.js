@@ -86,7 +86,7 @@ function lineToHit(initial, prepare = (state) => state) {
       for (const square of legalMoves(state)) {
         const before = prepare(structuredClone(state));
         const after = act(before, move(square.x, square.y));
-        if (after.events.some((event) => event.type === 'damage')) return { aimed: before, last: move(square.x, square.y), line };
+        if (after.events.some((event) => event.type === 'player-captured')) return { aimed: before, last: move(square.x, square.y), line };
         if (after.floor !== 2) continue;
         next.push({ state: after, line: [...line, move(square.x, square.y)] });
       }
@@ -123,7 +123,7 @@ test('exhaustion on the last move in room three resets the whole run to the same
   const restarted = act(aimed, last);
   assert.equal(restarted.status, 'playing');
   // The hit may land along a lane or at close range, depending on the tier's layout.
-  assert.deepEqual(restarted.events.map((event) => event.type).filter((type) => type !== 'close-capture'), ['damage', 'restart']);
+  assert.deepEqual(restarted.events.map((event) => event.type).filter((type) => type !== 'close-capture'), ['player-captured', 'restart']);
   assert.match(restarted.message, /Out of lives/);
   const fresh = createGame(getDaily(aimed.date));
   assert.deepEqual({ ...restarted, events: fresh.events, message: fresh.message }, { ...fresh, replayUnlocked: true, tries: 2 });

@@ -549,3 +549,21 @@ test('leftover hourglass moves stay on their floor, but shop hourglasses carry t
   bought.powers.freeze = 1;
   assert.equal(act(bought, {type:'descend'}).powers.freeze, 1, 'moves already spent are not refunded');
 });
+
+test("a monster's reply keeps the player's line from the same move in notes", () => {
+  const state = scenario('rook');
+  state.player.hp = state.player.maxHp = 2;
+  const pawn = { ...monster('p', 'pawn', 4, 3), name: 'Pip' };
+  const rook = { ...monster('r', 'rook', 0, 3, { x: 4, y: 3 }), name: 'Rooky' };
+  state.enemies = [pawn, rook, { ...monster('k', 'king', 7, 0), name: 'Kingo' }];
+  const next = act(state, move(4, 3));
+  assert.deepEqual(next.notes, ['Pip captured. +1 gold.']);
+  assert.match(next.message, /^Rooky .*1 life left\.$/);
+  // The next quiet move clears the notes and leaves no empty field behind.
+  const quiet = act(next, move(4, 4));
+  assert.equal(quiet.notes, undefined);
+  const fresh = createGame(daily);
+  assert.ok(validateSave({ ...fresh, notes: ['Pip captured.'] }, daily.date, daily));
+  assert.ok(!validateSave({ ...fresh, notes: [] }, daily.date, daily));
+  assert.ok(!validateSave({ ...fresh, notes: [''] }, daily.date, daily));
+});

@@ -110,7 +110,7 @@ test('a monster pawn captures a double-stepping pawn en passant at once', () => 
   const next = act(state, move(4, 4));
   assert.equal(next.player.hp, hp - 1);
   assert.deepEqual(find(next, 'close-capture'), { type: 'close-capture', id: 'p', x: 5, y: 4, enPassant: true });
-  assert.equal(find(next, 'damage').enPassant, true);
+  assert.equal(find(next, 'player-captured').enPassant, true);
   assert.equal(find(next, 'enemy-phase'), undefined);
   assert.match(next.message, /Ice bat captured you en passant as you passed it\./);
   // As in chess, the capturing pawn lands on the square the double step skipped.
@@ -125,7 +125,7 @@ test('a single step beside the monster pawn is the ordinary diagonal attack', ()
   assert.equal(next.player.hp, hp - 1);
   const close = find(next, 'close-capture');
   assert.equal(close.id, 'p'); assert.equal(close.enPassant, undefined);
-  assert.equal(find(next, 'damage').enPassant, undefined);
+  assert.equal(find(next, 'player-captured').enPassant, undefined);
 });
 
 test('a frozen monster pawn never strikes en passant', () => {

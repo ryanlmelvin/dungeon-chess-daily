@@ -40,7 +40,7 @@ function position(piece, hp) {
   return state;
 }
 const move = { type: 'move', x: 4, y: 5 };
-const damaged = (state) => act(state, move).events.some((event) => event.type === 'damage');
+const damaged = (state) => act(state, move).events.some((event) => event.type === 'player-captured');
 
 test('livesSpendable is 4 for pawn and 0 for every other piece', () => {
   for (const piece of ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king']) {

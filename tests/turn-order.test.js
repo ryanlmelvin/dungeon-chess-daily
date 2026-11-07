@@ -143,7 +143,7 @@ test('black exhaustion discards the stale click, while shields must already be o
   const state=scenario('queen'); state.enemies=[monster('attacker','rook',4,0,{x:4,y:6})];
   state.items=[{x:3,y:6,type:'powerup',power:'shield'}];
   const reset=act(state,move(3,6));
-  assert.deepEqual(reset.events.map((event)=>event.type),['damage','restart']);
+  assert.deepEqual(reset.events.map((event)=>event.type),['player-captured','restart']);
   const black={...getDaily(state.date),playerColor:'black'};
   const fresh=createCandidate(black);
   assert.deepEqual({...reset,events:fresh.events,message:fresh.message},{...fresh,replayUnlocked:true,tries:2});
