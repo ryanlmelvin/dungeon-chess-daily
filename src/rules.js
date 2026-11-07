@@ -17,8 +17,8 @@ export const POWERUPS = Object.freeze([
   { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, sold: false, description: 'Freeze every monster for three moves.' },
   { id: 'magnet', name: 'Coin magnet', cost: 4, max: 1, description: 'Collect coins within two tiles after every move.' },
   // Shop-only tools, used when you choose. None ever lies in a room.
-  { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Not a king.' },
-  { id: 'leap', name: 'Borrowed move', cost: 3, max: 1, description: 'Once, move like a knight (a knight moves like a queen).' },
+  { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Not a king. Floor 2 only.' },
+  { id: 'leap', name: 'Borrowed move', cost: 3, max: 1, description: 'Once, move like a knight (or like a queen if you’re a knight).' },
   { id: 'takeback', name: 'Take-back', cost: 4, max: 1, description: 'Undo one move, even one that cost a life.' },
 ]);
 /** How long a pin holds, in monster turns. */
@@ -31,7 +31,9 @@ export function takebackTarget(state) {
   return state?.status === 'playing' && state.undo?.powers?.takeback > 0 ? state.undo : null;
 }
 /** One life beyond the piece's army count, at most one per shop visit. */
-export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. One per shop.' });
+export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. Limit 1.' });
+/** The last floor hides its king among look-alikes; a pin (never a king) would point it out. */
+export const pinUsable = (state) => state.floor < state.targets.length - 1;
 /** What the between-floor shop offers, in display order. */
 export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)).concat(EXTRA_LIFE));
 /** The ids the shop after `floor` offers today (src/edition.js). */
@@ -913,7 +915,12 @@ function play(previous, action) {
     const state = nextState(previous); state.events = []; state.awaitingPlayer = false;
     // An armed Borrowed move stays bought but disarmed; a Take-back can't cross the stairs.
     delete state.leaping; delete state.undo;
-    finishFloor(state); return state;
+    finishFloor(state);
+    if (state.status === 'playing' && !pinUsable(state) && state.powers.pin) {
+      state.powers.pin = 0;
+      state.message += ' Your unused pin stays behind: on this floor it would point out the king.';
+    }
+    return state;
   }
   if (action.type === 'buy') {
     // The shop opens only between floors: after a room is cleared, before its stairs.
@@ -948,7 +955,7 @@ function play(previous, action) {
   }
   if (action.type === 'pin') {
     const foe = previous.enemies.find((entry) => entry.id === action.id);
-    if (!(previous.powers.pin > 0) || !foe || pinned(foe) || foe.piece === 'king' || foe.role === 'king') return previous;
+    if (!(previous.powers.pin > 0) || !pinUsable(previous) || !foe || pinned(foe) || foe.piece === 'king' || foe.role === 'king') return previous;
     // Pinning is free: it spends the tool, not a move.
     const state = nextState(previous);
     const target = state.enemies.find((entry) => entry.id === action.id);

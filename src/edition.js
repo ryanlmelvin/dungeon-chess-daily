@@ -143,10 +143,12 @@ export const SHOP_SIZE = 4;
 /**
  * The day's offers for the shop after floor `shop` (0 or 1), the same for
  * everyone. Its own hash stream, so no other draw of the edition moves. The
- * second shop leads to the coinless last floor, so it never stocks the magnet.
+ * second shop leads to the last floor, so it never stocks the magnet (that
+ * floor has no coins) or the pin (kings can't be pinned, so trying would
+ * find the hidden king).
  */
 export function shopStock(date, shop) {
-  const pool = SHOP_STOCK.filter((id) => id !== 'life' && (shop === 0 || id !== 'magnet'));
+  const pool = SHOP_STOCK.filter((id) => id !== 'life' && (shop === 0 || (id !== 'magnet' && id !== 'pin')));
   const rank = (id) => hash(`${date}:shop:${shop}:${id}`);
   const chosen = new Set(['life', ...[...pool].sort((a, b) => rank(a) - rank(b)).slice(0, SHOP_SIZE - 1)]);
   return SHOP_STOCK.filter((id) => chosen.has(id));

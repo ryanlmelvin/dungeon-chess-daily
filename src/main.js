@@ -14,6 +14,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
+import { pinUsable } from './rules.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
@@ -406,7 +407,7 @@ function paintBoard(){if(state&&!replay)renderer?.render({...state,danger:danger
 // Shop tools: Pin waits for a tapped monster; Borrow arms one move; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
 function renderTools() {
-  const pin = state.status === 'playing' && state.powers.pin > 0;
+  const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state);
   const leap = state.status === 'playing' && state.powers.leap > 0;
   const back = Boolean(takebackTarget(state));
   if (!pin) pinning = false;

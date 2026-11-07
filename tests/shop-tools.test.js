@@ -132,3 +132,17 @@ test('a Take-back can undo the move that ended the run, but not cross the stairs
   assert.ok(takebackTarget(won));
   assert.equal(takebackTarget(act(won, { type: 'descend' })), null);
 });
+
+test('a pin is never sold before the last floor and can’t be used there, where it would point out the king', () => {
+  assert.ok(dates.every((date) => !shopStock(date, 1).includes('pin')));
+  const state = scenario(); state.floor = 2; state.powers.pin = 1;
+  state.enemies = [monster('r', 'rook', 0, 6), monster('k', 'king', 7, 0)];
+  assert.equal(act(state, { type: 'pin', id: 'r' }), state);
+  // A pin left over from the first shop stays behind on the stairs to the last floor.
+  const floor2 = createGame(getDaily(dates.find((date) => shopStock(date, 0).includes('pin'))));
+  const cleared = { ...structuredClone(floor2), floor: 1, objective: { ...floor2.objective, complete: true }, exit: { ...floor2.exit, open: true } };
+  cleared.powers.pin = 1;
+  const last = act(cleared, { type: 'descend' });
+  assert.equal(last.floor, 2); assert.equal(last.powers.pin, 0);
+  assert.match(last.message, /pin stays behind/);
+});
