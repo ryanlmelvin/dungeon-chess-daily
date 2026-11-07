@@ -150,7 +150,7 @@
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the last rank promotes to a queen until the floor ends.</p>
-        <p>Pawns can capture <b>en passant</b>, and your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too): see <b>Special moves</b>.</p>
+        <p>Pawns can capture <b>en passant</b>, your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too), and a bishop recruit joining your bishop hops to the other colour (the <b>bishop pair</b>): see <b>Special moves</b>.</p>
         <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p><p>Then your recruit: arrows + Enter: move it · Space: keep it still</p></details>
       </article>
       <article class="guide-page" hidden>
@@ -188,7 +188,7 @@
           <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Squares with a ghosted knight (a ghosted queen if you’re a knight) and gold corners move like that piece. They’re optional: only taking one spends it. Tap Borrow to point them out.</dd></div>
           <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
           <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself; then it can’t capture targets. A king recruit can castle with your rook.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself; then it can’t capture targets. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -202,6 +202,9 @@
         <figure class="special-moves"><canvas class="hint-art" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook crosses over the king to the square beside it."></canvas></figure>
         <p>Your rook and a king recruit (or a practice king and a rook recruit) can trade places in one move when they stand on the same rank with exactly two open squares between them. The king slides two squares toward the rook, and the rook crosses over the king to the square beside it. Items may lie between, monsters and walls may not.</p>
         <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into check. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
+        <h3 id="guide-bishop-pair-title">Bishop pair</h3>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="bishop-pair" width="200" height="200" role="img" aria-label="Animated board: your bishop steps onto a waiting bishop recruit and the squares of its colour light up, half the board. The recruit hops one square sideways onto the other colour, and the rest of the board lights up too."></canvas></figure>
+        <p>A bishop stays on one square colour, so a bishop recruit on your colour would only reach squares you already can. When your bishop recruits a bishop, its move that turn is a hop to a side square (up, down, left or right) on the other colour; if all four are blocked, any free square of the other colour. On Manual, tap the green square it hops to: it can’t stay put. Now your two bishops cover every square. Chess players call this the ‘bishop pair!’</p>
       </article>
       <article class="guide-page" hidden>
         <p>Many days add one <b>room modifier</b> to all three floors. The paper’s bulletin and the top of the board name it. About half the days are plain.</p>
