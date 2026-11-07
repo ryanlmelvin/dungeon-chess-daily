@@ -18,6 +18,7 @@ import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.
 import { pinUsable, captureGoal, shareDate } from './rules.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
+import { caveInStatus, caveInExplain, goldAtRisk } from './cave-in.js';
 import { botRun, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
@@ -82,6 +83,8 @@ function paperDate(date) {
 }
 function notify(message, persistent = false) {
   clearTimeout(noticeTimer);
+  // Only the cave-in toast wears its own colors (announceCaveIn).
+  $('notice').classList.remove('cave-toast');
   $('notice').textContent = message;
   $('notice').hidden = !message;
   if (!persistent) noticeTimer = setTimeout(() => { $('notice').hidden = true; }, 5500);
@@ -377,14 +380,16 @@ function updateGame() {
   // A king can't step beside the monster king and its recruit can't take it.
   $('king-practice-note').hidden = !(practice && state.startingPiece === 'king');
   renderLives();
-  $('gold-status').textContent = `${state.gold} gold`;
+  // Gold won since the door opened is at risk until the stairs bank it (src/cave-in.js).
+  const risk = goldAtRisk(state);
+  $('gold-status').replaceChildren(`${state.gold} gold`, ...(risk ? [Object.assign(document.createElement('span'), { className: 'gold-risk', textContent: ` · ${risk} at risk` })] : []));
   // This floor's scored moves, the count its par is measured against. It pauses
   // once the floor's challenge is complete. Practice runs (no par) show the same.
   const moves = floorScoredMoves(state);
   $('move-status').textContent = `${moves} ${moves === 1 ? 'move' : 'moves'}`;
   const paused = state.objective.complete;
   $('move-status').classList.toggle('paused', paused);
-  $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so gold and stairs are free' : ''}`);
+  $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so later moves don’t count' : ''}`);
   renderPar();
   renderTools();
   const pinnedFoe = state.enemies.find((foe) => foe.pinned);
@@ -396,6 +401,11 @@ function updateGame() {
   $('modifier-status').textContent = modifierStatus(state);
   $('modifier-status').hidden = !$('modifier-status').textContent;
   $('modifier-status').setAttribute('aria-label', `${$('modifier-status').textContent}. Tap for what ${modifierOf(state).name} does`);
+  const caveLeft = state.caveIn?.moves;
+  $('cave-status').textContent = caveInStatus(state);
+  $('cave-status').hidden = !$('cave-status').textContent;
+  $('cave-status').classList.toggle('urgent', caveLeft === 1);
+  $('cave-status').setAttribute('aria-label', `${caveLeft ? `The ceiling caves in after ${caveLeft} more ${caveLeft === 1 ? 'move' : 'moves'}` : 'The ceiling has caved in'}. Tap for details`);
   // The combo counter shows from the second capture in a row; the third pays.
   const combo = state.combo ?? 0;
   $('combo-status').hidden = combo < 2;
@@ -711,6 +721,15 @@ function showTacticCallout(events) {
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
 $('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('modifier-status').addEventListener('click', () => { if (state) notify(modifierOf(state).explain); });
+// The cave-in countdown chip sits beside the modifier chip; tapping explains it.
+$('modifier-status').after(Object.assign(document.createElement('button'), { id: 'cave-status', type: 'button', hidden: true }));
+$('cave-status').addEventListener('click', () => { if (state) notify(caveInExplain(state)); });
+// "The ceiling caved in! You dropped 3 gold." pops up as the room shakes (renderer.js).
+function announceCaveIn(event) {
+  notify(`The ceiling caved in!${event.gold ? ` You dropped ${event.gold} gold.` : event.coins ? ' The coins left are buried.' : ''}`);
+  const notice = $('notice');
+  notice.classList.remove('cave-toast'); void notice.offsetWidth; notice.classList.add('cave-toast');
+}
 $('wait-button').addEventListener('click', () => takeAction({ type: 'wait' }));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
@@ -724,6 +743,8 @@ function takeAction(action) {
   const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
   const par = cleared ? runPars(next, daily)?.[cleared.floor] : null;
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(state.events);
+  const caveIn = state.events.find(event => event.type === 'cave-in');
+  if (caveIn) announceCaveIn(caveIn);
   const enPassant = state.events.some(event => event.type === 'en-passant');
   const castled = state.events.some(event => event.type === 'castle');
   const tactic = state.events.some(event => event.type === 'fork-won') ? 'fork' : state.events.some(event => event.type === 'combo') ? 'combo' : null;
@@ -1234,7 +1255,7 @@ function replayFrame() {
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${moves}${frame.exit?.open ? ' ✓' : ''} of ${total}`;
   // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b|^\s*Your score\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed') : '';
+  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose|take the stairs)\b|^\s*Your score\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed').replace(/\bYou dropped\b/, 'The bot dropped') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
   $('game-message').classList.remove('scrollable'); $('game-message').style.maxHeight = '';
