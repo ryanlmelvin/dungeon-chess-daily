@@ -244,7 +244,10 @@ function logState() {
   // A purchase or a fresh dungeon says nothing new.
   if (!state.events?.length) return;
   const action = ++logAction;
-  const lines = [...(state.notes ?? []), state.message].filter(Boolean);
+  const par = parFor(state, daily);
+  // The engine doesn't know par, so the challenge line gets it here.
+  const lines = [...(state.notes ?? []), state.message].filter(Boolean)
+    .map((text) => par === null ? text : text.replace(/^(You completed the challenge ✓ in \d+ moves?)\./, `$1, par ${par}.`));
   messageLog.push(...lines.map((text) => ({ text, action })));
   messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
 }
@@ -1029,7 +1032,7 @@ function replayFrame() {
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${frame.turns} of ${total}`;
   // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot') : '';
+  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
   $('game-message').classList.remove('scrollable'); $('game-message').style.maxHeight = '';

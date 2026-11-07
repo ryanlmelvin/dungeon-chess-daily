@@ -825,7 +825,9 @@ function captureEnemy(state, captured, companion = false) {
     state.exit.open = state.objective.complete;
     // The scored move count stops here: gathering gold afterwards is free.
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
-    state.message = state.exit.open ? 'Challenge complete. Tap the stairs to leave.' : `${captured.name} captured. Keep hunting.`;
+    const moves = state.objective.moves;
+    // The ✓ echoes the paused move counter; the UI adds par where the run has one.
+    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Tap the stairs to leave.` : `${captured.name} captured. Keep hunting.`;
   } else state.message = `${captured.name} captured. +1 gold.`;
 }
 

@@ -65,6 +65,7 @@ test('the scored count stops when the challenge is complete; later moves still c
   playRoute((state) => { if (!done && state.floor === 0 && state.objective.complete) done = state; });
   const frozen = floorScoredMoves(done);
   assert.equal(frozen, done.turns - done.floorStart.turns);
+  assert.ok([...(done.notes ?? []), done.message].some((line) => line.startsWith(`You completed the challenge ✓ in ${frozen} move`)));
   const after = act(act(done, { type: 'wait' }), { type: 'wait' });
   assert.equal(after.turns, done.turns + 2, 'waiting still spends moves');
   assert.equal(floorScoredMoves(after), frozen);
