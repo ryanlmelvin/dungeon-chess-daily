@@ -3,8 +3,8 @@
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 import { hash, random } from './random.js';
 import { getRawDaily } from './edition.js';
-import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState, modifierOf } from './modifiers.js';
-import { breakTactics, scoreTactics, tacticGold, tacticMarks, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
+import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcement, validModifierState } from './modifiers.js';
+import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove } from './monster-ai.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 6;
@@ -1098,35 +1098,18 @@ function play(previous, action) {
   return state;
 }
 
-// A spoiler-free result on one line: a 💀 for each earlier try that ran out of
-// lives, then each floor reached as ❤️ (no lives lost) or a 💔 per life lost,
-// each followed by 🇫🇷 for every en passant and 🏰 for every castle the player
-// made on that floor, in order, then 🍴 per fork and 🔥 per combo (tactics.js), then 🏆 for escaping, 🔒 for older saves that ended trapped without moves, or ⏳ while still playing,
-// and last the day's starting piece, then a won run's total par stars (⭐N).
-const FEAT_EMOJI = { 'en-passant': '\u{1F1EB}\u{1F1F7}', castle: '🏰' };
+// A spoiler-free result card like a Wordle grid: the title with a won run's
+// par stars out of nine, then one row per floor reached whose three squares
+// are that floor's par stars (src/par.js). A cleared floor without a par shows
+// ✅, and the floor still in play ⬛⬛⬛.
 export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
-  // Saves from before the tries counter only know that a restart happened.
-  const earlier = (state.tries ?? (state.replayUnlocked && !state.practice ? 2 : 1)) - 1;
-  // The day's starting piece in its color. The text-presentation selector keeps
-  // the black pawn from switching to its gray emoji form beside the others.
-  const glyphs = { white: { king: '♔', queen: '♕', rook: '♖', bishop: '♗', knight: '♘', pawn: '♙' }, black: { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟' } };
-  // The day's modifier emoji leads the line; plain days add nothing.
-  let line = modifierOf(state).emoji + '💀'.repeat(earlier);
+  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
+  const rows = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    const before = floor === 0 ? state.player.maxHp - livesBought(state.purchases ?? []) : state.records[floor - 1]?.hp;
-    const after = record ? record.hp - (record.lives ?? 0) : state.player.hp;
-    const lost = Number.isInteger(before) && Number.isInteger(after) ? Math.max(0, before - after) : 0;
-    line += lost ? '💔'.repeat(lost) : '❤️';
-    for (const feat of state.feats ?? []) if (feat.floor === floor) line += FEAT_EMOJI[feat.kind] ?? '';
-    line += tacticMarks(state.feats, floor);
+    rows.push(!record ? '⬛⬛⬛' : Number.isInteger(record.stars) ? '🟨'.repeat(record.stars) + '⬛'.repeat(3 - record.stars) : '✅');
   }
-  line += state.status === 'won' ? '🏆' : state.status === 'lost' ? '🔒' : '⏳';
-  line += `${glyphs[state.playerColor]?.[state.startingPiece] ?? ''}\uFE0E`;
-  // Par stars (src/par.js) close a won line once every floor has been scored.
-  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
-  if (stars !== null) line += ` ⭐${stars}`;
-  return `Dungeon Chess Daily #${state.edition}\n${line}\n${url}`;
+  return [`Dungeon Chess Daily #${state.edition}${stars !== null ? ` ⭐ ${stars}/9` : ''}`, ...rows, url].join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {

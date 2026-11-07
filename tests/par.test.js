@@ -4,8 +4,6 @@ import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, resetFloor, validateSave } from '../src/game.js';
 import { botRun } from '../src/bot.js';
 import { awardStars, floorPars, parFor, runPars, starsFor, starText, totalStars } from '../src/par.js';
-// The day's room-modifier emoji leads the share line; these checks are about what follows it.
-const share = (...args) => getShareText(...args).replace(/(^|\n)(?:🌑|🧊|🏚️)/gu, '$1');
 
 const daily = getDaily(new Date(Date.UTC(2026, 10, 5)));
 
@@ -95,20 +93,18 @@ test('awarding stars is idempotent and skips runs without a par', () => {
   assert.deepEqual(slow.records.map((record) => record.stars), [2, 1, 3]);
 });
 
-test('the share line ends with the total stars once the run is won', () => {
+test('the share card shows each floor\'s stars and the total once the run is won', () => {
   const won = playRoute();
-  const line = share(won).split('\n')[1];
-  assert.ok(line.endsWith('︎ ⭐9'), line);
+  assert.equal(getShareText(won).split('\n').slice(0, 4).join('\n'), `Dungeon Chess Daily #${won.edition} ⭐ 9/9\n🟨🟨🟨\n🟨🟨🟨\n🟨🟨🟨`);
   won.records[0].stars = 2; won.records[2].stars = 1;
-  assert.ok(share(won).split('\n')[1].endsWith(' ⭐6'));
-  // Segments before the stars are unchanged.
-  const glyph = { white: { pawn: '♙', knight: '♘', bishop: '♗', rook: '♖', queen: '♕' }, black: { pawn: '♟', knight: '♞', bishop: '♝', rook: '♜', queen: '♛' } }[won.playerColor][won.startingPiece];
-  assert.match(share(won).split('\n')[1], new RegExp(`^[❤️💔]+.*🏆${glyph}︎ ⭐6$`, 'u'));
-  // Unscored or unfinished runs have no star segment.
+  assert.deepEqual(getShareText(won).split('\n').slice(0, 4), [`Dungeon Chess Daily #${won.edition} ⭐ 6/9`, '🟨🟨⬛', '🟨🟨🟨', '🟨⬛⬛']);
+  // Unscored or unfinished runs have no star total.
   const legacy = structuredClone(won); delete legacy.records[1].stars;
-  assert.ok(!share(legacy).includes('⭐'));
+  assert.ok(!getShareText(legacy).includes('⭐'));
+  assert.equal(getShareText(legacy).split('\n')[2], '✅');
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
   assert.equal(playing.records[0].stars, 3);
-  assert.ok(!share(playing).includes('⭐'));
+  assert.ok(!getShareText(playing).includes('⭐'));
+  assert.equal(getShareText(playing).split('\n')[3], '⬛⬛⬛');
 });

@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, getShareText, validateSave } from '../src/rules.js';
+import { act, createGame, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { getDaily } from '../src/game.js';
 import { botRun } from '../src/bot.js';
 import { COMBO_START, TACTIC_GOLD, tacticGold } from '../src/tactics.js';
-// The day's room-modifier emoji leads the share line; these checks are about what follows it.
-const share = (...args) => getShareText(...args).replace(/(^|\n)(?:🌑|🧊|🏚️)/gu, '$1');
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -121,17 +119,6 @@ test('a new floor starts without a combo or a fork', () => {
   assert.equal(below.floor, 1);
   assert.equal(below.combo, 0);
   assert.equal(below.fork, null);
-});
-
-test('share text adds forks then combos after each floor\'s special moves', () => {
-  const state = scenario('pawn', 4, 6, []);
-  state.status = 'won'; state.floor = 2; state.player.hp = 7;
-  state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 7 }, { floor: 2, hp: 7 }];
-  state.feats = [{ floor: 0, kind: 'combo' }, { floor: 0, kind: 'en-passant' }, { floor: 0, kind: 'fork' }, { floor: 0, kind: 'combo' },
-    { floor: 2, kind: 'fork' }, { floor: 2, kind: 'castle' }];
-  assert.equal(share(state).split('\n')[1], '❤️🇫🇷🍴🔥🔥💔❤️🏰🍴🏆♙︎');
-  state.feats = [];
-  assert.equal(share(state).split('\n')[1], '❤️💔❤️🏆♙︎');
 });
 
 test('real runs with forks and combos save, resume and validate', () => {
