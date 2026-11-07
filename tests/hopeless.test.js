@@ -71,11 +71,15 @@ test('under Manual recruit control, a recruit that could still reach a target ke
   knight.companion = { piece: 'knight', basePiece: 'knight', x: 3, y: 6, moved: true, sharing: true };
   assert.equal(hopelessFloor(knight), true);
   assert.equal(hopelessFloor(knight, manual), false);
-  // A bishop on your colour can't reach the pawns either.
+  // A bishop recruit on your colour hops onto the other one (the bishop pair), where the pawns stand.
   const bishop = stuck();
   const odd = legalMoves(bishop).find((tile) => !tile.capture);
-  bishop.companion = { piece: 'bishop', basePiece: 'bishop', x: odd.x, y: odd.y, moved: true, sharing: false };
-  assert.equal(hopelessFloor(bishop, manual), true);
+  bishop.items.push({ type: 'companion', piece: 'bishop', x: odd.x, y: odd.y });
+  assert.equal(hopelessFloor(bishop), true, 'on Auto it may not take targets');
+  assert.equal(hopelessFloor(bishop, manual), false);
+  const joined = stuck();
+  joined.companion = { piece: 'bishop', basePiece: 'bishop', x: odd.x, y: odd.y, moved: true, sharing: false };
+  assert.equal(hopelessFloor(joined, manual), false);
   // A waiting recruit counts once your piece could step onto it.
   const waiting = stuck();
   waiting.items.push({ type: 'companion', piece: 'rook', x: odd.x, y: odd.y });
@@ -85,6 +89,10 @@ test('under Manual recruit control, a recruit that could still reach a target ke
   const even = [[2, 6], [4, 6], [3, 5], [3, 7], [1, 7], [5, 7]].find(([x, y]) => beyond.map[y][x] !== '#');
   beyond.items.push({ type: 'companion', piece: 'rook', x: even[0], y: even[1] });
   assert.equal(hopelessFloor(beyond, manual), true);
+  // So does a bishop waiting on the other colour: your bishop can never step onto it.
+  const apart = stuck();
+  apart.items.push({ type: 'companion', piece: 'bishop', x: even[0], y: even[1] });
+  assert.equal(hopelessFloor(apart, manual), true);
 });
 
 test('a target that can still move, or one on the bishop’s colour, is not hopeless', () => {

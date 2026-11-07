@@ -25,3 +25,8 @@ test('your en passant and castling always open their explainers; the first fork 
   assert.equal(autoExplainer([{ type: 'fork-won' }], (kind) => kind === 'fork'), null, 'once per device');
   assert.equal(autoExplainer([{ type: 'move' }, { type: 'capture' }], unseen), null);
 });
+
+test('the bishop pair’s hop offers its explainer from its line’s What? button, never by itself', () => {
+  assert.equal(autoExplainer([{ type: 'companion-phase' }, { type: 'bishop-pair' }, { type: 'companion-move' }], unseen), null);
+  assert.equal(autoExplainer([{ type: 'bishop-pair' }], () => true), null);
+});

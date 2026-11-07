@@ -4,7 +4,7 @@ import './menu.css';
 import { initGuide } from './guide.js';
 import { isFirstVisit, markGuideSeen } from './first-visit.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
-import { TACTIC_COPY, RECRUIT_COPY } from './tactics-art.js';
+import { TACTIC_COPY, RECRUIT_COPY, BISHOP_PAIR_COPY } from './tactics-art.js';
 import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
@@ -316,6 +316,7 @@ function showGameFeedback() {
   // A monster pawn capturing en passant surprises players, so its line keeps
   // a "What?" explainer button until the next action.
   const enPassantHit = state.events?.some(event => (event.type === 'player-captured' || event.type === 'damage' || event.type === 'shield') && event.enPassant);
+  const pairHop = state.events?.some(event => event.type === 'bishop-pair');
   box.replaceChildren(...messageLog.map((entry) => {
     const line = document.createElement('p');
     line.textContent = entry.text;
@@ -339,6 +340,17 @@ function showGameFeedback() {
       what.setAttribute('aria-label', 'What is a recruit?');
       what.setAttribute('aria-haspopup', 'dialog');
       what.addEventListener('click', () => openSpecialMove('recruit'));
+      line.append(' ', what);
+    }
+    // The bishop pair's "Holy duo!" line keeps its explainer until the next action.
+    if (pairHop && entry.action === latest && /^Holy duo!/.test(entry.text)) {
+      const what = document.createElement('button');
+      what.type = 'button';
+      what.className = 'hint-button message-what';
+      what.textContent = 'What?';
+      what.setAttribute('aria-label', 'What is the bishop pair?');
+      what.setAttribute('aria-haspopup', 'dialog');
+      what.addEventListener('click', () => openSpecialMove('bishop-pair'));
       line.append(' ', what);
     }
     return line;
@@ -460,7 +472,10 @@ function updateGame() {
   // waiting for a monster to walk into range is a gamble then (src/cave-in.js).
   $('wait-button').hidden = !holding && (state.status !== 'playing' || (state.exit.open && !caveInRunning(state)));
   $('wait-button').textContent = holding ? 'Hold' : 'Wait';
-  $('wait-button').setAttribute('aria-label', holding ? 'Hold: keep your recruit where it is' : 'Wait: skip your move and let the monsters act');
+  // The bishop pair's hop can't be held: the recruit must reach the other colour.
+  const hopping = Boolean(pendingOrder()?.hop);
+  $('wait-button').disabled = hopping;
+  $('wait-button').setAttribute('aria-label', hopping ? 'Hold is off: your bishop recruit must hop to the other colour' : holding ? 'Hold: keep your recruit where it is' : 'Wait: skip your move and let the monsters act');
   reserveObjectiveRoom();
   placeWaitButton();
   $('descend-button').hidden = !state.exit.open;
@@ -605,7 +620,7 @@ function paintBoard(){
   if(!state||replay)return;
   // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
   const pending=pendingOrder();
-  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,cursor,pinning:false,...hintMarks(pending.board)});return;}
+  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false,...hintMarks(pending.board)});return;}
   renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
 }
 // Paid hints stay on the board for the rest of the floor: rings around the
@@ -802,7 +817,7 @@ let specialMoveFrame = 0;
 // capture, 'enemy' after a monster pawn's) or castling.
 function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
-  if (TACTIC_COPY[kind] || kind === 'recruit') return openTactic(kind);
+  if (TACTIC_COPY[kind] || kind === 'recruit' || kind === 'bishop-pair') return openTactic(kind);
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
   const canvas = $('special-move-art');
@@ -827,11 +842,11 @@ function openSpecialMove(kind, mode = 'player') {
   frame(start);
 }
 // The first fork won and the first combo on this device get the same dialog,
-// with their own animated explainer (tactics-art.js), as does a waiting
-// recruit's What? button.
+// with their own animated explainer (tactics-art.js), as do the What? buttons
+// of a waiting recruit and of the bishop pair's hop.
 function openTactic(kind) {
-  const copy = kind === 'recruit' ? RECRUIT_COPY : TACTIC_COPY[kind];
-  if (kind !== 'recruit') try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  const copy = kind === 'recruit' ? RECRUIT_COPY : kind === 'bishop-pair' ? BISHOP_PAIR_COPY : TACTIC_COPY[kind];
+  if (TACTIC_COPY[kind]) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -852,13 +867,14 @@ function openTactic(kind) {
 // Kept outside the save prefix so backups never carry it.
 const tacticSeenKey = (kind) => `dchess-tactic-seen:${scope}:${kind}`;
 function tacticSeen(kind) { try { return localStorage.getItem(tacticSeenKey(kind)) === '1'; } catch { return false; } }
-// A brief "Fork!" or "Combo!" stamp over the board.
+// A brief "Fork!", "Combo!" or "Holy duo!" stamp over the board.
 let calloutTimer;
 function showTacticCallout(events) {
   const won = events.find((event) => event.type === 'fork-won');
   const combo = events.find((event) => event.type === 'combo');
   const fork = events.find((event) => event.type === 'fork');
-  const parts = [won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱'].filter(Boolean);
+  const pair = events.some((event) => event.type === 'bishop-pair');
+  const parts = [pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱'].filter(Boolean);
   if (!parts.length) return;
   const callout = $('tactic-callout');
   callout.textContent = parts.join(' · ');
@@ -937,19 +953,23 @@ function takeAction(action) {
 // a square marked green moves the recruit there, and the recruit itself (or
 // Hold, or Space) keeps it still. The move can't be taken back here: it was played.
 const ORDER_TIP = 'Now move your recruit: tap a square marked green, or tap the recruit (or Hold) to keep it still.';
+// The bishop pair (rules.js pairHop): the new bishop must hop to the other colour, so it can't hold.
+const HOP_TIP = 'Your bishop recruit hops onto the other colour: tap a square marked green.';
 function beginOrder(action, choice) {
-  ordering = { from: state, action, board: choice.board, phase: choice.phase, moves: choice.moves, shown: choice.board.events.slice(0, choice.phase) };
+  ordering = { from: state, action, board: choice.board, phase: choice.phase, moves: choice.moves, shown: choice.board.events.slice(0, choice.phase), hop: Boolean(choice.hop) };
   showMoves = false; pinning = false; cursor = null;
   // A short pause so a double tap on the destination can't also give the order.
   turnLocked = true;
   setTimeout(() => { turnLocked = false; }, 250);
   updateGame();
   playSound(ordering.shown);
-  if (!tacticSeen('recruit-order')) notify(ORDER_TIP);
+  if (ordering.hop) notify(HOP_TIP);
+  else if (!tacticSeen('recruit-order')) notify(ORDER_TIP);
   return true;
 }
 function giveOrder(recruit) {
   const pending = pendingOrder();
+  if (pending?.hop && recruit === 'hold') { notify(HOP_TIP); return false; }
   if (!pending || !takeAction({ ...pending.action, recruit })) return false;
   try { localStorage.setItem(tacticSeenKey('recruit-order'), '1'); } catch {}
   return true;
@@ -960,7 +980,7 @@ function orderAt({ x, y }) {
   if (!recruit) return false;
   if (x === recruit.x && y === recruit.y) return giveOrder('hold');
   if (pending.moves.some((tile) => tile.x === x && tile.y === y)) return giveOrder({ x, y });
-  notify(ORDER_TIP);
+  notify(pending.hop ? HOP_TIP : ORDER_TIP);
   return false;
 }
 // Keyboard: once your move shows, the cursor starts on the recruit.
