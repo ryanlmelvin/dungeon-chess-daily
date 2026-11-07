@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, unreachablePickups } from '../src/rules.js';
+import { act, createGame, unreachablePickups, coinlessFloor } from '../src/rules.js';
+import { getRawDaily } from '../src/edition.js';
 import { getDaily } from '../src/generation.js';
 
 test('powerups never sit on or beside the start square, and stay reachable (from 2026-11-06)', () => {
@@ -24,8 +25,10 @@ test('powerups never sit on or beside the start square, and stay reachable (from
   }
 });
 
+// Keyed by the launch seed (LEGACY_LAYOUT_SEEDS). The public 2026-11-05 edition is
+// now regenerated under its weekday tier, so these check the seed's own layout.
 test('editions before the rule keep their published powerup square', () => {
-  const state = createGame(getDaily('2026-11-05'));
+  const state = createGame(getRawDaily('2026-11-05'));
   const power = state.items.find((item) => item.type === 'powerup');
   const expected = { bishop: [3, 5], knight: [3, 4] }[state.startingPiece] ?? [4, 5];
   assert.deepEqual([power.x, power.y], expected);
@@ -56,13 +59,8 @@ test('the last floor holds no coins or coin magnet, and the shop before it sells
   }
 });
 
-test('the launch edition keeps its coins and relics on the last floor', () => {
-  const daily = getDaily('2026-11-05');
-  let state = createGame(daily);
-  for (const action of daily.generation.certificate.actions) {
-    state = act(state, action);
-    if (state.floor === 2) break;
-  }
-  assert.equal(state.floor, 2);
-  assert.equal(state.items.filter((item) => item.type === 'coin').length, 3);
+test('the launch seed keeps its coins and relics on the last floor', () => {
+  const state = createGame(getRawDaily('2026-11-05'));
+  assert.equal(coinlessFloor(state, 2), false);
+  assert.equal(coinlessFloor(createGame(getRawDaily('2026-11-06')), 2), true);
 });

@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Reproducible content audit; wall-clock measurements never affect generation.
 import assert from 'node:assert/strict';
-import { getDaily, DIFFICULTY_PROFILES } from '../src/generation.js';
+import { getDaily, DIFFICULTY_TIERS } from '../src/generation.js';
 import { createGame, act, validateSave } from '../src/rules.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { getRawDaily } from '../src/edition.js';
 
-const [start = '2026-11-05', countText = '365', difficulty = 'standard'] = process.argv.slice(2);
+// 'weekly' audits the public editions (each date's weekday tier); a tier id forces that tier.
+const [start = '2026-11-05', countText = '365', difficulty = 'weekly'] = process.argv.slice(2);
 const count = Number(countText);
 if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start))
   || new Date(start).toISOString().slice(0, 10) !== start
   || !Number.isInteger(count) || count < 1 || count > 10_000
-  || !Object.hasOwn(DIFFICULTY_PROFILES, difficulty)) {
-  throw new Error('Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days] [gentle|standard|expert]');
+  || !(difficulty === 'weekly' || Object.hasOwn(DIFFICULTY_TIERS, difficulty))) {
+  throw new Error(`Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days] [weekly|${Object.keys(DIFFICULTY_TIERS).join('|')}]`);
 }
-const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, livesLost: {}, maxGenerationMs: 0 };
+const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, livesLost: {}, scores: {}, maxGenerationMs: 0 };
 const tally = (bucket, key) => { bucket[key] = (bucket[key] ?? 0) + 1; };
 for (let offset = 0; offset < count; offset++) {
   const date = new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -22,7 +23,7 @@ for (let offset = 0; offset < count; offset++) {
   const raw = getRawDaily(date);
   let daily;
   try {
-    daily = getDaily(date, { difficulty });
+    daily = getDaily(date, difficulty === 'weekly' ? {} : { difficulty });
   } catch (error) {
     // After a rules change the fallback bank fails closed until it is rebuilt;
     // count those days as fallbacks so the generator's own rate stays visible.
@@ -47,7 +48,12 @@ for (let offset = 0; offset < count; offset++) {
   summary.promotedRoutes += Number(proof.metrics.promotion);
   if (proof.metrics.livesLost) tally(summary.livesLost, `${daily.playerPiece}:${proof.metrics.livesLost}`);
   summary.pieces[daily.playerPiece] = (summary.pieces[daily.playerPiece] ?? 0) + 1;
+  ((summary.scores[daily.difficulty] ??= {})[daily.playerPiece] ??= []).push(daily.generation.certificate.score);
   summary.colors[daily.playerColor] = (summary.colors[daily.playerColor] ?? 0) + 1;
   if ((offset + 1) % 50 === 0) console.log(`Certified ${offset + 1}/${count} editions.`);
+}
+// Mean difficulty score per tier and piece (src/difficulty.js difficultyScore).
+for (const byPiece of Object.values(summary.scores)) for (const [piece, values] of Object.entries(byPiece)) {
+  byPiece[piece] = { n: values.length, mean: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 };
 }
 console.log(JSON.stringify(summary, null, 2));

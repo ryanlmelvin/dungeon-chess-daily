@@ -486,6 +486,71 @@ function powerRoll(roll, coinless) {
   return coinless ? ['shield', 'freeze'][Math.floor(roll * 2)] : ['shield', 'freeze', 'magnet'][Math.floor(roll * 3)];
 }
 
+// A floor's optional residents: its two decoy species, alternating, `decoys` of
+// them (a difficulty knob, 0-4; default 2), never more of one role than a chess
+// army holds.
+export function floorDecoys(state, floor = state.floor) {
+  const pair = [state.species[3 + floor * 2], state.species[4 + floor * 2]];
+  const wanted = state.decoys ?? 2;
+  if (wanted === 2) return pair;
+  const chosen = [];
+  for (let index = 0; chosen.length < wanted && index < 8; index++) {
+    const species = pair[index % 2];
+    if (chosen.filter((entry) => entry.piece === species.piece).length < PIECE_COUNTS[species.piece]) chosen.push(species);
+  }
+  return chosen;
+}
+
+// Difficulty knobs (src/difficulty.js, src/calibration.js); 0 keeps the plain layout.
+// Decoys past the usual two start on a free square in the back three rows.
+// `scatter` draws non-pawn targets in the back four rows, off every line the
+// player's piece covers from its start square. `guards` moves up to that many
+// decoys beside a target, where they would strike a player who takes it.
+// Both draw from their own streams, so the room's other draws stay in sequence.
+function applyLayoutPressure(state, layoutPiece, targetPiece) {
+  const seed = state.dungeonSeed ?? state.seed;
+  const count = PIECE_COUNTS[targetPiece];
+  const targets = state.enemies.slice(0, count), decoys = state.enemies.slice(count);
+  const taken = (x, y, unit) => state.enemies.some((foe) => foe !== unit && foe.x === x && foe.y === y) || (x === 4 && y === 0);
+  const shuffled = (rng, test) => {
+    const tiles = [];
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (test(x, y)) tiles.push({ x, y, order: rng() });
+    return tiles.sort((a, b) => a.order - b.order);
+  };
+  if (decoys.length > 2) {
+    const rng = random(hash(`${seed}:decoys:${state.floor}`));
+    for (const foe of decoys.slice(2)) {
+      foe.x = -1; foe.y = -1;
+      const [tile] = shuffled(rng, (x, y) => y < 3 && x !== 4 && !taken(x, y, foe));
+      foe.x = tile.x; foe.y = tile.y;
+    }
+  }
+  if (state.scatter && targetPiece !== 'pawn' && layoutPiece !== 'pawn') {
+    const rng = random(hash(`${seed}:scatter:${state.floor}`));
+    const empty = { ...state, map: Array(8).fill('........'), enemies: [], companion: null };
+    const opening = movesFor(empty, { x: 4, y: 6, piece: layoutPiece });
+    for (const foe of targets) {
+      const [tile] = shuffled(rng, (x, y) => y < 4 && !taken(x, y, foe)
+        && (layoutPiece !== 'bishop' || (x + y) % 2 === 0) && !opening.some((move) => move.x === x && move.y === y));
+      if (tile) { foe.x = tile.x; foe.y = tile.y; }
+    }
+  }
+  if (state.guards > 0) {
+    const rng = random(hash(`${seed}:guards:${state.floor}`));
+    for (const foe of decoys.slice(0, state.guards)) {
+      const guards = (x, y) => targets.some((victim) => {
+        if (foe.piece !== 'knight' && Math.max(Math.abs(victim.x - x), Math.abs(victim.y - y)) !== 1) return false;
+        const board = { ...state, map: Array(8).fill('........'), enemies: [], companion: null, player: { x: victim.x, y: victim.y, hp: 1 } };
+        return movesFor(board, { ...foe, x, y }, true, true).some((move) => move.x === victim.x && move.y === victim.y);
+      });
+      // The back four rows only (row 4 holds the coins), never on a pawn's file:
+      // the guard waits by its target, it doesn't ambush the start.
+      const [tile] = shuffled(rng, (x, y) => y <= 3 && !taken(x, y, foe) && !(layoutPiece === 'pawn' && x === 4) && guards(x, y));
+      if (tile) { foe.x = tile.x; foe.y = tile.y; }
+    }
+  }
+}
+
 function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
@@ -498,14 +563,15 @@ function setFloor(state, kingRecruit = false) {
   state.objective = { piece: state.targets[state.floor], complete: false };
   state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure };
   const target = state.species[state.floor];
-  const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), state.species[3 + state.floor * 2], state.species[4 + state.floor * 2]];
+  const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), ...floorDecoys(state)];
   const mirror = rng() < 0.5;
   const formation = target.piece === 'pawn' && !FIXED_PAWN_FORMATION_SEEDS.has(state.dungeonSeed ?? state.seed)
     ? pawnFormation(state) : null;
   const targetTiles = formation ?? (target.piece === 'pawn'
     ? [[3, 3], [5, 3], [2, 2], [6, 2], [1, 1], [7, 1], [0, 2], [6, 0]]
     : layoutPiece === 'pawn' ? [[3, 2], [5, 1]] : [[4, 2], [2, 2]]);
-  const coordinates = [...targetTiles.slice(0, PIECE_COUNTS[target.piece]), [0, 0], [7, 0]];
+  // Decoys past the usual two are placed by applyLayoutPressure.
+  const coordinates = [...targetTiles.slice(0, PIECE_COUNTS[target.piece]), [0, 0], [7, 0], [0, 0], [0, 0]].slice(0, residents.length);
   state.enemies = coordinates.map(([initialX, y], index) => {
     const creature = residents[index];
     // Keep pawn editions' starting file free; a bishop target shares its color.
@@ -514,6 +580,7 @@ function setFloor(state, kingRecruit = false) {
     return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
       piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
   });
+  applyLayoutPressure(state, layoutPiece, target.piece);
   const powerTile = LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed)
     ? (layoutPiece === 'bishop' ? [3, 5] : layoutPiece === 'knight' ? [3, 4] : [4, 5])
     : distantPowerTile(state, layoutPiece, rng);
@@ -597,7 +664,7 @@ export function retryLostRun(previous) {
 
 export function createGame(daily = getRawDaily()) {
   const state = {
-    schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
+    schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
     startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
     turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0 }, records: [], events: [],
     message: `Capture all enemy ${daily.targets[0]}s. The newspaper holds a clue.`,
@@ -649,10 +716,10 @@ function finishFloor(state) {
 
 // Each floor's challenge pieces are mandatory, so only the optional residents pay out.
 function bonusResidents(state, floor) {
-  return [state.species[3 + floor * 2], state.species[4 + floor * 2]].filter((species) => species?.piece !== state.targets[floor]).length;
+  return floorDecoys(state, floor).filter((species) => species?.piece !== state.targets[floor]).length;
 }
 function bonusCaptures(state) {
-  const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - (PIECE_COUNTS[state.targets[record.floor]] + 2 - bonusResidents(state, record.floor)), 0);
+  const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - (PIECE_COUNTS[state.targets[record.floor]] + floorDecoys(state, record.floor).length - bonusResidents(state, record.floor)), 0);
   const remaining = state.enemies.filter((foe) => (foe.role ?? foe.piece) !== state.targets[state.floor]).length;
   return earlier + bonusResidents(state, state.floor) - remaining;
 }
@@ -897,8 +964,9 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.legacyTurnOrder !== false || value.playerColor !== daily.playerColor || typeof value.awaitingPlayer !== 'boolean') return false;
     if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
+    if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0)) return false;
     if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
-    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + 2;
+    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + floorDecoys(daily, floor).length;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, totalPopulation + 9)) return false;
     if (!value.player || !walkable(value, value.player.x, value.player.y) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;

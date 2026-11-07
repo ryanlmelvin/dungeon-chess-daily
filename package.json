@@ -10,7 +10,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
     "verify:fallbacks": "node scripts/build-fallbacks.mjs --verify",
-    "audit:dungeons": "node scripts/audit-dungeons.mjs"
+    "audit:dungeons": "node scripts/audit-dungeons.mjs",
+    "calibrate:difficulty": "node scripts/calibrate-difficulty.mjs"
   },
   "dependencies": {
     "three": "^0.181.1"

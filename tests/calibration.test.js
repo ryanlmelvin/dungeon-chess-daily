@@ -1,0 +1,116 @@
+// SPDX-License-Identifier: GPL-3.0-only
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TIERS, DEFAULT_KNOBS, tierForDate, tierLabel, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
+import { CALIBRATION, CALIBRATION_REPORT } from '../src/calibration.js';
+import { FALLBACKS } from '../src/fallbacks.js';
+import { PLAYABLE_PIECES } from '../src/pieces.js';
+import { getRawDaily } from '../src/edition.js';
+import { chooseCandidate, generateDaily, getDaily } from '../src/generation.js';
+import { createGame, validateSave, act } from '../src/game.js';
+
+// 2026-11-09 is a Monday.
+const WEEK = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15'];
+
+test('the tier rises from Monday to the weekend, by UTC weekday', () => {
+  const ranks = WEEK.map((date) => DIFFICULTY_TIERS[tierForDate(date)].rank);
+  assert.deepEqual(WEEK.map(tierForDate), ['gentle', 'fair', 'tricky', 'tough', 'tough', 'fiendish', 'fiendish']);
+  for (let index = 1; index < ranks.length; index++) assert.ok(ranks[index] >= ranks[index - 1], WEEK[index]);
+  assert.equal(ranks[0], 1, 'Monday is the easiest');
+  assert.equal(ranks[5], TIER_IDS.length, 'Saturday is the hardest');
+  assert.equal(ranks[6], TIER_IDS.length, 'Sunday is the hardest');
+  assert.equal(new Set(WEEKDAY_TIERS).size, TIER_IDS.length, 'every tier appears in the week');
+  assert.equal(tierLabel('2026-11-12'), 'Thursday · Tough');
+  // The edition date is UTC: late Sunday evening in New York is already Monday.
+  assert.equal(getRawDaily(new Date('2026-11-08T20:00:00-05:00')).date, '2026-11-09');
+});
+
+test('tier bands are contiguous and increasing', () => {
+  let previous = DIFFICULTY_TIERS.gentle.band[0];
+  for (const tier of TIER_IDS) {
+    const [low, high] = DIFFICULTY_TIERS[tier].band;
+    assert.equal(low, previous, tier);
+    assert.ok(high > low, tier);
+    previous = high;
+  }
+  assert.ok(Number.isFinite(previous));
+  assert.equal(bandDistance(DIFFICULTY_TIERS.tricky.band[0], 'tricky'), 0);
+  assert.equal(bandDistance(DIFFICULTY_TIERS.tricky.band[1], 'tricky'), 0);
+  assert.equal(bandDistance(DIFFICULTY_TIERS.tricky.band[1] + 1, 'tricky'), 1);
+  assert.equal(bandDistance(DIFFICULTY_TIERS.tricky.band[0] - 2, 'tricky'), 2);
+});
+
+test('the difficulty score grows with every kind of pressure', () => {
+  const base = { turns: 20, threatenedDecisions: 5, narrowEscapes: 1, livesLost: 0, unsafeAlternatives: 10, legalAlternatives: 100 };
+  const score = difficultyScore(base, 'pawn');
+  for (const [key, value] of Object.entries({ threatenedDecisions: 8, narrowEscapes: 3, livesLost: 2, unsafeAlternatives: 30 })) {
+    assert.ok(difficultyScore({ ...base, [key]: value }, 'pawn') > score, key);
+  }
+  assert.equal(difficultyScore({ ...base, legalAlternatives: 0, unsafeAlternatives: 0 }, 'pawn') <= score, true);
+  assert.ok(Number.isFinite(score));
+  // The same pressure is harder with fewer lives to spare.
+  const unharmed = { ...base, livesLost: 0 };
+  assert.ok(difficultyScore(unharmed, 'queen') > difficultyScore(unharmed, 'rook'));
+  assert.ok(difficultyScore(unharmed, 'rook') > difficultyScore(unharmed, 'pawn'));
+});
+
+test('the calibration table covers every tier and piece with valid knobs, and the fallback bank matches it', () => {
+  for (const tier of TIER_IDS) for (const piece of PLAYABLE_PIECES) {
+    const row = CALIBRATION[tier]?.[piece];
+    assert.ok(row, `${tier}/${piece} is calibrated`);
+    assert.deepEqual(Object.keys(row).sort(), Object.keys(DEFAULT_KNOBS).sort(), `${tier}/${piece} names every knob`);
+    const knobs = knobsFor(tier, piece);
+    assert.ok(Number.isInteger(knobs.obstacleBase) && knobs.obstacleBase >= 0 && knobs.obstacleBase <= 16);
+    assert.ok(Number.isInteger(knobs.decoys) && knobs.decoys >= 0 && knobs.decoys <= 4);
+    assert.ok([0, 1].includes(knobs.scatter));
+    assert.ok(Number.isInteger(knobs.guards) && knobs.guards >= 0 && knobs.guards <= knobs.decoys);
+    assert.ok(Number.isInteger(knobs.minThreatenedDecisions) && knobs.minThreatenedDecisions >= 0);
+    assert.ok(CALIBRATION_REPORT.tiers?.[tier]?.[piece], `${tier}/${piece} has measurements`);
+    const entry = FALLBACKS[`${tier}:${piece}:white`];
+    assert.ok(entry, `${tier}/${piece} has a fallback`);
+    assert.deepEqual(entry.knobs, { obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards });
+  }
+  assert.throws(() => knobsFor('standard', 'rook'), RangeError);
+});
+
+test('generateDaily keeps the first candidate in the band, else the closest', () => {
+  const [low, high] = DIFFICULTY_TIERS.tricky.band;
+  const found = (score, threatenedDecisions = 9) => ({ score, metrics: { threatenedDecisions } });
+  assert.equal(chooseCandidate([found(low), found(low + 0.1)], 'tricky', 0), 0);
+  assert.equal(chooseCandidate([found(low - 5), found(low)], 'tricky', 0), 1);
+  assert.equal(chooseCandidate([found(low - 5), found(high + 1)], 'tricky', 0), 1);
+  assert.equal(chooseCandidate([found(low - 1), found(high + 1)], 'tricky', 0), 0, 'ties keep the earlier');
+  assert.equal(chooseCandidate([null, found(low, 1)], 'tricky', 2), -1, 'too few threatened decisions');
+  assert.equal(chooseCandidate([], 'tricky', 0), -1);
+});
+
+test('the public edition takes its tier from the weekday and its knobs from the table, deterministically', () => {
+  for (const date of ['2026-11-09', '2026-11-12', '2026-11-15']) {
+    const daily = getDaily(date);
+    const tier = tierForDate(date);
+    const knobs = knobsFor(tier, daily.playerPiece);
+    assert.equal(daily.difficulty, tier);
+    for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards']) assert.equal(daily[knob], knobs[knob], `${date} ${knob}`);
+    assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= knobs.minThreatenedDecisions);
+    assert.equal(daily.generation.certificate.score, difficultyScore(daily.generation.certificate.metrics, daily.playerPiece));
+    assert.deepEqual(generateDaily(date), daily, `${date} regenerates identically`);
+    assert.deepEqual(getDaily(date, { difficulty: tier }), daily);
+  }
+});
+
+test('saves bind to the edition tier and stay valid along the certified route', () => {
+  const date = '2026-11-14';
+  const daily = getDaily(date);
+  let state = createGame(daily);
+  assert.equal(state.difficulty, 'fiendish');
+  assert.equal(validateSave(state, date), true);
+  for (const action of daily.generation.certificate.actions.slice(0, 6)) {
+    state = act(state, action);
+    assert.equal(validateSave(state, date), true, JSON.stringify(action));
+  }
+  const other = createGame(getDaily(date, { difficulty: 'gentle' }));
+  assert.equal(validateSave(other, date), false, 'another tier is not the public edition');
+  assert.equal(validateSave(other, date, { difficulty: 'gentle' }), true);
+  const tampered = { ...createGame(daily), guards: (daily.guards + 1) % 3 };
+  assert.equal(validateSave(tampered, date), false, 'knobs cannot be edited');
+});

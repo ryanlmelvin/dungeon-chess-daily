@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
 import { findWinningRoute, livesSpendable, verifyWinningRoute } from '../src/fairness.js';
-import { DIFFICULTY_PROFILES, generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
+import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
+import { TIER_IDS, knobsFor } from '../src/difficulty.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const dates = new Map();
@@ -71,14 +72,15 @@ function replay(daily) {
 }
 
 test('forced fallbacks certify every piece and difficulty with the production rules', () => {
-  for (const [difficulty, profile] of Object.entries(DIFFICULTY_PROFILES)) {
+  for (const difficulty of TIER_IDS) {
     for (const [identity, date] of dates) {
       const daily = generateDaily(date, { difficulty, maxAttempts: 0 });
+      const profile = knobsFor(difficulty, daily.playerPiece);
       assert.equal(`${daily.playerPiece}:${daily.playerColor}`, identity);
       assert.equal(daily.generation.version, GENERATOR_VERSION);
       assert.equal(daily.generation.source, 'fallback');
       assert.equal(daily.generation.attempt, 0);
-      assert.equal(daily.obstacleBase, profile.obstacleBase);
+      for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards']) assert.equal(daily[knob], profile[knob], knob);
       assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= profile.minThreatenedDecisions);
       const { initial } = replay(daily);
       assert.equal(initial.schema, 5);

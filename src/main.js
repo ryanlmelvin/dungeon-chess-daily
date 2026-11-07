@@ -4,6 +4,7 @@ import './menu.css';
 import { initGuide } from './guide.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
+import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, POWERUPS, PIECES } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
@@ -146,6 +147,8 @@ function renderPaper() {
   $('edition').textContent = `NO. ${String(Math.max(1, daily.edition)).padStart(3, '0')}`;
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = new Date(`${daily.date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
+  // The weekday's difficulty tier, e.g. "THURSDAY · TOUGH": no clue about the dungeon itself.
+  $('paper-tier').textContent = Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION';
   $('headline').textContent = headlineFor(daily.species[0], daily.date);
   $('deck').replaceChildren(createPrintLines(0));
   $('art-caption').textContent = "Artist's impression";

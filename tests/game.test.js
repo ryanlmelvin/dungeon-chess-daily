@@ -5,7 +5,7 @@ import { act, resetFloor, retryLostRun, createGame, dangerTiles, getDaily, getSh
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { royalRules } from '../src/rules.js';
+import { royalRules, floorDecoys } from '../src/rules.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -247,8 +247,10 @@ function assertInitialArmy(state) {
   const counts = Object.fromEntries(PIECES.map((piece) => [piece, state.enemies.filter((foe) => foe.role === piece).length]));
   for (const piece of PIECES) assert.ok(counts[piece] <= PIECE_COUNTS[piece], `${state.date} floor ${state.floor}: too many native ${piece}s`);
   assert.equal(counts[state.objective.piece], PIECE_COUNTS[state.objective.piece]);
-  assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + 2);
-  assert.equal(new Set(state.enemies.map((foe) => foe.role)).size, 3);
+  // The tier's `decoys` knob sets how many optional residents join the targets.
+  const decoys = floorDecoys(state);
+  assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + decoys.length);
+  assert.equal(new Set(state.enemies.map((foe) => foe.role)).size, 1 + new Set(decoys.map((species) => species.piece)).size);
   assert.equal(new Set(state.enemies.map((foe) => `${foe.x},${foe.y}`)).size, state.enemies.length);
   for (const piece of PIECES) {
     const group = state.enemies.filter((foe) => foe.role === piece);
@@ -293,10 +295,12 @@ test('objectives, palettes, obstacles and mixed residents vary deterministically
     assert.notEqual(issue.targets[0], issue.targets[1]);
     assert.ok(!issue.targets.slice(0, 2).includes('king'));
     const state = createGame(issue);
-    assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + 2);
-    assert.equal(new Set(state.enemies.map((enemy) => enemy.species)).size, 3);
-    assert.equal(state.props.length, 7);
-    assert.equal(state.map.join('').split('#').length - 1, 7);
+    const decoys = floorDecoys(state);
+    assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + decoys.length);
+    assert.equal(new Set(state.enemies.map((enemy) => enemy.species)).size, 1 + new Set(decoys.map((species) => species.id)).size);
+    // The tier's obstacleBase; a wall that would cut the board in two is skipped.
+    assert.ok(state.props.length <= issue.obstacleBase && state.props.length >= Math.min(issue.obstacleBase, 4));
+    assert.equal(state.map.join('').split('#').length - 1, state.props.length);
     assert.ok(state.enemies.every((enemy) => walkable(state, enemy.x, enemy.y)));
     assert.ok(state.items.every((item) => walkable(state, item.x, item.y)));
     assert.equal(state.exit.open, false);
