@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, RECRUIT_GHOST_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -17,9 +17,6 @@ const CROWN_WIDTH = 0.5;
 // Screen-up in world space for the board camera (about 72 degrees down), so a
 // crown can sit above a monster's head on screen without leaving its tile.
 const SCREEN_UP = new THREE.Vector3(0, 0.309, -0.951);
-// A waiting recruit's sprite opacity, and how far it shimmers around that.
-const GHOST_OPACITY = 0.55;
-const GHOST_SHIMMER = 0.08;
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -97,8 +94,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let pendingItems = null;
   let lastEvents = null;
   let moveMaterial = null;
-  // Waiting recruits shimmer between these opacities: present, but not yet solid.
-  const recruitGhosts = [];
   const playerPulse = { value: 0 };
   const moveColor = { value: new THREE.Color(MOVE_COLOR) };
 
@@ -130,7 +125,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const piece = id.startsWith('piece-');
     if (!palette || (piece && palette === 'white')) return textures.get(id);
     const key = `${id}:${palette}`;
-    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], palette === 'companion' ? COMPANION_PALETTE : palette === 'recruit' ? RECRUIT_GHOST_PALETTE : piece ? piecePalette(palette) : spritePalette(palette)));
+    if (!textures.has(key)) textures.set(key, pixelTexture(SPRITES[id], palette === 'companion' ? COMPANION_PALETTE : piece ? piecePalette(palette) : spritePalette(palette)));
     return textures.get(key);
   }
 
@@ -333,40 +328,25 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (key === itemKey) return;
     itemKey = key;
     clear(collectibles);
-    recruitGhosts.length = 0;
     for (const item of items) {
       const power = item.type === 'powerup';
       const companion = item.type === 'companion';
-      const texture = companion ? spriteTexture(`piece-${item.piece}`, 'recruit') : power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin');
-      // A waiting recruit is a translucent ghost: only stepping onto it makes it a solid ally.
-      // The ghost stands on its pedestal, so it skips the depth test (the pedestal
-      // would hide its base) and draws before the actors, which still pass in front.
-      const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.05, depthWrite: false, ...(companion && { opacity: GHOST_OPACITY, depthTest: false }) });
+      const texture = companion ? spriteTexture(`piece-${item.piece}`, 'companion') : power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin');
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
       materials.add(material);
       const coin = new THREE.Sprite(material);
-      if (companion) coin.renderOrder = -1;
       const size = companion ? 0.72 : power ? 0.55 : 0.3;
       coin.scale.set(size, size, 1);
-      if (companion) coin.center.set(0.5, 0.3);
-      coin.position.set(item.x, companion ? 0.3 : power ? 0.22 : 0.13, item.y);
+      coin.position.set(item.x, companion ? 0.24 : power ? 0.22 : 0.13, item.y);
+      collectibles.add(coin);
       if (power) tileMark(collectibles, item.x, item.y, 0.44, 0.44, basic(0x83c5bd, { transparent: true, opacity: 0.2, depthWrite: false }), 0.02);
       if (companion) {
-        // A small stone pedestal: the piece is on display, waiting to be claimed.
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.1, 16), basic(0x1d2524));
-        base.position.set(item.x, 0.05, item.y);
-        collectibles.add(base);
-        const top = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), basic(0x283331));
-        top.rotation.x = -Math.PI / 2;
-        top.position.set(item.x, 0.101, item.y);
-        collectibles.add(top);
-        tileRing(collectibles, item.x, item.y, 0.17, 0.21, MINT, 0.8, 0.105);
-        tileRing(collectibles, item.x, item.y, 0.36, 0.43, MINT, 0.3, 0.025);
+        tileRing(collectibles, item.x, item.y, 0.29, 0.36, MINT, 0.65);
+        tileRing(collectibles, item.x, item.y, 0.36, 0.43, MINT, 0.12, 0.025);
         const plus = basic(MINT);
-        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.19, 0.055, plus, 0.14);
-        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.055, 0.19, plus, 0.14);
-        recruitGhosts.push(material);
+        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.19, 0.055, plus, 0.06);
+        tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.055, 0.19, plus, 0.06);
       }
-      collectibles.add(coin);
     }
   }
 
@@ -661,7 +641,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const pulse = reducedMotion ? 0.7 : 0.5 - 0.5 * Math.cos(timestamp * Math.PI * 2 / 1600);
     playerPulse.value = moveHintsVisible ? 0.3 + pulse * 0.45 : 0;
     if (moveMaterial && materials.has(moveMaterial)) moveMaterial.opacity = 0.3 + pulse * 0.35;
-    if (!reducedMotion) for (const ghost of recruitGhosts) ghost.opacity = GHOST_OPACITY + GHOST_SHIMMER * Math.sin(timestamp * Math.PI * 2 / 2400);
     for (const [id, entity] of entities) {
       if (entity.spawnAt && timestamp >= entity.spawnAt) {
         entity.spawnAt = 0;

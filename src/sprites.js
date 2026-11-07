@@ -48,12 +48,6 @@ export const COMPANION_PALETTE = Object.freeze({
   x: '#123e3d', d: '#174c49', s: '#278a7d', b: '#78dec8', w: '#d5fff1',
 });
 
-// A recruit still waiting on its square: a pale, washed-out ghost of the
-// companion colors, drawn translucent (renderer.js) so it never reads as an ally yet.
-export const RECRUIT_GHOST_PALETTE = Object.freeze({
-  x: '#1f4f49', d: '#4f8f84', s: '#93d8c8', b: '#d2fbef', w: '#ffffff',
-});
-
 export function piecePalette(color) { return color === 'black' ? BLACK_PIECE_PALETTE : {}; }
 
 // Each hand-drawn 16-pixel silhouette sits inside a 20-pixel texture.
