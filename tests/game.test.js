@@ -361,6 +361,8 @@ test('walls block sliding, pawn double steps and attack lanes, while knights jum
   state.player.piece = 'knight';
   assert.equal(hasMove(state, 3, 4), true);
   state.player.piece = 'king'; state.enemies = [monster('rook', 'rook', 4, 0)];
+  // The rook's step is a seeded tie-break: pin the seed, not whichever candidate the day certifies.
+  state.dungeonSeed = state.seed;
   assert.deepEqual(dangerTiles(act(state, move(3, 6))), []);
 });
 

@@ -178,13 +178,13 @@ test('the turn you recruit, the new recruit may stay on your square or move off 
 test('a close-range hit that turn still leaves the recruit its order; a run-ending one ends the turn there', () => {
   const state = scenario('rook', { x: 7, y: 7 });
   state.companion = ally('rook', 0, 6); state.enemies = [foe('guard', 'king', 6, 4)];
-  // Ending next to the monster king costs a life at once; no monster phase follows.
+  // Ending next to the monster king costs a life at once; the monsters still take their turn, with no second hit.
   const hit = act(state, move(7, 5, { x: 6, y: 6 }));
   assert.equal(hit.player.hp, state.player.hp - 1);
   assert.deepEqual(at(hit.companion), [6, 6]);
   const order = types(hit);
   assert.ok(order.indexOf('close-capture') < order.indexOf('companion-phase'));
-  assert.ok(!order.includes('enemy-phase'));
+  assert.ok(order.indexOf('companion-phase') < order.indexOf('enemy-phase'));
   // The preview shows the hit already taken.
   const choice = recruitChoice(state, move(7, 5));
   assert.equal(choice.board.player.hp, state.player.hp - 1);

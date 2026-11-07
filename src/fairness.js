@@ -27,7 +27,7 @@ function positionKey(state, includeTime = true) {
     state.playerColor, state.awaitingPlayer,
     state.player.x, state.player.y, state.player.piece, state.player.hp, state.player.moved,
     state.enemies.map((enemy) => [enemy.id, enemy.x, enemy.y, enemy.piece, enemy.role,
-      enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent]),
+      enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true]),
     state.items, state.powers, state.companion, state.companions, state.enPassant ?? null,
     state.reinforcements ?? null, state.reinforcementsSkipped ?? null,
   ]);

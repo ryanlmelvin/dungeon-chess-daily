@@ -315,10 +315,22 @@ function showGameFeedback() {
   // A monster pawn capturing en passant surprises players, so its line keeps
   // a "What?" explainer button until the next action.
   const enPassantHit = state.events?.some(event => (event.type === 'player-captured' || event.type === 'damage' || event.type === 'shield') && event.enPassant);
+  // So does a missed lunge, which leaves its monster off-balance (rules.js).
+  const lunged = state.events?.some((event) => event.type === 'miss');
   box.replaceChildren(...messageLog.map((entry) => {
     const line = document.createElement('p');
     line.textContent = entry.text;
     line.classList.toggle('stale', entry.action !== latest);
+    if (lunged && entry.action === latest && /off-balance/.test(entry.text)) {
+      const what = document.createElement('button');
+      what.type = 'button';
+      what.className = 'hint-button message-what';
+      what.textContent = 'What?';
+      what.setAttribute('aria-label', 'What does off-balance mean?');
+      what.setAttribute('aria-haspopup', 'dialog');
+      what.addEventListener('click', () => openSpecialMove('off-balance'));
+      line.append(' ', what);
+    }
     if (enPassantHit && entry.action === latest && /en passant/i.test(entry.text)) {
       const what = document.createElement('button');
       what.type = 'button';

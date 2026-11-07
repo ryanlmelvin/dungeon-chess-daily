@@ -37,7 +37,9 @@ test('white: ending next to a monster king loses a life at once, and only once p
   assert.equal(next.player.hp,hp-1);
   assert.deepEqual(next.events.find((event)=>event.type==='close-capture'),{type:'close-capture',id:'king',x:5,y:3});
   assert.equal(count(next,'player-captured'),1);
-  assert.equal(count(next,'enemy-phase'),0);
+  // The monsters still take their turn, but the rook's wound-up strike holds.
+  assert.equal(count(next,'enemy-phase'),1);
+  assert.equal(next.enemies[1].phase,'aim');
   assert.deepEqual([next.player.x,next.player.y],[4,4]);
 });
 
@@ -66,7 +68,9 @@ test('a shield absorbs the instant hit',()=>{
   const next=act(state,move(4,4));
   assert.equal(next.player.hp,hp); assert.equal(next.powers.shield,0);
   assert.equal(count(next,'shield'),1); assert.equal(count(next,'close-capture'),1);
-  assert.equal(count(next,'enemy-phase'),0);
+  // No free freeze: the monsters still act, and the king winds up again.
+  assert.equal(count(next,'enemy-phase'),1);
+  assert.equal(next.enemies[0].phase,'aim');
 });
 
 test('frozen monsters never capture at close range',()=>{
