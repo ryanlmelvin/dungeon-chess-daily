@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
 import { planBoardLayout } from './layout.js';
-import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE, DANGER_HATCH } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -27,10 +27,10 @@ const CROWN_WIDTH = 0.5;
 // square, and its look-alikes wear that piece as a badge from then on.
 const UNMASK_POP_MS = 1100;
 const BADGE_WIDTH = 0.42;
-// Paid hints (main.js): the suspects' rings, in the objective's "Targets left"
-// pink, and the danger map's stripes, unlike the solid red of an attack path.
+// Paid hints (main.js): rings around the identified targets, in the objective's
+// "Targets left" pink, and the danger map's black-and-white hatch (sprites.js
+// DANGER_HATCH).
 const SUSPECT = 0xef8b94;
-const STRIPES = '#ff8a4c';
 // The gold stars that circle an off-balance monster's head.
 const STAR = ['...x...', '..xyx..', '.xxyxx.', 'xyywyyx', '.xxyxx.', '..xyx..', '...x...'];
 const STAR_SIZE = 0.26;
@@ -55,13 +55,15 @@ function pixelTexture(rows, paletteOverride = {}) {
   return texture;
 }
 
-// Diagonal pixel stripes covering one danger-map square.
-function stripeTexture() {
+// The danger map's hazard hatch covering one square: diagonal pixel bands.
+function hatchTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 16;
   const context = canvas.getContext('2d');
-  context.fillStyle = STRIPES;
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 6 < 2) context.fillRect(x, y, 1, 1);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    context.fillStyle = (x + y) % DANGER_HATCH.period < DANGER_HATCH.band ? DANGER_HATCH.light : DANGER_HATCH.dark;
+    context.fillRect(x, y, 1, 1);
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = texture.minFilter = THREE.NearestFilter;
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -100,7 +102,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const materials = new Set();
   const textures = new Map(Object.entries(SPRITES).map(([id, rows]) => [id, pixelTexture(rows)]));
   textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
-  textures.set('danger-stripes', stripeTexture());
+  textures.set('danger-hatch', hatchTexture());
   textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
@@ -621,10 +623,12 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
     // Choosing a pin: a crosshair on every monster, kings too, so none stands out.
     if (next.pinning) for (const enemy of next.enemies) if (!enemy.pinned) pinReticle(enemy.x, enemy.y);
-    // Paid hints: stripes where ending a move is captured at once, and a ring around each suspect.
+    // Paid hints: the hatch where ending a move is captured at once (laid on the
+    // floor under an attack lane's red and the move squares' blue, which tint
+    // it), and a ring around each identified target.
     if (next.closeRange?.length) {
-      const stripes = basic(0xffffff, { map: textures.get('danger-stripes'), transparent: true, opacity: 0.85, depthWrite: false });
-      for (const tile of next.closeRange) tileMark(hints, tile.x, tile.y, 0.94, 0.94, stripes, 0.043);
+      const hatch = basic(0xffffff, { map: textures.get('danger-hatch'), transparent: true, depthWrite: false });
+      for (const tile of next.closeRange) tileMark(hints, tile.x, tile.y, 0.94, 0.94, hatch, 0.025);
     }
     if (next.suspects) for (const enemy of next.enemies) if (enemy.species === next.suspects) tileRing(hints, enemy.x, enemy.y, 0.4, 0.48, SUSPECT, 0.95, 0.052);
   }

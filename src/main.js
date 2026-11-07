@@ -18,8 +18,8 @@ import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { pinUsable, captureGoal, shareDate } from './rules.js';
-import { floorLineup, nextHint, suspectsLine, targetSpecies, closeRangeSquares } from './rules.js';
-import { drawMugshot, drawSuspectCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
+import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
+import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { caveInStatus, caveInExplain, caveInRunning, goldAtRisk } from './cave-in.js';
@@ -211,10 +211,11 @@ function renderPaper() {
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode ? 'Enter this dungeon ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
 }
-// A police lineup of every species that can turn up on a floor (src/rules.js
-// floorLineup), by name, so the order never points at the target.
+// A police lineup of two suspects (src/rules.js paperSuspects): the floor's
+// target and one other species that can turn up there, by name, so the order
+// never points at the target.
 function createLineup(floor) {
-  const cast = floorLineup(daily, floor);
+  const cast = paperSuspects(daily, floor);
   const figure = document.createElement('figure');
   figure.className = 'lineup';
   const caption = document.createElement('figcaption');
@@ -620,7 +621,7 @@ function paintBoard(){
   renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
 }
 // Paid hints stay on the board for the rest of the floor: rings around the
-// suspects, and the danger map (recomputed every move).
+// targets, and the danger map (recomputed every move).
 function hintMarks(game) {
   const bought = game.hints ?? [];
   return { suspects: bought.includes('suspects') ? targetSpecies(game).id : null, closeRange: bought.includes('danger') ? closeRangeSquares(game) : null };
@@ -695,20 +696,26 @@ function renderHintButton() {
   $('hint-button').textContent = free || !next ? '? Hint' : '? Hint · +1';
   $('hint-button').setAttribute('aria-label', free ? `Hint: how an enemy ${state.objective.piece} moves` : next ? 'Hints: the next one adds a move to this floor' : 'Hints');
 }
+// Every card unlocked on this floor pages, in unlock order (src/rules.js
+// hintCards): the free one first. The dialog opens on the newest; paging is free.
+let hintPage = 0;
 function openHint() {
   if (!state || screen !== 'game' || document.querySelector('dialog[open]')) return;
   hintSeen = hintFloor();
   // Open first: the move demo keeps animating only while the dialog is open.
   $('hint-dialog').showModal();
+  hintPage = hintCards(state).length - 1;
   renderHint();
   renderHintButton();
 }
-// The dialog shows the latest hint and one button for the next.
-function renderHint() {
+// One card, the pager (once there are two), and one button for the next hint.
+// `slide` is the direction it was paged from: -1 back, 1 forward.
+function renderHint(slide = 0) {
   cancelAnimationFrame(hintFrame);
   const piece = state.objective.piece;
-  const bought = state.hints ?? [];
-  const card = bought.includes('danger') ? 'danger' : bought.includes('suspects') ? 'suspects' : 'moves';
+  const cards = hintCards(state);
+  hintPage = Math.max(0, Math.min(cards.length - 1, hintPage));
+  const card = cards[hintPage];
   const art = $('hint-art');
   $('hint-clue').hidden = card !== 'moves';
   if (card === 'moves') {
@@ -725,26 +732,62 @@ function renderHint() {
     };
     frame(start);
   } else if (card === 'suspects') {
-    const line = suspectsLine(state);
-    $('hint-title').textContent = 'The suspects';
+    // The 'suspects' hint identifies the target (the id stays for saved runs).
+    const line = targetLine(state);
+    $('hint-title').textContent = 'The target';
     $('hint-move').textContent = line[0].toUpperCase() + line.slice(1);
-    art.setAttribute('aria-label', `${targetSpecies(state).name}, in a police lineup`);
-    drawSuspectCard(art, targetSpecies(state));
+    art.setAttribute('aria-label', `${targetSpecies(state).name}, the target, in a police lineup`);
+    drawTargetCard(art, targetSpecies(state));
   } else {
     $('hint-title').textContent = 'Danger map';
-    $('hint-move').textContent = 'Striped squares: end your move on one and a monster captures you at once. The map updates after every move.';
-    art.setAttribute('aria-label', 'A monster with the eight squares around it striped');
+    $('hint-move').textContent = 'Hatched squares: end your move on one and a monster captures you at once. The map updates after every move.';
+    art.setAttribute('aria-label', 'A monster with the eight squares around it hatched in black and white');
     drawDangerCard(art, { playerPalette: piecePalette(state.playerColor) });
   }
+  $('hint-pager').hidden = cards.length < 2;
+  $('hint-page').textContent = `${hintPage + 1} / ${cards.length}`;
+  $('hint-back').disabled = hintPage === 0;
+  $('hint-forward').disabled = hintPage === cards.length - 1;
+  // A short slide from the side it came from (CSS; none under reduced motion).
+  const holder = $('hint-card');
+  holder.classList.remove('from-left', 'from-right');
+  if (slide) { void holder.offsetWidth; holder.classList.add(slide < 0 ? 'from-left' : 'from-right'); }
   const next = nextHint(state);
   $('hint-next').hidden = !next;
-  $('hint-next').textContent = next === 'suspects' ? 'Point out suspects · +1 move' : 'Show danger map · +1 move';
+  $('hint-next').textContent = next === 'suspects' ? 'Identify the target · +1 move' : 'Show danger map · +1 move';
+}
+function flipHint(step) {
+  const page = hintPage + step;
+  if (!state || !$('hint-dialog').open || page < 0 || page >= hintCards(state).length) return;
+  hintPage = page;
+  renderHint(step);
 }
 $('hint-button').addEventListener('click', openHint);
+$('hint-back').addEventListener('click', () => flipHint(-1));
+$('hint-forward').addEventListener('click', () => flipHint(1));
+$('hint-dialog').addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  flipHint(event.key === 'ArrowLeft' ? -1 : 1);
+});
+// A horizontal swipe on the card flips it: left for the next, right for the previous.
+let hintSwipe = null;
+$('hint-card').addEventListener('pointerdown', (event) => {
+  hintSwipe = event.pointerType === 'mouse' ? null : { id: event.pointerId, x: event.clientX, y: event.clientY };
+});
+$('hint-card').addEventListener('pointerup', (event) => {
+  if (hintSwipe?.id !== event.pointerId) return;
+  const dx = event.clientX - hintSwipe.x, dy = event.clientY - hintSwipe.y;
+  hintSwipe = null;
+  if (Math.abs(dx) >= 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) flipHint(dx < 0 ? 1 : -1);
+});
+$('hint-card').addEventListener('pointercancel', () => { hintSwipe = null; });
 $('hint-next').addEventListener('click', () => {
   const next = state && nextHint(state);
   if (!next || !takeAction({ type: 'hint', hint: next })) return;
-  renderHint();
+  // Straight to the card just bought.
+  hintPage = hintCards(state).length - 1;
+  renderHint(1);
   // The last hint hides its button: keep focus inside the dialog.
   if ($('hint-next').hidden) $('hint-dialog').querySelector('[data-close]').focus();
 });

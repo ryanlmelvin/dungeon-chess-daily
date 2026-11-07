@@ -870,6 +870,12 @@ export const CROWN = Object.freeze([
 ]);
 export const CROWN_PALETTE = Object.freeze({ y: '#f6c94c', w: '#fff3c4', o: '#b07a24', r: '#d13959', h: '#ff8fa6' });
 
+// The danger-map hint's hazard hatch: diagonal near-white bands (`band` of every
+// `period` pixels) over a darkened square. Every hue is already a signal (attack
+// lanes, rings, recruits, moves, six monster palettes), so it is black and
+// white, which reads on both stone colours under a monster of any palette.
+export const DANGER_HATCH = Object.freeze({ light: 'rgba(244,241,234,0.85)', dark: 'rgba(11,10,14,0.45)', period: 8, band: 3 });
+
 /** Draw at integer scale for crisp newspaper thumbnails and Three.js textures. */
 export function drawSprite(ctx, id, x = 0, y = 0, scale = 1, paletteOverride = {}) {
   const sprite = SPRITES[id];

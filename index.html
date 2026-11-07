@@ -225,14 +225,14 @@
       </article>
       <article class="guide-page" hidden>
         <h3>The paper</h3>
-        <p>Each story says how one floor’s target moves, never who it is, and lines up that floor’s <b>suspects</b>: every kind of monster that can turn up there. Watch how they move to spot the target.</p>
+        <p>Each story says how one floor’s target moves, never who it is, and lines up two <b>suspects</b>: the target’s kind and one other kind of monster that can turn up there. Watch how they move to tell which is which.</p>
         <h3>Unmasking</h3>
         <canvas class="guide-wide" data-clue-art="unmask" width="400" height="100" role="img" aria-label="A captured monster’s rook pops out of its square, and its look-alikes now wear a small rook badge."></canvas>
         <p>Every capture <b>unmasks</b> a monster: its true piece pops out. A kind of monster keeps one piece all day, so its look-alikes wear that piece as a badge.</p>
         <h3>Hints</h3>
         <p>Tap <b>Hint</b> beside the objective. The first is free: how the target moves. The next two each add <b>+1 move</b> to the floor’s score, and the button then reads <b>Hint · +1</b>:</p>
-        <p><b>Point out suspects</b> rings the targets on the board and names their kind. <b>Show danger map</b> stripes every square where ending your move gets you captured at once.</p>
-        <p>Paid hints count like moves: in your move count, against par and on your share card, even after <b>Restart this floor</b>.</p>
+        <p><b>Identify the target</b> rings the targets on the board and names their kind. <b>Show danger map</b> hatches in black and white every square where ending your move gets you captured at once.</p>
+        <p>Paid hints count like moves: in your move count, against par and on your share card, even after <b>Restart this floor</b>. Flip back through the hints you have with <b>‹ ›</b> or a swipe; that’s free.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
@@ -274,9 +274,12 @@
   </dialog>
   <dialog id="hint-dialog" aria-labelledby="hint-title">
     <div class="dialog-heading"><h2 id="hint-title">Hint</h2><button class="icon-button" data-close aria-label="Close hint">✕</button></div>
-    <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
-    <p id="hint-move"></p>
-    <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper’s suspects. Every monster hides its true piece.</p>
+    <div id="hint-card" class="hint-card">
+      <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
+      <p id="hint-move"></p>
+      <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper’s suspects. Every monster hides its true piece.</p>
+    </div>
+    <div id="hint-pager" class="hint-pager" hidden><button id="hint-back" type="button" aria-label="Previous hint card">‹</button><span id="hint-page" aria-live="polite"></span><button id="hint-forward" type="button" aria-label="Next hint card">›</button></div>
     <button id="hint-next" class="hint-next" type="button" hidden></button>
   </dialog>
   <dialog id="special-move-dialog" aria-labelledby="special-move-title" aria-describedby="special-move-text">

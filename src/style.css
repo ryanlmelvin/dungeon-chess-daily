@@ -31,17 +31,15 @@
 .side-stories article+article{border-left:1px solid #747474;padding-left:20px}
 .side-stories h3{font:400 28px/.95 'VT323','Courier New',monospace;margin:0 0 7px}
 .side-stories p{clear:both;margin:0}
-/* Suspect lineups (main.js createLineup): every species a floor can hold, by name. */
+/* Suspect lineups (main.js createLineup): two mugshots side by side, small-caps names below. */
 .lead-lineup{align-self:center;min-width:0}
 .lineup{margin:10px 0;min-width:0}
 .lead-lineup .lineup{margin:0}
 .lineup figcaption{font-size:16px;line-height:1;text-transform:uppercase;margin:0 0 6px}
-.lineup ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.lineup li{display:flex;align-items:center;gap:8px;min-width:0;font-size:22px;line-height:.9}
-.lineup li span{min-width:0;overflow-wrap:break-word}
+.lineup ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.lineup li{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;text-align:center;font-size:16px;line-height:1;text-transform:uppercase}
+.lineup li span{max-width:100%;overflow-wrap:break-word}
 .lineup canvas{flex:none;display:block;width:44px;height:44px;image-rendering:pixelated;border:2px solid var(--ink)}
-@media(max-width:600px){.lineup figcaption{font-size:14px}.lineup ul{gap:5px}.lineup li{gap:6px;font-size:18px}}
-@media(max-width:350px){.lineup li{font-size:16px}}
 .paper-action{display:flex;justify-content:flex-end;margin-top:20px}
 .primary{background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:3px 3px 0 #24212a45;padding:14px 20px;font-weight:bold;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:24px}
 .primary:hover{background:#443b49}.primary span{font-size:22px;line-height:1}
@@ -144,6 +142,22 @@ body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px
 .notice.cave-toast{color:#f3e5d6;background:#3a2a25;border-color:#e8b48a;animation:par-toast .5s cubic-bezier(.3,1.6,.5,1)}
 .dungeon canvas.quake{animation:quake .5s steps(10) both}@keyframes quake{0%,100%{transform:none}20%{transform:translate(-4px,2px)}40%{transform:translate(4px,-2px)}60%{transform:translate(-3px,-1px)}80%{transform:translate(2px,1px)}}
 @media(max-width:600px){.modifier-bulletin{font-size:17px;padding:5px 8px}}
+/* Phones: the whole paper, down to its Enter button, fits a 375×812 screen on
+   every day, bulletin included. Placed after the other phone rules so it wins. */
+@media(max-width:600px){
+  .lead-story{grid-template-columns:1.3fr 1fr;padding:12px 0}
+  .lead-copy h2{font-size:26px;margin-bottom:0}
+  .newspaper .deck,.side-stories p{display:none}
+  .side-stories{padding:10px 0}
+  .side-stories h3{font-size:22px}
+  .lineup{margin:8px 0 0}
+  .lineup figcaption{font-size:12px;margin-bottom:4px}
+  .lineup ul{gap:4px}
+  .lineup li{gap:2px;font-size:13px}
+  .modifier-bulletin{font-size:15px;padding:4px 7px;margin-top:8px}
+  .modifier-emoji{font-size:16px}
+  .paper-action{margin-top:12px}
+}
 /* Tactics (tactics.js): the combo counter and the brief Fork!/Combo! stamp. */
 .combo-status{color:#a5e2cc;white-space:nowrap}.combo-status.hot{color:#ff9a4a}
 .tactic-callout{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);margin:0;padding:6px 14px;font-family:'VT323','Courier New',monospace;font-size:34px;line-height:1;color:var(--gold);background:#100f14c9;border:2px solid #d5b16e;box-shadow:3px 3px #030208;pointer-events:none;white-space:nowrap;z-index:2}
