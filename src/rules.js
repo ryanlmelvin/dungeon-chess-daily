@@ -441,18 +441,28 @@ function enemyTurn(state) {
 function connectedBoard(state) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
-  const visited = new Set(['4,6']);
-  const queue = [{ x: 4, y: 6 }];
-  const board = { ...state, enemies: [] };
+  // Flood fill with movesFor's rules on an empty board (piece is never a pawn
+  // here): sliders run until a wall, knights and kings step once.
+  const open = new Uint8Array(64);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) open[y * 8 + x] = walkable(state, x, y) ? 1 : 0;
+  const visited = new Uint8Array(64);
+  const queue = [4 + 6 * 8];
+  visited[queue[0]] = 1;
+  const directions = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
+  const range = rays(piece) ? 7 : 1;
   for (let i = 0; i < queue.length; i++) {
-    for (const tile of movesFor(board, { ...queue[i], piece })) {
-      const key = `${tile.x},${tile.y}`;
-      if (!visited.has(key)) { visited.add(key); queue.push(tile); }
+    const qx = queue[i] % 8, qy = (queue[i] - qx) / 8;
+    for (const [dx, dy] of directions) {
+      for (let step = 1; step <= range; step++) {
+        const x = qx + dx * step, y = qy + dy * step;
+        if (x < 0 || y < 0 || x > 7 || y > 7 || !open[y * 8 + x]) break;
+        if (!visited[y * 8 + x]) { visited[y * 8 + x] = 1; queue.push(y * 8 + x); }
+      }
     }
   }
   // Bishops need every open square of their own color; other pieces need all.
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if (walkable(state, x, y) && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited.has(`${x},${y}`)) return false;
+    if (open[y * 8 + x] && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited[y * 8 + x]) return false;
   }
   return true;
 }
@@ -874,8 +884,43 @@ function grantPower(state, id) {
   state.message = `${power.name} acquired.`;
 }
 
+// Fields act() never changes in place: the floor snapshot (replaced whole by
+// markFloorStart, copied by resetFloor) and the day's theme and species. The
+// next state shares them instead of deep-copying them on every move.
+// structuredClone's result for plain JSON-like data, faster: objects and arrays
+// are copied key by key, shared references stay shared (`seen`), and anything
+// else that is not a primitive falls back to structuredClone.
+function deepCopy(value, seen) {
+  if (value === null || typeof value !== 'object') return value;
+  const known = seen.get(value);
+  if (known) return known;
+  const proto = Object.getPrototypeOf(value);
+  if (Array.isArray(value) && proto === Array.prototype) {
+    const copy = new Array(value.length);
+    seen.set(value, copy);
+    for (let i = 0; i < value.length; i++) {
+      if (!(i in value)) return replaceCopy(value, seen);
+      copy[i] = deepCopy(value[i], seen);
+    }
+    return copy;
+  }
+  if (proto !== Object.prototype && proto !== null) return replaceCopy(value, seen);
+  const copy = {};
+  seen.set(value, copy);
+  for (const key of Object.keys(value)) copy[key] = deepCopy(value[key], seen);
+  return copy;
+}
+function replaceCopy(value, seen) {
+  const copy = structuredClone(value);
+  seen.set(value, copy);
+  return copy;
+}
+const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species']);
 function nextState(previous) {
-  const state = structuredClone(previous);
+  const seen = new Map();
+  // Same key order as a whole-state copy, so saves serialize identically.
+  const state = {};
+  for (const key of Object.keys(previous)) state[key] = SHARED_FIELDS.has(key) ? previous[key] : deepCopy(previous[key], seen);
   delete state.notes;
   // Saves from when a Borrowed move had to be armed first.
   delete state.leaping;
