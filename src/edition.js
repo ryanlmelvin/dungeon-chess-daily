@@ -166,12 +166,20 @@ export function getRawDaily(date = new Date()) {
   const targets = [targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], targetsPool.splice(Math.floor(rng() * targetsPool.length), 1)[0], 'king'];
   const pool = [...SPECIES];
   const decoyRoles = targets.map((target) => PIECES.filter((piece) => piece !== target));
-  const species = Array.from({ length: 9 }, (_, index) => {
+  const species = [];
+  for (let index = 0; index < 9; index++) {
     const [id, baseName, plural] = pool.splice(Math.floor(rng() * pool.length), 1)[0];
-    const palette = PALETTE_NAMES[Math.floor(rng() * PALETTE_NAMES.length)];
+    // Floor-mates (a floor's target and its two decoy species, which also
+    // supply Collapse reinforcements) never share a palette: a clash steps to
+    // the next free one. Still one draw, so every other draw stays put.
+    const floor = index < 3 ? index : Math.floor((index - 3) / 2);
+    const mates = index < 3 ? [] : [species[floor], ...species.slice(3 + floor * 2, index)];
+    let pick = Math.floor(rng() * PALETTE_NAMES.length);
+    while (mates.some((mate) => mate.palette === PALETTE_NAMES[pick])) pick = (pick + 1) % PALETTE_NAMES.length;
+    const palette = PALETTE_NAMES[pick];
     const allowed = index < 3 ? [targets[index]] : decoyRoles[Math.floor((index - 3) / 2)];
-    return { id, name: `${palette[0].toUpperCase() + palette.slice(1)} ${baseName.toLowerCase()}`, baseName, plural, palette, piece: allowed.splice(Math.floor(rng() * allowed.length), 1)[0] };
-  });
+    species.push({ id, name: `${palette[0].toUpperCase() + palette.slice(1)} ${baseName.toLowerCase()}`, baseName, plural, palette, piece: allowed.splice(Math.floor(rng() * allowed.length), 1)[0] });
+  }
   return {
     date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: DAILY_COLOR, species, targets,
     theme: buildTheme(species),
