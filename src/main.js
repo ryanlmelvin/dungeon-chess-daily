@@ -717,8 +717,10 @@ function takeAction(action) {
   if (!shopping) showTacticCallout(state.events);
   // The recruit explainer waits for the player's first move, so it never stacks
   // on the first-visit guide, and yields to any other explainer this move.
-  const recruitNews = !shopping && state.status === 'playing' && !tacticSeen('recruit')
-    && (waitingRecruit(state) || state.events.some(event => event.type === 'companion-recruit'));
+  // The recruit explainer is only for a recruit still waiting. Someone who
+  // recruits before ever seeing it has worked it out, so it never shows.
+  if (state.events.some(event => event.type === 'companion-recruit')) { try { localStorage.setItem(tacticSeenKey('recruit'), '1'); } catch {} }
+  const recruitNews = !shopping && state.status === 'playing' && !tacticSeen('recruit') && waitingRecruit(state);
   const special = enPassant ? 'en-passant' : castled ? 'castle' : tactic && !tacticSeen(tactic) ? tactic : recruitNews ? 'recruit' : null;
   const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
@@ -906,6 +908,27 @@ $('daily-button').addEventListener('click', () => {
   setPracticeMode(false); state = load(); showMoves = false; cursor = null;
   enterGame();
 });
+// The game's own yes/no dialog. The browser's confirm() is silently refused
+// in some embedded and in-app browsers, which made restarting do nothing.
+let confirmResolve = null;
+function askConfirm(title, text, ok) {
+  confirmResolve?.(false);
+  $('confirm-title').textContent = title;
+  $('confirm-text').textContent = text;
+  $('confirm-ok').textContent = ok;
+  $('confirm-dialog').showModal();
+  $('confirm-ok').focus();
+  return new Promise((resolve) => { confirmResolve = resolve; });
+}
+$('confirm-ok').addEventListener('click', () => {
+  const resolve = confirmResolve; confirmResolve = null;
+  $('confirm-dialog').close();
+  resolve?.(true);
+});
+$('confirm-dialog').addEventListener('close', () => {
+  const resolve = confirmResolve; confirmResolve = null;
+  resolve?.(false);
+});
 // Voluntary resets cost nothing: no life and no extra try.
 function startOver(next, message) {
   $('menu-dialog').close();
@@ -913,13 +936,14 @@ function startOver(next, message) {
   clearMessageLog();
   save(); enterGame(); notify(message);
 }
-$('reset-floor-button').addEventListener('click', () => {
+$('reset-floor-button').addEventListener('click', async () => {
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
-  if (!confirm(`Restart floor ${state.floor + 1}? You keep the lives, gold and powers you arrived with.`)) return;
+  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the lives, gold and powers you arrived with.', `Restart floor ${state.floor + 1}`)) return;
+  if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${state.floor + 1} restarted.`);
 });
-$('reset-day-button').addEventListener('click', () => {
+$('reset-day-button').addEventListener('click', async () => {
   if (!state) return;
   // A run begun before the UTC rollover still holds yesterday's edition; "today's"
   // must not quietly mean that one, so let the player pick which to start.
@@ -936,7 +960,8 @@ $('reset-day-button').addEventListener('click', () => {
       return;
     }
   }
-  if (!confirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon from floor 1? This run is discarded.`)) return;
+  if (!await askConfirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon?`, 'You start again from floor 1, and this run is discarded.', 'Restart from floor 1')) return;
+  if (!state) return;
   const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
   startOver(next, `${archiveMode ? 'This' : 'Today’s'} dungeon restarted from floor 1.`);
 });

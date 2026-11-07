@@ -214,6 +214,14 @@
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
   </dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <div class="dialog-heading"><h2 id="confirm-title"></h2><button class="icon-button" data-close aria-label="Cancel">✕</button></div>
+    <p id="confirm-text"></p>
+    <div class="menu-actions">
+      <button id="confirm-ok" type="button"></button>
+      <button type="button" data-close>Cancel</button>
+    </div>
+  </dialog>
   <dialog id="rollover-dialog" aria-labelledby="rollover-title">
     <div class="dialog-heading"><h2 id="rollover-title">A new edition is out</h2><button class="icon-button" data-close aria-label="Cancel restart">✕</button></div>
     <p id="rollover-text"></p>
