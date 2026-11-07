@@ -5883,7 +5883,7 @@ export const FALLBACKS = {
       "guards": 2,
       "screens": 0
     },
-    "score": 13.8,
+    "score": 13.7,
     "actions": [
       {
         "type": "move",
@@ -5996,6 +5996,11 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
+        "x": 2,
+        "y": 4
+      },
+      {
+        "type": "move",
         "x": 7,
         "y": 4
       },
@@ -6014,16 +6019,19 @@ export const FALLBACKS = {
       },
       {
         "type": "move",
-        "x": 4,
+        "x": 5,
         "y": 4
+      },
+      {
+        "type": "wait"
+      },
+      {
+        "type": "wait"
       },
       {
         "type": "move",
         "x": 5,
         "y": 3
-      },
-      {
-        "type": "wait"
       },
       {
         "type": "move",
@@ -6041,19 +6049,22 @@ export const FALLBACKS = {
         "y": 0
       },
       {
-        "type": "move",
-        "x": 5,
-        "y": 4
+        "type": "wait"
       },
       {
         "type": "move",
-        "x": 7,
-        "y": 4
-      },
-      {
-        "type": "move",
-        "x": 7,
+        "x": 4,
         "y": 1
+      },
+      {
+        "type": "move",
+        "x": 4,
+        "y": 5
+      },
+      {
+        "type": "move",
+        "x": 6,
+        "y": 5
       },
       {
         "type": "descend"
@@ -7846,7 +7857,7 @@ export const FALLBACKS = {
       "guards": 2,
       "screens": 0
     },
-    "score": 14.2,
+    "score": 14.1,
     "actions": [
       {
         "type": "wait"
