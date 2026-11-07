@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
-import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone } from './sprites.js';
+import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE } from './sprites.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -12,6 +12,11 @@ const ICE_COLOR = 0xbfeaff;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
 const FORK_GLOW_MS = 900;
+const CROWN_POP_MS = 450;
+const CROWN_WIDTH = 0.5;
+// Screen-up in world space for the board camera (about 72 degrees down), so a
+// crown can sit above a monster's head on screen without leaving its tile.
+const SCREEN_UP = new THREE.Vector3(0, 0.309, -0.951);
 
 function pixelTexture(rows, paletteOverride = {}) {
   const canvas = document.createElement('canvas');
@@ -61,6 +66,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const plane = new THREE.PlaneGeometry(1, 1);
   const materials = new Set();
   const textures = new Map(Object.entries(SPRITES).map(([id, rows]) => [id, pixelTexture(rows)]));
+  textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
@@ -288,6 +294,35 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     return entity;
   }
 
+  // A promoted monster pawn wears a gold crown on its head's right corner. It is
+  // a child of the monster's group, so it follows every move and lunge, and is
+  // derived from the saved promoted flag, so it returns after a reload.
+  function wearCrown(entity, worn, popAt = 0) {
+    if (!worn) {
+      if (entity.crown) entity.crown.visible = false;
+      entity.crownAt = 0;
+      return;
+    }
+    if (!entity.crown) {
+      const material = new THREE.SpriteMaterial({ map: textures.get('crown'), transparent: true, alphaTest: 0.1, depthWrite: false, depthTest: false });
+      materials.add(material);
+      const crown = new THREE.Sprite(material);
+      crown.center.set(0.5, 0);
+      crown.scale.set(CROWN_WIDTH, CROWN_WIDTH * CROWN.length / CROWN[0].length, 1);
+      crown.position.set(0.21, 0.15, 0).addScaledVector(SCREEN_UP, 0.27);
+      crown.renderOrder = 2;
+      crown.visible = false;
+      entity.group.add(crown);
+      entity.crown = crown;
+    }
+    if (popAt) {
+      entity.crown.visible = false;
+      entity.crownAt = popAt;
+      // The monster itself flashes gold as the crown appears.
+      entity.glowAt = popAt;
+    } else if (!entity.crownAt) entity.crown.visible = true;
+  }
+
   function updateItems(items) {
     const key = items.map((item) => `${item.x}:${item.y}:${item.type}:${item.power || item.piece || ''}`).join('|');
     if (key === itemKey) return;
@@ -468,6 +503,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         entity.art.material.needsUpdate = true;
         entity.spriteId = spriteId;
       }
+      if (!player && !companion) {
+        const worn = data.promoted === true;
+        const crowned = worn && !changedBoard && events.some((event) => event.type === 'enemy-promotion' && event.x === data.x && event.y === data.y);
+        wearCrown(entity, worn, crowned ? (animateTurn ? now + delay + 145 : now) : 0);
+      }
       if (reducedMotion) entity.group.position.copy(entity.target);
     }
     for (const [id, entity] of entities) if (!live.has(id)) {
@@ -610,6 +650,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         }
       }
       entity.flash = Math.max(0, entity.flash - dt);
+      if (entity.crownAt && timestamp >= entity.crownAt) {
+        const t = reducedMotion ? 1 : (timestamp - entity.crownAt) / CROWN_POP_MS;
+        const pop = t >= 1 ? 1 : 1 + 0.7 * Math.sin(Math.PI * t);
+        if (t >= 1) entity.crownAt = 0;
+        entity.crown.visible = true;
+        entity.crown.scale.set(CROWN_WIDTH * pop, CROWN_WIDTH * pop * CROWN.length / CROWN[0].length, 1);
+      }
       const glow = entity.glowAt && timestamp >= entity.glowAt ? (timestamp - entity.glowAt) / FORK_GLOW_MS : -1;
       if (glow >= 1) entity.glowAt = 0;
       // Three gold pulses, or one steady flash under reduced motion.
