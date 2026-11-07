@@ -40,7 +40,7 @@
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><button id="wait-button" class="hint-button wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space">Wait</button></p>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
-      <p id="game-message" class="game-message" aria-live="polite"></p>
+      <div id="game-message" class="game-message" role="log" aria-label="Messages" aria-live="polite" tabindex="-1" hidden></div>
       <p id="tactic-callout" class="tactic-callout" aria-live="polite" hidden></p>
       <p id="first-tip" class="first-tip">Tap a square to move. Tap your piece for legal moves.</p>
       <div id="replay-bar" class="replay-bar" role="region" aria-label="Bot replay controls" hidden>

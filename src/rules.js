@@ -801,6 +801,7 @@ function grantPower(state, id) {
 
 function nextState(previous) {
   const state = structuredClone(previous);
+  delete state.notes;
   state.companionOrders ??= [];
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
@@ -811,7 +812,25 @@ function nextState(previous) {
   return state;
 }
 
+// Each phase of a move (the player's, the recruit's, the monsters', the ceiling's)
+// may say something. A later phase no longer erases an earlier one: settle() files
+// the earlier line in state.notes, oldest first, and state.message stays the last.
+function settle(state) {
+  if (!state.message) return;
+  (state.notes ??= []).push(state.message);
+  state.message = '';
+}
+
 export function act(previous, action) {
+  const state = play(previous, action);
+  if (state !== previous && state.notes) {
+    state.message ||= state.notes.pop();
+    if (!state.notes.length) delete state.notes;
+  }
+  return state;
+}
+
+function play(previous, action) {
   if (!previous || previous.status !== 'playing' || !action) return previous;
   if (action.type === 'descend') {
     if (!previous.exit.open || !previous.objective.complete) return previous;
@@ -834,12 +853,13 @@ export function act(previous, action) {
     if (state.playerColor === 'black' && !state.awaitingPlayer) {
       enemyTurn(state);
       if (state.events.some((event) => event.type === 'restart')) return state;
+      settle(state);
     }
     // Waiting is the player's move, so it spends any en passant window.
     state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state);
-    companionTurn(state);
-    if (state.playerColor === 'white') enemyTurn(state);
-    collapseTick(state);
+    companionTurn(state); settle(state);
+    if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
+    collapseTick(state); settle(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
     return state;
   }
@@ -876,6 +896,7 @@ export function act(previous, action) {
       state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : legalMoves(state).length ? 'The board changed. Choose another move.' : 'The board changed. Wait for an opening.'}`;
       return state;
     }
+    settle(state);
   }
   // Castling is decided on the board the move is played on (after black's prelude).
   const castle = castleFor(state);
@@ -938,6 +959,7 @@ export function act(previous, action) {
   const guard = closeAttacker(state, state.player);
   const close = guard ?? (doubleStep ? enPassantStriker(state, state.player) : null);
   if (close) {
+    settle(state);
     const passing = !guard;
     const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y, ...(passing && { enPassant: true }) };
     state.events.push(event);
@@ -948,9 +970,10 @@ export function act(previous, action) {
     if (passing && hit === 'captured' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
   }
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
-  if (!castle) companionTurn(state);
-  if (state.playerColor === 'white' && !close) enemyTurn(state);
-  collapseTick(state);
+  settle(state);
+  if (!castle) { companionTurn(state); settle(state); }
+  if (state.playerColor === 'white' && !close) { enemyTurn(state); settle(state); }
+  collapseTick(state); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
 }
@@ -1082,6 +1105,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
+    if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
     if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }

@@ -131,3 +131,12 @@ body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px
 @keyframes tactic-pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}12%{transform:translate(-50%,-50%) scale(1.15);opacity:1}22%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{transform:translate(-50%,-60%);opacity:0}}
 @media(max-width:600px){.tactic-callout{font-size:26px;max-width:calc(100% - 32px)}}
 body.replaying .tactic-callout{display:none!important}
+/* Message log (main.js showGameFeedback): the last two lines show, older ones scroll. */
+.game-message{width:min(460px,calc(100% - 32px));max-width:none;padding:6px 12px;text-align:left;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#766b7b transparent}
+.game-message.scrollable{pointer-events:auto;touch-action:pan-y}
+.game-message p{margin:0;padding:2px 0}
+.game-message p+p{border-top:1px solid #40394780}
+.game-message p.stale{color:var(--muted)}
+.game-message .message-what{pointer-events:auto}
+.game-message.below{bottom:auto}
+.game-message.beside{bottom:auto;transform:none}
