@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // The fairness checker's certified route doubles as the "bot" a player can
 // compare against after beating the day. It is shown only after a win.
-import { act, createGame } from './game.js';
+import { act, createGame, scoredMoves } from './game.js';
+
+const sum = (floors) => floors.reduce((total, moves) => total + moves, 0);
 
 /**
  * Replay the edition's certificate through the production engine. Returns each
- * position the bot passed through (frames[0] is the fresh dungeon), its total
- * chess moves, and its moves per floor. Returns null if there is no certificate.
+ * position the bot passed through (frames[0] is the fresh dungeon), every chess
+ * move it played (`turns`), and its scored moves per floor and in total: moves
+ * until each floor's challenge was complete. Returns null if there is no certificate.
  */
 export function botRun(daily) {
   const actions = daily?.generation?.certificate?.actions;
@@ -21,14 +24,15 @@ export function botRun(daily) {
     state = next;
   }
   if (state.status !== 'won') return null;
-  return { frames, moves: state.turns, floors: state.records.map((record) => record.turns) };
+  const floors = state.records.map(scoredMoves);
+  return { frames, turns: state.turns, moves: sum(floors), floors };
 }
 
-/** Moves a won run spent per floor, plus its total, for the comparison card. */
+/** Scored moves a won run spent per floor, plus their total, for the comparison card. */
 export function playerRun(state) {
   if (state?.status !== 'won' || !Array.isArray(state.records)) return null;
   return {
-    moves: state.turns, floors: state.records.map((record) => record.turns),
+    moves: sum(state.records.map(scoredMoves)), floors: state.records.map(scoredMoves),
     livesLost: state.player.maxHp - state.player.hp, tries: state.tries ?? (state.replayUnlocked ? 2 : 1),
   };
 }

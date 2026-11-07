@@ -781,7 +781,8 @@ function finishFloor(state) {
   const treasure = state.treasure - state.floorStart.treasure;
   // A life bought in this floor's shop is in `hp` but wasn't lost or kept on the floor.
   const lives = livesBought(state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0));
-  state.records.push({ floor: state.floor, turns: state.turns - state.floorStart.turns, captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  const turns = state.turns - state.floorStart.turns;
+  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
@@ -822,6 +823,8 @@ function captureEnemy(state, captured, companion = false) {
   if ((captured.role ?? captured.piece) === state.objective.piece) {
     state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
     state.exit.open = state.objective.complete;
+    // The scored move count stops here: gathering gold afterwards is free.
+    if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
     state.message = state.exit.open ? 'Challenge complete. Tap the stairs to leave.' : `${captured.name} captured. Keep hunting.`;
   } else state.message = `${captured.name} captured. +1 gold.`;
 }
@@ -1142,11 +1145,17 @@ function alignedScores(scores) {
   });
   return line;
 }
+/** Moves that count toward a floor's score: those until the challenge was complete. Older records count every move. */
+export function scoredMoves(record) { return record?.scored ?? record?.turns; }
+
+/** Scored moves on the floor in progress: still counting until the challenge is complete. */
+export function floorScoredMoves(state) { return state.objective?.moves ?? state.turns - state.floorStart.turns; }
+
 export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   const markers = [], scores = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    const diff = Number.isInteger(record?.turns) && Number.isInteger(pars?.[floor]) ? record.turns - pars[floor] : null;
+    const diff = Number.isInteger(scoredMoves(record)) && Number.isInteger(pars?.[floor]) ? scoredMoves(record) - pars[floor] : null;
     markers.push(FLOOR_MARKERS[floor]);
     scores.push(diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `\u2212${-diff}`);
   }
@@ -1225,6 +1234,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (new Set(value.enemies.map((foe) => foe.id)).size !== value.enemies.length || new Set(value.enemies.map((foe) => `${foe.x},${foe.y}`)).size !== value.enemies.length) return false;
     const capturedTarget = !value.enemies.some((foe) => foe.role === value.objective.piece);
     if (value.objective.complete !== capturedTarget) return false;
+    // Saves from before scored moves have no count; a present one belongs to a complete challenge.
+    if (value.objective.moves !== undefined && !(value.objective.complete && integer(value.objective.moves, 1, value.turns - value.floorStart.turns))) return false;
     if (!value.items.every((item) => template.items.some((original) => equal(original, item))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
     const recruit = template.items.find((item)=>item.type==='companion');
     const deliveredOrder = orders.find((entry) => entry.floor === value.floor);
@@ -1236,7 +1247,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;

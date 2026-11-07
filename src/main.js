@@ -8,7 +8,7 @@ import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -296,12 +296,13 @@ function renderPar() {
   $('par-status').hidden = par === null;
   if (par === null) return;
   $('par-status').textContent = `Par ${par}`;
-  $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${state.turns - state.floorStart.turns} so far`);
+  $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${floorScoredMoves(state)} so far`);
 }
 // "Floor 1 cleared in 12 moves · 2 over par" when a floor with a par is cleared.
 function announcePar(record, par) {
-  const diff = record.turns - par;
-  notify(`Floor ${record.floor + 1} cleared in ${record.turns} ${record.turns === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`);
+  const moves = scoredMoves(record);
+  const diff = moves - par;
+  notify(`Floor ${record.floor + 1} cleared in ${moves} ${moves === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`);
   const notice = $('notice');
   notice.classList.remove('par-toast'); void notice.offsetWidth; notice.classList.add('par-toast');
 }
@@ -326,7 +327,12 @@ function updateGame() {
   $('king-practice-note').hidden = !(practice && state.startingPiece === 'king');
   renderLives();
   $('gold-status').textContent = `${state.gold} gold`;
-  $('move-status').textContent = `${state.turns} ${state.turns === 1 ? 'move' : 'moves'}`;
+  // Scored moves: the count pauses once a floor's challenge is complete.
+  const moves = state.records.reduce((total, record) => total + scoredMoves(record), 0) + (state.records.length > state.floor ? 0 : floorScoredMoves(state));
+  $('move-status').textContent = `${moves} ${moves === 1 ? 'move' : 'moves'}`;
+  const paused = state.objective.complete;
+  $('move-status').classList.toggle('paused', paused);
+  $('move-status').setAttribute('aria-label', paused ? `${$('move-status').textContent}, paused: challenge complete, so gold and stairs are free` : $('move-status').textContent);
   renderPar();
   renderTools();
   const pinnedFoe = state.enemies.find((foe) => foe.pinned);
@@ -1018,7 +1024,7 @@ function replayFrame() {
   const frame = replay.run.frames[replay.index];
   const last = replay.index === replay.run.frames.length - 1;
   renderer.render({ ...frame, danger: dangerTiles(frame), legalMoves: [], showMoves: false, cursor: null });
-  const total = replay.run.moves;
+  const total = replay.run.turns;
   $('replay-label').textContent = last
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${frame.turns} of ${total}`;
