@@ -114,7 +114,7 @@ for search, authoring, and rule fixtures; application code uses `game.createGame
 
 ## Room modifiers
 
-`modifierFor(date)` draws `none`, `dark`, `ice` or `collapse` uniformly from its
+`modifierFor(date)` draws from `none`, `none`, `ice` and `collapse` uniformly from its
 own hash stream (`modifier:<date>`), so no other daily draw moves. The modifier is part of
 `getRawDaily()` and is copied into the state by `createGame()`.
 
@@ -134,12 +134,13 @@ own hash stream (`modifier:<date>`), so no other daily draw moves. The modifier 
   as `f<floor>-r<n>`. None arrive once the stairs open. Reinforcements are
   ordinary decoys: capturing one pays a gold, and save validation widens floor
   populations by the cap.
-- **Dark** has no rules effect. `visibleSquares()` and `updateSightings()` drive
-  the renderer's fog and last-seen ghosts.
+- **Dark** (retired) hid squares more than two away from the player. It hid the
+  board, which took the planning out of a day, and the solver could not model
+  it, so its draw slot now yields `none`. Former dark days kept their
+  dungeons, now played in full view.
 
 Ice and collapse change play, so the fallback bank holds a certificate for
-each tier, piece and one of `none`, `ice` or `collapse` (75 in all);
-dark days use the plain certificate. Over the 60 standard editions from
+each tier, piece and one of `none`, `ice` or `collapse` (75 in all). Over the 60 standard editions from
 2026-11-06, every modifier certified at the same rate as the same days
 without it (the same three days needed fallbacks).
 

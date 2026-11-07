@@ -134,7 +134,7 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
   // Bounded search may miss a solution. Fall back to a tested complete dungeon,
   // retaining this date's piece/color and cosmetic variety. Never accept an
   // uncertified layout, even if a future rule change invalidates the fallback.
-  // Each rules-changing room modifier has its own bank; plain and dark days share one.
+  // Each room modifier has its own bank; plain days share one.
   const entry = FALLBACKS[fallbackKey(tier, base.playerPiece, base.playerColor, base.modifier)];
   if (!entry) throw new Error('No certified fallback for this edition.');
   const template = getRawDaily(entry.date);

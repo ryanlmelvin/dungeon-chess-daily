@@ -9,7 +9,7 @@ import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
   MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
-  modifierFor, iceSlide, visibleSquares, updateSightings, ghostsFrom,
+  modifierFor, iceSlide,
 } from '../src/modifiers.js';
 
 const day = (offset, start = '2026-11-06') => new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -40,8 +40,8 @@ const strip = (state) => {
   return floorSnapshot ? { ...rest, floorSnapshot: strip(floorSnapshot) } : rest;
 };
 
-test('the modifier is a pure function of the date, about one plain day in four', () => {
-  const counts = { none: 0, dark: 0, ice: 0, collapse: 0 };
+test('the modifier is a pure function of the date, about one plain day in two', () => {
+  const counts = { none: 0, ice: 0, collapse: 0 };
   for (let offset = 0; offset < 365; offset++) {
     const date = day(offset, '2026-11-07');
     const modifier = modifierFor(date);
@@ -49,7 +49,8 @@ test('the modifier is a pure function of the date, about one plain day in four',
     assert.equal(getRawDaily(date).modifier, modifier);
     counts[modifier]++;
   }
-  for (const [id, count] of Object.entries(counts)) assert.ok(count > 60 && count < 125, `${id}: ${count}`);
+  for (const id of ['ice', 'collapse']) assert.ok(counts[id] > 60 && counts[id] < 125, `${id}: ${counts[id]}`);
+  assert.ok(counts.none > 145 && counts.none < 220, `none: ${counts.none}`);
   // The draw has its own stream: the rest of the edition is what it was.
   const raw = getRawDaily('2026-12-01');
   assert.equal(raw.seed, getRawDaily('2026-12-01').seed);
@@ -189,7 +190,7 @@ test('collapse stops once the stairs open and other modifiers never reinforce', 
   state.exit.open = true; state.objective.complete = true;
   for (let turn = 0; turn < COLLAPSE_EVERY * 2; turn++) state = act(state, { type: 'wait' });
   assert.equal(state.reinforcements, 0);
-  for (const modifier of ['none', 'dark', 'ice']) {
+  for (const modifier of ['none', 'ice']) {
     let other = createGame({ ...getRawDaily(firstDate('collapse')), modifier });
     other.powers.freeze = 1000;
     for (let turn = 0; turn < COLLAPSE_EVERY * 2; turn++) other = act(other, { type: 'wait' });
@@ -232,54 +233,12 @@ test('saves must match the day’s modifier and its ice', () => {
   assert.equal(validateSave({ ...plain, modifier: 'ice' }, plainDate, getDaily(plainDate)), false);
 });
 
-test('dark changes only what is drawn: the game plays exactly like a plain day', () => {
-  const date = firstDate('dark');
+test('dark is retired: its draws are plain days, and dark saves no longer load', () => {
+  assert.equal(MODIFIERS.dark, undefined);
+  for (let offset = 0; offset < 365; offset++) assert.notEqual(modifierFor(day(offset)), 'dark');
+  const date = firstDate('none');
   const daily = getDaily(date);
-  let dark = createGame(daily);
-  let plain = createGame({ ...daily, modifier: 'none' });
-  assert.equal(dark.modifier, 'dark');
-  for (const action of daily.generation.certificate.actions) {
-    assert.deepEqual(legalMoves(dark), legalMoves(plain));
-    dark = act(dark, action);
-    plain = act(plain, action);
-    assert.deepEqual(strip(dark), strip(plain));
-  }
-  assert.equal(dark.status, 'won');
-});
-
-test('dark sight: two squares around the player, plus monsters winding up and their paths', () => {
-  const state = room('dark', 'rook');
-  const seen = visibleSquares(state);
-  assert.equal(seen.size, 5 * 4); // rows 4-7 (the board's edge), files 2-6
-  assert.ok(seen.has('2,4') && seen.has('6,7') && !seen.has('4,3') && !seen.has('1,6'));
-  const aiming = { ...foe('a', 'rook', 0, 0), phase: 'aim', target: { x: 4, y: 0 }, intent: [{ x: 1, y: 0 }, { x: 2, y: 0 }] };
-  state.enemies = [aiming, foe('b', 'knight', 7, 0)];
-  const lit = visibleSquares(state);
-  for (const key of ['0,0', '1,1', '1,0', '2,0']) assert.ok(lit.has(key), key);
-  assert.ok(!lit.has('7,0'));
-  // Plain days see everything.
-  assert.equal(visibleSquares(room('none')).size, 64);
-});
-
-test('dark remembers monsters it has seen as ghosts until their square is seen again', () => {
-  const state = room('dark', 'rook');
-  state.enemies = [foe('a', 'knight', 4, 4)];
-  let memory = updateSightings(new Map(), state);
-  assert.deepEqual(ghostsFrom(memory, state), []);
-  // It moves out of sight: a ghost stays where it was last seen.
-  state.enemies[0] = { ...state.enemies[0], x: 4, y: 1 };
-  state.player.y = 7;
-  memory = updateSightings(memory, state);
-  assert.deepEqual(ghostsFrom(memory, state).map(({ id, x, y }) => [id, x, y]), [['a', 4, 4]]);
-  // Unseen squares keep their ghost; seeing that square empty clears it.
-  state.player.y = 6;
-  memory = updateSightings(memory, state);
-  assert.deepEqual(ghostsFrom(memory, state), []);
-  // A captured monster is forgotten.
-  state.enemies = [foe('b', 'knight', 4, 5)];
-  memory = updateSightings(memory, state);
-  state.player.y = 7; state.player.x = 0; state.enemies = [];
-  assert.deepEqual(ghostsFrom(updateSightings(memory, state), state), []);
+  assert.equal(validateSave({ ...createGame(daily), modifier: 'dark' }, date, daily), false);
 });
 
 test('every modifier certifies: generated and forced-fallback editions replay under it', () => {
@@ -309,6 +268,4 @@ test('the fallback bank covers every piece and difficulty under each rule-changi
       }
     }
   }
-  // Dark plays by plain rules, so it shares plain days' certificates.
-  assert.equal(fallbackKey('tough', 'rook', 'white', 'dark'), fallbackKey('tough', 'rook', 'white'));
 });

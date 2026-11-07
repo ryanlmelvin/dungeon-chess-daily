@@ -4,8 +4,6 @@
 // floors. The modifier is part of the game state (state.modifier, absent on
 // plain days), so the fairness solver and verifier play under it too.
 //
-// - dark: the renderer shows only squares near the player and around monsters
-//   that are winding up. The rules are unchanged.
 // - ice: some floor tiles are ice. The player's slider (rook, bishop, queen, or
 //   a pawn moving straight) ending a non-capturing move on ice slides one more
 //   square the same way if that square is open and empty. Monsters and
@@ -18,12 +16,6 @@ import { hash, random } from './random.js';
 
 export const MODIFIERS = Object.freeze({
   none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),
-  // Dark changes only what is drawn, so it shares plain days' fallback dungeons.
-  dark: Object.freeze({
-    id: 'dark', emoji: '🌑', name: 'Dark', changesRules: false,
-    headline: 'Lamps fail below: crawlers see two squares, and only a monster’s wind-up lights the gloom',
-    explain: 'Dark: you see only squares within 2 of your piece. A monster winding up lights itself and its path. The rules don’t change.',
-  }),
   ice: Object.freeze({
     id: 'ice', emoji: '🧊', name: 'Ice', changesRules: true,
     headline: 'Cold snap glazes the dungeon: long moves that end on ice skid one square further',
@@ -35,8 +27,10 @@ export const MODIFIERS = Object.freeze({
     explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door, or waits there until it’s free. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
 });
-// Uniform over these, so about one day in four stays plain.
-const DRAW = ['none', 'dark', 'ice', 'collapse'];
+// Uniform over these, so about half the days stay plain. The second slot was
+// Dark (retired: it hid the board, which took the planning out of a day); its
+// days became plain, so every other date keeps its draw and its dungeon.
+const DRAW = ['none', 'none', 'ice', 'collapse'];
 export const ICE_TILES = 8;
 export const COLLAPSE_EVERY = 10;
 export const COLLAPSE_CAP = 3;
@@ -147,54 +141,4 @@ export function modifierStatus(state) {
   const due = collapseDue(state);
   if (due > spawned) return `${modifier.emoji} Arrival waiting at the door`;
   return `${modifier.emoji} Next arrival in ${COLLAPSE_EVERY * (spawned + 1) - moves}`;
-}
-
-// ---- Dark: rendering only ----
-
-export const DARK_SIGHT = 2;
-
-/** Squares the player can see in the dark, as "x,y" keys. Every square otherwise. */
-export function visibleSquares(state) {
-  const seen = new Set();
-  if (state?.modifier !== 'dark') {
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) seen.add(`${x},${y}`);
-    return seen;
-  }
-  const light = (center, radius) => {
-    for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
-      if (inside(center.x + dx, center.y + dy)) seen.add(`${center.x + dx},${center.y + dy}`);
-    }
-  };
-  light(state.player, DARK_SIGHT);
-  // A monster winding up lights itself, its surroundings and its whole attack path.
-  for (const foe of state.enemies) if (foe.phase === 'aim') {
-    light(foe, 1);
-    for (const tile of foe.intent ?? []) seen.add(`${tile.x},${tile.y}`);
-  }
-  return seen;
-}
-
-/**
- * Remembered monsters in the dark: id -> where it was last seen. Monsters in
- * sight update their entry; a captured monster, or one whose remembered square
- * is now in sight and empty, is forgotten. Returns a new Map.
- */
-export function updateSightings(memory, state, visible = visibleSquares(state)) {
-  const next = new Map();
-  for (const [id, ghost] of memory) {
-    const foe = state.enemies.find((entry) => entry.id === id);
-    if (!foe || visible.has(`${ghost.x},${ghost.y}`)) continue;
-    next.set(id, ghost);
-  }
-  for (const foe of state.enemies) {
-    if (visible.has(`${foe.x},${foe.y}`)) next.set(foe.id, { x: foe.x, y: foe.y, species: foe.species, palette: foe.palette });
-  }
-  return next;
-}
-
-/** Ghosts to draw: remembered monsters not currently in sight. */
-export function ghostsFrom(memory, state, visible = visibleSquares(state)) {
-  return [...memory.entries()]
-    .filter(([id]) => { const foe = state.enemies.find((entry) => entry.id === id); return !foe || !visible.has(`${foe.x},${foe.y}`); })
-    .map(([id, ghost]) => ({ id, ...ghost }));
 }

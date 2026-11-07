@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
 import { SPRITES, PALETTE, spritePalette, piecePalette, COMPANION_PALETTE, STONE_SIZE, paintStone } from './sprites.js';
-import { visibleSquares, updateSightings, ghostsFrom } from './modifiers.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -57,9 +56,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const actors = new THREE.Group();
   const hints = new THREE.Group();
   const collectibles = new THREE.Group();
-  // Dark days: shade unseen squares and draw remembered monsters as ghosts.
-  const fog = new THREE.Group();
-  scene.add(board, fog, hints, collectibles, actors);
+  scene.add(board, hints, collectibles, actors);
   const cube = new THREE.BoxGeometry(1, 1, 1);
   const plane = new THREE.PlaneGeometry(1, 1);
   const materials = new Set();
@@ -91,10 +88,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let pendingItems = null;
   let lastEvents = null;
   let moveMaterial = null;
-  // Dark days only: wall sprites to dim, what is in sight, and last-seen monsters.
-  const propSprites = new Map();
-  let sight = null;
-  let sightings = new Map();
   const playerPulse = { value: 0 };
   const moveColor = { value: new THREE.Color(MOVE_COLOR) };
 
@@ -169,10 +162,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     clear(actors);
     clear(hints);
     clear(collectibles);
-    clear(fog);
-    propSprites.clear();
-    sightings = new Map();
-    sight = null;
     itemKey = '';
     pendingItems = null;
     targets.length = particles.length = 0;
@@ -200,7 +189,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         const type = prop?.type || ['pillar', 'crate', 'barrel', 'rock'][(x * 3 + y + next.floor) % 4];
         // A raised, dark footprint makes blocked squares clear at phone scale.
         block(board, x, 0.045, y, 0.78, 0.14, 0.78, basic(0x19151c));
-        propSprites.set(`${x},${y}`, propSprite(board, `prop-${type}`, x, y, 0.9, 0.27));
+        propSprite(board, `prop-${type}`, x, y, 0.9, 0.27));
         if (type === 'pillar') {
           // Fallen chunks around the stump read as ruined masonry, not a piece.
           const rubble = basic(0x71828e);
@@ -408,44 +397,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
   }
 
-  // Dark days hide monsters, pickups and floor outside the player's sight
-  // (src/modifiers.js); walls dim to silhouettes and seen monsters leave ghosts.
-  function updateFog(next) {
-    clear(fog);
-    if (next.modifier !== 'dark') {
-      sight = null;
-      for (const sprite of propSprites.values()) sprite.material.color.set(0xffffff);
-      applyFog();
-      return;
-    }
-    sight = visibleSquares(next);
-    sightings = updateSightings(sightings, next, sight);
-    const shade = basic(0x050307, { transparent: true, opacity: 0.86, depthWrite: false });
-    for (let y = 0; y < rows; y++) for (let x = 0; x < columns; x++) {
-      if (!sight.has(`${x},${y}`)) tileMark(fog, x, y, 1.0, 1.0, shade, 0.02);
-    }
-    for (const [key, sprite] of propSprites) sprite.material.color.set(sight.has(key) ? 0xffffff : 0x3a3440);
-    for (const ghost of ghostsFrom(sightings, next, sight)) {
-      const material = new THREE.SpriteMaterial({ map: spriteTexture(ghost.species, ghost.palette), transparent: true, opacity: 0.32, alphaTest: 0.05, depthWrite: false, color: 0xa8bcd8 });
-      materials.add(material);
-      const sprite = new THREE.Sprite(material);
-      sprite.center.set(0.5, 0.42);
-      sprite.scale.set(0.72, 0.72, 1);
-      sprite.position.set(ghost.x, 0.15, ghost.y);
-      fog.add(sprite);
-    }
-    applyFog();
-  }
-  function applyFog() {
-    const seen = (x, z) => !sight || sight.has(`${Math.round(x)},${Math.round(z)}`);
-    for (const child of collectibles.children) child.visible = seen(child.position.x, child.position.z);
-    for (const [id, entity] of entities) {
-      if (entity.player || entity.companion) continue;
-      const tile = entity.art.userData.tile;
-      entity.group.visible = !sight || sight.has(`${tile.x},${tile.y}`);
-    }
-  }
-
   function render(next, afterTransition = false) {
     if (disposed) return;
     const now = performance.now();
@@ -579,7 +530,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     // A monster entering through a collapsing door arrives in a puff of dust.
     for (const event of events) if (event.type === 'reinforcement') burst(event.x, event.y);
-    updateFog(next);
     currentTurn = next.turns;
     lastEvents = next.events;
     state = next;
@@ -674,7 +624,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (pendingItems && timestamp >= pendingItems.at) {
       updateItems(pendingItems.items);
       pendingItems = null;
-      applyFog();
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i];

@@ -171,14 +171,15 @@
         <p>Each capture costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
       </article>
       <article class="guide-page" hidden>
-        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop: a bone ward, a coin magnet, an extra life for 10 gold (one per shop), or one of three tools you use when you choose, from buttons beside your lives. Hourglasses turn up only in rooms. With no shop after it, the last floor holds no coins.</p>
+        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop. It always sells an extra life for 10 gold (one per shop), plus three other items drawn for that shop and the same for everyone that day: a bone ward, a coin magnet, or a tool you use when you choose from buttons beside your lives. Hourglasses turn up only in rooms. With no shop after it, the last floor holds no coins.</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one capture. Stacks up to 3.</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Found in rooms, never sold. Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
-          <div><dt class="guide-tool" aria-label="Pin">Pin</dt><dd>4 gold. Tap Pin, then a monster: it can’t move or capture for 3 moves. Kings can’t be pinned.</dd></div>
-          <div><dt class="guide-tool" aria-label="Borrowed move">♘</dt><dd>3 gold. Tap Borrow, and squares with gold corners move like a knight (a knight borrows a queen’s move). Only taking one of those squares spends it.</dd></div>
-          <div><dt class="guide-tool" aria-label="Take-back">↶</dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
+          <div><dt><canvas data-guide-art="power-pin" width="40" height="40" role="img" aria-label="Pin"></canvas></dt><dd>4 gold. Tap Pin, then a monster: it can’t move or capture for 3 moves. Kings can’t be pinned.</dd></div>
+          <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Tap Borrow, and squares with gold corners move like a knight (a knight borrows a queen’s move). Only taking one of those squares spends it.</dd></div>
+          <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
+          <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
           <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. A recruit moves after you for that floor and its captures count, but it can never capture the floor’s challenge piece: that’s yours to take. A king recruit can castle with your rook.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
@@ -195,9 +196,7 @@
         <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into check. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
       </article>
       <article class="guide-page" hidden>
-        <p>Most days add one <b>room modifier</b> to all three floors. The paper’s bulletin and the top of the board name it. About one day in four is plain.</p>
-        <h3>🌑 Dark</h3>
-        <p>You see only squares within 2 of your piece. A monster winding up lights itself and its red path, so warnings still show. Monsters you’ve seen stay as faded ghosts where you last saw them. The rules don’t change, only what you can see.</p>
+        <p>Many days add one <b>room modifier</b> to all three floors. The paper’s bulletin and the top of the board name it. About half the days are plain.</p>
         <h3>🧊 Ice</h3>
         <p>Pale, glinting squares are ice. A rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square the same way if that square is open and empty. Captures stop you dead. The move preview draws an arrow to where you’ll land. Monsters and recruits are sure-footed: only your piece slides.</p>
         <h3>🧱 Collapse</h3>

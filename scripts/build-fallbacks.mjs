@@ -16,7 +16,7 @@ import { MODIFIERS } from '../src/modifiers.js';
 // Every daily is white (src/edition.js), so only white needs a fallback.
 const colors = ['white'];
 // Plain play, plus each room modifier that changes the rules. A template date
-// must carry a modifier with the same bank key (dark days share the plain bank).
+// must carry a modifier with the same bank key.
 const modifiers = Object.values(MODIFIERS).filter((entry) => entry.id === 'none' || entry.changesRules).map((entry) => entry.id);
 const bankModifier = (modifier) => (MODIFIERS[modifier]?.changesRules ? modifier : 'none');
 const LAYOUT_KNOBS = ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens'];
