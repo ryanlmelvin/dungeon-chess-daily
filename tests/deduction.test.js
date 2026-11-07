@@ -8,7 +8,7 @@ import { getRawDaily, headlineFor } from '../src/edition.js';
 import { floorLineup, floorDecoys, paperSuspects, nextHint, hintCards, closeRangeSquares, closeAttacker, targetLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
 import { reinforcementOptions } from '../src/modifiers.js';
 import { floorPars } from '../src/par.js';
-import { playerRun } from '../src/bot.js';
+import { botRun, playerRun } from '../src/bot.js';
 
 const day = (offset) => new Date(Date.UTC(2026, 10, 5 + offset)).toISOString().slice(0, 10);
 const json = (value) => JSON.parse(JSON.stringify(value));
@@ -257,7 +257,8 @@ test('an unmasked target needs no target hint, and nothing is for sale once the 
 });
 
 test('paid hints score like moves: restarts keep them, and records, par, the share card and the bot table count them', () => {
-  const pars = floorPars(daily);
+  // The certified route's own moves per floor, so the strokes read as +N whatever par is (src/par.js).
+  const pars = botRun(daily).floors;
   const route = daily.generation.certificate.actions;
   let state = act(act(createGame(daily), hint('suspects')), hint('danger'));
   // A restart keeps the hints (and shows them), counting the moves made before it once.

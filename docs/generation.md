@@ -45,10 +45,13 @@ which most targets attack, so pawn routes depend on waiting and on spending
 lives: in a one-year audit, waiting cut pawn days that needed a fallback from
 63 of 75 to 12.
 
-After a daily win with the official piece, `src/bot.js` replays this same
-certificate through `act()` to show the player the bot's per-floor move counts
-and an animated replay. The route stays hidden until then. Its length is the
-length of a witnessed route, not the shortest one, so players can beat it.
+The certificate is for proving a day can be won; par comes from a second bot
+that plays like a person (see [Par and the human gap](#par-and-the-human-gap)).
+After a daily win with the official piece, `src/bot.js` shows the player that
+bot's per-floor move counts and an animated replay when it cleared every floor,
+and otherwise replays this certificate through `act()`. Routes stay hidden
+until then. The certificate's length is the length of a witnessed route, not
+the shortest one, so players can beat it.
 
 This is an existence guarantee from the fresh starting position under this
 version's deterministic rules. It does not mean every move is safe, every
@@ -165,6 +168,76 @@ pawn-lane rule, en passant, promotion and the royal floor's king and guard rules
 are unchanged. Weights live in `HABITS`; knights that never accept exposure made
 knight days hard to certify (110 of 120 audited dates instead of 118), so the
 exposure penalty stays below a strike-plus-fork bonus.
+
+## Par and the human gap
+
+The certificate's route is a search's route: on 2026-11-07's last floor
+(bishop against king, 16 moves) it wanders while the rook recruit eats every
+guard, then corners the lone king, which no person would plan. So par comes
+from a bot that plays like a person, `src/human-bot.js`:
+
+- **It sees what a player sees**: the board, items and red lanes, the floor's
+  target role and which species is the target (as if the newspaper were
+  solved), and a species' role once one of them has been captured. It never
+  reads a hidden role and never simulates the monsters' replies. A monster of
+  unknown role is dangerous up close: the squares next to it and a knight's jump
+  away count as unsafe, for any role but the target's.
+- **It plans only its own moves**, on the board as it stands: can I take a
+  target next move, will I have a safe square to go to, and how many moves
+  away is the nearest target?
+- **Habits, in order**: take a target when that's safe; never end a move in a
+  red lane or where a monster strikes up close; close in on the nearest target
+  by the safest short way (a search over squares no monster strikes, with the
+  wall-aware move tables of `src/move-tables.js` as the fallback); pick up the
+  recruit when it costs at most a move; take a decoy when that costs nothing;
+  otherwise wait, since monsters often walk into range, and after a few waits
+  try a sideways move. A pawn goes after a king only once promoted. When every
+  move is risky it takes the least risky one. No powerups and no shopping,
+  like the certificate.
+- **Each floor is played from its standard start**, the position the
+  certificate reaches there, so a floor's par never depends on how another
+  floor went. Five seeded runs per floor (`HUMAN_RUNS`; each seed is the date,
+  floor and run number, never a move count). A run succeeds when it completes
+  the challenge within 40 moves (`HUMAN_MOVE_CAP`) without losing its last
+  life; it may lose others, as players do.
+- **Par** is the lower median of the successful runs' scored moves. When every
+  run fails, par is the certificate's moves on that floor plus 25%, rounded up,
+  and the floor is recorded as failed.
+
+`scripts/build-editions.mjs` works out par for every stored edition on all
+cores (seconds, so it is redone on every build) and stores it beside the route
+in `src/editions.js` as `par`, with `runs`: the run the result card replays on
+each floor, or `null` where the bot failed. `--verify` checks both. A date past
+the window works par out once on the device (`src/par.js`) and remembers it in
+local storage. The result card's Dungeon Bot is the human-like bot when it
+cleared every floor without losing as many lives as the piece has (its floors
+are then the day's pars), else the certificate. Today the recruit moves on its
+own; `humanPlayer` takes a recruit policy that can add an order to each action.
+
+**The human gap.** `difficultyScore` measures how dangerous the certificate's
+route was, not how hard a route is to find. `humanGap` (`src/difficulty.js`)
+measures that: per floor, the human-like bot's expected moves (the mean of its
+five runs, a failed run counting as the whole 40-move cap) minus the
+certificate's moves, summed over the floors. It sits beside the score and does
+not pick tiers. `node scripts/measure-human-par.mjs` reports, by tier and piece,
+how often runs clear each floor, par against the certificate per floor, the gap
+and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06):
+
+| Tier | Runs won F1 / F2 / F3 | Total par / certified (median) | Human gap | Score |
+| --- | --- | --- | --- | --- |
+| Gentle | 95% / 89% / 64% | 27 / 20 | 21.3 | 9.5 |
+| Fair | 88% / 88% / 62% | 31 / 20 | 26.3 | 11.3 |
+| Tricky | 91% / 89% / 64% | 30 / 20 | 25.2 | 12.9 |
+| Tough | 88% / 90% / 64% | 32 / 22 | 25.9 | 13.6 |
+| Fiendish | 86% / 86% / 67% | 32 / 21 | 28.0 | 15.0 |
+
+By piece the gap is knight 14.4, queen 15.5, rook 20.0, bishop 30.2 and pawn
+45.5: the bot clears a bishop's king floor in 31% of runs and a pawn's in 42%
+(a pawn day's relic sits on the pawn's own file, and the bot, like the
+certificate, never takes it). The gap rises only a little through the week but
+differs widely between pieces, which is what a recalibration on it would fix.
+The bot is software with blind spots too, so a failed floor is evidence that a
+day is hard to figure out, not proof.
 
 ## Difficulty and chess learning
 

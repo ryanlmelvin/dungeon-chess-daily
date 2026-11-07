@@ -8,6 +8,7 @@
 // bounds or a claim that every winning strategy encounters these decisions.
 import { CALIBRATION } from './calibration.js';
 import { PIECE_LIVES } from './pieces.js';
+import { HUMAN_MOVE_CAP } from './human-bot.js';
 
 /**
  * Tiers from easiest to hardest. `band` is the [low, high] target range of
@@ -81,6 +82,26 @@ export function difficultyScore(metrics, piece) {
   const pressure = metrics.threatenedDecisions + 2 * metrics.narrowEscapes + metrics.turns / 4 + 20 * share;
   const livesLeft = Math.max(1, PIECE_LIVES[piece] - metrics.livesLost);
   return Math.round(pressure / Math.sqrt(livesLeft) * 10) / 10;
+}
+
+/**
+ * How much harder a day is for a person than for the search, beside
+ * difficultyScore (which measures the certified route alone). Per floor: the
+ * human-like bot's expected moves there (src/human-bot.js humanPar: the mean
+ * of its runs from the floor's standard start, a failed run counting as the
+ * whole move cap) minus the certified route's moves. Returns those per floor
+ * (`floors`), the share of runs that failed per floor (`failed`) and their sum
+ * (`total`), rounded to tenths. Higher is harder. Measured only: the tiers
+ * still use difficultyScore.
+ */
+export function humanGap({ results, certified }, cap = HUMAN_MOVE_CAP) {
+  const round = (value) => Math.round(value * 10) / 10;
+  const floors = results.map((runs, floor) => runs.reduce((sum, run) => sum + (run.won ? run.moves : cap), 0) / runs.length - certified[floor]);
+  return {
+    floors: floors.map(round),
+    failed: results.map((runs) => round(runs.filter((run) => !run.won).length / runs.length)),
+    total: round(floors.reduce((sum, gap) => sum + gap, 0)),
+  };
 }
 
 /** Distance from a score to a tier's band; 0 inside it. */
