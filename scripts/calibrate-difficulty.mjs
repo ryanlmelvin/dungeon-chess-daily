@@ -26,6 +26,9 @@
 //
 // Phase 1 (slow) searches both candidate layouts of `samples` dates per piece
 // under every grid setting, in parallel workers, at the runtime search budget.
+// Monsters grow smarter with the tier (src/monster-ai.js), so every setting is
+// measured once per tier, with that tier's monsters, and competes only for
+// that tier: five times the searches of one shared measurement.
 // It writes every search to --data: status ('solved', 'unknown' when the
 // budget ran out, 'invalid' when replay rejected the route), solver expansions,
 // route moves (final turns), wall time and the metrics the score needs, plus
@@ -33,8 +36,9 @@
 // instead of searching again, so the fit can be repeated after editing the
 // score or the bands.
 // Phase 2 (fast) replays generateDaily's own candidate choice
-// (chooseCandidate) for every tier, setting and threat minimum, and keeps the
-// cheapest: off-band distance, fallbacks and slow searches all cost.
+// (chooseCandidate, including the tier's minimum floor moves) for every tier,
+// its settings and threat minimum, and keeps the cheapest: off-band distance,
+// fallbacks and slow searches all cost.
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -46,12 +50,15 @@ const load = (path) => import(new URL(path, root).href);
 if (!isMainThread) {
   const { getRawDaily } = await load('src/edition.js');
   const { candidateFor, searchCandidate } = await load('src/generation.js');
-  const SCORE_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives'];
+  // floorMoves lets the fit apply the no-freebie-floor rule (chooseCandidate).
+  const SCORE_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves'];
   parentPort.on('message', ({ id, date, setting, budget }) => {
     const base = getRawDaily(date);
     const found = [0, 1].map((attempt) => {
       const began = performance.now();
-      const result = searchCandidate(candidateFor(base, 'calibration', setting, attempt), budget);
+      // Monsters grow smarter with the tier (src/monster-ai.js), so each
+      // setting is measured under the tier it is a candidate for.
+      const result = searchCandidate(candidateFor(base, setting.tier, setting, attempt), budget);
       const metrics = result.metrics ? Object.fromEntries(SCORE_METRICS.map((name) => [name, result.metrics[name]])) : null;
       return { status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics };
     });
@@ -127,8 +134,19 @@ if (!isMainThread) {
     if (!settings.some((entry) => settingKey(entry) === settingKey(plain))) settings.push(plain);
     return settings;
   };
-  // Settings without screens keep their original four-part key, so older data still matches.
-  const settingKey = ({ obstacleBase, decoys, scatter, guards, screens = 0 }) => `${obstacleBase}/${decoys}/${scatter}/${guards}${screens ? `/${screens}` : ''}`;
+  // Settings without screens keep their original four-part key. Each setting
+  // is measured for one tier, whose monsters it meets: `@tier` ends the key.
+  // Data from before tiered monsters has no tier and matches nothing.
+  const settingKey = ({ obstacleBase, decoys, scatter, guards, screens = 0, tier }) => `${obstacleBase}/${decoys}/${scatter}/${guards}${screens ? `/${screens}` : ''}${tier ? `@${tier}` : ''}`;
+  const parseKey = (key) => {
+    const [knobs, tier] = key.split('@');
+    const [obstacleBase, decoys, scatter, guards, screens = 0] = knobs.split('/').map(Number);
+    return { obstacleBase, decoys, scatter, guards, ...(screens && { screens }), ...(tier && { tier }) };
+  };
+  const tierOf = (key) => key.split('@')[1];
+  const isPlain = (key) => key.split('@')[0] === settingKey(DEFAULT_KNOBS);
+  // Every knob setting once per tier.
+  const perTier = (settings) => TIER_IDS.flatMap((tier) => settings.map((setting) => ({ ...setting, tier })));
   const datesFor = (piece) => {
     const dates = [];
     for (let time = Date.parse(start); dates.length < samples; time += 86_400_000) {
@@ -222,9 +240,8 @@ if (!isMainThread) {
     const settingsOf = new Map();
     for (const task of tasks) settingsOf.set(`${task.piece}|${settingKey(task.setting)}`, task.setting);
     const datesOf = (piece) => [...new Set(tasks.filter((task) => task.piece === piece).map((task) => task.date))];
-    const plainKey = settingKey(DEFAULT_KNOBS);
+    // A setting only competes for the tier whose monsters it was measured with.
     const bands = TIER_IDS.map((tier) => DIFFICULTY_TIERS[tier].band);
-    const floor = Math.min(...bands.map(([low]) => low)) - margin, ceiling = Math.max(...bands.map(([, high]) => high)) + margin;
     const byCenter = (value, [low, high]) => Math.abs(value - (low + high) / 2);
     let finals;
     const minimums = [0, 1, 2, 3, 4, 6];
@@ -270,29 +287,30 @@ if (!isMainThread) {
         const measured = ranked.filter((entry) => entry.mean !== null);
         // Below the full budget an unsolved screen may just mean hard, so it advances.
         const pick = new Set(fullScreens ? [] : ranked.filter((entry) => entry.mean === null).map((entry) => entry.id));
+        const out = new Set();
         for (const [index, band] of bands.entries()) {
+          const tier = TIER_IDS[index];
+          const mine = (entries) => entries.filter((entry) => tierOf(entry.id) === tier);
           // Full-budget screens rank by the fit's own cost on the dates so far;
           // cheaper screens can only rank by distance from the band's center.
           const value = fullScreens
-            ? (entry) => costsFor(piece, entry.id, TIER_IDS[index], Object.keys(screened[piece][entry.id.split('|')[1]]), screened).mean
+            ? (entry) => costsFor(piece, entry.id, tier, Object.keys(screened[piece][entry.id.split('|')[1]]), screened).mean
             : (entry) => byCenter(entry.mean, band);
-          const values = new Map((fullScreens ? ranked : measured).map((entry) => [entry.id, value(entry)]));
+          const values = new Map(mine(fullScreens ? ranked : measured).map((entry) => [entry.id, value(entry)]));
           [...values.keys()].sort((a, b) => values.get(a) - values.get(b)).slice(0, keep[stage]).forEach((id) => pick.add(id));
-        }
-        // The surrogate needs enough settings to fit 16 weights.
-        if (useSurrogate && stage === 0 && measured.length >= 24) {
-          const model = fitSurrogate(measured.map((entry) => ({ setting: entry.setting, y: entry.mean })));
-          for (const band of bands) {
-            [...ranked].sort((a, b) => byCenter(model.predict(a.setting), band) - byCenter(model.predict(b.setting), band)).slice(0, surrogateKeep).forEach((entry) => pick.add(entry.id));
+          // The surrogate needs enough settings to fit 16 weights.
+          if (useSurrogate && stage === 0 && mine(measured).length >= 24) {
+            const model = fitSurrogate(mine(measured).map((entry) => ({ setting: entry.setting, y: entry.mean })));
+            mine(ranked).sort((a, b) => byCenter(model.predict(a.setting), band) - byCenter(model.predict(b.setting), band)).slice(0, surrogateKeep).forEach((entry) => pick.add(entry.id));
+            console.log(`  ${piece} ${tier}: surrogate residual sd ${model.residualSd.toFixed(2)} on ${mine(measured).length} settings`);
           }
-          console.log(`  ${piece}: surrogate residual sd ${model.residualSd.toFixed(2)} on ${measured.length} settings`);
+          if (useDominance) for (const id of dominatedOut(mine(ranked), band[0] - margin, band[1] + margin)) out.add(id);
         }
-        const out = useDominance ? dominatedOut(ranked, floor, ceiling) : new Set();
         for (const id of pick) if (!out.has(id)) survivors.add(id);
         if (out.size) console.log(`  ${piece}: monotone dominance rules out ${out.size} settings`);
       }
       // The plain layout always advances: the report compares against it.
-      for (const id of alive) if (id.endsWith(`|${plainKey}`)) survivors.add(id);
+      for (const id of alive) if (isPlain(id.split('|')[1])) survivors.add(id);
       console.log(`Stage ${stage + 1}: ${survivors.size} of ${alive.length} settings advance.`);
       alive = [...survivors];
     }
@@ -316,18 +334,17 @@ if (!isMainThread) {
       active = active.filter((id) => done.get(id) < datesOf(pieceOf(id)).length);
       if (!useStopping) continue;
       const stopped = new Set();
-      for (const piece of new Set(active.map(pieceOf))) {
+      for (const piece of new Set(active.map(pieceOf))) for (const tier of TIER_IDS) {
         const dates = datesOf(piece);
-        const mine = alive.filter((id) => pieceOf(id) === piece);
-        // Leaders: settings measured on the most dates so far; the best per tier among them.
+        const mine = alive.filter((id) => pieceOf(id) === piece && tierOf(id) === tier);
+        if (!mine.length) continue;
+        // Leaders: settings measured on the most dates so far; the best among them.
         const front = Math.max(...mine.map((id) => done.get(id)));
-        const leaders = mine.filter((id) => done.get(id) === front);
-        const bestFor = Object.fromEntries(TIER_IDS.map((tier) => [tier,
-          leaders.map((id) => ({ id, mean: costsFor(piece, id, tier, dates.slice(0, front)).mean })).sort((a, b) => a.mean - b.mean)[0].id]));
-        for (const id of active.filter((entry) => pieceOf(entry) === piece && !entry.endsWith(`|${plainKey}`))) {
+        const best = mine.filter((id) => done.get(id) === front)
+          .map((id) => ({ id, mean: costsFor(piece, id, tier, dates.slice(0, front)).mean })).sort((a, b) => a.mean - b.mean)[0].id;
+        for (const id of active.filter((entry) => mine.includes(entry) && entry !== best && !isPlain(entry.split('|')[1]))) {
           const shared = dates.slice(0, done.get(id));
-          if (TIER_IDS.every((tier) => bestFor[tier] !== id
-            && clearlyWorse(costsFor(piece, id, tier, shared).costs, costsFor(piece, bestFor[tier], tier, shared).costs, { z: stopZ }))) stopped.add(id);
+          if (clearlyWorse(costsFor(piece, id, tier, shared).costs, costsFor(piece, best, tier, shared).costs, { z: stopZ })) stopped.add(id);
         }
       }
       if (stopped.size) console.log(`  Sequential stopping: ${stopped.size} settings stop adding dates.`);
@@ -357,15 +374,12 @@ if (!isMainThread) {
     // settings and the plain layout, each on every date at the full budget.
     const { CALIBRATION: live } = await load('src/calibration.js');
     const settingsFor = (piece) => {
-      if (!shortlist) return grid(piece);
-      const keys = new Set([settingKey(DEFAULT_KNOBS)]);
-      for (const row of shortlist.rows) if (row.piece === piece) keys.add(row.setting);
-      for (const tier of TIER_IDS) if (live[tier]?.[piece]) keys.add(settingKey(live[tier][piece]));
+      if (!shortlist) return perTier(grid(piece));
+      const keys = new Set(perTier([DEFAULT_KNOBS]).map(settingKey));
+      for (const row of shortlist.rows) if (row.piece === piece && tierOf(row.setting)) keys.add(row.setting);
+      for (const tier of TIER_IDS) if (live[tier]?.[piece]) keys.add(settingKey({ ...live[tier][piece], tier }));
       console.log(`${piece}: confirming ${keys.size} settings.`);
-      return [...keys].map((key) => {
-        const [obstacleBase, decoys, scatter, guards, screens = 0] = key.split('/').map(Number);
-        return { obstacleBase, decoys, scatter, guards, ...(screens && { screens }) };
-      });
+      return [...keys].map(parseKey);
     };
     const tasks = [];
     for (const piece of pieces) {
@@ -394,14 +408,15 @@ if (!isMainThread) {
     }
     // One row per search, compact: the raw numbers behind the table and the budgets.
     const source = `{"generated":${JSON.stringify(new Date().toISOString())},"start":${JSON.stringify(start)},"samples":${samples},"grid":${JSON.stringify(gridName)},`
-      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards[/screens]","summary":${JSON.stringify(summary)},\n"rows":[\n`
+      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards[/screens]@tier","summary":${JSON.stringify(summary)},\n"rows":[\n`
       + rows.map((row) => JSON.stringify(row)).join(',\n') + '\n]}\n';
     await writeFile(dataPath, source);
     console.log(`Wrote ${rows.length} searches to ${fileURLToPath(dataPath)}.`);
   }
 
   // Phase 2: replay generateDaily's choice for every tier, setting and minimum.
-  const parse = (key) => { const [obstacleBase, decoys, scatter, guards, screens = 0] = key.split('/').map(Number); return { obstacleBase, decoys, scatter, guards, ...(screens && { screens }) }; };
+  // The table's knobs: the setting without the tier it was measured for.
+  const parse = (key) => { const { tier, ...knobs } = parseKey(key); return knobs; };
   const scored = (found, piece) => found.map((entry) => (entry.metrics ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece) } : null));
   const stats = (values) => {
     if (!values.length) return { n: 0, mean: null, sd: null, min: null, max: null };
@@ -447,11 +462,10 @@ if (!isMainThread) {
   const calibration = {}, report = { generated: new Date().toISOString().slice(0, 10), start, samples, grid: gridName, uncalibrated: {}, tiers: {} };
   for (const piece of pieces) {
     const bySetting = measurements[piece];
-    const plainRuns = Object.values(bySetting[settingKey(DEFAULT_KNOBS)] ?? {}).map((found) => found[0].ms);
-    const plainMs = Math.max(1, plainRuns.reduce((sum, ms) => sum + ms, 0) / Math.max(1, plainRuns.length));
     if (!bySetting) throw new Error(`No measurements for ${piece}.`);
-    // Before: the old single profile (the plain layout, the first certified candidate).
-    const plain = bySetting[settingKey(DEFAULT_KNOBS)];
+    const plainOf = (tier) => bySetting[settingKey({ ...DEFAULT_KNOBS, tier })];
+    // Before: the old single profile (the plain layout, the first certified candidate), Gentle monsters.
+    const plain = plainOf('gentle');
     const before = [];
     for (const found of Object.values(plain ?? {})) {
       const index = scored(found, piece).findIndex((entry) => entry && entry.metrics.threatenedDecisions >= DEFAULT_KNOBS.minThreatenedDecisions);
@@ -459,12 +473,16 @@ if (!isMainThread) {
     }
     report.uncalibrated[piece] = { knobs: { ...DEFAULT_KNOBS }, ...stats(before) };
     for (const tier of TIER_IDS) {
+      const plainRuns = Object.values(plainOf(tier) ?? {}).map((found) => found[0].ms);
+      const plainMs = Math.max(1, plainRuns.reduce((sum, ms) => sum + ms, 0) / Math.max(1, plainRuns.length));
       let best = null;
-      for (const [key, byDate] of Object.entries(bySetting)) for (const minThreatenedDecisions of minimums) {
+      // Only settings measured with this tier's monsters compete for it.
+      for (const [key, byDate] of Object.entries(bySetting).filter(([key]) => tierOf(key) === tier)) for (const minThreatenedDecisions of minimums) {
         const result = simulate(byDate, tier, minThreatenedDecisions, piece);
         const value = cost(result, tier, plainMs);
         if (!best || value < best.value - 1e-9) best = { value, key, minThreatenedDecisions, result };
       }
+      if (!best) throw new Error(`No ${tier} measurements for ${piece}: data from before tiered monsters can't be reused.`);
       (calibration[tier] ??= {})[piece] = { ...parse(best.key), minThreatenedDecisions: best.minThreatenedDecisions };
       ((report.tiers[tier] ??= {})[piece] = {
         ...stats(best.result.scores), inBand: Math.round(best.result.inBandRate * 100) / 100,
