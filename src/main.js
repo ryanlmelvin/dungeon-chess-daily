@@ -17,7 +17,7 @@ import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
-import { parFor, runPars, awardStars, totalStars, starText, MAX_STARS } from './par.js';
+import { parFor, runPars } from './par.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -297,10 +297,12 @@ function renderPar() {
   $('par-status').textContent = `Par ${par}`;
   $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${state.turns - state.floorStart.turns} so far`);
 }
-function announceStars(record) {
-  notify(`Floor ${record.floor + 1} cleared in ${record.turns} ${record.turns === 1 ? 'move' : 'moves'} · ${starText(record.stars)}`);
+// "Floor 1 cleared in 12 moves · 2 over par" when a floor with a par is cleared.
+function announcePar(record, par) {
+  const diff = record.turns - par;
+  notify(`Floor ${record.floor + 1} cleared in ${record.turns} ${record.turns === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`);
   const notice = $('notice');
-  notice.classList.remove('star-toast'); void notice.offsetWidth; notice.classList.add('star-toast');
+  notice.classList.remove('par-toast'); void notice.offsetWidth; notice.classList.add('par-toast');
 }
 function renderLives() {
   const { hp, maxHp } = state.player;
@@ -566,8 +568,9 @@ function takeAction(action) {
   const next = act(state, action);
   if (next === state) return false;
   turnLocked=!shopping;
-  const scored = awardStars(next, runPars(next, daily));
-  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(scored.length)announceStars(scored.at(-1));updateGame();playSound(state.events);
+  const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
+  const par = cleared ? runPars(next, daily)?.[cleared.floor] : null;
+  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(state.events);
   const enPassant = state.events.some(event => event.type === 'en-passant');
   const castled = state.events.some(event => event.type === 'castle');
   const tactic = state.events.some(event => event.type === 'fork-won') ? 'fork' : state.events.some(event => event.type === 'combo') ? 'combo' : null;
@@ -654,7 +657,7 @@ function playSound(events=[]) {
 }
 // Archive and practice runs are labeled so a shared line never passes as today's.
 const runLabel = () => [archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
-function shareText(){if (!isOfficialPiece(state, daily)) return '';const text=getShareText(state);const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
+function shareText(){if (!isOfficialPiece(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -667,15 +670,13 @@ function showResult() {
   $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured on floor ${state.floor+1}. Tomorrow is another story.`:state.message;
   if (state.status === 'lost') return showDeath();
   showResultActions(true);
-  // Runs won before par existed get their stars the first time the result shows.
-  if (awardStars(state, runPars(state, daily)).length) save();
   const shareable = isOfficialPiece(state, daily);
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `One row per floor · 🟨 Par star\n${next}` : next;
+  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3 · moves over or under par · 🇫🇷 En passant · 🏰 Castled · 🍴 Fork won\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -996,19 +997,11 @@ function renderBotComparison() {
     tr.append(th, ...cells);
     return tr;
   };
-  // Par stars sit in their own column beside the floor and total rows.
-  const stars = totalStars(state.records);
-  $('bot-stars-head').hidden = stars === null;
-  const starCell = (tr, value, label) => {
-    if (stars === null) return tr;
-    const td = document.createElement('td'); td.className = 'bot-stars'; td.textContent = value; if (label) td.setAttribute('aria-label', label);
-    tr.append(td); return tr;
-  };
   $('bot-rows').replaceChildren(
-    ...bot.floors.map((moves, index) => starCell(row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves), starText(state.records[index]?.stars ?? 0), `${state.records[index]?.stars} of ${MAX_STARS} stars`)),
-    starCell(row('Total moves', you.moves, bot.moves, true), `⭐${stars}/${MAX_STARS * 3}`, `${stars} of ${MAX_STARS * 3} stars`),
-    starCell(row('Lives lost', you.livesLost, 0), ''),
-    ...(you.tries > 1 ? [starCell(row('Tries', you.tries, 1), '')] : []),
+    ...bot.floors.map((moves, index) => row(`Floor ${index + 1}`, you.floors[index] ?? '–', moves)),
+    row('Total moves', you.moves, bot.moves, true),
+    row('Lives lost', you.livesLost, 0),
+    ...(you.tries > 1 ? [row('Tries', you.tries, 1)] : []),
   );
 }
 

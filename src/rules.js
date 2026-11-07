@@ -1098,18 +1098,23 @@ function play(previous, action) {
   return state;
 }
 
-// A spoiler-free result card like a Wordle grid: the title with a won run's
-// par stars out of nine, then one row per floor reached whose three squares
-// are that floor's par stars (src/par.js). A cleared floor without a par shows
-// ✅, and the floor still in play ⬛⬛⬛.
-export function getShareText(state, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
-  const stars = state.status === 'won' && state.records.length === 3 && state.records.every((record) => Number.isInteger(record.stars)) ? state.records.reduce((sum, record) => sum + record.stars, 0) : null;
-  const rows = [];
+// A spoiler-free result card, golf-style:
+//   Dungeon Chess Daily #20
+//   🟥 ⬛ 👑        one marker per floor reached
+//   -2 +1 E        each floor's moves against its par (src/par.js); · without one
+//   🇫🇷🏰🍴         once each if the run took en passant, castled or won a fork
+const FLOOR_MARKERS = ['🟥', '⬛', '👑'];
+const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['fork', '🍴']];
+export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
+  const markers = [], scores = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);
-    rows.push(!record ? '⬛⬛⬛' : Number.isInteger(record.stars) ? '🟨'.repeat(record.stars) + '⬛'.repeat(3 - record.stars) : '✅');
+    const diff = Number.isInteger(record?.turns) && Number.isInteger(pars?.[floor]) ? record.turns - pars[floor] : null;
+    markers.push(FLOOR_MARKERS[floor]);
+    scores.push(diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`);
   }
-  return [`Dungeon Chess Daily #${state.edition}${stars !== null ? ` ⭐ ${stars}/9` : ''}`, ...rows, url].join('\n');
+  const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind)).map(([, mark]) => mark).join('');
+  return [`Dungeon Chess Daily #${state.edition}`, markers.join(' '), scores.join(' '), feats, url].filter(Boolean).join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {
@@ -1195,7 +1200,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
-    // Par stars: absent in older saves and on runs without a par.
+    // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;

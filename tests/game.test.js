@@ -206,16 +206,22 @@ test('moves remain available beyond sixty and final-floor extraction still works
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
-test('share text is a title and one row per floor, without spoilers', () => {
+test('share text is a title, a marker per floor and moves against par, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
-  state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 6 }, { floor: 2, hp: 5 }];
-  const text = getShareText(state);
-  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n✅\n✅\n✅\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
+  state.records = [{ floor: 0, hp: 8, turns: 8 }, { floor: 1, hp: 6, turns: 12 }, { floor: 2, hp: 5, turns: 9 }];
+  const text = getShareText(state, [10, 11, 9]);
+  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n🟥 ⬛ 👑\n-2 +1 E\nhttps://ryanlmelvin.github.io/dungeon-chess-daily/`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
-  state.status = 'lost';
-  state.floor = 0; state.records = [];
-  assert.equal(getShareText(state).split('\n')[1], '⬛⬛⬛');
+  // Without a par each floor shows a dot.
+  assert.equal(getShareText(state).split('\n')[2], '· · ·');
+  // Special moves add one mark each, in a fixed order, however often they happened.
+  state.feats = [{ floor: 2, kind: 'fork' }, { floor: 0, kind: 'combo' }, { floor: 0, kind: 'en-passant' }, { floor: 1, kind: 'fork' }, { floor: 2, kind: 'castle' }];
+  assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], '🇫🇷🏰🍴');
+  state.feats = [{ floor: 0, kind: 'combo' }];
+  assert.equal(getShareText(state, [10, 11, 9]).split('\n')[3], 'https://ryanlmelvin.github.io/dungeon-chess-daily/');
+  state.status = 'lost'; state.floor = 0; state.records = [];
+  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1, 3), ['🟥', '·']);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
@@ -390,7 +396,7 @@ test('piece lives are preserved and exhaustion restarts the same deterministic e
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
-  assert.equal(getShareText(restart).split('\n')[1], '⬛⬛⬛');
+  assert.equal(getShareText(restart).split('\n')[1], '🟥');
 });
 
 
@@ -529,7 +535,7 @@ test('running out of legal moves restarts the dungeon and counts another try, li
   assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
   assert.equal(validateSave(trapped, trapped.date), true);
-  assert.equal(getShareText(trapped).split('\n')[1], '⬛⬛⬛');
+  assert.equal(getShareText(trapped).split('\n')[1], '🟥');
 });
 
 test('an older save that ended trapped can be retried, counting as another try', () => {
