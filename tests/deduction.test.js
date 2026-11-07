@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor } from '../src/game.js';
 import { getRawDaily, headlineFor } from '../src/edition.js';
-import { floorLineup, nextHint, closeRangeSquares, closeAttacker, suspectsLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
+import { floorLineup, floorDecoys, paperSuspects, nextHint, hintCards, closeRangeSquares, closeAttacker, targetLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
 import { reinforcementOptions } from '../src/modifiers.js';
 import { floorPars } from '../src/par.js';
 import { playerRun } from '../src/bot.js';
@@ -53,7 +53,7 @@ test('the paper never names a species or a palette: headlines are anonymous on e
   }
 });
 
-test('each floor\'s lineup is exactly the species that can stand there, ordered by name, never target-first by design', () => {
+test('each floor\'s full cast is exactly the species that can stand there, ordered by name', () => {
   const firsts = new Set();
   const sizes = new Set();
   for (let offset = 0; offset < 70; offset++) {
@@ -75,7 +75,58 @@ test('each floor\'s lineup is exactly the species that can stand there, ordered 
     }
   }
   assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
-  assert.ok(sizes.has(1) && sizes.has(3), 'open-and-shut cases and full lineups both occur');
+  assert.ok(sizes.has(1) && sizes.has(3), 'one-species floors and full casts both occur');
+});
+
+test('the paper shows two suspects: the target and one other species from the floor, stable per date, by name', () => {
+  const firsts = new Set();
+  let arrivalsOnly = 0, alone = 0, firstDecoy = 0, secondDecoy = 0;
+  for (let offset = 0; offset < 120; offset++) {
+    const issue = getDaily(day(offset));
+    const pristine = structuredClone(issue);
+    for (let floor = 0; floor < 3; floor++) {
+      const cast = floorLineup(issue, floor);
+      const shown = paperSuspects(issue, floor);
+      const target = issue.species[floor];
+      const label = `${issue.date} floor ${floor + 1}`;
+      assert.equal(shown.length, Math.min(2, cast.length), label);
+      assert.ok(shown.some((species) => species.id === target.id), `${label}: the target is always a suspect`);
+      assert.ok(shown.every((species) => cast.some((entry) => entry.id === species.id)), `${label}: suspects can appear there`);
+      assert.deepEqual(shown.map((species) => species.name), shown.map((species) => species.name).sort(), `${label}: ordered by name`);
+      // A decoy already in the room comes before a collapse arrival.
+      const other = shown.find((species) => species.id !== target.id);
+      const decoys = [...new Map(floorDecoys(issue, floor).map((species) => [species.id, species])).values()];
+      if (other && decoys.length) assert.ok(decoys.some((species) => species.id === other.id), `${label}: the other suspect is a decoy`);
+      if (other && !decoys.length) arrivalsOnly++;
+      if (!other) alone++;
+      if (decoys.length === 2) other.id === decoys[0].id ? firstDecoy++ : secondDecoy++;
+      // Stable: the same date always picks the same pair, whatever ran before.
+      assert.deepEqual(paperSuspects(getDaily(issue.date), floor), shown, `${label}: stable`);
+      firsts.add(shown[0].id === target.id);
+    }
+    // The paper draws from its own hash stream: the edition and its dungeon are untouched.
+    assert.deepEqual(issue, pristine);
+    assert.deepEqual(createGame(issue), createGame(pristine));
+  }
+  assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
+  assert.ok(firstDecoy > 0 && secondDecoy > 0, 'either decoy species can be the one shown');
+  assert.ok(alone > 0 && arrivalsOnly > 0, 'open-and-shut floors and arrival-only floors both occur');
+});
+
+test('capturing a species the paper did not show still unmasks it and saves', () => {
+  let found = null;
+  for (let offset = 0; offset < 120 && !found; offset++) {
+    const issue = getDaily(day(offset));
+    let state = createGame(issue);
+    for (const action of issue.generation.certificate.actions) {
+      state = act(state, action);
+      const hidden = state.events.find((event) => event.type === 'unmask' && !paperSuspects(issue, state.floor).some((species) => species.id === event.species));
+      if (hidden) { found = { issue, state, species: hidden.species }; break; }
+    }
+  }
+  assert.ok(found, 'some certified route captures a species the paper left out');
+  assert.ok(found.state.unmasked.includes(found.species));
+  assert.equal(validateSave(json(found.state), found.issue.date), true);
 });
 
 test('a capture unmasks the monster: an event, a log line, and its species badged from then on', () => {
@@ -158,7 +209,7 @@ test('saves accept unmaskings of this floor\'s species only', () => {
   assert.equal(validateSave(json(snapshot), daily.date), false);
 });
 
-test('hints: the first is free, then suspects and the danger map each add one move without passing a turn', () => {
+test('hints: the first is free, then identifying the target and the danger map each add one move without passing a turn', () => {
   const state = createGame(daily);
   assert.deepEqual(PAID_HINTS, ['suspects', 'danger']);
   assert.equal(nextHint(state), 'suspects');
@@ -169,12 +220,13 @@ test('hints: the first is free, then suspects and the danger map each add one mo
   assert.equal(one.turns, state.turns, 'no turn passes');
   assert.deepEqual(one.enemies, state.enemies, 'no monster moves');
   assert.deepEqual(one.events.map((event) => event.type), ['hint']);
-  assert.equal(one.message, `Hint (+1 move): ${suspectsLine(one)}`);
-  assert.match(one.message, new RegExp(`the ${state.objective.piece}s? (are|is) the ${state.species[0].palette}`, 'i'));
+  assert.equal(one.message, `Target identified (+1 move): ${targetLine(one)}`);
+  assert.match(one.message, new RegExp(`the ${state.species[0].palette} [a-z ]+ (are|is) the enemy ${state.objective.piece}`, 'i'));
   assert.equal(validateSave(json(one), daily.date), true);
   assert.equal(nextHint(one), 'danger');
   const two = act(one, hint('danger'));
   assert.deepEqual(two.hints, ['suspects', 'danger']);
+  assert.match(two.message, /^Danger map \(\+1 move\): hatched squares/);
   assert.equal(floorScoredMoves(two), 2);
   assert.equal(nextHint(two), null);
   assert.equal(act(two, hint('danger')), two);
@@ -185,7 +237,7 @@ test('hints: the first is free, then suspects and the danger map each add one mo
   assert.equal(floorScoredMoves(moved), 3);
 });
 
-test('an unmasked target needs no suspects hint, and nothing is for sale once the challenge is complete', () => {
+test('an unmasked target needs no target hint, and nothing is for sale once the challenge is complete', () => {
   const state = createGame(daily);
   const known = { ...structuredClone(state), unmasked: [targetSpecies(state).id] };
   assert.equal(nextHint(known), 'danger');
@@ -262,6 +314,26 @@ test('a Take-back undoes the move, not the hint bought since; a new try starts w
   assert.equal(lost.tries, 2);
   assert.equal(lost.hints, undefined);
   assert.equal(lost.unmasked, undefined);
+});
+
+test('the hint dialog pages the cards unlocked on this floor: the free card first, then each paid one in unlock order', () => {
+  const state = createGame(daily);
+  assert.deepEqual(hintCards(state), ['moves']);
+  const one = act(state, hint('suspects'));
+  assert.deepEqual(hintCards(one), ['moves', 'suspects']);
+  const two = act(one, hint('danger'));
+  assert.deepEqual(hintCards(two), ['moves', 'suspects', 'danger']);
+  // Paging only reads the state.
+  const before = json(two);
+  hintCards(two);
+  assert.deepEqual(json(two), before);
+  // A reload rebuilds the pages from the save; a floor restart keeps them; the next floor starts over.
+  assert.deepEqual(hintCards(json(two)), hintCards(two));
+  assert.deepEqual(hintCards(resetFloor(two)), ['moves', 'suspects', 'danger']);
+  assert.deepEqual(hintCards(nextFloor(two)), ['moves']);
+  // With the target already unmasked, the danger map is the second page.
+  const known = { ...structuredClone(state), unmasked: [targetSpecies(state).id] };
+  assert.deepEqual(hintCards(act(known, hint('danger'))), ['moves', 'danger']);
 });
 
 test('practice runs pay for hints the same way, without a par', () => {
