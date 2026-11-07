@@ -19,19 +19,11 @@ export const TACTIC_GOLD = Object.freeze({ fork: 2, combo: 1 });
 export const COMBO_START = 3;
 export const TACTIC_KINDS = Object.freeze(Object.keys(TACTIC_GOLD));
 export const TACTIC_EVENTS = Object.freeze(['fork', 'fork-won', 'combo']);
-const TACTIC_EMOJI = { fork: '🍴', combo: '🔥' };
 
 /** Bonus gold the run has earned from its fork and combo feats. */
 export function tacticGold(feats) {
   if (!Array.isArray(feats)) return 0;
   return feats.reduce((sum, feat) => sum + (TACTIC_GOLD[feat?.kind] ?? 0), 0);
-}
-
-/** A floor's share marks: 🍴 per fork, then 🔥 per combo. */
-export function tacticMarks(feats, floor) {
-  let marks = '';
-  for (const kind of TACTIC_KINDS) for (const feat of feats ?? []) if (feat.floor === floor && feat.kind === kind) marks += TACTIC_EMOJI[kind];
-  return marks;
 }
 
 /** Ids of the distinct monsters the player's capture moves reach; two or more is a fork. */

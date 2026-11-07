@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, getShareText, legalMoves, validateSave } from '../src/rules.js';
+import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
-// The day's room-modifier emoji leads the share line; these checks are about what follows it.
-const share = (...args) => getShareText(...args).replace(/(^|\n)(?:🌑|🧊|🏚️)/gu, '$1');
 
 const move = (x, y) => ({ type: 'move', x, y });
 function findDaily(match, label) {
@@ -165,20 +163,6 @@ test('feats record the player\'s en passant and castle, never being captured en 
   const legacy = scenario('king'); delete legacy.feats; legacy.companion = ally('rook', 7, 6);
   assert.deepEqual(act(legacy, move(6, 6)).feats, [{ floor: 0, kind: 'castle' }]);
   assert.deepEqual(act(legacy, { type: 'wait' }).feats, []);
-});
-
-test('share text puts each floor\'s special moves on its row', () => {
-  const state = scenario('pawn');
-  state.status = 'won'; state.floor = 2; state.tries = 2; state.player.hp = 7;
-  state.records = [{ floor: 0, hp: 8 }, { floor: 1, hp: 7 }, { floor: 2, hp: 7 }];
-  state.feats = [{ floor: 0, kind: 'en-passant' }, { floor: 2, kind: 'castle' }, { floor: 2, kind: 'en-passant' }];
-  const glyph = state.playerColor === 'white' ? '♙' : '♟';
-  assert.deepEqual(share(state).split('\n').slice(1, 5), [`${glyph}︎ 🏆 Escaped · 2 tries`, '✅ 🇫🇷', '✅ 💔', '✅ 🏰🇫🇷']);
-  // A floor still in play carries its feats before the hourglass.
-  state.status = 'playing'; state.floor = 1; state.records = state.records.slice(0, 1); state.feats = [{ floor: 1, kind: 'castle' }];
-  assert.deepEqual(share(state).split('\n').slice(1, 4), [`${glyph}︎ ⏳ Floor 2 · 2 tries`, '✅', '⬛⬛⬛ 💔🏰']);
-  delete state.feats;
-  assert.deepEqual(share(state).split('\n').slice(2, 4), ['✅', '⬛⬛⬛ 💔']);
 });
 
 test('saves with feats and castle events validate; malformed feats do not; old saves still do', () => {

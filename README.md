@@ -22,13 +22,12 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
 - Complete all three 8×8 rooms with unlimited moves.
 - Room modifiers: each edition draws one modifier from its date, applied to all three floors and announced in a newspaper bulletin. About one day in four is plain. 🌑 **Dark**: you see only squares within two of your piece, plus any monster winding up, its surroundings and its red path; monsters you've seen stay as faded ghosts where you last saw them. Only the drawing changes, never the rules. 🧊 **Ice**: eight floor tiles per room are ice. Your rook, bishop or queen, or your pawn moving straight, that ends a non-capturing move on ice skids one more square the same way if that square is open and empty; the move preview draws an arrow to the landing square. Monsters and recruits never slide. 🏚️ **Collapse**: every 10 moves on a floor, one more monster (one of the floor's decoy species, never a pawn or the target) enters on the square in front of the door once it is free, at most three per floor and none after the stairs open.
 - Each floor has a **par**: the number of moves the certified winning route (the Dungeon Bot below) spent on it. The status line shows `Par N` from the start of the floor, never the route itself. Clearing a floor in at most par moves earns ⭐⭐⭐, within five over par ⭐⭐, and otherwise ⭐; a toast announces them and they are saved with the floor. Moves count as in the bot comparison: every move and wait on that floor in the current try. Practice runs with a different piece or color have no par and no stars.
-- The share card is a spoiler-free grid like a Wordle result: a title with the edition and the day's modifier, a summary line (your piece, 🏆 Escaped, total par stars out of nine, and how many tries), then one row per floor. Each row's three squares are that floor's par stars (🟨 earned, ⬛ not), followed by 💔 per life lost, 🇫🇷 per en passant, 🏰 per castle, 🍴 per fork won and 🔥 per combo capture:
+- The share card is a spoiler-free grid like a Wordle result: the edition and your par stars out of nine, then one row per floor whose three squares are that floor's stars (🟨 earned, ⬛ not):
   ```
-  Dungeon Chess Daily #20 · 🧊 Ice
-  ♙ 🏆 Escaped · ⭐ 7/9 · 2 tries
-  🟨🟨🟨 🇫🇷🍴
-  🟨🟨⬛ 💔
-  🟨🟨⬛ 🏰🔥🔥
+  Dungeon Chess Daily #20 ⭐ 7/9
+  🟨🟨🟨
+  🟨🟨⬛
+  🟨🟨⬛
   ```
 - Lives match the number of that piece in a chess army: eight pawns, two rooks, knights, or bishops, and one queen (or king, in practice). Each capture costs one life unless a shield absorbs it. A promoted pawn keeps its remaining lives but becomes a pawn again after losing one, returning to a safe square if needed. Losing all lives restarts the same daily dungeon from floor one, resetting gold and powers.
 

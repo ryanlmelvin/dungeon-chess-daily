@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { act, createGame, legalMoves, getShareText, validateSave } from '../src/rules.js';
+import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
 import { generateDaily, getDaily, fallbackKey } from '../src/generation.js';
 import { TIER_IDS } from '../src/difficulty.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -280,18 +280,6 @@ test('dark remembers monsters it has seen as ghosts until their square is seen a
   memory = updateSightings(memory, state);
   state.player.y = 7; state.player.x = 0; state.enemies = [];
   assert.deepEqual(ghostsFrom(updateSightings(memory, state), state), []);
-});
-
-test('the share card title names the modifier, and plain days add nothing', () => {
-  for (const modifier of Object.keys(MODIFIERS)) {
-    const state = createGame({ ...getRawDaily(firstDate('none')), modifier });
-    const title = getShareText(state).split('\n')[0];
-    if (modifier === 'none') assert.equal(title, `Dungeon Chess Daily #${state.edition}`);
-    else assert.equal(title, `Dungeon Chess Daily #${state.edition} · ${MODIFIERS[modifier].emoji} ${MODIFIERS[modifier].name}`);
-  }
-  const retried = createGame({ ...getRawDaily(firstDate('none')), modifier: 'ice' });
-  retried.tries = 2;
-  assert.ok(getShareText(retried).split('\n')[1].endsWith(' · 2 tries'));
 });
 
 test('every modifier certifies: generated and forced-fallback editions replay under it', () => {
