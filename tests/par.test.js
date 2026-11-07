@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves } from '../src/game.js';
-import { botRun } from '../src/bot.js';
+import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor, retryLostRun } from '../src/game.js';
+import { botRun, playerRun } from '../src/bot.js';
 import { floorPars, parFor, runPars } from '../src/par.js';
 
 const daily = getDaily(new Date(Date.UTC(2026, 10, 5)));
@@ -45,19 +45,73 @@ test('the certified route matches par on every floor, and older saves carrying s
   assert.equal(validateSave(legacy, daily.date), true);
 });
 
-test('the share card shows each floor\'s moves against par', () => {
+test('the share card shows each floor\'s moves against par, one floor per line', () => {
   const won = playRoute();
   const pars = floorPars(daily);
-  const cells = (line) => line.split(/[\u2000-\u200A]+/).filter(Boolean).join(' ');
-  assert.deepEqual(getShareText(won, pars).split('\n').slice(0, 3).map(cells), [`Dungeon Chess Daily #${won.edition}`, '🟥 ⬛ 👑', 'E E E']);
+  const lines = (state) => getShareText(state, pars).split('\n');
+  const plain = (line) => line.replace(/ [\u{1F1EB}\u{1F1F7}🏰🔱]+$/u, '');
+  assert.equal(lines(won)[0], `Dungeon Chess Daily #${won.edition}`);
+  assert.deepEqual(lines(won).slice(1, 4).map(plain), ['🟥 E', '⬛ E', '👑 E']);
   const off = structuredClone(won); off.records[0].scored = pars[0] + 3; off.records[2].scored = pars[2] - 1;
-  assert.equal(cells(getShareText(off, pars).split('\n')[2]), '+3 E \u22121');
+  assert.deepEqual(lines(off).slice(1, 4).map(plain), ['🟥 +3', '⬛ E', '👑 \u22121']);
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
-  assert.deepEqual(getShareText(playing, pars).split('\n').slice(1, 3).map(cells), ['🟥 ⬛ 👑', 'E E ·']);
-  // Each score is centered under its marker in Apple's system font, even at two digits.
+  assert.deepEqual(lines(playing).slice(1, 4).map(plain), ['🟥 E', '⬛ E', '👑 ·']);
   const wide = structuredClone(won); wide.records.forEach((record, floor) => { record.scored = pars[floor] + 42; });
-  assert.equal(cells(getShareText(wide, pars).split('\n')[2]), '+42 +42 +42');
+  assert.deepEqual(lines(wide).slice(1, 4).map(plain), ['🟥 +42', '⬛ +42', '👑 +42']);
+});
+
+test('moves spent before a floor restart keep counting toward that floor; a new try starts fresh', () => {
+  const pars = floorPars(daily);
+  const actions = daily.generation.certificate.actions;
+  // Play a few moves of floor 1, restart it, then finish the certified route.
+  let state = createGame(daily);
+  const spent = 3;
+  for (const action of actions.slice(0, spent)) state = act(state, action);
+  assert.equal(state.floor, 0);
+  state = resetFloor(state);
+  assert.equal(state.restartedMoves, spent);
+  assert.equal(state.turns, 0, 'the floor itself starts over');
+  assert.equal(floorScoredMoves(state), spent);
+  assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true);
+  // A second restart adds that attempt's moves too.
+  state = act(state, actions[0]);
+  assert.equal(floorScoredMoves(state), spent + 1);
+  state = resetFloor(state);
+  assert.equal(state.restartedMoves, spent + 1);
+  let cleared = null;
+  for (const action of actions) {
+    state = act(state, action);
+    if (!cleared && state.floor === 0 && state.objective.complete) cleared = state;
+  }
+  assert.equal(state.status, 'won');
+  assert.ok([...(cleared.notes ?? []), cleared.message].some((line) => line.startsWith(`You completed the challenge ✓ in ${pars[0] + spent + 1} moves`)));
+  assert.equal(state.records[0].restartedMoves, spent + 1);
+  assert.equal(state.records[0].scored, pars[0], 'the attempt that cleared the floor matches the route');
+  assert.deepEqual(state.records.map(scoredMoves), [pars[0] + spent + 1, pars[1], pars[2]]);
+  assert.equal(playerRun(state).moves, pars[0] + pars[1] + pars[2] + spent + 1);
+  assert.equal(state.restartedMoves, undefined, 'later floors start with no earlier moves');
+  assert.equal(getShareText(state, pars).split('\n')[1].split(' ')[1], `+${spent + 1}`);
+  assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true);
+  // Older saves carry no count: nothing earlier on the floor. Forged ones are rejected.
+  const legacy = structuredClone(state); delete legacy.records[0].restartedMoves;
+  for (const record of [...legacy.floorSnapshot.records]) delete record.restartedMoves;
+  assert.equal(validateSave(legacy, daily.date), true);
+  for (const bad of [0, -1, 1.5, '4']) {
+    const forged = createGame(daily); forged.restartedMoves = bad;
+    assert.equal(validateSave(forged, daily.date), false, `restartedMoves ${bad}`);
+  }
+  const snapshot = createGame(daily); snapshot.floorSnapshot.restartedMoves = 2;
+  assert.equal(validateSave(snapshot, daily.date), false);
+  // Losing every life is a new try: the count starts over.
+  let doomed = createGame(daily);
+  for (const action of actions.slice(0, spent)) doomed = act(doomed, action);
+  doomed = resetFloor(doomed);
+  doomed.status = 'lost';
+  const retry = retryLostRun(doomed);
+  assert.equal(retry.tries, 2);
+  assert.equal(retry.restartedMoves, undefined);
+  assert.equal(floorScoredMoves(retry), 0);
 });
 
 test('the scored count stops when the challenge is complete; later moves still count for collapse', () => {

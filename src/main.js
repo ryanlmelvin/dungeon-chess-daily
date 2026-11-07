@@ -833,7 +833,7 @@ function showResult() {
   $('share-preview').textContent=shareable ? shareText().split('\n').slice(0,-1).join('\n') : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3 · moves over (+) or under (−) par · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won\n${next}` : next;
+  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 One line per floor: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
   $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
@@ -943,7 +943,7 @@ function startOver(next, message) {
 }
 $('reset-floor-button').addEventListener('click', async () => {
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
-  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the lives, gold and powers you arrived with.', `Restart floor ${state.floor + 1}`)) return;
+  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.', `Restart floor ${state.floor + 1}`)) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${state.floor + 1} restarted.`);
@@ -1201,7 +1201,7 @@ function replayFrame() {
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${moves}${frame.exit?.open ? ' ✓' : ''} of ${total}`;
   // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed') : '';
+  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose)\b|^\s*Your score\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
   $('game-message').classList.remove('scrollable'); $('game-message').style.maxHeight = '';
