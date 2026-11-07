@@ -154,3 +154,4 @@ body.replaying .tactic-callout{display:none!important}
 .game-objective.beside{transform:none;bottom:auto;flex-direction:column;align-items:stretch;gap:8px;max-width:none;text-align:left}
 .game-objective.beside .hint-button{align-self:flex-start}
 .game-objective.beside .target-row{justify-content:flex-start;flex-wrap:wrap}
+.first-tip.beside{right:auto;bottom:auto;max-width:none;padding:0;text-align:left}

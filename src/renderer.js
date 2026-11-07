@@ -11,6 +11,10 @@ const MOVE_COLOR = 0x56dcff;
 const ICE_COLOR = 0xbfeaff;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
+// Page panels go beside the board when its margin is at least this wide;
+// otherwise the board keeps this much room below it for them.
+export const SIDE_PANEL_MIN = 230;
+const BOTTOM_PANEL_ROOM = 160;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
@@ -590,6 +594,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   }
 
   let topInset = 0;
+  // The board's left edge before any shrinking, so page panels can choose a
+  // side placement without feeding back into the board's size.
+  let naturalLeft = 0;
   function resize() {
     if (disposed) return;
     const bounds = container.getBoundingClientRect();
@@ -608,14 +615,28 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     camera.position.set(x, 18, z + 5.8);
     camera.lookAt(x, 0.14, z);
     camera.updateProjectionMatrix();
-    // Slide the board down, into spare room below it, when the page's top
-    // panel (the objective and its targets row) would otherwise cover the door.
-    if (topInset > 0) {
-      const screenY = (z) => (1 - new THREE.Vector3(x, 0, z).project(camera).y) / 2 * height;
-      const doorTop = screenY(exitTile.y - 1.26);
-      const boardBottom = screenY(rows - 0.5);
-      const shift = Math.max(0, Math.min(topInset + 6 - doorTop, height - boardBottom - 8));
-      if (shift > 0) {
+    // Keep the page's panels off the board. Where the board leaves no side
+    // margins for them (a tablet held upright), shrink it a little so a strip
+    // below stays free for the message log and tip. Then slide it down, into
+    // spare room below, when the top panel would otherwise cover the door.
+    const screenY = (z) => (1 - new THREE.Vector3(x, 0, z).project(camera).y) / 2 * height;
+    const screenX = (column) => (new THREE.Vector3(column, 0, rows - 0.5).project(camera).x + 1) / 2 * width;
+    naturalLeft = screenX(-0.5);
+    const bottomRoom = naturalLeft < SIDE_PANEL_MIN ? BOTTOM_PANEL_ROOM : 0;
+    if (topInset > 0 || bottomRoom > 0) {
+      let doorTop = screenY(exitTile.y - 1.26);
+      let boardBottom = screenY(rows - 0.5);
+      const room = height - (topInset + 6) - bottomRoom;
+      // Never shrink below three quarters of the natural size.
+      if (boardBottom - doorTop > room && room > 0) {
+        const k = Math.min(4 / 3, (boardBottom - doorTop) / room);
+        camera.left *= k; camera.right *= k; camera.top *= k; camera.bottom *= k;
+        camera.updateProjectionMatrix();
+        doorTop = screenY(exitTile.y - 1.26);
+        boardBottom = screenY(rows - 0.5);
+      }
+      const shift = Math.min(Math.max(0, topInset + 6 - doorTop), height - bottomRoom - boardBottom);
+      if (shift !== 0) {
         const units = shift / height * (camera.top - camera.bottom);
         camera.top += units; camera.bottom += units;
         camera.updateProjectionMatrix();
@@ -784,6 +805,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     resize,
     exitAnchor,
     boardRect,
+    naturalLeft: () => naturalLeft,
     // The lowest CSS pixel (from the container's top) the page's top panel covers.
     setTopInset(pixels) {
       const next = Math.max(0, Math.round(pixels));

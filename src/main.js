@@ -10,7 +10,7 @@ import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
-import { createDungeonRenderer } from './renderer.js';
+import { createDungeonRenderer, SIDE_PANEL_MIN } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
@@ -218,7 +218,7 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeFirstTip(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe && !takeAction({ type: 'pin', id: foe.id })) notify('Kings can’t be pinned.'); updateGame(); return; }
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
@@ -416,6 +416,7 @@ function updateGame() {
   if ($('shop-dialog').open) renderShop();
   $('first-tip').hidden = state.turns > 0;
   $('first-tip').textContent = `${state.playerColor === 'white' ? 'White piece: you move first.' : 'Black piece: enemies move first.'} Tap your piece for legal moves.`;
+  placeFirstTip();
   paintBoard();
   fitMessageLog();
   syncMusic();
@@ -434,7 +435,7 @@ function placeMessageLog() {
   const origin = $('dungeon').getBoundingClientRect().top;
   const floor = Math.min(board.height, ...['pwa-bar', 'first-tip', 'objective', 'descend-button'].map((id) => {
     const rect = $(id).getBoundingClientRect();
-    return rect.height && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
+    return rect.height && !$(id).classList.contains('beside') && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
   })) - 8;
   const height = Math.max(box.offsetHeight, 64);
   if (floor - board.bottom - 8 >= height) {
@@ -457,12 +458,11 @@ function placeMessageLog() {
 // margin left of the board, top-aligned with it; otherwise it stays centered on
 // top and the board slides down to keep the door clear. The room is only updated
 // while the panel shows, so the board doesn't jump when the stairs open.
-const OBJECTIVE_BESIDE_MIN = 230;
 function reserveObjectiveRoom() {
   const panel = $('objective');
   if (!renderer?.setTopInset || panel.hidden || replay) return;
   const board = renderer.boardRect();
-  const beside = board.left >= OBJECTIVE_BESIDE_MIN;
+  const beside = renderer.naturalLeft() >= SIDE_PANEL_MIN;
   panel.classList.toggle('beside', beside);
   if (beside) {
     const width = Math.min(board.left - 24, 320);
@@ -479,6 +479,26 @@ function reserveObjectiveRoom() {
   const rect = panel.getBoundingClientRect();
   // On short screens the panel sits at the bottom instead; leave the board alone.
   renderer.setTopInset(rect.top - area.top < area.height / 2 ? rect.bottom - area.top : 0);
+}
+// The first-move tip sits under the board. When it would cover the board's
+// bottom row (a wide screen, where the board fills the height) it moves into
+// the empty margin right of the board instead, level with the bottom row.
+function placeFirstTip() {
+  const tip = $('first-tip');
+  tip.classList.remove('beside');
+  tip.style.top = tip.style.left = tip.style.width = '';
+  const board = renderer?.boardRect?.();
+  if (!board || tip.hidden || replay) return;
+  const origin = $('dungeon').getBoundingClientRect().top;
+  const rect = tip.getBoundingClientRect();
+  if (rect.top - origin >= board.bottom + 4) return;
+  const room = board.width - board.right - 24;
+  if (room < 160) return;
+  const width = Math.min(room, 320);
+  tip.classList.add('beside');
+  tip.style.width = `${Math.round(width)}px`;
+  tip.style.left = `${Math.round(board.right + 12)}px`;
+  tip.style.top = `${Math.round(board.bottom - tip.offsetHeight)}px`;
 }
 // Wait is the one action button off the board, so it sits on its own just
 // above the board's top-right corner, apart from the informational panels. With
