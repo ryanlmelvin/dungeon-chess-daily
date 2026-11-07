@@ -211,6 +211,93 @@ export function unreachablePickups(state) {
   return state.items.filter((item) => !squares.has(`${item.x},${item.y}`));
 }
 
+/**
+ * True only when this floor's challenge provably can never be completed, though
+ * the player may still have moves (so trapped() never fires). Read-only: act()
+ * never consults it. The proof is square-disjointness on fixed walls: every
+ * square a remaining target could ever stand on (its own moves with every other
+ * unit gone, which only removes blockers; promotion; en passant displacement)
+ * is one the player's piece could never land on (its own moves likewise, pawn
+ * diagonals always allowed, promotion, a pawn's re-entry after losing a life,
+ * one held Borrowed move at any point). Monsters never move onto the player's
+ * square and the recruit can never take a target, so only the player's own
+ * landing captures one. A held Take-back's position must be hopeless too.
+ * Any doubt returns false: a false alarm is far worse than a missed one.
+ */
+export function hopelessFloor(state) {
+  if (!hopelessPosition(state)) return false;
+  const undo = takebackTarget(state);
+  return !undo || hopelessPosition(undo);
+}
+const squareKey = (x, y) => `${x},${y}`;
+function hopelessPosition(state) {
+  if (state?.status !== 'playing' || !state.objective || state.objective.complete || state.exit?.open
+    || !Array.isArray(state.map) || !Array.isArray(state.enemies) || !state.player) return false;
+  const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === state.objective.piece);
+  if (!targets.length) return false;
+  // Shop tools never lie in rooms; if one ever did, picking it up could change everything.
+  if ((state.items ?? []).some((item) => item.type === 'powerup' && item.power !== 'shield' && item.power !== 'freeze' && item.power !== 'magnet')) return false;
+  const pawnPlayer = state.player.piece === 'pawn' || state.startingPiece === 'pawn';
+  const landing = playerLandingSquares(state);
+  return targets.every((foe) => [...targetSquares(state, foe, pawnPlayer)].every((square) => !landing.has(square)));
+}
+// Every square a monster could ever occupy, and (for a pawn player) the squares
+// from which the player could take it en passant.
+function targetSquares(state, foe, pawnPlayer) {
+  const board = { ...state, enemies: [], companion: null, player: { ...state.player, x: -9, y: -9, hp: 0 } };
+  const start = { x: foe.x, y: foe.y, piece: foe.piece, moved: Boolean(foe.moved) };
+  const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}`;
+  const queue = [start];
+  const visited = new Set([key(start)]);
+  const squares = new Set();
+  for (let index = 0; index < queue.length; index++) {
+    const unit = queue[index];
+    squares.add(squareKey(unit.x, unit.y));
+    const next = movesFor(board, unit, true).map((tile) => ({ x: tile.x, y: tile.y }));
+    if (unit.piece === 'pawn' && pawnPlayer) {
+      // Taken en passant from the square it skipped; displaced diagonally when it takes yours that way.
+      if (unit.y === 3) squares.add(squareKey(unit.x, 2));
+      if (unit.y === 4) for (const dx of [-1, 1]) if (walkable(state, unit.x + dx, 5)) next.push({ x: unit.x + dx, y: 5 });
+    }
+    for (const tile of next) {
+      const moved = { ...unit, x: tile.x, y: tile.y, moved: true };
+      if (moved.piece === 'pawn' && moved.y === 7) moved.piece = 'queen';
+      if (!visited.has(key(moved))) { visited.add(key(moved)); queue.push(moved); }
+    }
+  }
+  return squares;
+}
+function playerLandingSquares(state) {
+  const board = { ...state, enemies: [], companion: null };
+  const start = { x: state.player.x, y: state.player.y, piece: state.player.piece, moved: Boolean(state.player.moved), leap: state.powers?.leap > 0 ? 1 : 0 };
+  const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}:${unit.leap}`;
+  const queue = [start];
+  const visited = new Set([key(start)]);
+  const squares = new Set();
+  const enqueue = (unit) => { if (!visited.has(key(unit))) { visited.add(key(unit)); queue.push(unit); } };
+  for (let index = 0; index < queue.length; index++) {
+    const unit = queue[index];
+    squares.add(squareKey(unit.x, unit.y));
+    const steps = movesFor(board, unit).map((tile) => ({ x: tile.x, y: tile.y, leap: unit.leap }));
+    // A pawn captures (en passant too) diagonally forward; assume something is always there to take.
+    if (unit.piece === 'pawn') for (const dx of [-1, 1]) if (walkable(state, unit.x + dx, unit.y - 1)) steps.push({ x: unit.x + dx, y: unit.y - 1, leap: unit.leap });
+    if (unit.leap) {
+      const piece = unit.piece === 'knight' ? 'queen' : 'knight';
+      for (const tile of movesFor(board, { ...unit, piece })) steps.push({ x: tile.x, y: tile.y, leap: 0 });
+    }
+    for (const tile of steps) {
+      const moved = { ...unit, x: tile.x, y: tile.y, moved: true, leap: tile.leap };
+      if (moved.piece === 'pawn' && moved.y === 0) moved.piece = 'queen';
+      enqueue(moved);
+    }
+    // A promoted pawn that loses a life starts over as a pawn on (nearly) any open square.
+    if (state.startingPiece === 'pawn' && unit.piece === 'queen') {
+      for (let y = 1; y <= 6; y++) for (let x = 0; x < 8; x++) if (walkable(state, x, y)) enqueue({ x, y, piece: 'pawn', moved: false, leap: unit.leap });
+    }
+  }
+  return squares;
+}
+
 /** Entire committed attack lanes; jump/step captures warn on their destination. */
 export function dangerTiles(state) {
   const cells = new Map();

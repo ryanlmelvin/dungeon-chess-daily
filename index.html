@@ -129,6 +129,7 @@
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to open the exit door onto the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last floor targets the king.</p>
         <p>Capture them all to open the door behind the back rank. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
+        <p>If the targets left end up where your piece can never land (say, pawns stuck against walls on a bishop’s other colour), the game tells you. Choose <b>Restart this floor</b> there or in the menu: you keep the lives, gold and powers you arrived with.</p>
         <p>Each floor shows a <b>Par</b>: the moves the certified route needed to finish that floor’s challenge. Your move count stops the moment you capture the last target, so gathering leftover gold and walking to the stairs is free. Your share card shows how far over or under par you finished each floor. Only the official piece and color have a par.</p>
         <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
@@ -219,7 +220,7 @@
     <p id="confirm-text"></p>
     <div class="menu-actions">
       <button id="confirm-ok" type="button"></button>
-      <button type="button" data-close>Cancel</button>
+      <button id="confirm-cancel" type="button" data-close>Cancel</button>
     </div>
   </dialog>
   <dialog id="rollover-dialog" aria-labelledby="rollover-title">

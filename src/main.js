@@ -9,7 +9,7 @@ import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
 import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
 import { createDungeonRenderer, SIDE_PANEL_MIN } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
@@ -732,6 +732,10 @@ function takeAction(action) {
       if (state === played && !replay && screen === 'game' && state.status === 'playing' && !state.events.some(event => event.type === 'restart')) openSpecialMove(special, 'player');
     }, animationTime);
   }
+  if (!shopping && !special) {
+    const played = state;
+    setTimeout(() => { if (state === played) offerHopelessRestart(); }, animationTime);
+  }
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
   else if (state.events.some(event => event.type === 'restart')) setTimeout(() => {
     if (screen === 'game' && state.status === 'playing' && state.events.some(event => event.type === 'restart')) showDeath();
@@ -911,11 +915,12 @@ $('daily-button').addEventListener('click', () => {
 // The game's own yes/no dialog. The browser's confirm() is silently refused
 // in some embedded and in-app browsers, which made restarting do nothing.
 let confirmResolve = null;
-function askConfirm(title, text, ok) {
+function askConfirm(title, text, ok, cancel = 'Cancel') {
   confirmResolve?.(false);
   $('confirm-title').textContent = title;
   $('confirm-text').textContent = text;
   $('confirm-ok').textContent = ok;
+  $('confirm-cancel').textContent = cancel;
   $('confirm-dialog').showModal();
   $('confirm-ok').focus();
   return new Promise((resolve) => { confirmResolve = resolve; });
@@ -932,9 +937,28 @@ $('confirm-dialog').addEventListener('close', () => {
 // Voluntary resets cost nothing: no life and no extra try.
 function startOver(next, message) {
   $('menu-dialog').close();
+  hopelessShown = null;
   state = next; showMoves = false; cursor = null; turnLocked = false;
   clearMessageLog();
   save(); enterGame(); notify(message);
+}
+// A floor that can no longer be finished (src/rules.js hopelessFloor) says so
+// once per stuck position and offers the menu's floor restart.
+let hopelessShown = null;
+async function offerHopelessRestart() {
+  if (replay || screen !== 'game' || !state || state.status !== 'playing' || !state.floorSnapshot || document.querySelector('dialog[open]')) return;
+  if (!hopelessFloor(state)) return;
+  const piece = state.objective.piece;
+  const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === piece);
+  const position = JSON.stringify([daily.date, practice, state.floor, state.player.piece, state.powers.leap, targets.map((foe) => [foe.id, foe.x, foe.y])]);
+  if (hopelessShown === position) return;
+  hopelessShown = position;
+  const floor = state.floor + 1;
+  const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
+  if (!await askConfirm('This floor can’t be finished', `Your piece can never reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with.`, `Restart floor ${floor}`, 'Keep playing')) return;
+  if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
+  refreshFromOtherWindow();
+  startOver(resetFloor(state), `Floor ${floor} restarted.`);
 }
 $('reset-floor-button').addEventListener('click', async () => {
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
