@@ -31,6 +31,17 @@
 .side-stories article+article{border-left:1px solid #747474;padding-left:20px}
 .side-stories h3{font:400 28px/.95 'VT323','Courier New',monospace;margin:0 0 7px}
 .side-stories p{clear:both;margin:0}
+/* Suspect lineups (main.js createLineup): every species a floor can hold, by name. */
+.lead-lineup{align-self:center;min-width:0}
+.lineup{margin:10px 0;min-width:0}
+.lead-lineup .lineup{margin:0}
+.lineup figcaption{font-size:16px;line-height:1;text-transform:uppercase;margin:0 0 6px}
+.lineup ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lineup li{display:flex;align-items:center;gap:8px;min-width:0;font-size:22px;line-height:.9}
+.lineup li span{min-width:0;overflow-wrap:break-word}
+.lineup canvas{flex:none;display:block;width:44px;height:44px;image-rendering:pixelated;border:2px solid var(--ink)}
+@media(max-width:600px){.lineup figcaption{font-size:14px}.lineup ul{gap:5px}.lineup li{gap:6px;font-size:18px}}
+@media(max-width:350px){.lineup li{font-size:16px}}
 .paper-action{display:flex;justify-content:flex-end;margin-top:20px}
 .primary{background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:3px 3px 0 #24212a45;padding:14px 20px;font-weight:bold;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:24px}
 .primary:hover{background:#443b49}.primary span{font-size:22px;line-height:1}

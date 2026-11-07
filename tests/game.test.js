@@ -117,9 +117,11 @@ test('player move and capture resolve BEFORE the surviving enemy response', () =
   assert.equal(next.enemies.length, 1);
   assert.equal(next.enemies[0].id, 'survivor');
   assert.deepEqual({ x: next.enemies[0].x, y: next.enemies[0].y }, { x: 4, y: 6 });
-  assert.equal(next.events[0].type, 'capture');
-  assert.equal(next.events[1].type, 'move');
-  assert.ok(next.events.findIndex((event) => event.type === 'miss') > 1);
+  // The capture unmasks the monster on the spot.
+  const order = next.events.filter((event) => event.type !== 'unmask');
+  assert.equal(order[0].type, 'capture');
+  assert.equal(order[1].type, 'move');
+  assert.ok(order.findIndex((event) => event.type === 'miss') > 1);
 });
 
 test('ranged captures warn for a full turn along their entire firing path', () => {
@@ -461,8 +463,10 @@ test('restarting a floor returns to its arrival state without costing a life or 
     assert.equal(validateSave(state, daily.date), true);
     const reset = resetFloor(state);
     assert.equal(validateSave(reset, daily.date), true, `reset on floor ${state.floor} after move ${state.turns}`);
-    const { restartedMoves, ...rest } = reset;
+    const { restartedMoves, unmasked, ...rest } = reset;
     assert.deepEqual(withoutMessage(rest), withoutMessage(arrivals[state.floor]));
+    // Monsters unmasked before the restart stay unmasked.
+    assert.deepEqual(unmasked, state.unmasked);
     // The moves already spent on the floor keep counting.
     assert.equal(restartedMoves, floorScoredMoves(state) || undefined);
     assert.equal(floorScoredMoves(reset), floorScoredMoves(state));
@@ -593,7 +597,7 @@ test("a monster's reply keeps the player's line from the same move in notes", ()
   const rook = { ...monster('r', 'rook', 0, 3, { x: 4, y: 3 }), name: 'Rooky' };
   state.enemies = [pawn, rook, { ...monster('k', 'king', 7, 0), name: 'Kingo' }];
   const next = act(state, move(4, 3));
-  assert.deepEqual(next.notes, ['Pip captured. +1 gold.']);
+  assert.deepEqual(next.notes, ['Pip unmasked — a pawn! +1 gold.']);
   assert.match(next.message, /^Rooky .*1 life left\.$/);
   // The next quiet move clears the notes and leaves no empty field behind.
   const quiet = act(next, move(4, 4));

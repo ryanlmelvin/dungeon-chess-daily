@@ -54,7 +54,9 @@ test('every daily is white, and a black practice game begins without committed a
     assert.ok(flipped.enemies.every((foe)=>foe.phase==='ready' && foe.intent.length===0));
   }
   const raw=getRawDaily(legacy.date);
-  for(const key of ['seed','edition','targets','theme']) assert.deepEqual(raw[key],legacy[key]);
+  for(const key of ['seed','edition','targets']) assert.deepEqual(raw[key],legacy[key]);
+  // Only display names moved since: the art shows the "imp" as a cat.
+  assert.deepEqual(raw.theme,{...legacy.theme,headline:legacy.theme.headline.replace('Ember imps','Ember cats')});
   // Same creatures and roles; a decoy's palette may move so floor-mates never share one.
   const cast=(species)=>species.map(({id,piece})=>({id,piece}));
   assert.deepEqual(cast(raw.species),cast(legacy.species));

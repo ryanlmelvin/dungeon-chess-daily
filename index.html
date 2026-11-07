@@ -28,7 +28,7 @@
         <p id="modifier-bulletin" class="modifier-bulletin" hidden><span id="modifier-emoji" class="modifier-emoji" aria-hidden="true"></span><b id="modifier-kicker"></b> <span id="modifier-headline"></span></p>
         <div class="lead-story">
           <div class="lead-copy"><h2 id="headline"></h2><p id="deck" class="deck" aria-hidden="true"></p></div>
-          <figure class="paper-figure"><canvas id="paper-art" width="180" height="150" aria-label="Pixel illustration of the dungeon beneath the city" role="img"></canvas><figcaption id="art-caption"></figcaption></figure>
+          <div id="lead-lineup" class="lead-lineup"></div>
         </div>
         <div id="side-stories" class="side-stories"></div>
         <div class="paper-action"><button id="start-button" class="primary">Enter today's dungeon <span aria-hidden="true">↘</span></button></div>
@@ -124,6 +124,7 @@
           <li><button data-guide-page="4">Special moves <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="5">Room modifiers <span aria-hidden="true">→</span></button></li>
           <li><button data-guide-page="6">Forks &amp; combos <span aria-hidden="true">→</span></button></li>
+          <li><button data-guide-page="7">Clues &amp; hints <span aria-hidden="true">→</span></button></li>
         </ol>
       </nav>
       <article class="guide-page" hidden>
@@ -215,6 +216,17 @@
         <figure class="special-moves"><canvas class="hint-art" data-guide-art="combo" width="200" height="200" role="img" aria-label="Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three."></canvas></figure>
         <p>Capture on moves in a row to build a combo; the counter appears beside your gold. The third capture in a row, and every one after it, pays <b>+1 bonus gold</b>. Waiting, a move without a capture, or a new floor ends it.</p>
       </article>
+      <article class="guide-page" hidden>
+        <h3>The paper</h3>
+        <p>Each story says how one floor’s target moves, never who it is, and lines up that floor’s <b>suspects</b>: every kind of monster that can turn up there. Watch how they move to spot the target.</p>
+        <h3>Unmasking</h3>
+        <canvas class="guide-wide" data-clue-art="unmask" width="400" height="100" role="img" aria-label="A captured monster’s rook pops out of its square, and its look-alikes now wear a small rook badge."></canvas>
+        <p>Every capture <b>unmasks</b> a monster: its true piece pops out. A kind of monster keeps one piece all day, so its look-alikes wear that piece as a badge.</p>
+        <h3>Hints</h3>
+        <p>Tap <b>Hint</b> beside the objective. The first is free: how the target moves. The next two each add <b>+1 move</b> to the floor’s score, and the button then reads <b>Hint · +1</b>:</p>
+        <p><b>Point out suspects</b> rings the targets on the board and names their kind. <b>Show danger map</b> stripes every square where ending your move gets you captured at once.</p>
+        <p>Paid hints count like moves: in your move count, against par and on your share card, even after <b>Restart this floor</b>.</p>
+      </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
     </section>
   </dialog>
@@ -257,7 +269,8 @@
     <div class="dialog-heading"><h2 id="hint-title">Hint</h2><button class="icon-button" data-close aria-label="Close hint">✕</button></div>
     <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
     <p id="hint-move"></p>
-    <p class="hint-clue"><b>Watch enemy movements to figure out which ones they are.</b> Every monster hides its true piece.</p>
+    <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper’s suspects. Every monster hides its true piece.</p>
+    <button id="hint-next" class="hint-next" type="button" hidden></button>
   </dialog>
   <dialog id="special-move-dialog" aria-labelledby="special-move-title" aria-describedby="special-move-text">
     <div class="dialog-heading"><h2 id="special-move-title">Special move</h2><button id="special-move-close" class="icon-button" data-close aria-label="Close explainer">✕</button></div>

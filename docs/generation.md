@@ -178,8 +178,9 @@ a band of the difficulty score, and maps the UTC weekday to a tier:
 | Thursday, Friday | Tough |
 | Saturday, Sunday | Fiendish |
 
-The newspaper prints the weekday and tier (for example "THURSDAY · TOUGH") and
-nothing else about the dungeon.
+The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
+each floor's clue and suspect lineup (the species that can appear there, so a
+lone suspect shows a floor without decoys), nothing else about the dungeon.
 
 **The score.** Every certified edition gets one number from its certificate's
 verifier metrics and its piece (`difficultyScore`):
