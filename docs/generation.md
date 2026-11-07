@@ -26,8 +26,9 @@ Every returned edition has an explicit sequence of legal actions that:
   player steering the recruit can always follow the certified route.
   Castling is an ordinary legal move, so a route may castle with the final
   floor's recruit. The bishop pair's hop (a bishop recruit joining a bishop
-  moves onto the other colour) concerns recruits of floors 1 and 2, which
-  routes never pick up, so it changes no certificate.
+  moves onto the other colour) and the recruit hunting on its own once floor 1
+  or 2 is cleared both concern recruits of floors 1 and 2, which routes never
+  pick up, so neither changes a certificate.
 - Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
   shield or freeze, and never restarts.
 
