@@ -220,17 +220,19 @@ export function unreachablePickups(state) {
  * is one the player's piece could never land on (its own moves likewise, pawn
  * diagonals always allowed, promotion, a pawn's re-entry after losing a life,
  * one held Borrowed move at any point). Monsters never move onto the player's
- * square and the recruit can never take a target, so only the player's own
- * landing captures one. A held Take-back's position must be hopeless too.
+ * square and a recruit on Auto can never take a target, so only the player's
+ * own landing captures one. With Manual recruit control (`manualRecruit`) the
+ * recruit may take targets, so every square it could land on counts as well.
+ * A held Take-back's position must be hopeless too.
  * Any doubt returns false: a false alarm is far worse than a missed one.
  */
-export function hopelessFloor(state) {
-  if (!hopelessPosition(state)) return false;
+export function hopelessFloor(state, { manualRecruit = false } = {}) {
+  if (!hopelessPosition(state, manualRecruit)) return false;
   const undo = takebackTarget(state);
-  return !undo || hopelessPosition(undo);
+  return !undo || hopelessPosition(undo, manualRecruit);
 }
 const squareKey = (x, y) => `${x},${y}`;
-function hopelessPosition(state) {
+function hopelessPosition(state, manualRecruit = false) {
   if (state?.status !== 'playing' || !state.objective || state.objective.complete || state.exit?.open
     || !Array.isArray(state.map) || !Array.isArray(state.enemies) || !state.player) return false;
   const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === state.objective.piece);
@@ -239,7 +241,34 @@ function hopelessPosition(state) {
   if ((state.items ?? []).some((item) => item.type === 'powerup' && item.power !== 'shield' && item.power !== 'freeze' && item.power !== 'magnet')) return false;
   const pawnPlayer = state.player.piece === 'pawn' || state.startingPiece === 'pawn';
   const landing = playerLandingSquares(state);
+  if (manualRecruit) for (const square of recruitLandingSquares(state, landing)) landing.add(square);
   return targets.every((foe) => [...targetSquares(state, foe, pawnPlayer)].every((square) => !landing.has(square)));
+}
+// Every square a recruit under Manual control could ever land on: the one at the
+// player's side from where it stands, or a waiting one from its square once the
+// player could step there. Fixed walls only, as for the player's piece; a pawn
+// may always take diagonally, and promotes on the far rank.
+function recruitLandingSquares(state, playerLanding) {
+  const recruit = state.companion ?? (state.items ?? []).find((item) => item.type === 'companion' && playerLanding.has(squareKey(item.x, item.y)));
+  if (!recruit) return [];
+  const board = { ...state, enemies: [], companion: null };
+  const start = { x: recruit.x, y: recruit.y, piece: recruit.piece === 'pawn' && recruit.y === 0 ? 'queen' : recruit.piece, moved: Boolean(recruit.moved) };
+  const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}`;
+  const queue = [start];
+  const visited = new Set([key(start)]);
+  const squares = new Set();
+  for (let index = 0; index < queue.length; index++) {
+    const unit = queue[index];
+    squares.add(squareKey(unit.x, unit.y));
+    const steps = movesFor(board, unit).map((tile) => ({ x: tile.x, y: tile.y }));
+    if (unit.piece === 'pawn') for (const dx of [-1, 1]) if (walkable(state, unit.x + dx, unit.y - 1)) steps.push({ x: unit.x + dx, y: unit.y - 1 });
+    for (const tile of steps) {
+      const moved = { ...unit, x: tile.x, y: tile.y, moved: true };
+      if (moved.piece === 'pawn' && moved.y === 0) moved.piece = 'queen';
+      if (!visited.has(key(moved))) { visited.add(key(moved)); queue.push(moved); }
+    }
+  }
+  return squares;
 }
 // Every square a monster could ever occupy, and (for a pawn player) the squares
 // from which the player could take it en passant.
@@ -361,7 +390,7 @@ function noteDoubleStep(state, foe, from) {
 }
 
 // Royal guard (final floor): the king avoids lines the player or companion
-// covers, and its guards screen it. The recruit never captures the king, but
+// covers, and its guards screen it. A recruit on Auto never captures the king, but
 // like a chess rook it still controls squares and herds it toward the player. Evaluations move a unit
 // hypothetically and always restore it.
 function chebyshev(a, b) { return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)); }
@@ -938,7 +967,7 @@ function captureEnemy(state, captured, companion = false) {
   } else state.message = `${captured.name} captured. +1 gold.`;
 }
 
-// A recruit never captures the challenge piece: that capture is the player's.
+// A recruit on Auto never captures the challenge piece: that capture is the player's.
 function recruitMayTake(state, foe) { return !foe || (foe.role ?? foe.piece) !== state.objective.piece; }
 export function challengeName(state) {
   const piece = state.objective.piece;
@@ -949,23 +978,70 @@ export function captureGoal(piece) {
   return PIECE_COUNTS[piece] > 1 ? `Capture all enemy ${piece}s` : `Capture the enemy ${piece}`;
 }
 
-function companionTurn(state) {
+// Manual recruit control: a move or wait may carry the recruit's order for that
+// turn, a square it can move to ({x, y}) or 'hold'. An ordered recruit may
+// capture any monster, the challenge piece included. With no order (Auto, and
+// every certified route) its own AI moves it, as below.
+const RECRUIT_PROBE = Symbol('recruit probe');
+const validOrder = (order) => order === 'hold' || (order !== null && typeof order === 'object' && inside(order.x, order.y));
+const squareOrder = (order) => order !== undefined && order !== 'hold' && order !== RECRUIT_PROBE;
+// Thrown by companionTurn for recruitChoice: the turn stops as the recruit's phase begins.
+class RecruitPhase {
+  constructor(board, phase, moves) { this.board = board; this.phase = phase; this.moves = moves; }
+}
+
+/**
+ * Where the recruit could move this turn if the player plays `action` (a move
+ * or a wait, without an order), for Manual recruit control. Null when the turn
+ * has no recruit phase: no recruit yet, castling (that was its move), a black
+ * move the monsters' first move sends back for a new choice, or a run-ending
+ * capture. Otherwise `board` is the position as its phase begins (after your
+ * move, a close-range hit and, as black, the monsters' first move;
+ * `board.events[phase]` is its 'companion-phase'), and `moves` its legal
+ * squares, captures of any monster included. Changes nothing.
+ */
+export function recruitChoice(previous, action) {
+  if (action?.type !== 'move' && action?.type !== 'wait') return null;
+  try {
+    play(previous, { ...action, recruit: RECRUIT_PROBE });
+  } catch (stop) {
+    if (stop instanceof RecruitPhase) return { board: stop.board, phase: stop.phase, moves: stop.moves };
+    throw stop;
+  }
+  return null;
+}
+
+// The recruit's move, once per turn after the player's. Returns false for an
+// order it can't carry out, which makes the whole action no action.
+function companionTurn(state, order) {
   const unit = state.companion;
-  if (!unit) return;
+  if (!unit) return !squareOrder(order);
   unit.sharing = same(unit,state.player);
+  const phase = state.events.length;
   state.events.push({type:'companion-phase',x:unit.x,y:unit.y});
   // A pawn recruited on the far rank promotes before choosing its first move.
   if (unit.piece==='pawn' && unit.y===0) {
     unit.piece='queen';
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
-  if (!state.enemies.length) return;
+  if (order === RECRUIT_PROBE) throw new RecruitPhase(state, phase, movesFor(state,unit).map(({x,y,capture}) => ({x,y,capture})));
+  if (order === 'hold') return true;
+  if (order !== undefined) {
+    const ordered = movesFor(state,unit).find((move) => same(move,order));
+    if (ordered) moveCompanion(state,unit,ordered);
+    return Boolean(ordered);
+  }
+  if (!state.enemies.length) return true;
   const candidates = movesFor(state,unit).filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
   const nearest = (move) => Math.min(...state.enemies.map((foe)=>distance(move,foe)));
   const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${state.turns}:${move.x},${move.y}`);
   candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
   const destination = candidates[0];
-  if (!destination) return;
+  if (destination) moveCompanion(state,unit,destination);
+  return true;
+}
+
+function moveCompanion(state, unit, destination) {
   const from = {x:unit.x,y:unit.y};
   const captured = enemyAt(state,destination.x,destination.y);
   unit.x=destination.x; unit.y=destination.y; unit.moved=true; unit.sharing=false;
@@ -1053,6 +1129,8 @@ function settle(state) {
 }
 
 export function act(previous, action) {
+  // A recruit order is a square or 'hold' (see companionTurn); anything else is no action.
+  if (action?.recruit !== undefined && !validOrder(action.recruit)) return previous;
   const state = play(previous, action);
   if (state !== previous && state.notes) {
     state.message ||= state.notes.pop();
@@ -1130,7 +1208,8 @@ function play(previous, action) {
     }
     // Waiting is the player's move, so it spends any en passant window.
     state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state);
-    companionTurn(state); settle(state);
+    if (!companionTurn(state, action.recruit)) return previous;
+    settle(state);
     if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
     collapseTick(state); settle(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
@@ -1221,7 +1300,10 @@ function play(previous, action) {
     state.items = state.items.filter((item)=>item!==recruit);
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
-    state.message = `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`;
+    // An action with a recruit order is played under Manual recruit control.
+    state.message = action.recruit === undefined
+      ? `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`
+      : `A ${recruit.piece} joins you this floor. You move it after each of your moves, and it can capture ${challengeName(state)} too.`;
   }
   // Pick up the relic before applying the magnet, so it works immediately.
   const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
@@ -1249,7 +1331,9 @@ function play(previous, action) {
   }
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
-  if (!castle) { companionTurn(state); settle(state); }
+  // Castling was the recruit's move, so an order to move it again is no action.
+  if (castle ? squareOrder(action.recruit) : !companionTurn(state, action.recruit)) return previous;
+  if (!castle) settle(state);
   if (state.playerColor === 'white' && !close) { enemyTurn(state); settle(state); }
   collapseTick(state); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
