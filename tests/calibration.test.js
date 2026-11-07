@@ -59,7 +59,9 @@ test('the calibration table covers every tier and piece with valid knobs, and th
   for (const tier of TIER_IDS) for (const piece of PLAYABLE_PIECES) {
     const row = CALIBRATION[tier]?.[piece];
     assert.ok(row, `${tier}/${piece} is calibrated`);
-    assert.deepEqual(Object.keys(row).sort(), Object.keys(DEFAULT_KNOBS).sort(), `${tier}/${piece} names every knob`);
+    // screens appears only where calibration chose some.
+    assert.deepEqual(Object.keys(row).filter((knob) => knob !== 'screens').sort(), Object.keys(DEFAULT_KNOBS).filter((knob) => knob !== 'screens').sort(), `${tier}/${piece} names every knob`);
+    assert.ok([0, 1, 3].includes(knobsFor(tier, piece).screens));
     const knobs = knobsFor(tier, piece);
     assert.ok(Number.isInteger(knobs.obstacleBase) && knobs.obstacleBase >= 0 && knobs.obstacleBase <= 16);
     assert.ok(Number.isInteger(knobs.decoys) && knobs.decoys >= 0 && knobs.decoys <= 4);
@@ -69,7 +71,7 @@ test('the calibration table covers every tier and piece with valid knobs, and th
     assert.ok(CALIBRATION_REPORT.tiers?.[tier]?.[piece], `${tier}/${piece} has measurements`);
     const entry = FALLBACKS[`${tier}:${piece}:white`];
     assert.ok(entry, `${tier}/${piece} has a fallback`);
-    assert.deepEqual(entry.knobs, { obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards });
+    assert.deepEqual(entry.knobs, { obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards, screens: knobs.screens });
   }
   assert.throws(() => knobsFor('standard', 'rook'), RangeError);
 });

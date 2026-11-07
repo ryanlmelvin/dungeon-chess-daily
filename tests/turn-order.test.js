@@ -9,6 +9,8 @@ import { closeAttacker, createGame as createCandidate, validateSave as validateC
 const move = (x,y) => ({type:'move',x,y});
 // The first legal move that no monster captures at close range.
 const safeMove = (state) => ({type:'move',...legalMoves(state).find((tile)=>!closeAttacker(state,tile))});
+// A black selection the monsters' first move blocks, so it waits for a fresh one.
+const blockedMove = (state) => legalMoves(state).map((tile)=>({type:'move',x:tile.x,y:tile.y})).find((action)=>act(state,action).awaitingPlayer);
 function dailyFor(piece,color) {
   // Every daily is white; black engine tests borrow a white day, as practice does.
   if (color === 'black') return { ...dailyFor(piece, 'white'), playerColor: 'black' };
@@ -102,7 +104,7 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   // Every daily is white, so black is checked as a practice game.
   const check=(value)=>validateSave(value,value.date,{practice:true});
   const state=createPracticeGame(getDaily('2026-11-21'),{piece:'queen',color:'black'});
-  const pending=act(state,move(4,5));
+  const pending=act(state,blockedMove(state));
   assert.equal(pending.awaitingPlayer,true);
   assert.equal(check(pending),true);
   const saved=JSON.parse(JSON.stringify(pending));
@@ -111,7 +113,7 @@ test('black pending turns persist in valid saves, purchases preserve the phase, 
   assert.equal(check(reply),true);
   assert.ok(!reply.events.some((event)=>event.type==='enemy-phase'));
   const beforeDeadline=structuredClone(state); beforeDeadline.turns=59;
-  const lastPending=act(beforeDeadline,move(4,5));
+  const lastPending=act(beforeDeadline,blockedMove(beforeDeadline));
   assert.equal(lastPending.turns,59); assert.equal(lastPending.status,'playing');
   assert.equal(check(lastPending),true);
   const timedOut=act(lastPending,safeMove(lastPending));
