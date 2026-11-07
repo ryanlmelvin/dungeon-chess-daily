@@ -2,7 +2,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor, retryLostRun } from '../src/game.js';
-import { shareDate } from '../src/rules.js';
 import { botRun, playerRun } from '../src/bot.js';
 import { floorPars, parFor, runPars } from '../src/par.js';
 
@@ -46,20 +45,20 @@ test('the certified route matches par on every floor, and older saves carrying s
   assert.equal(validateSave(legacy, daily.date), true);
 });
 
-test('the share card shows each floor\'s moves against par, one floor per line', () => {
+test('the share card shows each floor\'s moves against par, the floors side by side on one line', () => {
   const won = playRoute();
   const pars = floorPars(daily);
-  const lines = (state) => getShareText(state, pars).split('\n');
-  const plain = (line) => line.replace(/ [\u{1F1EB}\u{1F1F7}🏰🔱]+$/u, '');
-  assert.equal(lines(won)[0], `Dungeon Chess Daily · ${shareDate(won.date)}`);
-  assert.deepEqual(lines(won).slice(1, 4).map(plain), ['🟥 E', '⬛ E', '👑 E']);
+  const floors = (state) => getShareText(state, pars).split('\n')[1].split('  ');
+  const plain = (floor) => floor.replace(/ [\u{1F1EB}\u{1F1F7}🏰🔱]+$/u, '');
+  assert.equal(getShareText(won, pars, { now: new Date(Date.UTC(2026, 10, 5)) }).split('\n')[0], 'Dungeon Chess Daily · Nov 5 ♟\uFE0E');
+  assert.deepEqual(floors(won).map(plain), ['🟥 E', '⬛ E', '👑 E']);
   const off = structuredClone(won); off.records[0].scored = pars[0] + 3; off.records[2].scored = pars[2] - 1;
-  assert.deepEqual(lines(off).slice(1, 4).map(plain), ['🟥 +3', '⬛ E', '👑 \u22121']);
+  assert.deepEqual(floors(off).map(plain), ['🟥 +3', '⬛ E', '👑 \u22121']);
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
-  assert.deepEqual(lines(playing).slice(1, 4).map(plain), ['🟥 E', '⬛ E', '👑 ·']);
+  assert.deepEqual(floors(playing).map(plain), ['🟥 E', '⬛ E', '👑 ·']);
   const wide = structuredClone(won); wide.records.forEach((record, floor) => { record.scored = pars[floor] + 42; });
-  assert.deepEqual(lines(wide).slice(1, 4).map(plain), ['🟥 +42', '⬛ +42', '👑 +42']);
+  assert.deepEqual(floors(wide).map(plain), ['🟥 +42', '⬛ +42', '👑 +42']);
 });
 
 test('moves spent before a floor restart keep counting toward that floor; a new try starts fresh', () => {

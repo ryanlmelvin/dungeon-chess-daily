@@ -5,7 +5,7 @@ import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, dangerTile
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { royalRules, floorDecoys, shareDate } from '../src/rules.js';
+import { royalRules, floorDecoys } from '../src/rules.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -206,25 +206,44 @@ test('moves remain available beyond sixty and final-floor extraction still works
   assert.equal(act(extracted, move(4, 1)), extracted);
 });
 
-test('share text is a title and one line per floor: marker, moves against par and that floor\'s feats, without spoilers', () => {
+test('share text is a title, one line of floors (marker, moves against par and that floor\'s feats) and the link, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2; state.player.hp = 5;
   state.records = [{ floor: 0, hp: 8, turns: 8 }, { floor: 1, hp: 6, turns: 12 }, { floor: 2, hp: 5, turns: 9 }];
   const url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/';
-  const text = getShareText(state, [10, 11, 9]);
-  assert.equal(text, `Dungeon Chess Daily · ${shareDate(state.date)}\n🟥 \u22122\n⬛ +1\n👑 E\n${url}`);
+  const share = (pars) => getShareText(state, pars, { now: new Date(Date.UTC(2026, 10, 7)) });
+  const floors = (pars) => share(pars).split('\n')[1];
+  const text = share([10, 11, 9]);
+  assert.equal(text, `Dungeon Chess Daily · Nov 5 ♟\uFE0E\n🟥 \u22122  ⬛ +1  👑 E\n${url}`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
   // Without a par each floor shows a dot.
-  assert.deepEqual(getShareText(state).split('\n').slice(1, 4), ['🟥 ·', '⬛ ·', '👑 ·']);
-  // Wide scores stay on their own line, so nothing has to line up.
-  assert.deepEqual(getShareText(state, [20, 0, 21]).split('\n').slice(1, 4), ['🟥 \u221212', '⬛ +12', '👑 \u221212']);
+  assert.equal(floors(), '🟥 ·  ⬛ ·  👑 ·');
+  // Two spaces part the floors and each starts with its marker, so wide scores still read cleanly.
+  assert.equal(floors([20, 0, 21]), '🟥 \u221212  ⬛ +12  👑 \u221212');
   // Special moves mark the floor they happened on, once each in a fixed order; combos don't show.
   state.feats = [{ floor: 2, kind: 'fork' }, { floor: 0, kind: 'combo' }, { floor: 0, kind: 'en-passant' }, { floor: 1, kind: 'fork' }, { floor: 2, kind: 'castle' }, { floor: 2, kind: 'fork' }];
-  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1), ['🟥 \u22122 🇫🇷', '⬛ +1 🔱', '👑 E 🏰🔱', url]);
+  assert.equal(floors([10, 11, 9]), '🟥 \u22122 🇫🇷  ⬛ +1 🔱  👑 E 🏰🔱');
   state.feats = [{ floor: 0, kind: 'combo' }];
-  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1), ['🟥 \u22122', '⬛ +1', '👑 E', url]);
+  assert.equal(floors([10, 11, 9]), '🟥 \u22122  ⬛ +1  👑 E');
+  // Floors not reached are left off.
   state.status = 'lost'; state.floor = 0; state.records = [];
-  assert.deepEqual(getShareText(state, [10, 11, 9]).split('\n').slice(1), ['🟥 ·', url]);
+  assert.deepEqual(share([10, 11, 9]).split('\n').slice(1), ['🟥 ·', url]);
+});
+
+test('the share card names the edition by its UTC date, with the year only when it isn\'t the current one, then the starting piece in black', () => {
+  const state = createGame(daily);
+  assert.deepEqual([state.date, state.playerColor, state.startingPiece], ['2026-11-05', 'white', 'pawn']);
+  const title = (now, change = {}) => getShareText({ ...state, ...change }, null, { now }).split('\n')[0];
+  assert.equal(title(new Date(Date.UTC(2026, 10, 5))), 'Dungeon Chess Daily · Nov 5 ♟\uFE0E');
+  assert.equal(title(new Date(Date.UTC(2026, 11, 31, 23, 59))), 'Dungeon Chess Daily · Nov 5 ♟\uFE0E');
+  // From 00:00 UTC on Jan 1, an edition from the year before (an archive run, or one begun
+  // before midnight) carries its year.
+  assert.equal(title(new Date(Date.UTC(2027, 0, 1))), 'Dungeon Chess Daily · Nov 5, 2026 ♟\uFE0E');
+  assert.equal(title(new Date(Date.UTC(2027, 0, 1, 0, 5)), { date: '2026-12-31' }), 'Dungeon Chess Daily · Dec 31, 2026 ♟\uFE0E');
+  // Black glyphs whatever the color. Only ♟ also has an emoji form, so only it carries
+  // U+FE0E, asking for the text form that matches the others.
+  const glyph = (piece) => title(new Date(Date.UTC(2026, 10, 5)), { startingPiece: piece }).split(' ').at(-1);
+  assert.deepEqual(PIECES.map(glyph), ['♟\uFE0E', '♜', '♞', '♝', '♛', '♚']);
 });
 
 test('save validation accepts real chess runs and rejects incompatible or corrupt exports', () => {
