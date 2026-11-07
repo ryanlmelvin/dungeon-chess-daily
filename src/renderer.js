@@ -23,6 +23,14 @@ const STRIKE_MS = 300;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
+// Unmasking (rules.js unmask): a captured monster's true piece pops out of its
+// square, and its look-alikes wear that piece as a badge from then on.
+const UNMASK_POP_MS = 1100;
+const BADGE_WIDTH = 0.42;
+// Paid hints (main.js): the suspects' rings, in the objective's "Targets left"
+// pink, and the danger map's stripes, unlike the solid red of an attack path.
+const SUSPECT = 0xef8b94;
+const STRIPES = '#ff8a4c';
 // Screen-up in world space for the board camera (about 72 degrees down), so a
 // crown can sit above a monster's head on screen without leaving its tile.
 const SCREEN_UP = new THREE.Vector3(0, 0.309, -0.951);
@@ -38,6 +46,19 @@ function pixelTexture(rows, paletteOverride = {}) {
     context.fillStyle = palette[key];
     context.fillRect(x, y, 1, 1);
   }));
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = texture.minFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// Diagonal pixel stripes covering one danger-map square.
+function stripeTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 16;
+  const context = canvas.getContext('2d');
+  context.fillStyle = STRIPES;
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 6 < 2) context.fillRect(x, y, 1, 1);
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = texture.minFilter = THREE.NearestFilter;
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -76,11 +97,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const materials = new Set();
   const textures = new Map(Object.entries(SPRITES).map(([id, rows]) => [id, pixelTexture(rows)]));
   textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
+  textures.set('danger-stripes', stripeTexture());
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
   const targets = [];
   const particles = [];
+  const pops = [];
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let state = null;
   let boardKey = '';
@@ -186,7 +209,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     itemKey = '';
     pendingItems = null;
     recruitSprites = [];
-    targets.length = particles.length = 0;
+    targets.length = particles.length = pops.length = 0;
     entities.clear();
     columns = next.map?.[0]?.length || 8;
     rows = next.map?.length || 8;
@@ -338,6 +361,51 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       // The monster itself flashes gold as the crown appears.
       entity.glowAt = popAt;
     } else if (!entity.crownAt) entity.crown.visible = true;
+  }
+
+  // A monster whose species is unmasked wears its piece, in the enemy's color,
+  // on its head's left corner (the crown takes the right). Derived from the
+  // saved state.unmasked, so it returns after a reload; `showAt` holds it back
+  // until this move's reveal.
+  function wearBadge(entity, piece, palette, showAt = 0) {
+    if (!piece) {
+      if (entity.badge) entity.badge.visible = false;
+      entity.badgeAt = 0;
+      return;
+    }
+    if (!entity.badge) {
+      const material = new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false, depthTest: false });
+      materials.add(material);
+      const badge = new THREE.Sprite(material);
+      badge.center.set(0.5, 0);
+      badge.scale.set(BADGE_WIDTH, BADGE_WIDTH, 1);
+      badge.position.set(-0.22, 0.15, 0).addScaledVector(SCREEN_UP, 0.25);
+      badge.renderOrder = 2;
+      badge.visible = false;
+      entity.group.add(badge);
+      entity.badge = badge;
+    }
+    const id = `piece-${piece}:${palette}`;
+    if (entity.badgeId !== id) {
+      entity.badge.material.map = spriteTexture(`piece-${piece}`, palette);
+      entity.badge.material.needsUpdate = true;
+      entity.badgeId = id;
+    }
+    if (showAt) { entity.badge.visible = false; entity.badgeAt = showAt; }
+    else if (!entity.badgeAt) entity.badge.visible = true;
+  }
+
+  // The captured monster's true piece pops up out of its square and fades.
+  function popRole(event, at, palette) {
+    const material = new THREE.SpriteMaterial({ map: spriteTexture(`piece-${event.role}`, palette), transparent: true, alphaTest: 0.05, depthWrite: false, depthTest: false });
+    materials.add(material);
+    const sprite = new THREE.Sprite(material);
+    sprite.center.set(0.5, 0.42);
+    sprite.position.set(event.x, 0.15, event.y);
+    sprite.renderOrder = 3;
+    sprite.visible = false;
+    actors.add(sprite);
+    pops.push({ sprite, at, origin: sprite.position.clone() });
   }
 
   function updateItems(items) {
@@ -511,6 +579,12 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
     // Choosing a pin: a crosshair on every monster, kings too, so none stands out.
     if (next.pinning) for (const enemy of next.enemies) if (!enemy.pinned) pinReticle(enemy.x, enemy.y);
+    // Paid hints: stripes where ending a move is captured at once, and a ring around each suspect.
+    if (next.closeRange?.length) {
+      const stripes = basic(0xffffff, { map: textures.get('danger-stripes'), transparent: true, opacity: 0.85, depthWrite: false });
+      for (const tile of next.closeRange) tileMark(hints, tile.x, tile.y, 0.94, 0.94, stripes, 0.043);
+    }
+    if (next.suspects) for (const enemy of next.enemies) if (enemy.species === next.suspects) tileRing(hints, enemy.x, enemy.y, 0.4, 0.48, SUSPECT, 0.95, 0.052);
   }
 
   function render(next, afterTransition = false) {
@@ -552,6 +626,16 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     const companionDelay = companionPhase && (playerMoved || blackPhase) ? playerDelay + 175 : 0;
     const enemyDelay = !blackPhase && enemyPhase && (playerMoved || companionPhase) ? (playerMoved ? 175 : 0) + (companionPhase ? 175 : 0) : 0;
     const captureAt = now + playerDelay + 145;
+    // Unmaskings land with their capture: the player's at captureAt, the recruit's after its own step.
+    const enemyPalette = next.playerColor === 'black' ? 'white' : 'black';
+    const unmaskedNow = changedBoard ? [] : events.filter((event) => event.type === 'unmask');
+    const revealAt = (event) => (!animateTurn ? now
+      : events.some((other) => other.type === 'companion-capture' && other.id === event.id) ? now + companionDelay + 145 : captureAt);
+    // A species unmasked by this move badges its look-alikes only once the reveal lands.
+    const reveals = new Map();
+    for (const event of unmaskedNow) {
+      if (!(state?.unmasked ?? []).includes(event.species)) reveals.set(event.species, Math.min(reveals.get(event.species) ?? Infinity, revealAt(event)));
+    }
     if (animateTurn && playerMoved) pendingItems = { items: next.items || [], at: captureAt };
     else if (!pendingItems) updateItems(next.items || []);
     const live = new Set();
@@ -591,6 +675,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         const worn = data.promoted === true;
         const crowned = worn && !changedBoard && events.some((event) => event.type === 'enemy-promotion' && event.x === data.x && event.y === data.y);
         wearCrown(entity, worn, crowned ? (animateTurn ? now + delay + 145 : now) : 0);
+        wearBadge(entity, next.unmasked?.includes(data.species) ? data.piece : null, enemyPalette, reveals.get(data.species) ?? 0);
       }
       if (reducedMotion) entity.group.position.copy(entity.target);
     }
@@ -657,6 +742,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // The ceiling comes down once the turn's moves have landed (never on a new room).
     if (changedBoard) caveInAt = 0;
     else if (events.some((event) => event.type === 'cave-in')) caveInAt = animateTurn ? now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 : now;
+    for (const event of unmaskedNow) popRole(event, revealAt(event), enemyPalette);
     currentTurn = next.turns;
     lastEvents = next.events;
     state = next;
@@ -772,6 +858,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         entity.crown.visible = true;
         entity.crown.scale.set(CROWN_WIDTH * pop, CROWN_WIDTH * pop * CROWN.length / CROWN[0].length, 1);
       }
+      if (entity.badgeAt && timestamp >= entity.badgeAt) {
+        entity.badgeAt = 0;
+        entity.badge.visible = true;
+      }
       const glow = entity.glowAt && timestamp >= entity.glowAt ? (timestamp - entity.glowAt) / FORK_GLOW_MS : -1;
       if (glow >= 1) entity.glowAt = 0;
       // Three gold pulses, or one steady flash under reduced motion.
@@ -785,6 +875,20 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const covered = [...entities.values()].some((entity) => !entity.player && !entity.companion
         && Math.abs(entity.group.position.x - recruit.position.x) < 0.5 && Math.abs(entity.group.position.z - recruit.position.z) < 0.5);
       recruit.material.opacity = covered ? COVERED_RECRUIT_OPACITY : 1;
+    }
+    // An unmasked piece grows out of its square with a gold flash, rises and
+    // fades. Under reduced motion it simply stands there for a moment.
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const pop = pops[i];
+      if (timestamp < pop.at) continue;
+      const t = (timestamp - pop.at) / UNMASK_POP_MS;
+      if (t >= 1) { release(pop.sprite); pops.splice(i, 1); continue; }
+      pop.sprite.visible = true;
+      const grow = reducedMotion ? 1 : (0.35 + 0.65 * Math.min(1, t / 0.15)) * (1 + 0.2 * Math.sin(Math.PI * Math.min(1, t / 0.35)));
+      pop.sprite.scale.set(0.8 * grow, 0.8 * grow, 1);
+      pop.sprite.position.copy(pop.origin).addScaledVector(SCREEN_UP, reducedMotion ? 0 : 0.55 * (1 - (1 - Math.min(1, t / 0.5)) ** 2));
+      pop.sprite.material.opacity = reducedMotion || t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      pop.sprite.material.color.set(!reducedMotion && t < 0.25 ? 0xffd46b : 0xffffff);
     }
     if (pendingHints && timestamp >= pendingHints.at) {
       updateHints(pendingHints.next);

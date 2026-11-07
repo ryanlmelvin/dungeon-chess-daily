@@ -182,6 +182,8 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .hint-button { pointer-events: auto; flex: none; font-size: 20px; min-height: 36px; padding: 4px 10px; color: var(--gold); border-color: var(--gold); }
 .hint-art { display: block; width: min(100%, 240px); height: auto; margin: 0 auto 12px; image-rendering: pixelated; }
 #hint-dialog { max-width: 420px; }
+/* One button for the next hint, priced in moves. */
+.hint-next { display: block; width: 100%; margin-top: 12px; color: var(--gold); }
 .first-tip { font-size: 20px; line-height: 1.2; }
 .game-message, .notice, .webgl-error { font-size: 20px; line-height: 1.2; }
 .result-paper { --paper: #c9c9c7; --ink: #252525; }

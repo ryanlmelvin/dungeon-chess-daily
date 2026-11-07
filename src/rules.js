@@ -766,6 +766,8 @@ function setFloor(state, kingRecruit = false) {
   state.objective = { piece: state.targets[state.floor], complete: false };
   state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure };
   delete state.restartedMoves;
+  // Hints and unmaskings belong to one floor: its species never live on another.
+  delete state.hints; delete state.unmasked;
   const target = state.species[state.floor];
   const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), ...floorDecoys(state)];
   const mirror = rng() < 0.5;
@@ -867,8 +869,8 @@ function restartRun(state, events, message) {
   delete state.caveIn; delete state.dropped;
   // A held Take-back keeps its `undo`: it can take back the move that ended the run.
   state.tries = tries;
-  // A new try starts every floor's move count afresh.
-  delete state.restartedMoves;
+  // A new try starts every floor's move count afresh, paid hints and unmaskings too.
+  delete state.restartedMoves; delete state.hints; delete state.unmasked;
   state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
   state.message = message;
   return state;
@@ -899,7 +901,7 @@ export function createGame(daily = getRawDaily()) {
 // Keep the floor exactly as it began, so the player may voluntarily start it over.
 function markFloorStart(state) {
   // Attempt counters belong to the live run, so a restart never rewinds them.
-  const { floorSnapshot, replayUnlocked, tries, restartedMoves, ...start } = state;
+  const { floorSnapshot, replayUnlocked, tries, restartedMoves, hints, unmasked, ...start } = state;
   state.floorSnapshot = structuredClone(start);
 }
 
@@ -907,6 +909,7 @@ function markFloorStart(state) {
  * Return to the start of the current floor: same lives, gold and powers as on
  * arrival. The moves already spent on the floor keep counting toward its score
  * (`restartedMoves`), so a restart can't wipe a floor's count back to zero.
+ * Paid hints stay paid (and shown), and unmasked species stay unmasked.
  */
 export function resetFloor(previous) {
   const snapshot = previous?.floorSnapshot;
@@ -915,10 +918,19 @@ export function resetFloor(previous) {
   state.floorSnapshot = structuredClone(snapshot);
   if (previous.replayUnlocked === true) state.replayUnlocked = true;
   if (previous.tries !== undefined) state.tries = previous.tries;
-  const spent = floorScoredMoves(previous);
+  const spent = floorScoredMoves(previous) - hintMoves(previous);
   if (spent) state.restartedMoves = spent;
+  keepKnowledge(state, previous);
   state.message = `Floor ${state.floor + 1} reset. ${snapshot.message}`;
   return state;
+}
+
+// What the player learned on this floor outlives a floor restart or a Take-back:
+// the hints they paid for and the species they unmasked.
+function keepKnowledge(state, previous) {
+  if (previous.hints?.length) state.hints = [...previous.hints];
+  const unmasked = [...new Set([...(state.unmasked ?? []), ...(previous.unmasked ?? [])])];
+  if (unmasked.length) state.unmasked = unmasked;
 }
 
 function finishFloor(state) {
@@ -928,6 +940,8 @@ function finishFloor(state) {
   const lives = livesBought(state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0));
   const turns = state.turns - state.floorStart.turns;
   state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  // Paid hints are penalty moves on the floor's score (scoredMoves).
+  if (state.hints?.length) state.records.at(-1).hints = [...state.hints];
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
     state.events.push({ type: 'win', x: state.player.x, y: state.player.y });
@@ -965,6 +979,7 @@ function captureEnemy(state, captured, companion = false) {
   state.captures++;
   if ((captured.role ?? captured.piece) !== state.objective.piece) { state.gold++; state.paidCaptures++; }
   state.events.push({ type: companion ? 'companion-capture' : 'capture', id: captured.id, x: captured.x, y: captured.y });
+  const unmasked = unmask(state, captured);
   if ((captured.role ?? captured.piece) === state.objective.piece) {
     state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
     state.exit.open = state.objective.complete;
@@ -972,8 +987,21 @@ function captureEnemy(state, captured, companion = false) {
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
     const moves = floorScoredMoves(state);
     // The ✓ echoes the paused move counter; the UI adds par where the run has one.
-    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.` : `${captured.name} captured. Keep hunting.`;
-  } else state.message = `${captured.name} captured. +1 gold.`;
+    if (state.exit.open) { state.message = unmasked; settle(state); }
+    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.` : `${unmasked} Keep hunting.`;
+  } else state.message = `${unmasked} +1 gold.`;
+}
+
+// Every capture unmasks the monster's true role. A species keeps one role all
+// edition, so from now on its look-alikes wear that piece as a badge (the
+// renderer reads state.unmasked). Returns the log line, e.g. "Moss gremlin
+// unmasked — a rook!".
+function unmask(state, captured) {
+  const role = captured.role ?? captured.piece;
+  state.events.push({ type: 'unmask', id: captured.id, species: captured.species, role, x: captured.x, y: captured.y });
+  if (captured.species && !(state.unmasked ?? []).includes(captured.species)) state.unmasked = [...(state.unmasked ?? []), captured.species];
+  const who = captured.promoted ? `a crowned ${role}` : role === 'king' ? 'the king' : `a ${role}`;
+  return `${captured.name} unmasked — ${who}!`;
 }
 
 // A recruit on Auto never captures the challenge piece: that capture is the player's.
@@ -985,6 +1013,56 @@ export function challengeName(state) {
 // "Capture all enemy bishops", but "Capture the enemy king" for a lone target.
 export function captureGoal(piece) {
   return PIECE_COUNTS[piece] > 1 ? `Capture all enemy ${piece}s` : `Capture the enemy ${piece}`;
+}
+
+/**
+ * Who can stand on `floor`: its target species, its decoys and, on a collapse
+ * day, the decoy species its reinforcements come from. The newspaper lines
+ * them up by name, so their order never points at the target.
+ */
+export function floorLineup(state, floor = state.floor) {
+  const arrivals = state.modifier === 'collapse'
+    ? reinforcementOptions({ ...state, floor, exit: { x: 4, y: 0 } }, 0).map((foe) => state.species.find((entry) => entry.id === foe.species))
+    : [];
+  const cast = [state.species[floor], ...floorDecoys(state, floor), ...arrivals];
+  return cast.filter((species, index) => cast.findIndex((entry) => entry.id === species.id) === index)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/**
+ * Hints, per floor. The first (how the target's role moves) is free and lives
+ * in the UI. The paid ones, in order: 'suspects' rings the target species and
+ * names it; 'danger' stripes the squares where ending a move is captured at
+ * once (closeRangeSquares). Each adds one move to the floor's score.
+ */
+export const PAID_HINTS = Object.freeze(['suspects', 'danger']);
+const hintMoves = (value) => (Array.isArray(value?.hints) ? value.hints.length : 0);
+const validHints = (hints) => Array.isArray(hints) && hints.length > 0 && new Set(hints).size === hints.length && hints.every((hint) => PAID_HINTS.includes(hint));
+/** The floor's target species: its role is the objective's. */
+export function targetSpecies(state) { return state.species[state.floor]; }
+/** The paid hint on offer, or null once the floor's challenge is complete or nothing is left to buy. */
+export function nextHint(state) {
+  if (state?.status !== 'playing' || !state.objective || state.objective.complete) return null;
+  const bought = state.hints ?? [];
+  // A target already unmasked wears its badge, so pointing out the suspects would add nothing.
+  if (!bought.includes('suspects') && !(state.unmasked ?? []).includes(targetSpecies(state)?.id)) return 'suspects';
+  return bought.includes('danger') ? null : 'danger';
+}
+/** "the bishops are the Ember cats, ringed on the board." */
+export function suspectsLine(state) {
+  const species = targetSpecies(state);
+  const many = PIECE_COUNTS[state.objective.piece] > 1;
+  const who = many ? `${species.palette[0].toUpperCase() + species.palette.slice(1)} ${species.plural.toLowerCase()}` : species.name;
+  return `${many ? `the ${state.objective.piece}s are` : `the ${state.objective.piece} is`} the ${who}, ringed on the board.`;
+}
+/** The danger map: every square where ending a move now is captured at once, by the monsters' true roles. */
+export function closeRangeSquares(state) {
+  const squares = [];
+  if (state?.status !== 'playing') return squares;
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    if (walkable(state, x, y) && !same({ x, y }, state.player) && closeAttacker(state, { x, y })) squares.push({ x, y });
+  }
+  return squares;
 }
 
 // Manual recruit control: a move or wait may carry the recruit's order for that
@@ -1189,6 +1267,8 @@ function play(previous, action) {
     const state = structuredClone(target);
     delete state.notes; delete state.undo;
     state.powers.takeback--;
+    // It takes back the move, not a hint paid for since or a monster seen unmasked.
+    if (state.floor === previous.floor && state.tries === previous.tries) keepKnowledge(state, previous);
     state.events = [{ type: 'takeback', x: state.player.x, y: state.player.y }];
     state.message = 'You took back your last move.';
     return state;
@@ -1203,6 +1283,16 @@ function play(previous, action) {
     state.powers.pin--;
     state.events = [{ type: 'pin', id: target.id, x: target.x, y: target.y }];
     state.message = `${target.name} is pinned for ${PIN_MOVES} moves.`;
+    return state;
+  }
+  if (action.type === 'hint') {
+    // A paid hint is a penalty stroke: one move on this floor's score, no turn passes.
+    const hint = nextHint(previous);
+    if (!hint || action.hint !== hint) return previous;
+    const state = nextState(previous);
+    state.hints = [...(state.hints ?? []), hint];
+    state.events = [{ type: 'hint', hint, x: state.player.x, y: state.player.y }];
+    state.message = `Hint (+1 move): ${hint === 'suspects' ? suspectsLine(state) : 'striped squares get you captured at once if you end a move there.'}`;
     return state;
   }
   if (action.type === 'wait') {
@@ -1279,7 +1369,8 @@ function play(previous, action) {
   if (passed) {
     state.events.push({ type: 'en-passant', id: passed.id, x: passed.x, y: passed.y, to: { x: action.x, y: action.y } });
     state.feats.push({ floor: state.floor, kind: 'en-passant' });
-    if (!state.exit.open) state.message = `En passant! You captured ${passed.name} as it passed.`;
+    // "En passant! Ice bat unmasked — a pawn! +1 gold."
+    if (!state.exit.open) state.message = `En passant! ${state.message}`;
   }
   // On ice a non-capturing slide skids one more square (src/modifiers.js).
   const slide = castle || captured ? null : iceSlide(state, action);
@@ -1303,7 +1394,8 @@ function play(previous, action) {
   if (state.player.piece === 'pawn' && state.player.y === 0) {
     state.player.piece = 'queen';
     state.events.push({ type: 'promotion', x: to.x, y: to.y });
-    if (!state.exit.open) state.message = 'Promoted to queen for the rest of this floor.';
+    // A capture on the far rank keeps its unmasking line.
+    if (!state.exit.open) { settle(state); state.message = 'Promoted to queen for the rest of this floor.'; }
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
   if (recruit && !state.companion) {
@@ -1368,16 +1460,16 @@ const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['
 const PIECE_MARKS = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟\uFE0E' };
 /**
  * Moves that count toward a floor's score: those until the challenge was
- * complete, plus those spent on the floor before any Restart this floor. Older
- * records count every move.
+ * complete, plus those spent on the floor before any Restart this floor, plus
+ * one per paid hint. Older records count every move.
  */
 export function scoredMoves(record) {
   const moves = record?.scored ?? record?.turns;
-  return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) : moves;
+  return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) + hintMoves(record) : moves;
 }
 
-/** Scored moves on the floor in progress, restarts included: still counting until the challenge is complete. */
-export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0); }
+/** Scored moves on the floor in progress, restarts and paid hints included: still counting until the challenge is complete. */
+export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0) + hintMoves(state); }
 
 /** The edition's full date, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself), as the archive and dialogs name it. */
 export function shareDate(date) {
@@ -1461,6 +1553,12 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!validModifierState(value, template)) return false;
     if (!equal(value.map, template.map) || !equal(value.props, template.props) || value.exit?.x !== 4 || value.exit?.y !== 0 || typeof value.exit.open !== 'boolean') return false;
     if (!value.objective || value.objective.piece !== daily.targets[value.floor] || value.objective.complete !== value.exit.open) return false;
+    // Paid hints and unmasked species (src/rules.js nextHint, unmask): absent in older saves and on a fresh floor.
+    if (value.hints !== undefined && !validHints(value.hints)) return false;
+    if (value.unmasked !== undefined) {
+      const lineup = floorLineup(daily, value.floor).map((species) => species.id);
+      if (!(Array.isArray(value.unmasked) && value.unmasked.length > 0 && new Set(value.unmasked).size === value.unmasked.length && value.unmasked.every((id) => lineup.includes(id)))) return false;
+    }
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;
     if (!value.enemies.every((foe) => {
       const original = template.enemies.find((entry) => entry.id === foe.id)
@@ -1493,6 +1591,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
+    if (!value.records.every((record) => record.hints === undefined || validHints(record.hints))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
     if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;
     const previous = value.records.slice(0, value.floor);
@@ -1505,15 +1604,17 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
       if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.restartedMoves !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
+      if (start.hints !== undefined || start.unmasked !== undefined) return false;
     }
     if (value.status === 'won' && (value.restartedMoves ?? 0) !== (value.records[2]?.restartedMoves ?? 0)) return false;
+    if (value.status === 'won' && !equal(value.hints, value.records[2]?.hints)) return false;
     if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
     // Saves from before en passant have no window; a present one names a pawn that just double-stepped.
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

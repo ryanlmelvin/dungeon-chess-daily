@@ -93,7 +93,7 @@ test('an ordered recruit may capture the challenge piece, and it counts toward t
   assert.equal(auto.captures, 0); assert.equal(auto.enemies.length, 2);
   const first = act(state, move(7, 6, { x: 0, y: 2 }));
   assert.equal(first.captures, 1); assert.equal(first.gold, state.gold, 'targets pay nothing');
-  assert.equal(first.exit.open, false); assert.equal(first.message, 'Ice bat captured. Keep hunting.');
+  assert.equal(first.exit.open, false); assert.equal(first.message, 'Ice bat unmasked — a knight! Keep hunting.');
   const second = act(first, move(7, 5, { x: 5, y: 2 }));
   assert.equal(second.captures, 2); assert.equal(second.enemies.length, 0);
   assert.equal(second.objective.complete, true); assert.equal(second.exit.open, true);

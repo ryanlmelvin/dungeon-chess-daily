@@ -51,8 +51,11 @@ test('white: a monster pawn double-stepping beside the pawn can be taken en pass
   assert.equal(next.enemies.some((foe) => foe.id === 'p'), false);
   assert.deepEqual([next.player.x, next.player.y], [5, 2]);
   const t = types(next);
-  assert.equal(t.indexOf('en-passant'), t.indexOf('capture') + 1);
+  // The capture unmasks the pawn, then the en passant is noted.
+  assert.equal(t.indexOf('unmask'), t.indexOf('capture') + 1);
+  assert.equal(t.indexOf('en-passant'), t.indexOf('unmask') + 1);
   assert.deepEqual(find(next, 'capture'), { type: 'capture', id: 'p', x: 5, y: 3 });
+  assert.deepEqual(find(next, 'unmask'), { type: 'unmask', id: 'p', species: 'bat', role: 'pawn', x: 5, y: 3 });
   assert.deepEqual(find(next, 'en-passant'), { type: 'en-passant', id: 'p', x: 5, y: 3, to: { x: 5, y: 2 } });
   assert.equal(next.enPassant, null);
 });
@@ -77,7 +80,7 @@ test('black: the window opened by this act\'s enemy phase is usable by the same 
   const next = act(state, move(5, 2));
   assert.equal(next.enemies.some((foe) => foe.id === 'p'), false);
   assert.ok(find(next, 'en-passant'));
-  assert.match(next.message, /En passant! You captured Ice bat as it passed\./);
+  assert.match(next.message, /En passant! Ice bat unmasked — a pawn! \+1 gold\./);
   assert.equal(next.enPassant, null);
   // Choosing another move instead spends the window.
   const other = act(state, move(4, 2));

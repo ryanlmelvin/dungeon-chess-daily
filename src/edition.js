@@ -8,16 +8,18 @@ export const FIRST_EDITION_DATE = new Date(EPOCH).toISOString().slice(0, 10);
 import { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
 import { hash, random } from './random.js';
 import { modifierFor } from './modifiers.js';
+// Ids (and this order) feed generation and never change. Names follow the art:
+// the 'imp' sprite reads as a cat, 'goblin' as a horned imp, 'dragon' as a gremlin.
 const SPECIES = [
   ['bat', 'Bat', 'Bats'], ['rat', 'Rat', 'Rats'], ['slime', 'Slime', 'Slimes'],
   ['spider', 'Spider', 'Spiders'], ['ghost', 'Ghost', 'Ghosts'], ['mushroom', 'Mushroom', 'Mushrooms'],
   ['skull', 'Skull', 'Skulls'], ['snake', 'Snake', 'Snakes'], ['beetle', 'Beetle', 'Beetles'],
-  ['gargoyle', 'Gargoyle', 'Gargoyles'], ['imp', 'Imp', 'Imps'], ['mimic', 'Mimic', 'Mimics'],
+  ['gargoyle', 'Gargoyle', 'Gargoyles'], ['imp', 'Cat', 'Cats'], ['mimic', 'Mimic', 'Mimics'],
   ['eye', 'Floating eye', 'Floating eyes'], ['worm', 'Worm', 'Worms'], ['moth', 'Moth', 'Moths'],
   ['crab', 'Crab', 'Crabs'], ['wraith', 'Wraith', 'Wraiths'], ['golem', 'Golem', 'Golems'],
   ['clown', 'Clown', 'Clowns'], ['frog', 'Frog', 'Frogs'], ['scorpion', 'Scorpion', 'Scorpions'],
-  ['pumpkin', 'Pumpkin', 'Pumpkins'], ['jellyfish', 'Jellyfish', 'Jellyfish'], ['goblin', 'Goblin', 'Goblins'],
-  ['dragon', 'Dragon', 'Dragons'], ['cyclops', 'Cyclops', 'Cyclopes'],
+  ['pumpkin', 'Pumpkin', 'Pumpkins'], ['jellyfish', 'Jellyfish', 'Jellyfish'], ['goblin', 'Imp', 'Imps'],
+  ['dragon', 'Gremlin', 'Gremlins'], ['cyclops', 'Cyclops', 'Cyclopes'],
 ];
 const PALETTE_NAMES = ['ice', 'ember', 'moss', 'violet', 'gold', 'rose'];
 // The first wording stays canonical in saved themes. Display headlines can vary
@@ -25,7 +27,8 @@ const PALETTE_NAMES = ['ice', 'ember', 'moss', 'violet', 'gold', 'rose'];
 const HEADLINES = {
   pawn: [
     'join the front line',
-    'advance one step, eye a promotion',
+    // Not "eye": the paper never names a species, even by pun (Floating eye).
+    'advance one step, chase a promotion',
     'open with a double-time march',
     'take the next rank by storm',
     'pick diagonal fights on the march',
@@ -109,17 +112,33 @@ const HEADLINES = {
   ],
 };
 
+// Saved themes name the species; the paper itself never does (headlineFor).
 function headlineSubject(creature) {
   return PIECE_COUNTS[creature.piece] > 1
     ? `${creature.palette[0].toUpperCase() + creature.palette.slice(1)} ${creature.plural.toLowerCase()}`
     : creature.name;
 }
 
-/** Display-only variation; the UTC edition and role pick the same clue everywhere. */
-export function headlineFor(creature, date) {
+// The paper describes how a floor's target moves but never says who it is: each
+// story lines up the floor's suspects instead (main.js). Both lists use the same
+// index, so a subject says nothing beyond the verb's number (one queen or king).
+export const HEADLINE_SUBJECTS = Object.freeze({
+  plural: Object.freeze(['Some residents', 'Certain tenants', 'Insiders say some locals', 'Mystery guests',
+    'Unnamed regulars', 'Witnesses say some lodgers', 'Sources say certain newcomers', 'Masked locals']),
+  singular: Object.freeze(['One resident', 'A certain tenant', 'Insiders say one local', 'A mystery guest',
+    'An unnamed regular', 'Witnesses say a lodger', 'Sources say a certain newcomer', 'A masked local']),
+});
+
+/**
+ * Display-only variation; the UTC edition and role pick the same clue everywhere.
+ * The subject is anonymous and differs between the day's three floors.
+ */
+export function headlineFor(creature, date, floor = 0) {
   const choices = HEADLINES[creature.piece];
   const choice = hash(`newspaper:${date}:${creature.piece}`) % choices.length;
-  return `${headlineSubject(creature)} ${choices[choice]}`;
+  const subjects = HEADLINE_SUBJECTS[PIECE_COUNTS[creature.piece] > 1 ? 'plural' : 'singular'];
+  const subject = subjects[(hash(`newspaper-subject:${date}`) + floor) % subjects.length];
+  return `${subject} ${choices[choice]}`;
 }
 
 const HINTS = {
