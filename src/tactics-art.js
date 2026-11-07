@@ -212,7 +212,7 @@ export const RECRUIT_STILL = 4600;
 /** A waiting recruit's explainer, from its line's What? button, in the same dialog as the tactics. */
 export const RECRUIT_COPY = Object.freeze({
   title: 'A recruit is waiting',
-  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. Or set Recruit control to Auto in the menu to let it move itself; then it can’t capture targets.',
+  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. Or set Recruit control to Auto in the menu to let it move itself. In auto mode, it can’t capture targets.',
   art: 'Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line.',
   draw: drawRecruitDemo, still: RECRUIT_STILL,
 });
