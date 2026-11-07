@@ -1015,25 +1015,43 @@ export function captureGoal(piece) {
   return PIECE_COUNTS[piece] > 1 ? `Capture all enemy ${piece}s` : `Capture the enemy ${piece}`;
 }
 
+const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+const distinct = (cast) => cast.filter((species, index) => cast.findIndex((entry) => entry.id === species.id) === index);
 /**
  * Who can stand on `floor`: its target species, its decoys and, on a collapse
- * day, the decoy species its reinforcements come from. The newspaper lines
- * them up by name, so their order never points at the target.
+ * day, the decoy species its reinforcements come from, by name. Saves may
+ * unmask any of them (validateSave).
  */
 export function floorLineup(state, floor = state.floor) {
   const arrivals = state.modifier === 'collapse'
     ? reinforcementOptions({ ...state, floor, exit: { x: 4, y: 0 } }, 0).map((foe) => state.species.find((entry) => entry.id === foe.species))
     : [];
-  const cast = [state.species[floor], ...floorDecoys(state, floor), ...arrivals];
-  return cast.filter((species, index) => cast.findIndex((entry) => entry.id === species.id) === index)
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return distinct([state.species[floor], ...floorDecoys(state, floor), ...arrivals]).sort(byName);
+}
+
+/**
+ * The newspaper's two suspects for `floor`: its target and one other species
+ * that can appear there, picked from the date on the paper's own hash stream
+ * (never gameplay's). A decoy standing in the room from the start comes before
+ * a collapse arrival, which would leave the target the only suspect in sight.
+ * A floor with no other species shows its target alone. Ordered by name, so
+ * the target comes first only by alphabet.
+ */
+export function paperSuspects(state, floor = state.floor) {
+  const target = state.species[floor];
+  const others = (cast) => distinct(cast).filter((species) => species.id !== target.id);
+  const residents = others(floorDecoys(state, floor));
+  const pool = residents.length ? residents : others(floorLineup(state, floor));
+  if (!pool.length) return [target];
+  return [target, pool[hash(`paper-suspects:${state.date}:${floor}`) % pool.length]].sort(byName);
 }
 
 /**
  * Hints, per floor. The first (how the target's role moves) is free and lives
- * in the UI. The paid ones, in order: 'suspects' rings the target species and
- * names it; 'danger' stripes the squares where ending a move is captured at
- * once (closeRangeSquares). Each adds one move to the floor's score.
+ * in the UI. The paid ones, in order: 'suspects' ("Identify the target"; saves
+ * keep that id) rings the target species and names it; 'danger' hatches the
+ * squares where ending a move is captured at once (closeRangeSquares). Each
+ * adds one move to the floor's score.
  */
 export const PAID_HINTS = Object.freeze(['suspects', 'danger']);
 const hintMoves = (value) => (Array.isArray(value?.hints) ? value.hints.length : 0);
@@ -1044,16 +1062,24 @@ export function targetSpecies(state) { return state.species[state.floor]; }
 export function nextHint(state) {
   if (state?.status !== 'playing' || !state.objective || state.objective.complete) return null;
   const bought = state.hints ?? [];
-  // A target already unmasked wears its badge, so pointing out the suspects would add nothing.
+  // A target already unmasked wears its badge, so identifying the target would add nothing.
   if (!bought.includes('suspects') && !(state.unmasked ?? []).includes(targetSpecies(state)?.id)) return 'suspects';
   return bought.includes('danger') ? null : 'danger';
 }
-/** "the bishops are the Ember cats, ringed on the board." */
-export function suspectsLine(state) {
+/**
+ * The hint cards unlocked on this floor, in the order they were unlocked: the
+ * free card ('moves', how the target's role moves) first, then each paid hint
+ * as bought. The hint dialog pages through them; paging changes nothing.
+ */
+export function hintCards(state) {
+  return ['moves', ...(state?.hints ?? [])];
+}
+/** The target, identified: "the Ember cats are the enemy bishops, ringed on the board." */
+export function targetLine(state) {
   const species = targetSpecies(state);
   const many = PIECE_COUNTS[state.objective.piece] > 1;
   const who = many ? `${species.palette[0].toUpperCase() + species.palette.slice(1)} ${species.plural.toLowerCase()}` : species.name;
-  return `${many ? `the ${state.objective.piece}s are` : `the ${state.objective.piece} is`} the ${who}, ringed on the board.`;
+  return `the ${who} ${many ? 'are' : 'is'} the enemy ${state.objective.piece}${many ? 's' : ''}, ringed on the board.`;
 }
 /** The danger map: every square where ending a move now is captured at once, by the monsters' true roles. */
 export function closeRangeSquares(state) {
@@ -1292,7 +1318,7 @@ function play(previous, action) {
     const state = nextState(previous);
     state.hints = [...(state.hints ?? []), hint];
     state.events = [{ type: 'hint', hint, x: state.player.x, y: state.player.y }];
-    state.message = `Hint (+1 move): ${hint === 'suspects' ? suspectsLine(state) : 'striped squares get you captured at once if you end a move there.'}`;
+    state.message = hint === 'suspects' ? `Target identified (+1 move): ${targetLine(state)}` : 'Danger map (+1 move): hatched squares get you captured at once if you end a move there.';
     return state;
   }
   if (action.type === 'wait') {

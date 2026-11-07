@@ -1,15 +1,13 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 // Pictures for the deduction loop: the newspaper's suspect mugshots, the hint
-// cards (the suspects, the danger map) and the guide's unmasking example.
-import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE, SPRITES, PALETTE, haloed, PIECE_HALO } from './sprites.js';
+// cards (the target, the danger map) and the guide's unmasking example.
+import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE, SPRITES, PALETTE, haloed, PIECE_HALO, DANGER_HATCH } from './sprites.js';
 
 const WALL = '#302a36';
 const MARK = '#4a4150';
 const TILE = ['#302a38', '#443747'];
 const MINT = '#a5e2cc';
 const GOLD = '#e6c17a';
-// The board's danger-map stripes (renderer.js).
-const STRIPES = '#ff8a4c';
 
 /** A suspect against a lineup wall with height marks, `scale` pixels per sprite pixel. */
 export function drawMugshot(ctx, creature, scale = 2) {
@@ -23,21 +21,24 @@ export function drawMugshot(ctx, creature, scale = 2) {
   drawSprite(ctx, creature.id, 0, 0, scale, spritePalette(creature.palette));
 }
 
-/** The suspects hint card: the target species, full size. */
-export function drawSuspectCard(canvas, creature) {
+/** The "Identify the target" hint card: the target species, full size. */
+export function drawTargetCard(canvas, creature) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawMugshot(ctx, creature, Math.floor(Math.min(canvas.width, canvas.height) / SPRITE_SIZE));
 }
 
-function stripes(ctx, x, y, cell) {
-  ctx.fillStyle = STRIPES;
+// The board's danger-map hatch on one cell (renderer.js draws the same pattern).
+function hatch(ctx, x, y, cell) {
   const pixel = cell / 16;
-  for (let v = 0; v < 16; v++) for (let u = 0; u < 16; u++) if ((u + v) % 6 < 2) ctx.fillRect(x + u * pixel, y + v * pixel, pixel, pixel);
+  for (let v = 0; v < 16; v++) for (let u = 0; u < 16; u++) {
+    ctx.fillStyle = (u + v) % DANGER_HATCH.period < DANGER_HATCH.band ? DANGER_HATCH.light : DANGER_HATCH.dark;
+    ctx.fillRect(x + u * pixel, y + v * pixel, pixel, pixel);
+  }
 }
 
-/** The danger-map hint card: a monster's close range striped on a small board. */
+/** The danger-map hint card: a monster's close range hatched on a small board. */
 export function drawDangerCard(canvas, { playerPalette = {} } = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -48,7 +49,7 @@ export function drawDangerCard(canvas, { playerPalette = {} } = {}) {
   for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
     ctx.fillStyle = TILE[(x + y) % 2];
     ctx.fillRect(x * 40, y * 40, 40, 40);
-    if (Math.max(Math.abs(x - 2), Math.abs(y - 2)) === 1) stripes(ctx, x * 40, y * 40, 40);
+    if (Math.max(Math.abs(x - 2), Math.abs(y - 2)) === 1) hatch(ctx, x * 40, y * 40, 40);
   }
   drawSprite(ctx, 'bat', 80, 80, 2, spritePalette('violet'));
   drawSprite(ctx, 'piece-rook', 0, 160, 2, playerPalette);
