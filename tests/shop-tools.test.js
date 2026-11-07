@@ -60,7 +60,6 @@ test('a pin is free, clears an aimed attack, and holds the monster for three mon
   const state = scenario();
   const rook = monster('r', 'rook', 0, 6, { x: 4, y: 6 });
   state.enemies = [rook, monster('k', 'king', 7, 0)]; state.powers.pin = 1;
-  assert.equal(act(state, { type: 'pin', id: 'k' }), state, 'kings can’t be pinned');
   const pinned = act(state, { type: 'pin', id: 'r' });
   assert.equal(pinned.turns, state.turns, 'pinning spends no move');
   assert.equal(pinned.powers.pin, 0);
@@ -84,6 +83,24 @@ test('a pinned monster beside you can’t capture at close range', () => {
   assert.equal(exposed.player.hp, 1);
   const safe = act(act(state, { type: 'pin', id: 'n' }), move(4, 5));
   assert.equal(safe.player.hp, 2);
+});
+
+test('a king can be pinned like any monster before the last floor, where it is always a decoy', () => {
+  const state = scenario('rook', 4, 6);
+  state.floor = 1; state.objective = { piece: 'pawn', complete: false }; state.powers.pin = 1;
+  state.enemies = [monster('k', 'king', 3, 4), monster('p', 'pawn', 0, 0)];
+  // Stepping beside the king, to (4,5), is normally a close-range capture.
+  assert.equal(act(state, move(4, 5)).player.hp, 1);
+  const pinned = act(state, { type: 'pin', id: 'k' });
+  assert.notEqual(pinned, state, 'refusing a king would point it out');
+  assert.equal(pinned.enemies[0].pinned, PIN_MOVES);
+  assert.equal(pinned.powers.pin, 0);
+  let next = act(pinned, move(4, 5));
+  assert.equal(next.player.hp, 2, 'a pinned king can’t capture at close range');
+  for (let turn = 2; turn <= PIN_MOVES; turn++) next = act(next, { type: 'wait' });
+  assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [3, 4], `held for ${PIN_MOVES} monster turns`);
+  assert.equal(next.player.hp, 2);
+  assert.equal(next.enemies[0].pinned, undefined, 'the pin wears off');
 });
 
 test('a Borrowed move offers knight squares without arming, spent only when used', () => {
@@ -133,7 +150,7 @@ test('a Take-back can undo the move that ended the run, but not cross the stairs
   assert.equal(takebackTarget(act(won, { type: 'descend' })), null);
 });
 
-test('a pin is never sold before the last floor and can’t be used there, where it would point out the king', () => {
+test('a pin is never sold before the last floor and can’t be used there', () => {
   assert.ok(dates.every((date) => !shopStock(date, 1).includes('pin')));
   const state = scenario(); state.floor = 2; state.powers.pin = 1;
   state.enemies = [monster('r', 'rook', 0, 6), monster('k', 'king', 7, 0)];

@@ -17,7 +17,7 @@ export const POWERUPS = Object.freeze([
   { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, sold: false, description: 'Freeze every monster for three moves.' },
   { id: 'magnet', name: 'Coin magnet', cost: 4, max: 1, description: 'Collect coins within two tiles after every move.' },
   // Shop-only tools, used when you choose. None ever lies in a room.
-  { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Not a king. Floor 2 only.' },
+  { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Floor 2 only.' },
   { id: 'leap', name: 'Borrowed move', cost: 3, max: 1, description: 'Once, move like a knight (or like a queen if you’re a knight).' },
   { id: 'takeback', name: 'Take-back', cost: 4, max: 1, description: 'Undo one move, even one that cost a life.' },
 ]);
@@ -32,7 +32,11 @@ export function takebackTarget(state) {
 }
 /** One life beyond the piece's army count, at most one per shop visit. */
 export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. Limit 1.' });
-/** The last floor hides its king among look-alikes; a pin (never a king) would point it out. */
+/**
+ * A pin works only before the last floor, whose target is the king. Earlier
+ * floors never target the king, so a king there is a decoy, and a pin holds it
+ * like any other monster: refusing it would point it out.
+ */
 export const pinUsable = (state) => state.floor < state.targets.length - 1;
 /** What the between-floor shop offers, in display order. */
 export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)).concat(EXTRA_LIFE));
@@ -1071,7 +1075,7 @@ function play(previous, action) {
     finishFloor(state);
     if (state.status === 'playing' && !pinUsable(state) && state.powers.pin) {
       state.powers.pin = 0;
-      state.message += ' Your unused pin stays behind: on this floor it would point out the king.';
+      state.message += ' Your unused pin stays behind: pins only work on floor 2.';
     }
     return state;
   }
@@ -1108,7 +1112,7 @@ function play(previous, action) {
   }
   if (action.type === 'pin') {
     const foe = previous.enemies.find((entry) => entry.id === action.id);
-    if (!(previous.powers.pin > 0) || !pinUsable(previous) || !foe || pinned(foe) || foe.piece === 'king' || foe.role === 'king') return previous;
+    if (!(previous.powers.pin > 0) || !pinUsable(previous) || !foe || pinned(foe)) return previous;
     // Pinning is free: it spends the tool, not a move.
     const state = nextState(previous);
     const target = state.enemies.find((entry) => entry.id === action.id);

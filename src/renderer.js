@@ -10,6 +10,14 @@ const RED = 0xd13959;
 const MINT = 0x8af4d5;
 const MOVE_COLOR = 0x56dcff;
 const ICE_COLOR = 0xbfeaff;
+// Choosing a pin: a white crosshair, never mistaken for a fork's gold ring.
+const PIN_TARGET = 0xffffff;
+// Pieces, monsters and their sparks draw after everything lying on the floor
+// (hint marks and pickups) whatever their height, so a monster standing on a
+// waiting recruit, a coin or a powerup stays in front of it.
+const ACTOR_LAYER = 1;
+// A waiting recruit fades while a monster stands on its square.
+const COVERED_RECRUIT_OPACITY = 0.35;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
 const FORK_GLOW_MS = 900;
@@ -93,6 +101,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let exitTile = { x: 4, y: 0 };
   let itemKey = '';
   let pendingItems = null;
+  // Waiting recruits' sprites, to fade while a monster stands on them.
+  let recruitSprites = [];
   let lastEvents = null;
   let moveMaterial = null;
   const playerPulse = { value: 0 };
@@ -173,6 +183,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     clear(collectibles);
     itemKey = '';
     pendingItems = null;
+    recruitSprites = [];
     targets.length = particles.length = 0;
     entities.clear();
     columns = next.map?.[0]?.length || 8;
@@ -283,6 +294,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     const art = new THREE.Sprite(material);
     art.center.set(0.5, 0.42);
+    art.renderOrder = ACTOR_LAYER;
     const size = companion ? 0.76 : player ? 0.88 : 0.8;
     art.scale.set(size, size, 1);
     art.position.y = 0.15;
@@ -331,6 +343,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (key === itemKey) return;
     itemKey = key;
     clear(collectibles);
+    recruitSprites = [];
     for (const item of items) {
       const power = item.type === 'powerup';
       const companion = item.type === 'companion';
@@ -344,9 +357,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       collectibles.add(coin);
       if (power) tileMark(collectibles, item.x, item.y, 0.44, 0.44, basic(0x83c5bd, { transparent: true, opacity: 0.2, depthWrite: false }), 0.02);
       if (companion) {
+        recruitSprites.push(coin);
         tileRing(collectibles, item.x, item.y, 0.29, 0.36, MINT, 0.65);
         tileRing(collectibles, item.x, item.y, 0.36, 0.43, MINT, 0.12, 0.025);
-        const plus = basic(MINT);
+        // It never hides a monster standing here (see ACTOR_LAYER).
+        const plus = basic(MINT, { transparent: true, depthWrite: false });
         tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.19, 0.055, plus, 0.06);
         tileMark(collectibles, item.x + 0.3, item.y + 0.29, 0.055, 0.19, plus, 0.06);
       }
@@ -359,6 +374,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const material = new THREE.SpriteMaterial({ color: i % 3 ? WHITE : RED, transparent: true, depthWrite: false });
       materials.add(material);
       const mesh = new THREE.Sprite(material);
+      mesh.renderOrder = ACTOR_LAYER;
       mesh.scale.set(0.06, 0.06, 1);
       mesh.position.set(x, 0.3, y);
       actors.add(mesh);
@@ -381,9 +397,21 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     materials.add(material);
     const ghost = new THREE.Sprite(material);
     ghost.center.set(0.5, 0.42);
+    // On the pieces' layer, so it shows over a monster it could capture.
+    ghost.renderOrder = ACTOR_LAYER;
     ghost.scale.set(0.7, 0.7, 1);
     ghost.position.set(x, 0.15, y);
     hints.add(ghost);
+  }
+
+  // A monster that can be pinned: a white ring with four ticks, a crosshair.
+  // It lies over the inner edge of a fork's wider gold ring, so both show.
+  function pinReticle(x, y) {
+    tileRing(hints, x, y, 0.33, 0.39, PIN_TARGET, 0.95, 0.055);
+    const ink = basic(PIN_TARGET);
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      tileMark(hints, x + dx * 0.4, y + dy * 0.4, dx ? 0.14 : 0.055, dx ? 0.055 : 0.14, ink, 0.056);
+    }
   }
 
   function updateHints(next) {
@@ -396,11 +424,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       hints.add(ring);
     }
     if (next.powers?.freeze) for (const enemy of next.enemies) cornerMarks(enemy.x, enemy.y, 0xa7dfff, 0.35, 0.1);
-    // Pinned monsters wear gold corners; while choosing a pin, every monster that can be pinned is ringed.
-    for (const enemy of next.enemies) {
-      if (enemy.pinned) cornerMarks(enemy.x, enemy.y, 0xf2ce80, 0.36, 0.17);
-      else if (next.pinning && enemy.piece !== 'king' && enemy.role !== 'king') tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
-    }
+    // Pinned monsters wear gold corners.
+    for (const enemy of next.enemies) if (enemy.pinned) cornerMarks(enemy.x, enemy.y, 0xf2ce80, 0.36, 0.17);
     const danger = next.danger || next.enemies.flatMap((enemy) => enemy.phase === 'aim' ? enemy.intent || [] : []);
     const seen = new Set();
     for (const tile of danger) {
@@ -447,6 +472,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (next.cursor) cornerMarks(next.cursor.x, next.cursor.y, 0xcabfd7, 0.46, 0.2);
     // A pending fork (tactics.js): gold rings under every forked monster.
     for (const enemy of next.enemies) if (next.fork?.ids?.includes(enemy.id)) tileRing(hints, enemy.x, enemy.y, 0.36, 0.46, 0xf2ce80, 0.9, 0.05);
+    // Choosing a pin: a crosshair on every monster, kings too, so none stands out.
+    if (next.pinning) for (const enemy of next.enemies) if (!enemy.pinned) pinReticle(enemy.x, enemy.y);
   }
 
   function render(next, afterTransition = false) {
@@ -707,6 +734,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const gold = glow >= 0 && glow < 1 && (reducedMotion || Math.sin(glow * Math.PI * 6) > 0);
       entity.art.material.color.set(entity.flash ? 0xff6889 : gold ? 0xffd46b : 0xffffff);
       if (entity.player && entity.flash) playerPulse.value = 0;
+    }
+    // A monster standing on a waiting recruit is drawn in front of it (ACTOR_LAYER)
+    // and fades it, so the monster reads clearly.
+    for (const recruit of recruitSprites) {
+      const covered = [...entities.values()].some((entity) => !entity.player && !entity.companion
+        && Math.abs(entity.group.position.x - recruit.position.x) < 0.5 && Math.abs(entity.group.position.z - recruit.position.z) < 0.5);
+      recruit.material.opacity = covered ? COVERED_RECRUIT_OPACITY : 1;
     }
     if (pendingHints && timestamp >= pendingHints.at) {
       updateHints(pendingHints.next);

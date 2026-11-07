@@ -209,7 +209,7 @@ export function drawRecruitDemo(canvas, time, { playerPalette = {}, monsterPalet
 /** A still for reduced motion: the joined recruit blocking the monster's line. */
 export const RECRUIT_STILL = 4600;
 
-/** The first waiting recruit's explainer, in the same dialog as the tactics. */
+/** A waiting recruit's explainer, from its line's What? button, in the same dialog as the tactics. */
 export const RECRUIT_COPY = Object.freeze({
   title: 'A recruit is waiting',
   text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, moves after you, and from then on it blocks monster lines. Its captures count, but it can never capture the floor’s challenge piece.',
