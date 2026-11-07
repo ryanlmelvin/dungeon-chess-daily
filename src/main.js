@@ -960,7 +960,7 @@ async function offerHopelessRestart() {
   hopelessShown = position;
   const floor = state.floor + 1;
   const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
-  if (!await askConfirm('This floor can’t be finished', `Your piece can never reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with.`, `Restart floor ${floor}`, 'Keep playing')) return;
+  if (!await askConfirm('This floor can’t be finished', `Your piece can never reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${floor} restarted.`);
