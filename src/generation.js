@@ -8,6 +8,8 @@ import { FALLBACKS } from './fallbacks.js';
 import { DIFFICULTY_TIERS, tierForDate, knobsFor, difficultyScore, bandDistance } from './difficulty.js';
 export { DIFFICULTY_TIERS, tierForDate } from './difficulty.js';
 import { MODIFIERS } from './modifiers.js';
+import { EDITIONS } from './editions.js';
+import { decodeRoute, encodeRoute } from './route-code.js';
 
 export const GENERATOR_VERSION = RULES_VERSION;
 // These describe witnessed tactical pressure, not a lower bound on optimal play.
@@ -77,17 +79,47 @@ function certify(daily, actions, source, attempt, knobs) {
  * weekday tier. `knobs` overrides the calibrated knobs (tooling only), and
  * `fallback: false` returns null instead of using the fallback bank.
  */
-export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATTEMPTS, knobs, fallback = true } = {}) {
+// Dates past the build's precomputed window search once per device, then the
+// certified result is remembered in browser storage and replayed like a
+// precomputed entry. Storage may be missing or blocked; that only costs speed.
+const deviceKey = (date) => `dchess-edition:v${GENERATOR_VERSION}:${date}`;
+function rememberedEdition(date) {
+  try {
+    const entry = JSON.parse(globalThis.localStorage?.getItem(deviceKey(date)) ?? 'null');
+    const attemptOk = entry?.attempt === 'fallback' || (Number.isInteger(entry?.attempt) && entry.attempt >= 0 && entry.attempt < ATTEMPTS);
+    return attemptOk && typeof entry.tier === 'string' && typeof entry.route === 'string' && entry.route.length <= 200 ? entry : undefined;
+  } catch { return undefined; }
+}
+function rememberEdition(daily) {
+  const { source, attempt, certificate } = daily.generation;
+  const entry = { tier: daily.difficulty, attempt: source === 'fallback' ? 'fallback' : attempt, route: source === 'fallback' ? '' : encodeRoute(certificate.actions) };
+  try { globalThis.localStorage?.setItem(deviceKey(daily.date), JSON.stringify(entry)); } catch { /* storage is optional */ }
+}
+
+export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATTEMPTS, knobs, fallback = true, precomputed = true } = {}) {
   const base = getRawDaily(date);
   const tier = difficulty ?? tierForDate(base.date);
   if (!Object.hasOwn(DIFFICULTY_TIERS, tier)) throw new RangeError('Unknown difficulty tier.');
   if (!Number.isInteger(maxAttempts) || maxAttempts < 0 || maxAttempts > ATTEMPTS) throw new RangeError('Invalid candidate budget.');
   const settings = { ...knobsFor(tier, base.playerPiece), ...knobs };
+  // Build-time certified editions (src/editions.js, scripts/build-editions.mjs)
+  // replay a stored route instead of searching. It is the same result the
+  // search below would reach; a stale entry is ignored and the search runs.
+  const official = precomputed && !knobs && maxAttempts === ATTEMPTS;
+  const stored = official ? EDITIONS[base.date] ?? rememberedEdition(base.date) : undefined;
+  let searches = maxAttempts;
+  if (stored && stored.tier === tier) {
+    if (stored.attempt === 'fallback') searches = 0;
+    else {
+      const accepted = certify(candidateFor(base, tier, settings, stored.attempt), decodeRoute(stored.route), 'generated', stored.attempt, settings);
+      if (accepted) return accepted;
+    }
+  }
   // Try the first layout; only when its witnessed route scores outside the
   // tier's band, also try the second. Both use the same fixed budgets, so the
   // choice stays a pure function of the date.
   const found = [];
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < searches; attempt++) {
     found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
     if (chooseCandidate(found, tier, settings.minThreatenedDecisions) === attempt
       && bandDistance(found[attempt].score, tier) === 0) break;
@@ -95,6 +127,7 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
   const chosen = chooseCandidate(found, tier, settings.minThreatenedDecisions);
   if (chosen >= 0) {
     const accepted = certify(candidateFor(base, tier, settings, chosen), found[chosen].actions, 'generated', chosen, settings);
+    if (accepted && official && !EDITIONS[base.date]) rememberEdition(accepted);
     if (accepted) return accepted;
   }
   if (!fallback) return null;
@@ -111,6 +144,7 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
     species, theme: buildTheme(species),
   }, entry.actions, 'fallback', maxAttempts, settings);
   if (!certified) throw new Error('Dungeon certification failed. No unverified dungeon was released.');
+  if (official && !EDITIONS[base.date]) rememberEdition(certified);
   return certified;
 }
 
