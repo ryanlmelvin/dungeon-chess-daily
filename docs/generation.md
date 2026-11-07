@@ -231,16 +231,85 @@ solver expansions, route moves and wall time, plus min/median/p90/max summaries
 per piece and knob setting. `--reuse` refits from that file without searching
 again (after editing the score or bands), `--merge` measures only what the file
 lacks, `--pieces`, `--obstacles` and `--grid quick` narrow the grid, and
-`--dry-run` leaves the table alone. A full run takes about an hour on eight
-cores.
+`--dry-run` leaves the table alone. A full brute-force run uses every core but
+one (`--jobs N` overrides) and takes well over an hour.
+
+### Shortlist, then confirm (the quick way)
+
+Two commands replace the hour-long run with a few minutes of screening and a
+targeted full check:
+
+```sh
+npm run calibrate:shortlist   # minutes; writes scripts/calibration-shortlist.json only
+npm run calibrate:confirm     # full-budget check of the shortlist; writes src/calibration.js
+```
+
+**Shortlist** (`--fast`) screens the whole grid cheaply and never touches
+`src/calibration.js` or `scripts/calibration-data.json`. Its searches and
+finalists go to `scripts/calibration-shortlist.json` (git-ignored). It measures
+every setting on one date (`--stage1-dates`), keeps the best `--keep1` (6) per
+tier by the fit's own cost, adds `--stage2-dates` (4) more dates and keeps the
+best `--keep2` (3) per tier, then adds the remaining dates two at a time. All of
+its searches run at the runtime budget (`--screen-budget 3000` screens cheaper,
+and then unsolved screens advance). The helpers live in
+`scripts/calibration-search.mjs`:
+
+- a per-piece least-squares surrogate (knobs plus pairwise products) fitted to
+  the stage-1 scores; its `--surrogate-keep` (3) best predictions per tier also
+  advance, which guards against one unlucky date (`--no-surrogate`);
+- monotone dominance: difficulty mostly rises with obstacles, decoys, guards and
+  screens, so a setting at least as hard as one already `--dominance-margin`
+  (1.5) above the hardest band, or at most as hard as one that far below the
+  easiest, is dropped (same scatter only; never by its own mean; `--no-dominance`);
+- sequential stopping: finalists share dates and layouts, and one stops gaining
+  dates once a paired test shows its per-day cost clearly worse (`--stop-z` 2.5
+  standard errors, four dates at least) than the leader's for every tier
+  (`--no-stopping`).
+
+**Confirm** (`--confirm scripts/calibration-shortlist.json`) is brute force on a
+short list. It uses the shortlist's start date and sample count, then measures
+three groups of settings on every date at the full budget, exactly as a
+brute-force run would:
+
+- the shortlist's finalists;
+- every setting in the live `src/calibration.js`;
+- the plain layout.
+
+Then it fits and writes the table and `scripts/calibration-data.json` as usual
+(`--dry-run` to only look). Because the live settings are always in the running,
+a confirm can never choose a setting that does worse than the current table on
+the same dates.
+
+Why not trust the shortlist on its own: on 2026-11-07, a full `--fast` refit
+(3.5 minutes) scored worse than the brute-force table on the same ten dates.
+
+| | Shortlist alone | Brute force |
+|---|---|---|
+| (tier, piece) means outside their band | 8 | 1 |
+| Summed distance outside the bands | 4.5 | 0.6 |
+
+Its worst misses were fiendish queen (14.1 against 16.2) and gentle knight
+(11.0 against 9.5). Early stopping on a few dates sometimes settles on a worse
+setting. Its screening is still good at finding the candidates, which is the
+part confirm keeps.
+
+To compare search strategies without searching, `--replay data.json` serves
+searches from an earlier full-budget data file (search is deterministic, so a
+smaller budget is that search cut short), and `--choices-out file` saves the
+chosen table and its report. Every run prints its searches, expansions and
+wall time.
+
+### After a rules, monster, modifier or search change
 
 Monster AI, room modifiers, rules and search changes all shift difficulty.
 After any of them:
 
 ```sh
-npm run calibrate:difficulty        # rewrite src/calibration.js
+npm run calibrate:shortlist          # or calibrate:difficulty for full brute force
+npm run calibrate:confirm            # rewrite src/calibration.js
 node scripts/build-fallbacks.mjs     # rebuild the bank for the new knobs
 npm run verify:fallbacks
+npm run build:editions -- --full     # re-certify every stored day under the new knobs
 npm test
 ```
 

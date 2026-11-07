@@ -8,6 +8,21 @@
 //   node scripts/calibrate-difficulty.mjs [--samples 8] [--start 2026-11-07]
 //     [--jobs N] [--pieces pawn,rook] [--grid full|quick]
 //     [--data scripts/calibration-data.json] [--reuse] [--dry-run]
+//     [--fast] [--confirm shortlist.json] [--replay data.json] [--choices-out file]
+//     (--fast tuning, see docs/generation.md: --stage1-dates --stage2-dates
+//      --keep1 --keep2 --screen-budget --surrogate-keep --dominance-margin
+//      --stop-z --final-step --no-surrogate --no-dominance --no-stopping)
+//
+// Two ways to refit (docs/generation.md, "Calibration"):
+// - Brute force (no --fast/--confirm): every grid setting on every date. Slow
+//   (over an hour) and the reference method.
+// - Shortlist, then confirm: `npm run calibrate:shortlist` (--fast) screens the
+//   grid in minutes and writes only scripts/calibration-shortlist.json, never
+//   src/calibration.js. `npm run calibrate:confirm` (--confirm that file) then
+//   measures the shortlisted settings, the current table's settings and the
+//   plain layout on every date at the full budget, exactly as brute force
+//   would, and writes the table. Keeping the current settings in the running
+//   means a confirm can never pick worse than the live table on its own data.
 //
 // Phase 1 (slow) searches both candidate layouts of `samples` dates per piece
 // under every grid setting, in parallel workers, at the runtime search budget.
@@ -32,11 +47,11 @@ if (!isMainThread) {
   const { getRawDaily } = await load('src/edition.js');
   const { candidateFor, searchCandidate } = await load('src/generation.js');
   const SCORE_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives'];
-  parentPort.on('message', ({ id, date, setting }) => {
+  parentPort.on('message', ({ id, date, setting, budget }) => {
     const base = getRawDaily(date);
     const found = [0, 1].map((attempt) => {
       const began = performance.now();
-      const result = searchCandidate(candidateFor(base, 'calibration', setting, attempt));
+      const result = searchCandidate(candidateFor(base, 'calibration', setting, attempt), budget);
       const metrics = result.metrics ? Object.fromEntries(SCORE_METRICS.map((name) => [name, result.metrics[name]])) : null;
       return { status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics };
     });
@@ -50,14 +65,20 @@ if (!isMainThread) {
   };
   let samples = Number(option('samples', '10'));
   let start = option('start', '2026-11-07');
-  const jobs = Number(option('jobs', String(Math.max(1, Math.min(8, availableParallelism() - 1)))));
+  const jobs = Number(option('jobs', String(Math.max(1, availableParallelism() - 1))));
   const gridName = option('grid', 'full');
   // Editions are certified at build time (scripts/build-editions.mjs), so a slow
   // search only costs a device that opens a date past the two-year window, once.
   // Generation time therefore no longer counts against a setting by default.
   const timeWeight = Number(option('time-weight', '0'));
   const obstacleOption = option('obstacles')?.split(',').map(Number);
-  const dataPath = new URL(option('data', 'scripts/calibration-data.json'), new URL(`file://${process.cwd()}/`));
+  const fast = args.includes('--fast'), confirmPath = option('confirm');
+  if (fast && confirmPath) throw new Error('--fast makes a shortlist and --confirm checks one: run them one after the other.');
+  // A shortlist run keeps its searches apart from the data behind the live table.
+  const dataPath = new URL(option('data', fast ? 'scripts/calibration-shortlist.json' : 'scripts/calibration-data.json'), new URL(`file://${process.cwd()}/`));
+  const shortlist = confirmPath ? JSON.parse(await readFile(new URL(confirmPath, new URL(`file://${process.cwd()}/`)), 'utf8')) : null;
+  if (shortlist && !option('start')) start = shortlist.start;
+  if (shortlist && !option('samples')) samples = shortlist.samples;
   const { PLAYABLE_PIECES } = await load('src/pieces.js');
   const pieces = option('pieces', PLAYABLE_PIECES.join(',')).split(',');
   if (!Number.isInteger(samples) || samples < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isInteger(jobs) || jobs < 1
@@ -117,6 +138,206 @@ if (!isMainThread) {
     return dates;
   };
 
+  // Run search tasks on the worker pool, storing results in `into`.
+  let searchCount = 0, expansionCount = 0;
+  const runBegan = Date.now();
+  // --replay file: take searches from an earlier full-budget run instead of
+  // searching, to compare search strategies cheaply. Wall time is then the
+  // summed search time divided by the workers (replayMs / jobs).
+  let replay = null, replayMs = 0;
+  if (option('replay')) {
+    replay = {};
+    for (const row of JSON.parse(await readFile(option('replay'), 'utf8')).rows) {
+      (((replay[row.piece] ??= {})[row.setting] ??= {})[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics };
+    }
+  }
+  const elapsedSeconds = () => (replay ? replayMs / 1000 / jobs : (Date.now() - runBegan) / 1000);
+  const measure = async (tasks, budget, into) => {
+    tasks = tasks.map((task, id) => ({ ...task, id }));
+    if (replay) {
+      // Serve searches from a full-budget data file (search is deterministic,
+      // so a smaller budget is the same search cut short).
+      for (const task of tasks) {
+        const found = replay[task.piece][settingKey(task.setting)][task.date].map((entry) => (entry.explored <= budget
+          ? entry : { status: 'unknown', explored: budget, ms: Math.round(entry.ms * budget / entry.explored), metrics: null }));
+        ((into[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = found;
+        searchCount += found.length; expansionCount += found.reduce((sum, entry) => sum + entry.explored, 0);
+        replayMs += found.reduce((sum, entry) => sum + entry.ms, 0);
+      }
+      return;
+    }
+    console.log(`Measuring ${tasks.length} dates × ${ATTEMPTS} candidates on ${jobs} workers at ${budget} expansions…`);
+    const began = Date.now();
+    let next = 0, done = 0;
+    await Promise.all(Array.from({ length: Math.min(jobs, tasks.length) }, () => new Promise((resolve, reject) => {
+      const worker = new Worker(fileURLToPath(import.meta.url));
+      const feed = () => {
+        if (next >= tasks.length) { worker.terminate(); resolve(); return; }
+        const task = tasks[next++];
+        worker.postMessage({ id: task.id, date: task.date, setting: task.setting, budget });
+      };
+      worker.on('message', ({ id, found }) => {
+        const task = tasks[id];
+        ((into[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = found;
+        searchCount += found.length; expansionCount += found.reduce((sum, entry) => sum + entry.explored, 0);
+        if (++done % 100 === 0 || done === tasks.length) {
+          const elapsed = (Date.now() - began) / 1000;
+          console.log(`  ${done}/${tasks.length} (${Math.round(elapsed)} s, about ${Math.round(elapsed / done * (tasks.length - done))} s left)`);
+        }
+        feed();
+      });
+      worker.on('error', reject);
+      feed();
+    })));
+  };
+
+  // --fast: screen every setting cheaply, then spend full searches only on the
+  // settings that could win a tier (successive halving). Stage 1 runs each
+  // setting on --stage1-dates dates (default 1) and stage 2 on --stage2-dates
+  // more (default 4), both at a screening budget; the closest settings per tier
+  // advance. Two filters shape stage 1: a least-squares surrogate (knobs plus
+  // pairwise products, per piece) smooths one-date noise, and its top picks per
+  // tier advance alongside the observed ranks; monotone dominance drops settings
+  // at least as hard as one already far above the hardest band, or at most as
+  // hard as one far below the easiest. Finalists are re-measured at the full
+  // runtime budget on common dates, a few at a time; a setting stops gaining
+  // dates once a paired comparison shows it clearly worse than the current best
+  // for every tier. Only full-budget data reaches the fit. A setting with no
+  // solved screening search advances: running out of budget often means hard.
+  const fastMeasure = async (tasks) => {
+    const { fitSurrogate, dominatedOut, clearlyWorse } = await import('./calibration-search.mjs');
+    // Default: screen at the full budget. At 3000 expansions most queen and
+    // bishop screens ran out of budget and told nothing, and full-budget screens
+    // are reused as final data, so nothing is searched twice.
+    const screenBudget = Number(option('screen-budget', String(SEARCH_BUDGET)));
+    const keep = [Number(option('keep1', '6')), Number(option('keep2', '3'))];
+    const stageSizes = [Number(option('stage1-dates', '1')), Number(option('stage2-dates', '4'))];
+    const useSurrogate = !args.includes('--no-surrogate');
+    const surrogateKeep = Number(option('surrogate-keep', '3'));
+    const useDominance = !args.includes('--no-dominance');
+    const margin = Number(option('dominance-margin', '1.5'));
+    const useStopping = !args.includes('--no-stopping');
+    const finalFirst = Number(option('final-first', '4')), finalStep = Number(option('final-step', '2'));
+    const stopZ = Number(option('stop-z', '2.5'));
+    const settingsOf = new Map();
+    for (const task of tasks) settingsOf.set(`${task.piece}|${settingKey(task.setting)}`, task.setting);
+    const datesOf = (piece) => [...new Set(tasks.filter((task) => task.piece === piece).map((task) => task.date))];
+    const plainKey = settingKey(DEFAULT_KNOBS);
+    const bands = TIER_IDS.map((tier) => DIFFICULTY_TIERS[tier].band);
+    const floor = Math.min(...bands.map(([low]) => low)) - margin, ceiling = Math.max(...bands.map(([, high]) => high)) + margin;
+    const byCenter = (value, [low, high]) => Math.abs(value - (low + high) / 2);
+    let finals;
+    const minimums = [0, 1, 2, 3, 4, 6];
+    // Per-date cost: the fit's cost terms for one day (a fallback costs 11).
+    const dayCost = (found, piece, tier, minThreatenedDecisions) => {
+      const [low, high] = DIFFICULTY_TIERS[tier].band, width = high - low;
+      const candidates = found.map((entry) => (entry.metrics ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece) } : null));
+      const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
+      if (index < 0) return 11;
+      const score = candidates[index].score, off = bandDistance(score, tier);
+      return off / width + (off > 0 ? 1 : 0) + 0.2 * Math.abs(score - (low + high) / 2) / width;
+    };
+    const costsFor = (piece, id, tier, dates, source = finals) => {
+      const byDate = source[piece][id.split('|')[1]];
+      let best = null;
+      for (const minimum of minimums) {
+        const costs = dates.map((date) => dayCost(byDate[date], piece, tier, minimum));
+        const mean = costs.reduce((sum, value) => sum + value, 0) / costs.length;
+        if (!best || mean < best.mean) best = { mean, costs };
+      }
+      return best;
+    };
+    const screened = {};
+    const fullScreens = screenBudget === SEARCH_BUDGET;
+    let alive = [...settingsOf.keys()];
+    let offset = 0;
+    for (const [stage, size] of stageSizes.entries()) {
+      const [from, to] = [offset, offset + size];
+      offset = to;
+      if (size > 0) {
+        await measure(alive.flatMap((id) => {
+          const [piece] = id.split('|');
+          return datesOf(piece).slice(from, to).map((date) => ({ piece, date, setting: settingsOf.get(id) }));
+        }), screenBudget, screened);
+      }
+      const survivors = new Set();
+      for (const piece of new Set(alive.map((id) => id.split('|')[0]))) {
+        // Mean screened score so far (a candidate scores if either layout solved).
+        const ranked = alive.filter((id) => id.startsWith(`${piece}|`)).map((id) => {
+          const scores = Object.values(screened[piece]?.[id.split('|')[1]] ?? {}).map((found) => found.find((entry) => entry.metrics)).filter(Boolean).map((entry) => difficultyScore(entry.metrics, piece));
+          return { id, setting: settingsOf.get(id), mean: scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null };
+        });
+        const measured = ranked.filter((entry) => entry.mean !== null);
+        // Below the full budget an unsolved screen may just mean hard, so it advances.
+        const pick = new Set(fullScreens ? [] : ranked.filter((entry) => entry.mean === null).map((entry) => entry.id));
+        for (const [index, band] of bands.entries()) {
+          // Full-budget screens rank by the fit's own cost on the dates so far;
+          // cheaper screens can only rank by distance from the band's center.
+          const value = fullScreens
+            ? (entry) => costsFor(piece, entry.id, TIER_IDS[index], Object.keys(screened[piece][entry.id.split('|')[1]]), screened).mean
+            : (entry) => byCenter(entry.mean, band);
+          const values = new Map((fullScreens ? ranked : measured).map((entry) => [entry.id, value(entry)]));
+          [...values.keys()].sort((a, b) => values.get(a) - values.get(b)).slice(0, keep[stage]).forEach((id) => pick.add(id));
+        }
+        // The surrogate needs enough settings to fit 16 weights.
+        if (useSurrogate && stage === 0 && measured.length >= 24) {
+          const model = fitSurrogate(measured.map((entry) => ({ setting: entry.setting, y: entry.mean })));
+          for (const band of bands) {
+            [...ranked].sort((a, b) => byCenter(model.predict(a.setting), band) - byCenter(model.predict(b.setting), band)).slice(0, surrogateKeep).forEach((entry) => pick.add(entry.id));
+          }
+          console.log(`  ${piece}: surrogate residual sd ${model.residualSd.toFixed(2)} on ${measured.length} settings`);
+        }
+        const out = useDominance ? dominatedOut(ranked, floor, ceiling) : new Set();
+        for (const id of pick) if (!out.has(id)) survivors.add(id);
+        if (out.size) console.log(`  ${piece}: monotone dominance rules out ${out.size} settings`);
+      }
+      // The plain layout always advances: the report compares against it.
+      for (const id of alive) if (id.endsWith(`|${plainKey}`)) survivors.add(id);
+      console.log(`Stage ${stage + 1}: ${survivors.size} of ${alive.length} settings advance.`);
+      alive = [...survivors];
+    }
+
+    // Finals at the full budget on common dates (common random numbers).
+    // At the full budget the screening searches are final data: keep them.
+    finals = fullScreens ? screened : {};
+    const pieceOf = (id) => id.split('|')[0];
+    const done = new Map(alive.map((id) => [id, Object.keys(finals[pieceOf(id)]?.[id.split('|')[1]] ?? {}).length]));
+    if (finals === screened) {
+      // Only finalists' searches reach the fit; drop the screened-out settings.
+      for (const piece of Object.keys(finals)) for (const key of Object.keys(finals[piece])) if (!done.has(`${piece}|${key}`)) delete finals[piece][key];
+    }
+    let active = [...alive];
+    while (active.length) {
+      await measure(active.flatMap((id) => {
+        const from = done.get(id), to = !useStopping ? Infinity : from === 0 ? finalFirst : from + finalStep;
+        return datesOf(pieceOf(id)).slice(from, to).map((date) => ({ piece: pieceOf(id), date, setting: settingsOf.get(id) }));
+      }), SEARCH_BUDGET, finals);
+      for (const id of active) done.set(id, Object.keys(finals[pieceOf(id)][id.split('|')[1]]).length);
+      active = active.filter((id) => done.get(id) < datesOf(pieceOf(id)).length);
+      if (!useStopping) continue;
+      const stopped = new Set();
+      for (const piece of new Set(active.map(pieceOf))) {
+        const dates = datesOf(piece);
+        const mine = alive.filter((id) => pieceOf(id) === piece);
+        // Leaders: settings measured on the most dates so far; the best per tier among them.
+        const front = Math.max(...mine.map((id) => done.get(id)));
+        const leaders = mine.filter((id) => done.get(id) === front);
+        const bestFor = Object.fromEntries(TIER_IDS.map((tier) => [tier,
+          leaders.map((id) => ({ id, mean: costsFor(piece, id, tier, dates.slice(0, front)).mean })).sort((a, b) => a.mean - b.mean)[0].id]));
+        for (const id of active.filter((entry) => pieceOf(entry) === piece && !entry.endsWith(`|${plainKey}`))) {
+          const shared = dates.slice(0, done.get(id));
+          if (TIER_IDS.every((tier) => bestFor[tier] !== id
+            && clearlyWorse(costsFor(piece, id, tier, shared).costs, costsFor(piece, bestFor[tier], tier, shared).costs, { z: stopZ }))) stopped.add(id);
+        }
+      }
+      if (stopped.size) console.log(`  Sequential stopping: ${stopped.size} settings stop adding dates.`);
+      active = active.filter((id) => !stopped.has(id));
+    }
+    const settingDates = [...done.values()].reduce((sum, value) => sum + value, 0);
+    console.log(`Finals: ${alive.length} settings, ${settingDates} setting-dates at ${SEARCH_BUDGET} expansions.`);
+    return finals;
+  };
+
   // Phase 1: measurements[piece][settingKey][date] = [{ ms, metrics|null }, ...]
   let measurements = {};
   let rows = [];
@@ -132,36 +353,31 @@ if (!isMainThread) {
   } else {
     // --merge keeps the data file's searches and measures only what it lacks.
     if (args.includes('--merge')) await loadRows(() => true);
+    // --confirm measures only the shortlist's finalists, the live table's
+    // settings and the plain layout, each on every date at the full budget.
+    const { CALIBRATION: live } = await load('src/calibration.js');
+    const settingsFor = (piece) => {
+      if (!shortlist) return grid(piece);
+      const keys = new Set([settingKey(DEFAULT_KNOBS)]);
+      for (const row of shortlist.rows) if (row.piece === piece) keys.add(row.setting);
+      for (const tier of TIER_IDS) if (live[tier]?.[piece]) keys.add(settingKey(live[tier][piece]));
+      console.log(`${piece}: confirming ${keys.size} settings.`);
+      return [...keys].map((key) => {
+        const [obstacleBase, decoys, scatter, guards, screens = 0] = key.split('/').map(Number);
+        return { obstacleBase, decoys, scatter, guards, ...(screens && { screens }) };
+      });
+    };
     const tasks = [];
     for (const piece of pieces) {
       const dates = datesFor(piece);
-      for (const setting of grid(piece)) for (const date of dates) {
+      for (const setting of settingsFor(piece)) for (const date of dates) {
         if (!measurements[piece]?.[settingKey(setting)]?.[date]) tasks.push({ id: tasks.length, piece, date, setting });
       }
     }
-    console.log(`Measuring ${tasks.length} dates × ${ATTEMPTS} candidates on ${jobs} workers…`);
-    const began = Date.now();
-    let next = 0, done = 0;
-    await Promise.all(Array.from({ length: jobs }, () => new Promise((resolve, reject) => {
-      const worker = new Worker(fileURLToPath(import.meta.url));
-      const feed = () => {
-        if (next >= tasks.length) { worker.terminate(); resolve(); return; }
-        const task = tasks[next++];
-        worker.postMessage({ id: task.id, date: task.date, setting: task.setting });
-      };
-      worker.on('message', ({ id, found }) => {
-        const task = tasks[id];
-        ((measurements[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = found;
-        if (++done % 100 === 0 || done === tasks.length) {
-          const elapsed = (Date.now() - began) / 1000;
-          console.log(`  ${done}/${tasks.length} (${Math.round(elapsed)} s, about ${Math.round(elapsed / done * (tasks.length - done))} s left)`);
-        }
-        feed();
-      });
-      worker.on('error', reject);
-      feed();
-    })));
+    if (fast) measurements = await fastMeasure(tasks);
+    else await measure(tasks, SEARCH_BUDGET, measurements);
   }
+  if (searchCount) console.log(`Searched ${searchCount} candidate layouts, ${expansionCount} expansions in all, ${Math.round(elapsedSeconds())} s wall time${replay ? " (replayed)" : ""} on ${jobs} workers.`);
   for (const [piece, bySetting] of Object.entries(measurements)) for (const [setting, byDate] of Object.entries(bySetting)) {
     for (const [date, found] of Object.entries(byDate)) for (const [attempt, entry] of found.entries()) {
       rows.push({ piece, setting, date, attempt, status: entry.status, explored: entry.explored, turns: entry.metrics?.turns ?? null, ms: entry.ms, metrics: entry.metrics });
@@ -292,7 +508,16 @@ if (!isMainThread) {
   }).map((piece) => `${tier}/${piece}`));
   if (misses.length) console.warn(`\nWarning: mean score outside the band for ${misses.join(', ')}. Consider a wider grid, new knobs, or new bands.`);
 
-  if (args.includes('--dry-run')) {
+  // --choices-out: the chosen knobs and their measured report, for comparing methods.
+  const choicesOut = option('choices-out');
+  if (choicesOut) {
+    await writeFile(new URL(choicesOut, new URL(`file://${process.cwd()}/`)), JSON.stringify({ calibration, report, searches: searchCount, expansions: expansionCount, seconds: elapsedSeconds() }, null, 2));
+  }
+
+  if (fast) {
+    console.log(`\nShortlist only: src/calibration.js unchanged. Its finalists are in ${fileURLToPath(dataPath)}.`
+      + `\nNext: node scripts/calibrate-difficulty.mjs --confirm ${fileURLToPath(dataPath)} (npm run calibrate:confirm).`);
+  } else if (args.includes('--dry-run')) {
     console.log('\nDry run: src/calibration.js unchanged.');
   } else {
     // Keep rows for pieces this run did not measure.
