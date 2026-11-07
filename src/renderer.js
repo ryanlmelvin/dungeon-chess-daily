@@ -104,6 +104,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   // Waiting recruits' sprites, to fade while a monster stands on them.
   let recruitSprites = [];
   let lastEvents = null;
+  let caveInAt = 0;
   let moveMaterial = null;
   let recruitMaterial = null;
   const playerPulse = { value: 0 };
@@ -384,6 +385,26 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
   }
 
+  // A cave-in (src/cave-in.js) rains rubble across the room and shakes the
+  // view (style.css .quake). Reduced motion skips both.
+  function caveIn() {
+    if (reducedMotion) return;
+    const canvas = renderer.domElement;
+    canvas.classList.remove('quake'); void canvas.offsetWidth; canvas.classList.add('quake');
+    const stone = [0x8a7f78, 0x5e5560, 0xb3a58f, 0x463f48];
+    for (let i = 0; i < 24; i++) {
+      const material = new THREE.SpriteMaterial({ color: stone[i % stone.length], transparent: true, depthWrite: false });
+      materials.add(material);
+      const mesh = new THREE.Sprite(material);
+      const size = 0.06 + (i % 3) * 0.04;
+      mesh.scale.set(size, size, 1);
+      // A fixed scatter over the board, at staggered heights.
+      mesh.position.set((i * 5 + 3) % 8 + (i * 7 % 10) / 10 - 0.5, 1.1 + (i % 4) * 0.2, (i * 3 + (i >> 3)) % 8 + (i * 3 % 10) / 10 - 0.5);
+      actors.add(mesh);
+      particles.push({ mesh, life: 0.4, velocity: new THREE.Vector3(0, -2.2 - (i % 3) * 0.4, 0) });
+    }
+  }
+
   function cornerMarks(x, y, color, inset = 0.39, width = 0.14) {
     const ink = basic(color);
     for (const dx of [-inset, inset]) for (const dy of [-inset, inset]) {
@@ -633,6 +654,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     // A monster entering through a collapsing door arrives in a puff of dust.
     for (const event of events) if (event.type === 'reinforcement') burst(event.x, event.y);
+    // The ceiling comes down once the turn's moves have landed (never on a new room).
+    if (changedBoard) caveInAt = 0;
+    else if (events.some((event) => event.type === 'cave-in')) caveInAt = animateTurn ? now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 : now;
     currentTurn = next.turns;
     lastEvents = next.events;
     state = next;
@@ -769,6 +793,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (pendingItems && timestamp >= pendingItems.at) {
       updateItems(pendingItems.items);
       pendingItems = null;
+    }
+    if (caveInAt && timestamp >= caveInAt) {
+      caveInAt = 0;
+      caveIn();
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i];

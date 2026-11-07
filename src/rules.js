@@ -6,6 +6,7 @@ import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove } from './monster-ai.js';
+import { caveInTick, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 6;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -755,6 +756,8 @@ function setFloor(state, kingRecruit = false) {
   const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null; state.enPassant = null;
   breakTactics(state);
+  // A new floor's ceiling holds; the stairs banked any gold at risk (src/cave-in.js).
+  delete state.caveIn;
   state.map = Array(8).fill('........');
   // Promotion lasts only for the room it happened in; each floor starts with the original piece.
   state.player.piece = state.startingPiece;
@@ -860,6 +863,8 @@ function restartRun(state, events, message) {
   // Count today's attempts; saves from before this counter only know a restart happened.
   const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
   Object.assign(state, fresh);
+  // A fresh run has no cave-in and has dropped no gold (fields the fresh state lacks).
+  delete state.caveIn; delete state.dropped;
   // A held Take-back keeps its `undo`: it can take back the move that ended the run.
   state.tries = tries;
   // A new try starts every floor's move count afresh.
@@ -1216,6 +1221,7 @@ function play(previous, action) {
     settle(state);
     if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
     collapseTick(state); settle(state);
+    caveInTick(state, previous); settle(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
     return state;
   }
@@ -1340,6 +1346,7 @@ function play(previous, action) {
   if (!castle) settle(state);
   if (state.playerColor === 'white' && !close) { enemyTurn(state); settle(state); }
   collapseTick(state); settle(state);
+  caveInTick(state, previous); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
 }
@@ -1425,7 +1432,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // under the old rule that paid every capture, so they may hold up to one gold per capture.
     const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent - tacticGold(value.feats) : value.paidCaptures;
     const bonus = bonusCaptures(value);
-    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent) return false;
+    // Gold dropped in cave-ins (src/cave-in.js) leaves the ledger too.
+    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent - (value.dropped ?? 0)) return false;
     // Special moves the player made: absent in older saves.
     // Forks and combos are bounded by captures (validTactics), the rest by 30.
     if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.filter((feat) => !TACTIC_KINDS.includes(feat?.kind)).length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
@@ -1476,7 +1484,10 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
-    if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - value.items.filter((item) => item.type === 'coin').length) return false;
+    const coinsLeft = value.items.filter((item) => item.type === 'coin').length;
+    if (!validCaveIn(value)) return false;
+    // Coins a cave-in buried were never collected.
+    if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - coinsLeft - (value.caveIn?.buried ?? 0)) return false;
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
@@ -1489,7 +1500,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', ...TACTIC_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

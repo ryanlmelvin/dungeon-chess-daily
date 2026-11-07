@@ -99,7 +99,9 @@ test('an ordered recruit may capture the challenge piece, and it counts toward t
   assert.equal(second.objective.complete, true); assert.equal(second.exit.open, true);
   // The scored move count stops on the recruit's capture as on yours.
   assert.equal(second.objective.moves, 2);
-  assert.equal(second.message, 'You completed the challenge ✓ in 2 moves. Your score is locked in: explore for gold or take the stairs.');
+  // The completion line is filed in notes; the cave-in's crack line (src/cave-in.js) follows it in the log.
+  assert.ok((second.notes ?? []).includes('You completed the challenge ✓ in 2 moves. Your score is locked in: explore for gold or take the stairs.'));
+  assert.match(second.message, /^The ceiling starts to crack!/);
 });
 
 // The 2026-11-13 certificate played to the last floor, with the monsters frozen.
