@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor, retryLostRun } from '../src/game.js';
+import { shareDate } from '../src/rules.js';
 import { botRun, playerRun } from '../src/bot.js';
 import { floorPars, parFor, runPars } from '../src/par.js';
 
@@ -50,7 +51,7 @@ test('the share card shows each floor\'s moves against par, one floor per line',
   const pars = floorPars(daily);
   const lines = (state) => getShareText(state, pars).split('\n');
   const plain = (line) => line.replace(/ [\u{1F1EB}\u{1F1F7}🏰🔱]+$/u, '');
-  assert.equal(lines(won)[0], `Dungeon Chess Daily #${won.edition}`);
+  assert.equal(lines(won)[0], `Dungeon Chess Daily · ${shareDate(won.date)}`);
   assert.deepEqual(lines(won).slice(1, 4).map(plain), ['🟥 E', '⬛ E', '👑 E']);
   const off = structuredClone(won); off.records[0].scored = pars[0] + 3; off.records[2].scored = pars[2] - 1;
   assert.deepEqual(lines(off).slice(1, 4).map(plain), ['🟥 +3', '⬛ E', '👑 \u22121']);

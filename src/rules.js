@@ -1277,6 +1277,11 @@ export function scoredMoves(record) {
 /** Scored moves on the floor in progress, restarts included: still counting until the challenge is complete. */
 export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0); }
 
+/** The edition's date as shared, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself). */
+export function shareDate(date) {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
 export function getShareText(state, pars = null, url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/') {
   const floors = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
@@ -1286,7 +1291,7 @@ export function getShareText(state, pars = null, url = 'https://ryanlmelvin.gith
     const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind && feat.floor === floor)).map(([, mark]) => mark).join('');
     floors.push([FLOOR_MARKERS[floor], score, feats].filter(Boolean).join(' '));
   }
-  return [`Dungeon Chess Daily #${state.edition}`, ...floors, url].filter(Boolean).join('\n');
+  return [`Dungeon Chess Daily · ${shareDate(state.date)}`, ...floors, url].filter(Boolean).join('\n');
 }
 
 export function validateSave(value, date, daily = getRawDaily(date)) {

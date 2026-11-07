@@ -5,7 +5,7 @@ import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, dangerTile
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { royalRules, floorDecoys } from '../src/rules.js';
+import { royalRules, floorDecoys, shareDate } from '../src/rules.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
@@ -212,7 +212,7 @@ test('share text is a title and one line per floor: marker, moves against par an
   state.records = [{ floor: 0, hp: 8, turns: 8 }, { floor: 1, hp: 6, turns: 12 }, { floor: 2, hp: 5, turns: 9 }];
   const url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/';
   const text = getShareText(state, [10, 11, 9]);
-  assert.equal(text, `Dungeon Chess Daily #${state.edition}\n🟥 \u22122\n⬛ +1\n👑 E\n${url}`);
+  assert.equal(text, `Dungeon Chess Daily · ${shareDate(state.date)}\n🟥 \u22122\n⬛ +1\n👑 E\n${url}`);
   for (const spoiler of [state.player.piece, ...state.species.map((entry) => entry.name), state.theme.headline]) assert.ok(!text.includes(spoiler));
   // Without a par each floor shows a dot.
   assert.deepEqual(getShareText(state).split('\n').slice(1, 4), ['🟥 ·', '⬛ ·', '👑 ·']);

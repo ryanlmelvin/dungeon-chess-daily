@@ -15,7 +15,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
-import { pinUsable, captureGoal } from './rules.js';
+import { pinUsable, captureGoal, shareDate } from './rules.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { botRun, playerRun, verdict } from './bot.js';
@@ -158,7 +158,6 @@ function switchScreen(next) {
   syncMusic();
 }
 function renderPaper() {
-  $('edition').textContent = `NO. ${String(Math.max(1, daily.edition)).padStart(3, '0')}`;
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = paperDate(daily.date);
   // The weekday's difficulty tier, e.g. "THURSDAY · TOUGH": no clue about the dungeon itself.
@@ -182,7 +181,7 @@ function renderPaper() {
     drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
     article.append(portrait,h,p); return article;
   }));
-  $('paper-screen').setAttribute('aria-label', archiveMode ? `Archive newspaper, edition ${daily.edition}` : "Today's newspaper");
+  $('paper-screen').setAttribute('aria-label', archiveMode ? `Archive newspaper, ${shareDate(daily.date)}` : "Today's newspaper");
   $('archive-banner').hidden = !archiveMode;
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode ? 'Enter this dungeon ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
@@ -835,7 +834,7 @@ function showResult() {
   const won=state.status==='won';
   $('result-date').textContent=paperDate(daily.date);
   $('result-kicker').hidden=!runLabel();
-  $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
+  $('result-kicker').textContent=`${runLabel()} EDITION`;
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
   $('result-en-passant').hidden = true;
   $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured on floor ${state.floor+1}. Tomorrow is another story.`:state.message;
@@ -864,7 +863,7 @@ function showDeath() {
   showResultActions(false);
   $('result-date').textContent=paperDate(daily.date);
   $('result-kicker').hidden=!runLabel();
-  $('result-kicker').textContent=archiveMode ? `${runLabel()} · EDITION #${daily.edition}` : 'PRACTICE EDITION';
+  $('result-kicker').textContent=`${runLabel()} EDITION`;
   const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
   $('result-title').textContent=trapped?'Cornered.':'Captured.';
   const fatal = state.events.find(event => event.type === 'player-captured' && event.name);
@@ -991,7 +990,7 @@ $('reset-day-button').addEventListener('click', async () => {
     if (current.date !== daily.date) {
       const day = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
       rolloverDates = { current: daily.date, next: current.date };
-      $('rollover-text').textContent = `This run is from ${formatShortDate(daily.date)}. Edition No. ${String(current.edition).padStart(3, '0')} came out since it began. Restarting discards this run; today’s edition leaves it saved in the archive.`;
+      $('rollover-text').textContent = `This run is from ${shareDate(daily.date)}. The ${shareDate(current.date)} edition came out since it began. Restarting discards this run; today’s edition leaves it saved in the archive.`;
       $('rollover-new').textContent = `Start today’s · ${day(current.date)}`;
       $('rollover-current').textContent = `Restart ${practice ? 'practice · ' : ''}${day(daily.date)}`;
       $('rollover-dialog').showModal();
@@ -1013,7 +1012,7 @@ $('rollover-current').addEventListener('click', () => {
   $('rollover-dialog').close();
   if (!state || rolloverDates?.current !== daily.date) return;
   const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
-  startOver(next, `The ${formatShortDate(daily.date)} dungeon restarted from floor 1.`);
+  startOver(next, `The ${shareDate(daily.date)} dungeon restarted from floor 1.`);
 });
 $('result-paper-button').addEventListener('click',()=>{
   if(!archiveMode){
@@ -1049,17 +1048,14 @@ function openEdition(date) {
   renderPaper(); switchScreen('paper');
   $('start-button').focus({ preventScroll: true });
 }
-function formatShortDate(date) {
-  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
-function archiveRow({ date, edition, status, today = false }) {
+function archiveRow({ date, status, today = false }) {
   const item = document.createElement('li');
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `archive-entry is-${status}`;
   if (date === daily.date) button.setAttribute('aria-current', 'true');
   const title = document.createElement('span'); title.className = 'archive-title';
-  title.textContent = today ? `Today · No. ${String(edition).padStart(3, '0')}` : `No. ${String(edition).padStart(3, '0')} · ${formatShortDate(date)}`;
+  title.textContent = today ? `Today · ${shareDate(date)}` : shareDate(date);
   const badge = document.createElement('span'); badge.className = 'archive-status';
   badge.textContent = STATUS_LABELS[status];
   button.append(title, badge);
@@ -1074,11 +1070,11 @@ function openArchive() {
   const read = (name) => { try { return localStorage.getItem(`${prefix}${name}`); } catch { return null; } };
   const past = archiveEntries(today.date, FIRST_EDITION_DATE, read);
   const todayStatus = savedStatus(read(dailySaveKey(today.date)), today.date);
-  $('archive-list').replaceChildren(archiveRow({ date: today.date, edition: today.edition, status: todayStatus, today: true }), ...past.map(archiveRow));
+  $('archive-list').replaceChildren(archiveRow({ date: today.date, status: todayStatus, today: true }), ...past.map(archiveRow));
   const unplayed = past.filter(entry => entry.status === 'unplayed').length;
   $('archive-summary').textContent = past.length
     ? `${past.length} past ${past.length === 1 ? 'edition' : 'editions'} · ${unplayed} not played yet. Past editions keep their own saves and share as archive results.`
-    : 'Edition No. 001 is today’s paper. Past editions will collect here from tomorrow.';
+    : 'Today’s paper is the first edition. Past editions will collect here from tomorrow.';
   $('menu-dialog').close();
   $('archive-dialog').showModal();
   $('archive-list').querySelector('[aria-current]')?.focus({ preventScroll: true });
