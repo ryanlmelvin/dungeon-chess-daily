@@ -138,7 +138,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   // Waiting recruits' sprites, to fade while a monster stands on them.
   let recruitSprites = [];
   let lastEvents = null;
-  let caveInAt = 0;
+  // The ceiling's next shake (src/cave-in.js), once the turn's moves have landed.
+  let pendingQuake = null;
   let moveMaterial = null;
   let recruitMaterial = null;
   const playerPulse = { value: 0 };
@@ -502,24 +503,41 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
   }
 
-  // A cave-in (src/cave-in.js) rains rubble across the room and shakes the
-  // view (style.css .quake). Reduced motion skips both.
-  function caveIn() {
-    if (reducedMotion) return;
-    const canvas = renderer.domElement;
-    canvas.classList.remove('quake'); void canvas.offsetWidth; canvas.classList.add('quake');
-    const stone = [0x8a7f78, 0x5e5560, 0xb3a58f, 0x463f48];
-    for (let i = 0; i < 24; i++) {
-      const material = new THREE.SpriteMaterial({ color: stone[i % stone.length], transparent: true, depthWrite: false });
+  // The cracking ceiling (src/cave-in.js) shakes the view and shakes dust
+  // loose: gently as it cracks, harder on every move after (strength 0 to 1),
+  // and the cave-in itself rains rubble. Reduced motion keeps the falling
+  // dust and rubble but never shakes the view.
+  const STONE = [0x8a7f78, 0x5e5560, 0xb3a58f, 0x463f48];
+  function shakeView(px, ms) {
+    if (reducedMotion || !renderer.domElement.animate) return;
+    const frames = [{ transform: 'none' }];
+    for (let i = 1; i < 8; i++) {
+      const fade = 1 - i / 8;
+      frames.push({ transform: `translate(${(px * fade * (i % 2 ? -1 : 1)).toFixed(1)}px, ${(px * fade * ((i * 5) % 3 - 1) / 2).toFixed(1)}px)` });
+    }
+    frames.push({ transform: 'none' });
+    renderer.domElement.animate(frames, { duration: ms });
+  }
+  function fallingStone(count, size, speed, life) {
+    for (let i = 0; i < count; i++) {
+      const material = new THREE.SpriteMaterial({ color: STONE[i % STONE.length], transparent: true, depthWrite: false });
       materials.add(material);
       const mesh = new THREE.Sprite(material);
-      const size = 0.06 + (i % 3) * 0.04;
-      mesh.scale.set(size, size, 1);
-      // A fixed scatter over the board, at staggered heights.
-      mesh.position.set((i * 5 + 3) % 8 + (i * 7 % 10) / 10 - 0.5, 1.1 + (i % 4) * 0.2, (i * 3 + (i >> 3)) % 8 + (i * 3 % 10) / 10 - 0.5);
+      const scale = size * (1 + (i % 3) * 0.6);
+      mesh.scale.set(scale, scale, 1);
+      mesh.position.set(Math.random() * 8 - 0.5, 1.1 + Math.random() * 0.8, Math.random() * 8 - 0.5);
       actors.add(mesh);
-      particles.push({ mesh, life: 0.4, velocity: new THREE.Vector3(0, -2.2 - (i % 3) * 0.4, 0) });
+      particles.push({ mesh, life, velocity: new THREE.Vector3(0, -speed - Math.random() * 0.4, 0) });
     }
+  }
+  function tremor(strength) {
+    shakeView(2 + 4 * strength, 300 + 250 * strength);
+    fallingStone(Math.round(8 + 16 * strength), 0.05, 0.8, 0.7);
+  }
+  function caveIn() {
+    shakeView(10, 850);
+    fallingStone(16, 0.05, 0.8, 0.7);
+    fallingStone(24, 0.06, 2.2, 0.4);
   }
 
   function cornerMarks(x, y, color, inset = 0.39, width = 0.14) {
@@ -797,8 +815,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // A monster entering through a collapsing door arrives in a puff of dust.
     for (const event of events) if (event.type === 'reinforcement') burst(event.x, event.y);
     // The ceiling comes down once the turn's moves have landed (never on a new room).
-    if (changedBoard) caveInAt = 0;
-    else if (events.some((event) => event.type === 'cave-in')) caveInAt = animateTurn ? now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 : now;
+    if (changedBoard) pendingQuake = null;
+    else {
+      const ceiling = events.find((event) => event.type === 'cave-crack' || event.type === 'cave-tremor' || event.type === 'cave-in');
+      if (ceiling) pendingQuake = { event: ceiling, at: animateTurn ? now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 : now };
+    }
     for (const event of unmaskedNow) popRole(event, revealAt(event), enemyPalette);
     currentTurn = next.turns;
     lastEvents = next.events;
@@ -964,16 +985,18 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       updateItems(pendingItems.items);
       pendingItems = null;
     }
-    if (caveInAt && timestamp >= caveInAt) {
-      caveInAt = 0;
-      caveIn();
+    if (pendingQuake && timestamp >= pendingQuake.at) {
+      const { event } = pendingQuake;
+      pendingQuake = null;
+      if (event.type === 'cave-in') caveIn();
+      else tremor(event.type === 'cave-crack' ? 0 : (event.total - event.left) / Math.max(1, event.total - 1));
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i];
       particle.life -= dt;
       particle.velocity.y -= dt * 5;
       particle.mesh.position.addScaledVector(particle.velocity, dt);
-      particle.mesh.material.opacity = Math.max(0, particle.life / 0.4);
+      particle.mesh.material.opacity = Math.min(1, Math.max(0, particle.life / 0.4));
       if (particle.life <= 0) {
         release(particle.mesh);
         particles.splice(i, 1);

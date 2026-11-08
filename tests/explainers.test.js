@@ -26,6 +26,14 @@ test('your en passant and castling always open their explainers; the first fork 
   assert.equal(autoExplainer([{ type: 'move' }, { type: 'capture' }], unseen), null);
 });
 
+test('the first cracked ceiling explains the cave-in countdown once; tactics go first', () => {
+  const crack = { type: 'cave-crack', x: 4, y: 0, moves: 5 };
+  assert.equal(autoExplainer([{ type: 'capture' }, crack], unseen), 'cave-in');
+  assert.equal(autoExplainer([crack], (kind) => kind === 'cave-in'), null, 'once per device');
+  assert.equal(autoExplainer([{ type: 'fork-won' }, crack], unseen), 'fork');
+  assert.equal(autoExplainer([{ type: 'cave-tremor', x: 4, y: 0, left: 3, total: 5 }], unseen), null, 'never on the moves after');
+});
+
 test('the bishop pair’s hop offers its explainer from its line’s What? button, never by itself', () => {
   assert.equal(autoExplainer([{ type: 'companion-phase' }, { type: 'bishop-pair' }, { type: 'companion-move' }], unseen), null);
   assert.equal(autoExplainer([{ type: 'bishop-pair' }], () => true), null);

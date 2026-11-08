@@ -22,7 +22,7 @@ import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRan
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
-import { caveInStatus, caveInExplain, caveInRunning, caveInText, cavedIn, goldAtRisk } from './cave-in.js';
+import { caveInLabel, caveInLoss, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
 import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
@@ -319,52 +319,30 @@ function showGameFeedback() {
   // So does a missed lunge, which leaves its monster off-balance (rules.js).
   const lunged = state.events?.some((event) => event.type === 'miss');
   const pairHop = state.events?.some(event => event.type === 'bishop-pair');
+  // So does the ceiling's crack, which starts the cave-in countdown (src/cave-in.js).
+  const cracked = state.events?.some((event) => event.type === 'cave-crack');
+  const what = (label, open) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'hint-button message-what';
+    button.textContent = 'What?';
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-haspopup', 'dialog');
+    button.addEventListener('click', open);
+    return button;
+  };
   box.replaceChildren(...messageLog.map((entry) => {
     const line = document.createElement('p');
     line.textContent = entry.text;
     line.classList.toggle('stale', entry.action !== latest);
-    if (lunged && entry.action === latest && /off-balance/.test(entry.text)) {
-      const what = document.createElement('button');
-      what.type = 'button';
-      what.className = 'hint-button message-what';
-      what.textContent = 'What?';
-      what.setAttribute('aria-label', 'What does off-balance mean?');
-      what.setAttribute('aria-haspopup', 'dialog');
-      what.addEventListener('click', () => openSpecialMove('off-balance'));
-      line.append(' ', what);
-    }
-    if (enPassantHit && entry.action === latest && /en passant/i.test(entry.text)) {
-      const what = document.createElement('button');
-      what.type = 'button';
-      what.className = 'hint-button message-what';
-      what.textContent = 'What?';
-      what.setAttribute('aria-label', 'What is en passant?');
-      what.setAttribute('aria-haspopup', 'dialog');
-      what.addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
-      line.append(' ', what);
-    }
+    const fresh = entry.action === latest;
+    if (lunged && fresh && /off-balance/.test(entry.text)) line.append(' ', what('What does off-balance mean?', () => openSpecialMove('off-balance')));
+    if (enPassantHit && fresh && /en passant/i.test(entry.text)) line.append(' ', what('What is en passant?', () => openSpecialMove('en-passant', 'enemy')));
     // The recruit line keeps its explainer while that recruit still waits.
-    if (entry.recruit && entry.action === latest && waitingRecruit(state)) {
-      const what = document.createElement('button');
-      what.type = 'button';
-      what.className = 'hint-button message-what';
-      what.textContent = 'What?';
-      what.setAttribute('aria-label', 'What is a recruit?');
-      what.setAttribute('aria-haspopup', 'dialog');
-      what.addEventListener('click', () => openSpecialMove('recruit'));
-      line.append(' ', what);
-    }
+    if (entry.recruit && fresh && waitingRecruit(state)) line.append(' ', what('What is a recruit?', () => openSpecialMove('recruit')));
     // The bishop pair's "Holy duo!" line keeps its explainer until the next action.
-    if (pairHop && entry.action === latest && /^Holy duo!/.test(entry.text)) {
-      const what = document.createElement('button');
-      what.type = 'button';
-      what.className = 'hint-button message-what';
-      what.textContent = 'What?';
-      what.setAttribute('aria-label', 'What is the bishop pair?');
-      what.setAttribute('aria-haspopup', 'dialog');
-      what.addEventListener('click', () => openSpecialMove('bishop-pair'));
-      line.append(' ', what);
-    }
+    if (pairHop && fresh && /^Holy duo!/.test(entry.text)) line.append(' ', what('What is the bishop pair?', () => openSpecialMove('bishop-pair')));
+    if (cracked && fresh && /The ceiling starts to crack!/.test(entry.text)) line.append(' ', what('What does the cracking ceiling mean?', () => openSpecialMove('cave-in')));
     return line;
   }));
   // Before the first move the log opens with how to play a turn.
@@ -471,11 +449,6 @@ function updateGame() {
   $('modifier-status').textContent = modifierStatus(state);
   $('modifier-status').hidden = !$('modifier-status').textContent;
   $('modifier-status').setAttribute('aria-label', `${$('modifier-status').textContent}. Tap for what ${modifierOf(state).name} does`);
-  const caveLeft = state.caveIn?.moves;
-  $('cave-status').textContent = caveInStatus(state);
-  $('cave-status').hidden = !$('cave-status').textContent;
-  $('cave-status').classList.toggle('urgent', caveLeft === 1);
-  $('cave-status').setAttribute('aria-label', `${caveLeft ? `The ceiling caves in after ${caveLeft} more ${caveLeft === 1 ? 'move' : 'moves'}` : 'The ceiling has caved in'}. Tap for details`);
   // The combo counter shows from the second capture in a row; the third pays.
   const combo = state.combo ?? 0;
   $('combo-status').hidden = combo < 2;
@@ -500,7 +473,13 @@ function updateGame() {
   placeWaitButton();
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').disabled = holding;
-  $('descend-button').textContent = state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘';
+  // During the cave-in countdown the stairs button carries the count (src/cave-in.js).
+  const caving = caveInLabel(state), caveLeft = state.caveIn?.moves;
+  $('descend-button').textContent = caving || (state.floor === 2 ? 'Leave dungeon ↘' : 'Take stairs ↘');
+  $('descend-button').classList.toggle('caving', Boolean(caving));
+  $('descend-button').classList.toggle('urgent', Boolean(caving) && caveLeft === 1);
+  if (caving) $('descend-button').setAttribute('aria-label', `Take the stairs. The ceiling caves in after ${caveLeft} more ${caveLeft === 1 ? 'move' : 'moves'}.`);
+  else $('descend-button').removeAttribute('aria-label');
   placeDescendButton();
   $('treasure').textContent = ` · ${state.captures} captures`;
   $('news-button').hidden = false;
@@ -634,9 +613,22 @@ function placeDescendButton() {
   const anchor = renderer?.exitAnchor?.();
   if (!anchor || button.hidden) return;
   const height = button.offsetHeight;
-  const top = Math.min(Math.max(anchor.top - 6 - height, 64), anchor.bottom - height);
+  let top = Math.min(Math.max(anchor.top - 6 - height, 64), anchor.bottom - height);
+  // Centred over the stairs, but never past the screen's edges or onto the Wait
+  // button (the cave-in countdown label is long): it slides left, or on a very
+  // narrow screen drops below Wait.
+  const half = button.offsetWidth / 2, width = document.documentElement.clientWidth;
+  let left = Math.min(Math.max(anchor.x, half + 8), width - half - 8);
+  const wait = $('wait-button');
+  if (!wait.hidden && button.offsetParent) {
+    const box = wait.getBoundingClientRect(), origin = button.offsetParent.getBoundingClientRect();
+    const waitTop = box.top - origin.top, waitBottom = box.bottom - origin.top, waitLeft = box.left - origin.left;
+    const beside = () => top < waitBottom + 4 && top + height > waitTop - 4 && left + half > waitLeft - 6;
+    if (beside()) left = Math.max(half + 8, waitLeft - 6 - half);
+    if (beside()) top = waitBottom + 4;
+  }
   button.style.top = `${Math.round(top)}px`;
-  button.style.left = `${Math.round(anchor.x)}px`;
+  button.style.left = `${Math.round(left)}px`;
   button.style.bottom = 'auto';
 }
 function paintBoard(){
@@ -917,24 +909,22 @@ function showTacticCallout(events) {
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
 $('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('modifier-status').addEventListener('click', () => { if (state) notify(modifierOf(state).explain); });
-// The cave-in countdown chip sits beside the modifier chip; tapping explains it.
-$('modifier-status').after(Object.assign(document.createElement('button'), { id: 'cave-status', type: 'button', hidden: true }));
-$('cave-status').addEventListener('click', () => { if (state) notify(caveInExplain(state)); });
-// The room shakes (renderer.js), then a modal says what the cave-in cost.
-// Closing it, however it's closed, opens the shop: the rubble carried the
-// player down the stairs (src/cave-in.js cavedIn).
-const CAVE_IN_MODAL_MS = 900;
+// The rubble comes down (renderer.js), then the shop opens with what the
+// cave-in cost: the rubble carried the player down the stairs (src/cave-in.js
+// cavedIn). An explainer that opened on the same move goes first.
+const CAVE_IN_TO_SHOP_MS = 1400;
+let caveNews = null;
 function announceCaveIn(event) {
   const caved = state;
-  setTimeout(() => {
-    if (state !== caved || !cavedIn(state) || screen !== 'game') return;
-    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
-    $('cave-text').textContent = caveInText(event);
-    $('cave-dialog').showModal();
-    $('cave-continue').focus();
-  }, CAVE_IN_MODAL_MS);
+  caveNews = { game: gameKey(state), floor: state.floor, event };
+  setTimeout(() => shopAfterCaveIn(caved), CAVE_IN_TO_SHOP_MS);
 }
-$('cave-dialog').addEventListener('close', () => { if (cavedIn(state)) setTimeout(takeStairs); });
+function shopAfterCaveIn(caved) {
+  if (state !== caved || !cavedIn(state) || screen !== 'game' || $('shop-dialog').open) return;
+  const open = document.querySelector('dialog[open]');
+  if (open) open.addEventListener('close', () => setTimeout(() => shopAfterCaveIn(caved)), { once: true });
+  else takeStairs();
+}
 $('wait-button').addEventListener('click', () => (pendingOrder() ? giveOrder('hold') : takeAction({ type: 'wait' })));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
@@ -974,6 +964,8 @@ function takeAction(action) {
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
   const animationTime = fallenBoard ? FALL_TO_RESULT_MS : special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
+  const explainAt = special === 'cave-in' ? 1100 : animationTime;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   // Congratulate the player's own en passant or castle once the move has settled,
   // unless another action, a death, a result or the bot replay has taken over since.
@@ -981,7 +973,7 @@ function takeAction(action) {
     const played = state;
     setTimeout(() => {
       if (state === played && !replay && screen === 'game' && state.status === 'playing' && !state.events.some(event => event.type === 'restart')) openSpecialMove(special, 'player');
-    }, animationTime);
+    }, explainAt);
   }
   if (!shopping && !special) {
     const played = state;
@@ -1051,7 +1043,15 @@ window.addEventListener('keydown',event=>{
   else if(name==='Escape'){showMoves=false;pinning=false;cursor=null;updateGame();}
 });
 function renderShop() {
-  $('shop-gold').textContent = `${cavedIn(state) ? 'The ceiling caved in behind you. ' : ''}Floor ${state.floor + 1} cleared · ${state.gold} gold`;
+  // After a cave-in the shop opens with what it cost (src/cave-in.js caveInLoss).
+  const news = $('shop-news');
+  news.hidden = !cavedIn(state);
+  if (cavedIn(state)) {
+    const event = state.events.find((entry) => entry.type === 'cave-in') ?? (caveNews?.game === gameKey(state) && caveNews.floor === state.floor ? caveNews.event : null);
+    const loss = event ? caveInLoss(event) : '';
+    news.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'The ceiling caved in!' }), ...(loss ? [` ${loss}`] : []));
+  }
+  $('shop-gold').textContent = `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
   for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);

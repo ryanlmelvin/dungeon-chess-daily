@@ -1,7 +1,8 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 // Animated explainers for the tactic rewards (tactics.js): a knight fork and a
 // three-capture combo, drawn on a 5x5 board crop like the other guide art. The
-// off-balance punish (a missed lunge, rules.js) is drawn the same way.
+// off-balance punish (a missed lunge, rules.js) and the cave-in countdown
+// (cave-in.js) are drawn the same way.
 import { drawSprite, SPRITE_SIZE, spritePalette, COMPANION_PALETTE } from './sprites.js';
 
 const MINT = '#a5e2cc';
@@ -69,13 +70,14 @@ function label(ctx, text, x, y, color, alpha, size = 22) {
   ctx.fillText(text, x, y);
   ctx.restore();
 }
-function frame(canvas, draw) {
+function frame(canvas, draw, [dx, dy] = [0, 0]) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.scale(canvas.width / 200, canvas.height / 200);
+  ctx.translate(dx, dy);
   board(ctx);
   draw(ctx);
   ctx.restore();
@@ -328,6 +330,83 @@ export function drawBishopPairDemo(canvas, time, { playerPalette = {} } = {}) {
 /** A still for reduced motion and the guide: the recruit on the other colour, every square lit. */
 export const BISHOP_PAIR_STILL = 4200;
 
+// The open stairs: gold steps going down, lit at the top.
+function stairsTile(ctx, x, y) {
+  ctx.fillStyle = '#100f14';
+  ctx.fillRect(x * 40 + 2, y * 40 + 2, 36, 36);
+  ['#d9b45a', '#b0955f', '#8c7650', '#6b5a3e'].forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x * 40 + 6 + i * 3, y * 40 + 6 + i * 8, 28 - i * 6, 5);
+  });
+}
+function coin(ctx, x, y, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = GOLD;
+  ctx.strokeStyle = '#100f14';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(center(x), center(y), 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+// The ceiling's shakes: [start ms, length ms, strength in px], one as it
+// cracks and one after each move, harder as the count runs down.
+const SHAKES = [[200, 350, 2], [1300, 350, 3], [2400, 450, 5]];
+
+/**
+ * One frame of the cave-in explainer, looping every 6 s: the ceiling cracks
+ * and the board shakes; your rook grabs two coins (gold at risk) while the
+ * count drops from 3 to 1 and every shake is harder, then it reaches the
+ * stairs and banks the gold.
+ */
+export function drawCaveInDemo(canvas, time, { playerPalette = {} } = {}) {
+  const t = ((time % 6000) + 6000) % 6000;
+  const shake = SHAKES.find(([from, length]) => t >= from && t < from + length);
+  const strength = shake ? shake[2] * (1 - (t - shake[0]) / shake[1]) : 0;
+  const offset = [Math.round(Math.sin(t / 13) * strength), Math.round(Math.cos(t / 17) * strength / 2)];
+  frame(canvas, (ctx) => {
+    // Rook (0,4) -> (0,2) -> (2,2) -> the stairs on (2,0), a coin on each stop.
+    const legs = [[900, 1300], [2000, 2400], [3300, 3700]];
+    const stops = [[0, 4], [0, 2], [2, 2], [2, 0]];
+    const reset = beat(t, 5700, 6000);
+    const fade = 1 - reset;
+    ctx.globalAlpha = fade;
+    stairsTile(ctx, 2, 0);
+    coin(ctx, 0, 2, fade * (t < 1300 ? 1 : 0));
+    coin(ctx, 2, 2, fade * (t < 2400 ? 1 : 0));
+    let at = [center(0), center(4)];
+    legs.forEach(([from, to], index) => {
+      const p = beat(t, from, to);
+      const [ax, ay] = stops[index], [bx, by] = stops[index + 1];
+      if (p > 0) at = [lerp(center(ax), center(bx), p), lerp(center(ay), center(by), p)];
+    });
+    // The rook goes down the stairs.
+    ctx.globalAlpha = fade * (1 - beat(t, 3700, 3950));
+    sprite(ctx, 'piece-rook', at[0], at[1], playerPalette);
+    ctx.globalAlpha = fade;
+    burst(ctx, center(2), center(0), beat(t, 3700, 4200), GOLD);
+    // Dust shaken loose from the ceiling.
+    if (shake) {
+      const p = (t - shake[0]) / shake[1];
+      ctx.save();
+      ctx.globalAlpha = fade * (1 - p);
+      ctx.fillStyle = '#b3a58f';
+      for (let i = 0; i < shake[2] * 3; i++) ctx.fillRect((i * 53 + shake[0]) % 196, p * (120 + (i % 4) * 25) - 6, 3, 3);
+      ctx.restore();
+    }
+    label(ctx, '+1 AT RISK', center(0) + 34, center(2) - 26, FLAME, beat(t, 1300, 1450) * (1 - beat(t, 1900, 2100)), 20);
+    label(ctx, '+1 AT RISK', center(2) + 30, center(2) - 26, FLAME, beat(t, 2400, 2550) * (1 - beat(t, 3000, 3200)), 20);
+    const count = t < 1300 ? 3 : t < 2400 ? 2 : 1;
+    const counting = beat(t, 200, 400) * (1 - beat(t, 3700, 3800));
+    const pulse = count === 1 ? 0.7 + 0.3 * Math.sin(t / 90) : 1;
+    label(ctx, count === 1 ? 'TAKE THE STAIRS!' : `CAVING IN ${count}`, 100, 182, FLAME, counting * pulse, count === 1 ? 26 : 24);
+    label(ctx, 'GOLD BANKED!', 100, 182, GOLD, beat(t, 3800, 4000) * fade, 28);
+    ctx.globalAlpha = 1;
+  }, offset);
+}
+/** A still for reduced motion and the guide: two coins grabbed, one move left. */
+export const CAVE_IN_STILL = 3000;
+
 /** The bishop pair's explainer, from its line's What? button, in the same dialog as the tactics. */
 export const BISHOP_PAIR_COPY = Object.freeze({
   title: 'Holy duo!',
@@ -364,5 +443,12 @@ export const TACTIC_COPY = Object.freeze({
     text: 'You stepped off a monster’s red path, so its lunge missed. Now it’s off-balance until your next move ends: stars circle its head, and it can’t capture you at all, even up close. Bait a lunge, sidestep, then strike!',
     art: 'Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it.',
     draw: drawOffBalanceDemo, still: OFF_BALANCE_STILL,
+  },
+  // The first cracked ceiling on this device, and the "What?" button on its message.
+  'cave-in': {
+    title: 'The ceiling is cracking!',
+    text: 'Opening the door cracks the ceiling, and the stairs button counts the moves until it caves in. Waits count too. Gold you grab from now on is at risk: take the stairs in time to keep it. If the ceiling caves in first, you drop that gold and the rubble carries you down to the shop.',
+    art: 'Animated board: the ceiling cracks and the board shakes. A rook grabs two coins while the count drops from 3 to 1 and the shaking grows, then it reaches the stairs and banks the gold.',
+    draw: drawCaveInDemo, still: CAVE_IN_STILL,
   },
 });

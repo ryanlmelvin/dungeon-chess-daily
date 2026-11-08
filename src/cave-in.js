@@ -14,6 +14,12 @@
 // Certified routes take the stairs right after each clear (src/fairness.js),
 // so no certified route ever meets a cave-in.
 //
+// The room shows the countdown (renderer.js, main.js): the crack ('cave-crack'
+// event) and every move after it ('cave-tremor') shake the board and shake
+// dust loose, harder as the count runs down, and the stairs button reads
+// "Take the stairs! Caving in 3" (caveInLabel). The cave-in itself ('cave-in')
+// brings the rubble down, then the shop opens with what it cost (caveInLoss).
+//
 // state.caveIn, absent until the door opens and on every new floor:
 //   moves   moves left before the ceiling caves in, 0 once it has
 //   risk    gold won since the door opened, 0 once it caves in. The shop is
@@ -29,7 +35,7 @@
 export const CAVE_IN_MOVES = Object.freeze({ gentle: 7, fair: 6, tricky: 5, tough: 4, fiendish: 4 });
 /** Editions from before tiers (difficulty 'standard') or any other value. */
 export const CAVE_IN_DEFAULT_MOVES = 5;
-export const CAVE_IN_EVENTS = Object.freeze(['cave-in']);
+export const CAVE_IN_EVENTS = Object.freeze(['cave-in', 'cave-crack', 'cave-tremor']);
 
 /** The day's countdown: how many moves after the door opens the ceiling caves in. */
 export function caveInMoves(state) {
@@ -61,6 +67,7 @@ export function caveInTick(state, before) {
     // Whatever the door-opening move won was won clearing the room: it's safe.
     const moves = caveInMoves(state);
     state.caveIn = { moves, risk: 0, buried: 0 };
+    state.events.push({ type: 'cave-crack', x: state.player.x, y: state.player.y, moves });
     say(state, `The ceiling starts to crack! It caves in after ${moves} more moves, and gold you grab now is at risk until you take the stairs.`);
     return;
   }
@@ -68,6 +75,7 @@ export function caveInTick(state, before) {
   if (!cave.moves) return;
   cave.risk += won;
   if (--cave.moves) {
+    state.events.push({ type: 'cave-tremor', x: state.player.x, y: state.player.y, left: cave.moves, total: caveInMoves(state) });
     const risk = goldAtRisk(state);
     if (cave.moves === 1) say(state, `The ceiling is about to cave in!${risk ? ` Take the stairs now to keep your ${risk} gold.` : ''}`);
     return;
@@ -80,13 +88,13 @@ export function caveInTick(state, before) {
   cave.buried = coins;
   state.items = state.items.filter((item) => !buriable(item));
   state.events.push({ type: 'cave-in', x: state.player.x, y: state.player.y, gold: lost, coins, ...(power && { power }) });
-  say(state, `The ceiling caved in! ${caveInText({ gold: lost, coins, power })}`);
+  say(state, ['The ceiling caved in!', caveInLoss({ gold: lost, coins, power }), 'It carries you down the stairs to the shop.'].filter(Boolean).join(' '));
 }
 
-/** What a cave-in cost, from its event: "You dropped 4 gold. The rubble buries … It carries you down the stairs to the shop." */
-export function caveInText({ gold, coins, power }) {
+/** What a cave-in cost, from its event: "You dropped 4 gold. The rubble buries the coins left.", or '' for nothing. */
+export function caveInLoss({ gold, coins, power }) {
   const buried = [coins && (coins === 1 ? 'the last coin' : 'the coins left'), power && `the ${POWER_NAMES[power] ?? 'pickup'}`].filter(Boolean);
-  return [gold && `You dropped ${gold} gold.`, buried.length && `The rubble buries ${buried.join(' and ')}.`, 'It carries you down the stairs to the shop.'].filter(Boolean).join(' ');
+  return [gold && `You dropped ${gold} gold.`, buried.length && `The rubble buries ${buried.join(' and ')}.`].filter(Boolean).join(' ');
 }
 
 /** True while the ceiling is counting down: the room can still pay, and Wait stays on offer. */
@@ -109,16 +117,9 @@ export function goldAtRisk(state) {
   return Math.max(0, Math.min(state?.caveIn?.risk ?? 0, state?.gold ?? 0));
 }
 
-/** Short in-game label, e.g. "🪨 Caving in 3", or '' while the ceiling holds. */
-export function caveInStatus(state) {
-  const cave = state?.status === 'playing' ? state.caveIn : null;
-  if (!cave) return '';
-  return cave.moves ? `🪨 Caving in ${cave.moves}` : '🪨 Caved in';
-}
-
-/** What tapping the chip says, with the day's own count. */
-export function caveInExplain(state) {
-  return `Cave-in: on floors 1 and 2 the open door cracks the ceiling. Today it caves in ${caveInMoves(state)} moves after the door opens (fewer on harder days). Gold you grab before then is at risk until you take the stairs. If it caves in first, you drop that gold, the coins and pickup left are buried, and the rubble carries you down the stairs to the shop.`;
+/** The stairs button during the countdown, e.g. "Take the stairs! Caving in 3", or '' otherwise. */
+export function caveInLabel(state) {
+  return caveInRunning(state) ? `Take the stairs! Caving in ${state.caveIn.moves}` : '';
 }
 
 /**

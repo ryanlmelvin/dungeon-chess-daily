@@ -9,7 +9,7 @@ import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { playFloor } from '../src/human-bot.js';
 import { tacticGold } from '../src/tactics.js';
 import { modifierStatus } from '../src/modifiers.js';
-import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInRunning, caveInStatus, cavedIn, goldAtRisk } from '../src/cave-in.js';
+import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInRunning, caveInLabel, caveInLoss, cavedIn, goldAtRisk } from '../src/cave-in.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -90,12 +90,16 @@ test('the open door starts a countdown set by the day’s tier, and every move o
     assert.equal(caveInRunning(state), true);
     assert.equal(caveInMoves(state), total, difficulty);
     assert.deepEqual(state.caveIn, { moves: total, risk: 0, buried: 0 });
-    assert.equal(caveInStatus(state), `🪨 Caving in ${total}`);
+    // The stairs button carries the count, and the crack shakes the room.
+    assert.equal(caveInLabel(state), `Take the stairs! Caving in ${total}`);
+    assert.deepEqual(state.events.filter((event) => event.type.startsWith('cave-')), [{ type: 'cave-crack', x: 3, y: 4, moves: total }]);
     assert.match(state.message, new RegExp(`It caves in after ${total} more moves, and gold you grab now is at risk until you take the stairs\\.$`));
     for (let left = total - 1; left >= 1; left--) {
       state = act(state, shuffle(state, left));
       assert.equal(state.caveIn.moves, left);
-      assert.equal(caveInStatus(state), `🪨 Caving in ${left}`);
+      assert.equal(caveInLabel(state), `Take the stairs! Caving in ${left}`);
+      // Every move or wait after the crack shakes the room again, harder as the count runs down.
+      assert.deepEqual(state.events.filter((event) => event.type.startsWith('cave-')), [{ type: 'cave-tremor', x: state.player.x, y: state.player.y, left, total }]);
     }
     assert.equal(state.message, 'The ceiling is about to cave in!');
     // Frozen monsters don't hold the ceiling up.
@@ -103,7 +107,8 @@ test('the open door starts a countdown set by the day’s tier, and every move o
     assert.equal(caveInRunning(state), true); assert.equal(cavedIn(state), false);
     state = act(state, wait);
     assert.equal(state.caveIn.moves, 0);
-    assert.equal(caveInStatus(state), '🪨 Caved in');
+    assert.equal(caveInLabel(state), '', 'the stairs button drops the count once it caves in');
+    assert.ok(!state.events.some((event) => event.type === 'cave-tremor'));
     assert.equal(caveInRunning(state), false, 'Wait goes away again once it caves in');
     assert.deepEqual(caveEvent(state), { type: 'cave-in', x: state.player.x, y: state.player.y, gold: 0, coins: 0 });
     assert.equal(state.message, 'The ceiling caved in! It carries you down the stairs to the shop.');
@@ -185,7 +190,8 @@ test('after a cave-in the shop still sells with the banked gold, and Pin and Bor
 test('floor 2 caves in too, but the last floor never does', () => {
   assert.ok(act(room({ floor: 1, enemies: [foe('k', 'king', 3, 4)] }), move(3, 4)).caveIn);
   let last = act(room({ floor: 2, enemies: [foe('k', 'king', 3, 4)], items: [coin(5, 5)] }), move(3, 4));
-  assert.equal(last.exit.open, true); assert.equal(last.caveIn, undefined); assert.equal(caveInStatus(last), '');
+  assert.equal(last.exit.open, true); assert.equal(last.caveIn, undefined); assert.equal(caveInLabel(last), '');
+  assert.ok(!last.events.some((event) => event.type === 'cave-crack'), 'nothing cracks on the last floor');
   assert.equal(caveInRunning(last), false, 'no countdown, so Wait stays hidden once the door opens');
   for (let n = 0; n < 9; n++) last = act(last, shuffle(last, n));
   assert.equal(last.gold, 1); assert.equal(last.caveIn, undefined); assert.equal(last.dropped, undefined);
@@ -257,7 +263,7 @@ test('black, Pin and Collapse days: one tick per completed move, none for free a
   let state = act(collapse, move(3, 4));
   for (let n = 0; n < 4; n++) state = act(state, shuffle(state, n));
   assert.equal(state.reinforcements, 0); assert.ok(!state.enemies.length);
-  assert.equal(modifierStatus(state), '🧱 Collapse'); assert.equal(caveInStatus(state), '🪨 Caving in 1');
+  assert.equal(modifierStatus(state), '🧱 Collapse'); assert.equal(caveInLabel(state), 'Take the stairs! Caving in 1');
 });
 
 test('the shop at the stairs spends banked gold first', () => {
@@ -384,4 +390,11 @@ test('certified routes take the stairs right after each clear, so they never mee
     checked++;
   }
   assert.equal(checked, 2, 'two searched routes checked');
+});
+
+test('the shop’s cave-in news says what was lost, and nothing when nothing was', () => {
+  assert.equal(caveInLoss({ gold: 4, coins: 3, power: 'shield' }), 'You dropped 4 gold. The rubble buries the coins left and the bone ward.');
+  assert.equal(caveInLoss({ gold: 0, coins: 1 }), 'The rubble buries the last coin.');
+  assert.equal(caveInLoss({ gold: 2, coins: 0 }), 'You dropped 2 gold.');
+  assert.equal(caveInLoss({ gold: 0, coins: 0 }), '');
 });
