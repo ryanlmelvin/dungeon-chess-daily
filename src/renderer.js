@@ -606,7 +606,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     // Manual recruit control, waiting for the recruit's order: green dots on its
     // squares (a ring around a monster it can capture), never your piece's filled
-    // blue squares. Hold (or Space) keeps it still, not a tap on the recruit.
+    // blue squares, and green corners on the recruit itself, which holds it
+    // (except on the bishop pair's hop, which can't hold: recruitHold false).
     if (next.recruitMoves && next.companion) {
       recruitMaterial = basic(MINT, { transparent: true, opacity: 0.85, depthWrite: false });
       for (const tile of next.recruitMoves) {
@@ -616,6 +617,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         mark.position.set(tile.x, 0.055, tile.y);
         hints.add(mark);
       }
+      if (next.recruitHold !== false) cornerMarks(next.companion.x, next.companion.y, MINT, 0.42, 0.18);
     }
     if (next.cursor) cornerMarks(next.cursor.x, next.cursor.y, 0xcabfd7, 0.46, 0.2);
     // A pending fork (tactics.js): gold rings under every forked monster.
