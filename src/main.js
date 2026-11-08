@@ -635,7 +635,7 @@ function paintBoard(){
   if(!state||replay)return;
   // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
   const pending=pendingOrder();
-  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false,...hintMarks(pending.board)});return;}
+  if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,cursor,pinning:false,...hintMarks(pending.board)});return;}
   renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
 }
 // Paid hints stay on the board for the rest of the floor: rings around the
@@ -973,9 +973,10 @@ function takeAction(action) {
   return true;
 }
 // The recruit's order under Manual control. Your move is already on the board;
-// a square marked green moves the recruit there, and the recruit itself (or
-// Hold, or Space) keeps it still. The move can't be taken back here: it was played.
-const ORDER_TIP = 'Now move your recruit: tap a square marked green, or tap the recruit (or Hold) to keep it still.';
+// a square marked green moves the recruit there, and Hold (or Space) keeps it
+// still. Tapping the recruit itself only repeats the tip: players tap a piece to
+// see its moves, never to keep it still. The move can't be taken back here: it was played.
+const ORDER_TIP = 'Now move your recruit: tap a square marked green, or tap Hold to keep it still.';
 // The bishop pair (rules.js pairHop): the new bishop must hop to the other colour, so it can't hold.
 const HOP_TIP = 'Your bishop recruit hops onto the other colour: tap a square marked green.';
 function beginOrder(action, choice) {
@@ -1001,7 +1002,6 @@ function orderAt({ x, y }) {
   const pending = pendingOrder();
   const recruit = pending?.board.companion;
   if (!recruit) return false;
-  if (x === recruit.x && y === recruit.y) return giveOrder('hold');
   if (pending.moves.some((tile) => tile.x === x && tile.y === y)) return giveOrder({ x, y });
   notify(pending.hop ? HOP_TIP : ORDER_TIP);
   return false;
