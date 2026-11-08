@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import { validateSave } from './game.js';
 
-const SAVE_KEY = /^daily:(?:(v[3-6]):)?(\d{4}-\d{2}-\d{2})$/;
+const SAVE_KEY = /^daily:(?:(v[3-7]):)?(\d{4}-\d{2}-\d{2})$/;
 const STATUS_RANK = { lost: 0, playing: 1, won: 2 };
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isSound = (value) => value === 'on' || value === 'off';

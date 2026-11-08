@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {act,createGame,getDaily,legalMoves,validateSave,COMPANIONS} from '../src/game.js';
-import {COMPANIONS as RULE_COMPANIONS,createGame as createCandidate,validateSave as validateCandidate} from '../src/rules.js';
+import {COMPANIONS as RULE_COMPANIONS,createGame as createCandidate,validateSave as validateCandidate,RULES_VERSION} from '../src/rules.js';
 import {getRawDaily} from '../src/edition.js';
 import {findFloorRoute} from '../src/fairness.js';
 
@@ -138,7 +138,7 @@ test('older reservations and power purchases both count toward the gold balance'
 
 test('older saves without a reservation ledger remain valid and normalize on their next action',()=>{
   const old=bank();delete old.companionOrders;
-  assert.equal(old.schema,6);assert.equal(validateSave(old,old.date),true);
+  assert.equal(old.schema,RULES_VERSION);assert.equal(validateSave(old,old.date),true);
   assert.equal(buy(old,'pawn'),old);
   const powered=act(old,{type:'buy',id:'shield'});assert.deepEqual(powered.companionOrders,[]);
   assert.equal(validateSave(powered,powered.date),true);assert.equal(old.companionOrders,undefined);

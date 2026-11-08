@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { act, createGame, createPracticeGame, getDaily, legalMoves, validateSave } from '../src/game.js';
 import { getRawDaily } from '../src/edition.js';
-import { closeAttacker, createGame as createCandidate, validateSave as validateCandidate } from '../src/rules.js';
+import { closeAttacker, createGame as createCandidate, validateSave as validateCandidate, RULES_VERSION } from '../src/rules.js';
 
 const move = (x,y) => ({type:'move',x,y});
 // The first legal move that no monster captures at close range.
@@ -181,13 +181,13 @@ test('older progress stays archived instead of being relabeled as a certified ed
   assert.equal(validateSave(legacy,legacy.date),false);
   assert.deepEqual(legacy,original,'validation must preserve the archived stored record');
   const current=createGame(getDaily(legacy.date));
-  assert.equal(current.schema,6);
-  assert.equal(current.rulesVersion,6);
+  assert.equal(current.schema,RULES_VERSION);
+  assert.equal(current.rulesVersion,RULES_VERSION);
   assert.equal(current.legacyTurnOrder,false);
-  for(const schema of [2,3,4,5]) {
+  for(let schema=2;schema<RULES_VERSION;schema++) {
     assert.equal(validateSave({...current,schema},current.date),false);
   }
-  const previousRules={...current,rulesVersion:5};
+  const previousRules={...current,rulesVersion:RULES_VERSION-1};
   assert.equal(validateSave(previousRules,current.date),false);
 });
 
