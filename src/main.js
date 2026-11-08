@@ -22,7 +22,7 @@ import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRan
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
-import { caveInStatus, caveInExplain, caveInRunning, goldAtRisk } from './cave-in.js';
+import { caveInStatus, caveInExplain, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
 import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
@@ -644,8 +644,9 @@ function hintMarks(game) {
 // Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
 function renderTools() {
-  const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state);
-  const leap = state.status === 'playing' && state.powers.leap > 0;
+  // A caved-in room takes no more moves or pins: only Take back is left there.
+  const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state) && !cavedIn(state);
+  const leap = state.status === 'playing' && state.powers.leap > 0 && !cavedIn(state);
   const back = Boolean(takebackTarget(state));
   if (!pin) pinning = false;
   $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !back;
@@ -903,7 +904,9 @@ $('modifier-status').addEventListener('click', () => { if (state) notify(modifie
 $('modifier-status').after(Object.assign(document.createElement('button'), { id: 'cave-status', type: 'button', hidden: true }));
 $('cave-status').addEventListener('click', () => { if (state) notify(caveInExplain(state)); });
 // "The ceiling caved in! You dropped 3 gold." pops up as the room shakes (renderer.js);
-// the message log says what the rubble buried.
+// the message log says what the rubble buried. Then the shop opens: the rubble
+// carried the player down the stairs (src/cave-in.js cavedIn).
+const CAVE_IN_TO_SHOP_MS = 1400;
 function announceCaveIn(event) {
   notify(`The ceiling caved in!${event.gold ? ` You dropped ${event.gold} gold.` : ''}`);
   const notice = $('notice');
@@ -937,7 +940,12 @@ function takeAction(action) {
   const par = cleared && next.status === 'playing' ? runPars(next, daily)?.[cleared.floor] : null;
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(boardEvents());
   const caveIn = state.events.find(event => event.type === 'cave-in');
-  if (caveIn) announceCaveIn(caveIn);
+  if (caveIn) {
+    announceCaveIn(caveIn);
+    // The rubble carries you down the stairs to the shop, as if you'd taken them.
+    const caved = state;
+    setTimeout(() => { if (state === caved && cavedIn(state)) takeStairs(); }, CAVE_IN_TO_SHOP_MS);
+  }
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
@@ -1019,7 +1027,7 @@ window.addEventListener('keydown',event=>{
   else if(name==='Escape'){showMoves=false;pinning=false;cursor=null;updateGame();}
 });
 function renderShop() {
-  $('shop-gold').textContent = `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
+  $('shop-gold').textContent = `${cavedIn(state) ? 'The ceiling caved in behind you. ' : ''}Floor ${state.floor + 1} cleared · ${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
   for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);

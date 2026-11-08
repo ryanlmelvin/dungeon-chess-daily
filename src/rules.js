@@ -6,7 +6,7 @@ import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
-import { caveInTick, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
+import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
 export const RULES_VERSION = 6;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -108,7 +108,8 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
 
 /**
  * The player's legal chess destinations. A pawn captures only diagonally. A king may not step into close range.
- * On ice days a move that will skid carries its resting square as `slide`.
+ * On ice days a move that will skid carries its resting square as `slide`. None
+ * once the room has caved in: the rubble carried the player to the stairs (src/cave-in.js).
  */
 export function legalMoves(state) {
   const moves = chessMoves(state);
@@ -116,7 +117,7 @@ export function legalMoves(state) {
   return moves.map((move) => { const slide = iceSlide(state, move); return slide ? { ...move, slide } : move; });
 }
 function chessMoves(state) {
-  if (!state || state.status !== 'playing') return [];
+  if (!state || state.status !== 'playing' || cavedIn(state)) return [];
   const moves = movesFor(state, state.player);
   // A held Borrowed move adds the borrowed piece's squares as optional moves;
   // `borrowed` names that piece so the board can ghost it there.
@@ -1427,6 +1428,8 @@ function play(previous, action) {
     state.message = 'You took back your last move.';
     return state;
   }
+  // A caved-in room is over: what's left is the shop, the stairs down and a Take-back.
+  if (cavedIn(previous) && (action.type === 'wait' || action.type === 'pin')) return previous;
   if (action.type === 'pin') {
     const foe = previous.enemies.find((entry) => entry.id === action.id);
     if (!(previous.powers.pin > 0) || !pinUsable(previous) || !foe || pinned(foe)) return previous;
