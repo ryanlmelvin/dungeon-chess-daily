@@ -635,6 +635,20 @@ plain pawn layouts sit; Fiendish ends where the hardest layouts reach, and
 the choice among four candidates lifts a pawn's 13 into it. As before, a band
 is about two thirds of one setting's day-to-day spread.
 
+**The fit.** Brute force on 2026-11-08 (every setting of the full grid under
+every tier's monsters, ten dates per piece, four candidates each: 146,400
+searches in 64 minutes on seven workers, with the 3.3× search speedup) put
+every (tier, piece) mean inside its band but Tricky pawn (7.2), and no
+calibration day fell back:
+
+| Tier | Band | Piece means | Days in band |
+| --- | --- | --- | --- |
+| Gentle | 2.5–5 | 3.5–3.8 | 80–100% |
+| Fair | 5–7.5 | 5.7–6.5 | 40–90% |
+| Tricky | 7.5–10 | 7.2–9.4 | 40–80% |
+| Tough | 10–12.5 | 10.6–11.7 | 70–80% |
+| Fiendish | 12.5–15 | 12.9–14.7 | 60–80% |
+
 **The score** (for reference). Every certified edition also gets one number
 from its certificate's verifier metrics and its piece (`difficultyScore`). It
 says how dangerous the certified route was; it no longer picks candidates, but
@@ -699,7 +713,8 @@ behind it with the mean score beside them) and
 `unknown` when the budget ran out, or `invalid` when replay rejected the route),
 solver expansions, route moves, wall time (search and bot), the metrics and
 the bot's runs per floor (`human`: each run's moves, `null` where it failed),
-plus min/median/p90/max summaries per piece and knob setting. `--reuse`
+plus min/median/p90/max summaries per piece and knob setting (git-ignored: a
+full run's file is about 46 MB, so it stays on the machine that measured it). `--reuse`
 refits from that file without searching again (after editing the measure, its
 cap and weights, or the bands), `--merge` measures only what the file lacks,
 `--pieces`, `--obstacles` and `--grid quick` narrow the grid, and `--dry-run`
@@ -845,14 +860,17 @@ Monster AI, room modifiers, rules, search and human-like bot changes all shift
 difficulty. After any of them:
 
 ```sh
-npm run calibrate:shortlist          # or calibrate:difficulty for full brute force
-npm run calibrate:confirm            # rewrite src/calibration.js
+npm run calibrate:difficulty         # brute force: about an hour on seven workers
 node scripts/build-fallbacks.mjs     # rebuild the bank for the new knobs
 npm run verify:fallbacks
 npm run build:editions -- --full     # re-certify every stored day under the new knobs
 npm test
 ```
 
+The shortlist and confirm pair (`npm run calibrate:shortlist`, then
+`npm run calibrate:confirm`) is quicker, but under the stage 2 rules its
+one-date screen is too noisy to trust ([Shortlist, then
+confirm](#shortlist-then-confirm-the-quick-way)).
 `verify:fallbacks` fails if a fallback was built for knobs the table no longer
 holds. The script warns when a (tier, piece) mean gap misses its band; then
 widen the grid, add a knob, or move the bands. Afterwards

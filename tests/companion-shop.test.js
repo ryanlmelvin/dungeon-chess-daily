@@ -7,12 +7,21 @@ import {getRawDaily} from '../src/edition.js';
 import {findFloorRoute} from '../src/fairness.js';
 
 const move=(x,y)=>({type:'move',x,y});
-const daily=getDaily('2026-11-05');
-let earned=createGame(daily);
-for(const action of daily.generation.certificate.actions) {
-  if(action.type==='descend')break;
-  earned=act(earned,action);
+// Floor 1 of a stored edition, played by its certificate up to the stairs.
+function clearedFirstFloor(daily) {
+  let state=createGame(daily);
+  for(const action of daily.generation.certificate.actions) {
+    if(action.type==='descend')break;
+    state=act(state,action);
+  }
+  return state;
 }
+// The first day from 2026-11-05 whose first floor earns enough under the legacy
+// ledger (every capture banked) to afford every companion: regenerating the
+// editions changes which days do.
+const daily=Array.from({length:30},(_,day)=>getDaily(new Date(Date.UTC(2026,10,5+day))))
+  .find((candidate)=>{const state=clearedFirstFloor(candidate);return state.treasure+state.captures>=8;});
+let earned=clearedFirstFloor(daily);
 assert.equal(earned.exit.open,true);
 // Legacy-order tests need every companion affordable. Saves from before optional-only capture
 // gold banked every capture, and that legacy ledger stays valid.
