@@ -38,11 +38,15 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
  * Bounded search plus independent replay. `status` is 'solved' (with actions,
  * metrics and score), 'unknown' (the budget ran out) or 'invalid' (a route the
  * replay rejected); `explored` counts the search's simulated transitions.
+ * `recruit` and `everyRecruit` pick the recruit mode (src/fairness.js
+ * RECRUIT_MODES): generation always certifies on Auto; tooling may measure a
+ * steered recruit.
  */
-export function searchCandidate(candidate, budget = SEARCH_BUDGET) {
-  const result = findWinningRoute(createGame(candidate), { maxExpansions: budget });
+export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = 'auto', everyRecruit } = {}) {
+  const options = { recruit, everyRecruit };
+  const result = findWinningRoute(createGame(candidate), { maxExpansions: budget, ...options });
   if (result.status !== 'solved') return { status: 'unknown', explored: result.explored };
-  const proof = verifyWinningRoute(createGame(candidate), result.actions);
+  const proof = verifyWinningRoute(createGame(candidate), result.actions, options);
   if (!proof.valid) return { status: 'invalid', explored: result.explored };
   return { status: 'solved', explored: result.explored, actions: result.actions, metrics: proof.metrics, score: difficultyScore(proof.metrics, candidate.playerPiece) };
 }
