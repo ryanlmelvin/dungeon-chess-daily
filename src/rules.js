@@ -731,7 +731,10 @@ function enemyTurn(state, hit = false) {
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
       if (capture) { announceMisses(state, missed); return; }
-      const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
+      // The square a pawn just stepped up from is behind it, off its way forward,
+      // so a lunge may land there though it's on the pawn's file.
+      const behindPawn = (move) => state.player.piece === 'pawn' && move.x === state.player.x && move.y > state.player.y;
+      const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && (preservesPawnLane(state, move) || behindPawn(move)));
       if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
       else if (destination) relocate(state, foe, destination);
       // The lunge missed: it spent its turn and is off-balance until the player's next move ends.

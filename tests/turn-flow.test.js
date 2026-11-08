@@ -181,6 +181,17 @@ test('an off-balance monster pawn can’t capture en passant', () => {
   assert.equal(count(next, 'close-capture'), 0);
 });
 
+test('a lunge at a pawn that steps forward lands on the square behind it', () => {
+  const state = scenario({ piece: 'pawn', at: [4, 5] });
+  state.player.moved = true;
+  state.enemies = [monster('knight', 'knight', 2, 4, [{ x: 4, y: 5 }])];
+  const next = act(state, move(4, 4));
+  const knight = foe(next, 'knight');
+  assert.deepEqual([knight.x, knight.y], [4, 5], 'it lands on the square the pawn left');
+  assert.equal(knight.offBalance, true);
+  assert.equal(next.player.hp, 3);
+});
+
 test('a royal king that misses and won’t land in danger stays put, off-balance', () => {
   const state = scenario({ at: [4, 6], floor: 2 });
   state.enemies = [monster('king', 'king', 3, 5, [{ x: 4, y: 6 }])];
