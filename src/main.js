@@ -257,6 +257,8 @@ function ensureRenderer() {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pendingOrder()) { orderAt({ x, y }); return; }
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
+      // A caved-in room takes no moves: the rubble carried you to the stairs, so any tap reopens the shop.
+      if(cavedIn(state)){takeStairs();return;}
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
       if(x===state.player.x&&y===state.player.y){showMoves=!showMoves;cursor=null;paintBoard();return;}
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
@@ -683,6 +685,8 @@ function enterGame() {
   if (!state) { state = createGame(daily); save(); }
   updateGame();
   openFirstVisitGuide();
+  // Back in a caved-in room (a reload, or the app reopened): the rubble already carried you to the shop.
+  if (cavedIn(state)) takeStairs();
 }
 // A brand-new player lands on the board with the Quick start open, once. Play
 // (or closing it) leaves them on the board, ready for their first move.
