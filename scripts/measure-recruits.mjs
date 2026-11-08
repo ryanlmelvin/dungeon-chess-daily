@@ -27,7 +27,7 @@
 // on that floor alone (--floor-budget transitions) on Auto (the recruit may
 // join on every floor) and steered, and the human-like bot (src/human-bot.js,
 // HUMAN_RUNS seeded runs, the same seeds for every swap) on Auto and with the
-// steering policy of scripts/recruit-policy.mjs. It reports, per player piece
+// steering policy of src/recruit-policy.js. It reports, per player piece
 // and recruit piece, how much the recruit helps against none; the bot's floor
 // success by tier and piece with the drawn recruit; and for a pawn recruit
 // whether walls block its file (it can never promote by walking) and whether
@@ -54,7 +54,7 @@ import { createGame, act, scoredMoves, recruitChoice, legalMoves } from '../src/
 import { hash } from '../src/random.js';
 import { findFloorRoute, verifyWinningRoute } from '../src/fairness.js';
 import { playFloor, runSeed, autoRecruit, HUMAN_RUNS } from '../src/human-bot.js';
-import { steerRecruit } from './recruit-policy.mjs';
+import { steerRecruit } from '../src/recruit-policy.js';
 
 // Budget of the per-floor search that looks for a steered clear in under three moves.
 const QUICK_BUDGET = 3000;
@@ -516,7 +516,7 @@ if (!isMainThread) {
     console.log(`\n## Recruit matching (${floorSamples} dates per tier and piece, first candidate; floor search ${floorBudget} transitions; bot ${HUMAN_RUNS} runs, a failed run counts ${HUMAN_MOVE_CAP} moves)\n`);
     console.log('Floors 1 and 2 (any recruit today):\n');
     console.log(table(matchHeader, matchRows(complete.filter((spot) => spot.floor < 2), () => PIECES)));
-    console.log('\nKing floor (rook, queen or king today; the rest are what-ifs):\n');
+    console.log('\nKing floor (always a king today; the rest are what-ifs):\n');
     console.log(table(matchHeader, matchRows(complete.filter((spot) => spot.floor === 2), () => PIECES)));
 
     // The bot's floor success with the recruit as drawn: no recruit, Auto, steered.

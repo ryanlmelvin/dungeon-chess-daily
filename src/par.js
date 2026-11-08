@@ -1,9 +1,10 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 // Par. Each floor's par is how many moves the human-like bot (src/human-bot.js)
-// usually needs there: the median of its seeded runs from the floor's
-// standard start, or the certified route's moves plus 25% when every run
-// failed. The build stores it with each edition (src/editions.js); a date past
+// usually needs there, steering its recruit as on Manual recruit control: the
+// median of its seeded runs from the floor's standard start, or the certified
+// route's moves plus 25% when every run failed. The build stores it with each
+// edition (src/editions.js); a date past
 // that window works it out once on the device and remembers it. Only the
 // number is ever shown, never a route. Pars are for the official piece and
 // color, so a practice run with any other piece or color has no par.

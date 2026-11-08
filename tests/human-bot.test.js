@@ -115,12 +115,16 @@ test('the human gap counts extra moves over the route, a failed run as the whole
 });
 
 test('the bot\'s whole run replays each floor from its standard start and validates', () => {
-  // The first edition whose stored runs clear every floor.
-  const date = Object.keys(EDITIONS).find((day) => EDITIONS[day].runs.every((run) => run !== null) && humanRun(getDaily(day), EDITIONS[day].runs));
-  const daily = getDaily(date);
-  const human = humanPar(daily);
-  assert.deepEqual(human.runs, EDITIONS[date].runs);
-  const run = humanRun(daily, human.runs);
+  // The first edition whose bot runs clear every floor (the editions table stores these runs: tests/par.test.js).
+  let daily, human, run;
+  for (const day of Object.keys(EDITIONS)) {
+    daily = getDaily(day); human = humanPar(daily);
+    run = human.runs.every((entry) => entry !== null) && humanRun(daily, human.runs);
+    if (run) break;
+  }
+  assert.ok(run, 'some edition’s bot clears every floor');
+  // Replayed again from the seeds, the run (its recruit orders included) comes out the same.
+  assert.deepEqual(humanRun(daily, human.runs), run);
   assert.deepEqual(run.floors, human.par);
   assert.equal(run.moves, human.par.reduce((a, b) => a + b, 0));
   assert.equal(run.frames[0].turns, 0);
@@ -129,7 +133,12 @@ test('the bot\'s whole run replays each floor from its standard start and valida
   const frames = run.frames.map((frame) => JSON.stringify(frame));
   for (const start of starts.slice(1)) assert.ok(frames.includes(JSON.stringify(start)), 'each floor opens on the certified start');
   for (const frame of run.frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), daily.date), true, `turn ${frame.turns}`);
-  // No powerups: the bot never steps onto a relic.
-  assert.ok(run.frames.every((frame) => !frame.events.some((event) => event.type === 'powerup')));
+  // No powerups, but for a relic on its pawn's file ahead, which it walks onto.
+  run.frames.forEach((frame, index) => {
+    const pickup = frame.events.find((event) => event.type === 'powerup');
+    if (!pickup) return;
+    const before = run.frames[index - 1].player;
+    assert.ok(before.piece === 'pawn' && pickup.x === before.x && pickup.y < before.y, `turn ${frame.turns}: ${JSON.stringify(pickup)}`);
+  });
   assert.equal(humanRun(daily, [human.runs[0], null, human.runs[2]]), null);
 });

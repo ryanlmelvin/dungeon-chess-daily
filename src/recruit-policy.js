@@ -1,17 +1,23 @@
+// Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// A simple Manual recruit policy for the human-like bot (the `recruit` hook of
-// humanPlayer and playFloor in src/human-bot.js), used by
-// scripts/measure-recruits.mjs to price steering against Auto. Measurement
-// only: the shipped bot and par leave the recruit on Auto.
+// How the human-like bot (src/human-bot.js) steers its recruit, as a player
+// on Manual recruit control (the default) does. It is the bot's default
+// recruit policy, so par, the result card's Dungeon Bot and the human gap all
+// assume a steered recruit; scripts/measure-recruits.mjs prices it against
+// Auto (autoRecruit in src/human-bot.js).
 //
 // It decides from what a player sees once the move is on the board, like the
 // Manual green dots (recruitChoice in src/rules.js): squares, red lanes, and
 // which monsters are the targets (the bot's view knows the target species, as
 // if the newspaper were solved). It never reads a hidden role. The recruit is
 // never captured, so the only risk an order carries is moving it out of a
-// red lane it blocks.
-import { recruitChoice } from '../src/rules.js';
-import { distanceTable, UNREACHABLE } from '../src/move-tables.js';
+// red lane it blocks. Its squares come from recruitChoice, so it keeps the
+// rules a player's orders keep: no capture on the turn the recruit joins, and
+// no orders once floor 1 or 2 is cleared (the recruit hunts on its own).
+// It is deterministic: the same position and move give the same order, so a
+// run replayed from its seed (humanRun) gives the same orders again.
+import { recruitChoice } from './rules.js';
+import { distanceTable, UNREACHABLE } from './move-tables.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const square = (tile) => ({ x: tile.x, y: tile.y });
