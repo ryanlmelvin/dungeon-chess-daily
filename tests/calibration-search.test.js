@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitSurrogate, dominates, dominatedOut, clearlyWorse, compactRuns, storedGap, dataStamp, dataProblem, DATA_VERSION } from '../scripts/calibration-search.mjs';
+import { fitSurrogate, dominates, dominatedOut, clearlyWorse, compactRuns, storedGap, dataStamp, dataProblem, behaviourFingerprint, DATA_VERSION } from '../scripts/calibration-search.mjs';
 import { cappedGap } from '../src/difficulty.js';
 import { RULES_VERSION } from '../src/rules.js';
 import { HUMAN_BOT_VERSION } from '../src/human-bot.js';
@@ -19,7 +19,7 @@ test('a data row keeps the bot\'s runs compactly and gives back the same capped 
 });
 
 test('calibration data from before the capped gap, or from other rules, is refused', () => {
-  const now = { rules: RULES_VERSION, bot: HUMAN_BOT_VERSION, attempts: ATTEMPTS };
+  const now = { rules: RULES_VERSION, bot: HUMAN_BOT_VERSION, attempts: ATTEMPTS, fingerprint: '0123abcd' };
   assert.equal(DATA_VERSION, 2);
   assert.equal(dataProblem({ ...dataStamp(now), rows: [] }, now), null);
   // The score-band data file had no stamp at all.
@@ -27,6 +27,14 @@ test('calibration data from before the capped gap, or from other rules, is refus
   assert.match(dataProblem({ ...dataStamp(now), attempts: 2 }, now), /attempts 2/);
   assert.match(dataProblem({ ...dataStamp(now), humanBotVersion: HUMAN_BOT_VERSION + 1 }, now), /humanBotVersion/);
   assert.match(dataProblem({ ...dataStamp(now), rulesVersion: RULES_VERSION - 1 }, now), /rulesVersion/);
+  // Another default recruit policy for the bot, say, with no version bump.
+  assert.match(dataProblem({ ...dataStamp(now), behaviour: 'ffff0000' }, now), /play differently now/);
+});
+
+test('the behaviour fingerprint is a pure function of the code', () => {
+  const fingerprint = behaviourFingerprint();
+  assert.match(fingerprint, /^[0-9a-f]{8}$/);
+  assert.equal(behaviourFingerprint(), fingerprint);
 });
 
 const grid = [];

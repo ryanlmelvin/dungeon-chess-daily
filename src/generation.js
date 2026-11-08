@@ -42,8 +42,10 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
  * the tiers' bands measure), 'unknown' (the budget ran out) or 'invalid' (a
  * route the replay rejected); `explored` counts the search's simulated
  * transitions. The bot plays each floor from the route's own standard start
- * with the same seeds as the edition's par, so a generated edition's par is
- * the one measured here.
+ * with the same seeds and the same default recruit policy as the edition's
+ * par (humanPar's own default: Auto today, a steered recruit once par
+ * assumes Manual play), so a generated edition's par is the one measured
+ * here. Never pass a policy here that par doesn't use.
  */
 export function searchCandidate(candidate, budget = SEARCH_BUDGET) {
   const result = findWinningRoute(createGame(candidate), { maxExpansions: budget });

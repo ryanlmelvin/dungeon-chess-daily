@@ -110,10 +110,11 @@ if (!isMainThread) {
   const { chooseCandidate, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
   const { RULES_VERSION } = await load('src/rules.js');
   const { HUMAN_BOT_VERSION } = await load('src/human-bot.js');
-  const { dataStamp, dataProblem, storedGap } = await import('./calibration-search.mjs');
-  // Data measured under other rules, another bot, another candidate count or
-  // before the capped human gap (no bot runs) must not reach the fit.
-  const stamp = { rules: RULES_VERSION, bot: HUMAN_BOT_VERSION, attempts: ATTEMPTS };
+  const { dataStamp, dataProblem, storedGap, behaviourFingerprint } = await import('./calibration-search.mjs');
+  // Data measured under other rules, another bot (or another default recruit
+  // policy: the behaviour fingerprint), another candidate count or before
+  // the capped human gap (no bot runs) must not reach the fit.
+  const stamp = { rules: RULES_VERSION, bot: HUMAN_BOT_VERSION, attempts: ATTEMPTS, fingerprint: behaviourFingerprint() };
   const refuseStale = (file, path, remedy) => {
     const problem = dataProblem(file, stamp);
     if (problem) throw new Error(`${path} can't be reused: ${problem}. ${remedy}`);

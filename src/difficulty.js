@@ -27,7 +27,10 @@ export const HUMAN_MOVE_CAP = 40;
  * single candidate; generation picks among four). A single candidate's pawn
  * gap averages 11 or more on any Gentle layout (the bot never takes the relic
  * on its pawn's file), so Gentle pawn days lean on that choice. Bands are 3
- * wide, about two thirds of one setting's day-to-day spread.
+ * wide, about two thirds of one setting's day-to-day spread. They were
+ * measured with the bot's recruit on Auto: par is moving to a steered
+ * recruit, which lowers every tier's gap by 4 to 5, so the bands must move
+ * with it (docs/generation.md, "With a steered recruit").
  * The rank also sets how smart the monsters are (src/monster-ai.js).
  * `minFloorMoves`: a certified route must spend at least that many moves on
  * every floor (no freebie floors); generation rejects a candidate that clears
@@ -133,7 +136,9 @@ export const GAP_RUN_CAP = 10;
  * and the human-like bot doesn't steer its recruit there while the
  * certificate leans on it. It fails 72% of a bishop's king-floor runs and 32%
  * of a rook's (7% of a knight's or queen's), mostly by running out of moves,
- * and the knobs hardly change that (docs/generation.md).
+ * and the knobs hardly change that (docs/generation.md). With a steered
+ * recruit those failures fall to 2-14%, like floors 1 and 2: when par
+ * steers, measure again and likely count the king floor in full.
  */
 export const GAP_FLOOR_WEIGHTS = Object.freeze([1, 1, 0.5]);
 

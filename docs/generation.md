@@ -406,9 +406,12 @@ floor's own minimum (`floorMinimums`), which tooling uses to price other rules.
 
 The tiers are bands of the *capped human gap* (`cappedGap`): how much harder a
 day is for the human-like bot than for the certifying search. Generation plays
-the bot on every solved candidate's route (`searchCandidate`, with the seeds of
-the edition's par), so a generated edition's par comes from the very runs its
-band was judged on.
+the bot on every solved candidate's route (`searchCandidate`, with the seeds
+and the default recruit policy of the edition's par, `humanPar`'s own
+default), so a generated edition's par comes from the very runs its band was
+judged on. Everything below was measured with that default on Auto; par is
+moving to a steered recruit, which changes the numbers a lot ([With a steered
+recruit](#with-a-steered-recruit)).
 
     per run   = won ? clamp(bot's moves − route's moves, 0, 10) : 10
     per floor = mean of the floor's five runs
@@ -424,14 +427,14 @@ band was judged on.
   the shortest (the search wanders on some king floors), so a bot that beats
   it found the floor easy, not "negatively hard".
 - **The king floor counts half** (`GAP_FLOOR_WEIGHTS`). The tiers' monster
-  smarts never reach it (royal rules), and the bot doesn't steer its recruit
-  there while certificates lean on theirs: it fails 72% of a bishop's
+  smarts never reach it (royal rules), and on Auto the bot doesn't steer its
+  recruit there while certificates lean on theirs: it fails 72% of a bishop's
   king-floor runs and 32% of a rook's, nearly all by running out of moves,
   against 7% of a knight's or queen's, and the knobs hardly move that (a
-  bishop's king floor alone kept about 8 of its 10 at every tier). Revisit the
-  weight once the bot can steer its recruit.
-- **Pawn days stay hard, and noisy, for the bot.** A pawn day's relic always
-  sits on the pawn's own file, and the bot never takes it, so its pawn must
+  bishop's king floor alone kept about 8 of its 10 at every tier). Steering
+  removes most of that, so revisit the weight when par steers.
+- **Pawn days stay hard, and noisy, for the bot on Auto.** A pawn day's relic
+  always sits on the pawn's own file, and the bot never takes it, so its pawn must
   capture its way around and often stands still under attack: about half of
   its pawn runs fail on floors 1 and 2, mostly by losing all eight lives, and
   one setting's pawn gap swings from 7 to 25 between dates. On a single
@@ -441,8 +444,9 @@ band was judged on.
   pawn layout, 4 walls and 4 decoys, averaged 7.5 that way over 4 dates).
   Decoys help the bot here, since they are what its pawn captures its way
   around with: on Fiendish more decoys made a pawn day *easier*, so
-  calibration skips monotone dominance for pawns. A bot that takes a relic
-  blocking its pawn's file would remove most of this blind spot.
+  calibration skips monotone dominance for pawns. A steered recruit removes
+  most of this blind spot (it clears the pawn's way); a bot that takes a relic
+  blocking its pawn's file would remove the rest.
 
 Measured 2026-11-07 under the current rules (smarter monsters, the 3-move
 freebie rule on Tricky and up, the per-floor search, four candidates) with the
@@ -480,7 +484,8 @@ hard: 13 walls, 4 decoys, all guards, scattered targets):
 | Queen | 0.9 / 3.7 / 11.3 | all fall back / all fall back / 15.4 |
 
 On Fiendish, easy rook and queen layouts fall in under three moves, so the
-freebie rule sends them all to the bank. **The bands** rise by 3 a tier:
+freebie rule sends them all to the bank. **The bands** (for the bot on Auto,
+as in the code today) rise by 3 a tier:
 Gentle 5–8, Fair 8–11, Tricky 11–14, Tough 14–17, Fiendish 17–20. Gentle is
 where rook, knight, bishop and queen layouts reach at their easiest; Fiendish
 is where the hardest reach (the current Fiendish knobs give 16 to 17, and the
@@ -489,6 +494,62 @@ setting's day-to-day spread (sd 4.4; a date's four candidates differ by 2.9),
 so the candidate choice matters. Under the score's knobs only 25% of days
 fall inside these bands: the knobs must be recalibrated
 ([Calibration](#knobs-and-calibration)) before the bands mean anything.
+
+### With a steered recruit
+
+Par is to assume a steered recruit, as default Manual play does: the bot will
+give its recruit orders through `humanPlayer`'s recruit hook (the policy is
+`steerRecruit` in `scripts/recruit-policy.mjs` for now). Generation, the
+calibration fit and `build-fallbacks` all call `humanPar` without a policy, so
+they follow whatever default `src/human-bot.js` gives it; nothing here
+hard-codes Auto. On 12 dates per tier and piece (889 candidates that
+certify under the current knobs), the same routes with the recruit on Auto
+and steered:
+
+| Piece | Runs failed F1 / F2 / F3, Auto → steered | Capped gap, Auto → steered |
+| --- | --- | --- |
+| Pawn | 43→13% / 48→23% / 62→14% | 16.4 → 7.2 |
+| Rook | 13→11% / 13→11% / 35→4% | 13.6 → 9.0 |
+| Knight | 7→6% / 6→4% / 4→2% | 9.1 → 6.5 |
+| Bishop | 7→5% / 11→8% / 71→4% | 12.5 → 7.5 |
+| Queen | 12→9% / 10→6% / 7→7% | 10.8 → 9.0 |
+
+By tier the gap falls from 7.4 / 10.9 / 14.0 / 15.0 / 16.7 to 3.4 / 6.6 / 9.1
+/ 10.1 / 11.9, and the pieces close up (Fiendish 9.8 to 13.2). What the knobs
+reach with the bot steering (first certified candidate, 12 dates):
+
+| Piece | Gentle monsters: easy / plain / hard | Fiendish monsters: easy / plain / hard |
+| --- | --- | --- |
+| Pawn | 3.3 (67% fall back) / 3.5 / 7.7 | 12.8 (92% fall back) / 8.6 / 10.5 |
+| Rook | 0.5 / 3.3 / 4.3 | all fall back / all fall back / 12.8 |
+| Knight | 4.4 / 6.2 / 9.4 | 6.1 (58% fall back) / 10.6 (42% fall back) / 10.8 |
+| Bishop | 2.3 / 2.8 / 7.2 | 8.0 (58% fall back) / 10.4 / 11.2 |
+| Queen | 0.7 / 2.8 / 9.9 | all fall back / all fall back / 13.9 |
+
+So when par steers, the bands must come down with it. A provisional set by
+the same recipe: Gentle 2–4.5, Fair 4.5–7, Tricky 7–9.5, Tough 9.5–12,
+Fiendish 12–14.5 (2.5 wide; one setting's day-to-day spread is 4.0). The
+king floor fails about as often as floors 1 and 2 with a steered recruit, so
+it can likely count in full (`GAP_FLOOR_WEIGHTS` [1, 1, 1]: steered gaps then
+rise by 1 to 2.5), and pawns may no longer need to skip dominance. The
+recruit rules coming before calibration (a king recruit on every king floor,
+no capture on the turn a recruit joins, pawn recruits only on files open to
+the far rank) will move the gap again, so measure once more after them and
+before the shortlist, for example with `node scripts/measure-monsters.mjs`
+(its mean gap per tier and piece) and a small `--fast` dry run like the one
+below. The switch, in order:
+
+1. Make the steering policy `humanPar`'s and `humanRun`'s default in
+   `src/human-bot.js` (the result card replays `humanRun` with par's runs, so
+   both must agree), bump `HUMAN_BOT_VERSION` and the rules version.
+2. Land the recruit rule changes; measure as above.
+3. Set the bands (and the king floor's weight) from that measurement.
+4. Run the calibration and rebuild ([After a rules, monster, modifier,
+   search or bot change](#after-a-rules-monster-modifier-search-or-bot-change)).
+
+The calibration data's behaviour fingerprint (below) changes with the default
+policy, so data measured with the bot on Auto is refused even if a version
+bump is forgotten.
 
 **The score** (for reference). Every certified edition also gets one number
 from its certificate's verifier metrics and its piece (`difficultyScore`). It
@@ -568,14 +629,18 @@ per tier too). Setting keys end in `@tier`. Rows keep the route's `floorMoves`,
 so the fit applies the no-freebie-floor rule as generation does, and the
 route's side of the gap.
 
-Data files are stamped (`dataVersion` 2, `rulesVersion`, `humanBotVersion` and
-`attempts`; `scripts/calibration-search.mjs`), and `--reuse`, `--merge`,
-`--replay` and `--confirm` refuse a file without the bot's runs or one made
-under other rules, another bot or another candidate count. So the
-`scripts/calibration-data.json` measured for the score bands (two candidates,
-the whole-run search, no bot runs) can't be reused; the next confirm replaces
-it. The stamp can't see a rules change made without a version bump: after one,
-measure afresh.
+Data files are stamped (`dataVersion` 2, `rulesVersion`, `humanBotVersion`,
+`attempts` and a behaviour fingerprint; `scripts/calibration-search.mjs`), and
+`--reuse`, `--merge`, `--replay` and `--confirm` refuse a file without the
+bot's runs or one made under other rules, another bot or another candidate
+count. The fingerprint (`behaviourFingerprint`) hashes what the search and the
+bot do on three fixed plain-layout candidates (`FINGERPRINT_DAYS`: a knight,
+a bishop and a pawn day), through `searchCandidate`, so with the bot's
+default recruit policy: switching that policy, or any rules, monster, search
+or bot change that touches those days, refuses old data even without a
+version bump. So the `scripts/calibration-data.json` measured for the score
+bands (two candidates, the whole-run search, no bot runs) can't be reused;
+the next confirm replaces it.
 
 ### Shortlist, then confirm (the quick way)
 

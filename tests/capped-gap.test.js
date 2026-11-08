@@ -6,6 +6,7 @@ import { DIFFICULTY_TIERS, TIER_IDS, GAP_RUN_CAP, GAP_FLOOR_WEIGHTS, HUMAN_MOVE_
 import { getRawDaily } from '../src/edition.js';
 import { ATTEMPTS, candidateFor, chooseCandidate, generateDaily, searchCandidates } from '../src/generation.js';
 import { humanPar } from '../src/human-bot.js';
+import { humanSummary } from '../src/par.js';
 
 const won = (moves) => ({ won: true, moves, livesLost: 0 });
 const lost = (moves = 12) => ({ won: false, moves, livesLost: 2 });
@@ -39,15 +40,16 @@ test('one hopeless floor can\'t swamp the capped gap the way it swamps the raw g
   assert.equal(cappedGap(failedEarly), cappedGap(slowEarly));
 });
 
-test('the tier bands rise inside the range the capped gap can take', () => {
+test('the tier bands rise in equal steps inside the range the capped gap can take', () => {
   const most = GAP_RUN_CAP * GAP_FLOOR_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
+  const width = DIFFICULTY_TIERS[TIER_IDS[0]].band[1] - DIFFICULTY_TIERS[TIER_IDS[0]].band[0];
   let previous = -Infinity;
   for (const tier of TIER_IDS) {
     const [low, high] = DIFFICULTY_TIERS[tier].band;
     assert.ok(low >= 0 && high <= most && low > previous, tier);
+    assert.equal(high - low, width, `${tier}: every band is as wide`);
     previous = low;
   }
-  assert.deepEqual(TIER_IDS.map((tier) => DIFFICULTY_TIERS[tier].band), [[5, 8], [8, 11], [11, 14], [14, 17], [17, 20]]);
 });
 
 test('generation measures every solved candidate with the human-like bot, as par does, and keeps the first in the band', () => {
@@ -70,6 +72,10 @@ test('generation measures every solved candidate with the human-like bot, as par
   assert.ok(chosen >= 0, 'a candidate is kept');
   const daily = generateDaily(date, { fallback: false });
   assert.equal(daily.generation.attempt, chosen);
-  // The edition's par comes from the very runs its band was judged on.
-  assert.deepEqual(humanPar(daily).par, found[chosen].human.par);
+  // The edition's par, as the game works it out (src/par.js, past the stored
+  // window), comes from the very runs its band was judged on: the gap uses
+  // whatever recruit policy par plays with, never a hard-coded one.
+  const shown = humanSummary(daily);
+  assert.deepEqual(shown.par, found[chosen].human.par);
+  assert.deepEqual(shown.runs, found[chosen].human.runs);
 });
