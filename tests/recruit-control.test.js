@@ -298,7 +298,9 @@ test('Auto is unchanged: every recruit move on certified routes can be ordered b
         const moved = auto.events.slice(phase).find((event) => event.type === 'companion-move');
         const order = moved ? { x: moved.x, y: moved.y } : 'hold';
         const choice = recruitChoice(state, action);
-        assert.ok(order === 'hold' || choice.moves.some((tile) => tile.x === order.x && tile.y === order.y), `${date}: Auto's move is on offer`);
+        // The move that clears a floor has no order step: the recruit hunts on its own from there.
+        if (auto.exit.open) assert.equal(choice, null, `${date}: no order on the clearing move`);
+        else assert.ok(order === 'hold' || choice.moves.some((tile) => tile.x === order.x && tile.y === order.y), `${date}: Auto's move is on offer`);
         assert.deepEqual(strip(act(state, { ...action, recruit: order })), strip(auto), `${date}: same result`);
         mirrored++;
       }
@@ -416,21 +418,23 @@ test('a recruit that joins after the clear hunts on its own from its first move'
   assert.ok(said(swept).includes('You completed the challenge ✓ in 1 move. Your score is locked in: explore for gold or take the stairs. A knight joins you and hunts on its own for the rest of this room.'), said(swept));
 });
 
-test('the last floor is unchanged: after the king falls you still steer the recruit, and the message adds nothing', () => {
+test('on the last floor, once the king falls to your piece, the recruit hunts on its own: no order step before the stairs', () => {
   let state = lastFloor();
   const pickup = state.items.find((item) => item.type === 'companion');
   state = act(state, move(pickup.x, pickup.y, 'hold'));
-  const square = recruitChoice(state, wait()).moves.find((tile) => !tile.capture);
+  // Stand the king on a square your piece can take it from.
+  const square = legalMoves(state).find((tile) => !tile.capture && !(tile.x === state.player.x && tile.y === state.player.y));
   const king = state.enemies.find((monster) => monster.role === 'king');
   Object.assign(king, { x: square.x, y: square.y });
-  const taken = act(state, wait({ x: square.x, y: square.y }));
+  const capture = move(square.x, square.y);
+  assert.equal(recruitChoice(state, capture), null, 'taking the king has no order step');
+  const taken = act(state, capture);
+  assert.ok(!taken.enemies.some((monster) => monster.role === 'king'));
   assert.equal(taken.exit.open, true);
   const lines = [...(taken.notes ?? []), taken.message];
   assert.ok(lines.some((text) => /^You completed the challenge ✓ in \d+ moves?\. Your score is locked in: take the stairs to finish\.$/.test(text)), lines.join(' | '));
-  assert.ok(!said(taken).includes('watch your back'));
-  const choice = recruitChoice(taken, wait());
-  assert.ok(choice?.moves.length > 0, 'an order step still follows your move');
-  const next = choice.moves.find((tile) => !tile.capture);
-  assert.deepEqual(at(act(taken, wait({ x: next.x, y: next.y })).companion), [next.x, next.y]);
-  assert.deepEqual(at(act(taken, wait('hold')).companion), at(taken.companion));
+  // An order the capture still carries is ignored, and later moves have no order step either.
+  assert.deepEqual(act(state, move(square.x, square.y, 'hold')), taken);
+  assert.equal(recruitChoice(taken, wait()), null);
+  assert.equal(act(taken, { type: 'descend' }).status, 'won');
 });

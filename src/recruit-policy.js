@@ -13,7 +13,7 @@
 // never captured, so the only risk an order carries is moving it out of a
 // red lane it blocks. Its squares come from recruitChoice, so it keeps the
 // rules a player's orders keep: no capture on the turn the recruit joins, and
-// no orders once floor 1 or 2 is cleared (the recruit hunts on its own).
+// no orders once a floor is cleared (the recruit hunts on its own).
 // It is deterministic: the same position and move give the same order, so a
 // run replayed from its seed (humanRun) gives the same orders again.
 import { recruitChoice } from './rules.js';

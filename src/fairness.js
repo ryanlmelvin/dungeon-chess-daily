@@ -150,7 +150,7 @@ function between(from, to, square) {
  * ground; and holding still where the recruit already blocks such a lane.
  * Never Auto's own move again. On the bishop pair's hop, the other squares it
  * may hop to, nearest a target first. None when the turn has no recruit
- * phase: no recruit yet, castling, or a floor 1 or 2 the move just cleared,
+ * phase: no recruit yet, castling, or a floor the move just cleared,
  * where the recruit hunts on its own and ignores orders (huntsAlone in
  * src/rules.js, where recruitChoice returns null). The rules' own move order
  * breaks ties, so the list is deterministic.

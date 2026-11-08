@@ -1407,11 +1407,12 @@ export function closeRangeSquares(state) {
 const RECRUIT_PROBE = Symbol('recruit probe');
 const validOrder = (order) => order === 'hold' || (order !== null && typeof order === 'object' && inside(order.x, order.y));
 const squareOrder = (order) => order !== undefined && order !== 'hold' && order !== RECRUIT_PROBE;
-// Once floor 1's or 2's challenge is complete the recruit hunts on its own for
-// the rest of that room, as on Auto, so it keeps winning gold while you collect
+// Once a floor's challenge is complete the recruit hunts on its own for the
+// rest of that room, as on Auto, so it keeps winning gold while you collect
 // coins: no order step, and an order a move or wait still carries is ignored.
-// The last floor keeps your orders.
-const huntsAlone = (state) => state.exit.open && state.floor < state.targets.length - 1;
+// On the last floor that means the move that takes the king goes straight to
+// the stairs, with no order to give first.
+const huntsAlone = (state) => state.exit.open;
 // Thrown by companionTurn for recruitChoice: the turn stops as the recruit's phase begins.
 class RecruitPhase {
   constructor(board, phase, moves, hop) { this.board = board; this.phase = phase; this.moves = moves; this.hop = hop; }
@@ -1422,7 +1423,7 @@ class RecruitPhase {
  * or a wait, without an order), for Manual recruit control. Null when the turn
  * has no recruit phase: no recruit yet, castling (that was its move), a black
  * move the monsters' first move sends back for a new choice, a run-ending
- * capture, or a cleared floor 1 or 2 (huntsAlone). Otherwise `board` is the
+ * capture, or a cleared floor (huntsAlone). Otherwise `board` is the
  * position as its phase begins (after your move, a close-range hit and, as
  * black, the monsters' first move; `board.events[phase]` is its
  * 'companion-phase'), and `moves` its legal squares, captures of any monster
@@ -1819,7 +1820,7 @@ function play(previous, action) {
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
     // An action with a recruit order is played under Manual recruit control.
-    // On a cleared floor 1 or 2 it takes no orders either way (huntsAlone). A
+    // On a cleared floor it takes no orders either way (huntsAlone). A
     // monster you took on the recruit's square keeps its line (maybe the clear).
     settle(state);
     state.message = huntsAlone(state) ? `A ${recruit.piece} joins you and hunts on its own for the rest of this room.`
@@ -1855,7 +1856,7 @@ function play(previous, action) {
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
   // Castling was the recruit's move, so an order to move it again is no action.
-  // A cleared floor 1 or 2 ignores orders: the recruit hunts on its own there.
+  // A cleared floor ignores orders: the recruit hunts on its own there.
   const order = huntsAlone(state) ? undefined : action.recruit;
   if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
   if (!castle) settle(state);

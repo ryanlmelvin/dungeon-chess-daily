@@ -271,7 +271,7 @@ from a bot that plays like a person, `src/human-bot.js`:
   take a decoy, or step nearer the closest target over the walls; on the
   bishop pair's hop, the hop square nearest a target. Its squares come from
   `recruitChoice`, so it keeps a player's rules (no capture the turn the
-  recruit joins, no orders once floor 1 or 2 is cleared). Par, the result
+  recruit joins, no orders once a floor is cleared). Par, the result
   card's run and the human gap all assume a steered recruit; `autoRecruit`
   leaves it on Auto, for measurement.
 - **Each floor is played from its standard start**, the position the
@@ -980,7 +980,7 @@ orders (`RECRUIT_ORDERS`): every capture of a target, a step into a wound-up
 lane between its monster and the player, the step that brings the recruit
 nearest a target over the walls, and holding still where it already blocks
 such a lane; on the bishop pair's hop, the hop squares nearest a target. The
-squares come from `recruitChoice`, so the move that clears floor 1 or 2, after
+squares come from `recruitChoice`, so the move that clears a floor, after
 which the recruit hunts on its own, takes no order. Each order tried spends one
 transition of the same fixed budget. `verifyWinningRoute(state, actions,
 { recruit: 'steer' })` accepts the orders and adds `metrics.recruit`;

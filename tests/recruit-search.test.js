@@ -4,7 +4,7 @@
 // floor's recruit may join. 'steer' (tooling) plays the recruit like a Manual
 // player: every floor's recruit may join and each move or wait may carry an
 // order, so the recruit may take targets, hop for the bishop pair, and never
-// takes an order on a cleared floor 1 or 2, where it hunts on its own.
+// takes an order on a cleared floor, where it hunts on its own.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
@@ -127,7 +127,7 @@ test('a steered route verifies only as steered, and reports what its recruit did
   assert.equal(refused.valid, false);
   assert.match(refused.reason, /Only chess moves|collects a powerup or companion|uses a power/);
   // An order rides only a turn whose recruit phase takes one: never the
-  // stairs, and never the move that clears floor 1 or 2, after which the
+  // stairs, and never the move that clears a floor, after which the
   // recruit hunts on its own and would ignore it (recruitChoice is null there).
   let state = createGame(daily);
   let earlyRecruit = false;
