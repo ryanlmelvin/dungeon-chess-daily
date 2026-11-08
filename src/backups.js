@@ -16,8 +16,8 @@ function readRun(key, serialized) {
     if (!isRecord(run) || run.date !== date || typeof run.status !== 'string' || !Object.hasOwn(STATUS_RANK, run.status)) return null;
     const schemas = version ? [Number(version.slice(1))] : [2, 3];
     if (!schemas.includes(run.schema) || !Number.isInteger(run.floor) || run.floor < 0 || run.floor > 2) return null;
-    if (version === 'v6' && !validateSave(run, date)) return null;
-    return { run, archived: version !== 'v6' };
+    if (version === 'v7' && !validateSave(run, date)) return null;
+    return { run, archived: version !== 'v7' };
   } catch { return null; }
 }
 
