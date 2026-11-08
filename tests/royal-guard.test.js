@@ -79,9 +79,9 @@ function kingFloorRecruit(date) {
   return { recruit: state.items.find((item) => item.type === 'companion') ?? state.companion };
 }
 
-test('every edition offers a rook, queen or king recruit on the king floor', () => {
+test('every edition offers a king recruit on the king floor', () => {
   for (const date of ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-12', '2026-11-20']) {
     const { recruit } = kingFloorRecruit(date);
-    assert.ok(['rook', 'queen', 'king'].includes(recruit.piece ?? recruit.basePiece), `${date}: ${JSON.stringify(recruit)}`);
+    assert.equal(recruit.basePiece ?? recruit.piece, 'king', `${date}: ${JSON.stringify(recruit)}`);
   }
 });

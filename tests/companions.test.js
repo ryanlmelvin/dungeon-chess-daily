@@ -29,16 +29,18 @@ function descend(state) {
   return act(cleared,{type:'descend'});
 }
 
-// Floors one and two recruit any piece, on a square one move from the start.
+// Floors one and two recruit any piece, on a square one move from the start;
+// a pawn only where its file is open to the far rank.
 function earlyRecruit(state,label,seen) {
   const [recruit,...extra]=recruitsOn(state);
   assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.ok(PIECES.includes(recruit.piece),label);seen?.add(recruit.piece);
   assert.equal(state.map[recruit.y][recruit.x],'.');
   assert.ok(!state.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
+  if(recruit.piece==='pawn') for(let y=0;y<recruit.y;y++) assert.equal(state.map[y][recruit.x],'.',`${label}: a pawn recruit's file is open`);
   return recruit;
 }
 
-test('floors one and two recruit any piece while the final floor keeps its rook, queen or king',()=>{
+test('floors one and two recruit any piece while the final floor always recruits a king',()=>{
   const finalTypes=new Set(),earlyTypes=new Set();
   for(let d=0;d<60;d++) {
     const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
@@ -53,14 +55,14 @@ test('floors one and two recruit any piece while the final floor keeps its rook,
     assert.equal(last.floor,2);
     const [recruit,...extra]=recruitsOn(last);
     assert.ok(recruit,`${daily.date}: final recruit`);assert.equal(extra.length,0);
-    assert.ok(['rook','queen','king'].includes(recruit.piece),`${daily.date}: ${recruit.piece}`);finalTypes.add(recruit.piece);
+    assert.equal(recruit.piece,'king',`${daily.date}: ${recruit.piece}`);finalTypes.add(recruit.piece);
     if(last.startingPiece==='pawn') assert.ok(recruit.y<6,'pawn recruits must be ahead of the player, not behind the entrance');
     assert.ok(last.items.every((item)=>item.x!==last.exit.x||item.y!==last.exit.y),'pickups must remain clickable after stairs appear');
     assert.ok(!last.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
     assert.equal(last.map[recruit.y][recruit.x],'.');
     assert.equal(last.companion,null);
   }
-  assert.deepEqual([...finalTypes].sort(),['king','queen','rook']);
+  assert.deepEqual([...finalTypes],['king']);
   assert.deepEqual([...earlyTypes].sort(),[...PIECES].sort());
   for(const date of ['2026-11-12','2026-11-13']) {
     const daily=getDaily(date), state=createGame(daily);
@@ -98,13 +100,22 @@ test('saves from before the change keep their floor-one recruit, on the board or
 
 test('a white recruit moves after its player, captures a guard for gold, then enemies respond',()=>{
   const state=scenario();state.items=[{type:'companion',piece:'rook',x:4,y:5}];state.enemies=[foe('guard','king',4,2),foe('target','knight',0,7)];
-  const next=act(state,move(4,5));
-  assert.equal(next.player.piece,'king');assert.equal(next.startingPiece,'king');
+  // The turn it joins it captures nothing: it closes in on the guard instead.
+  const joined=act(state,move(4,5));
+  assert.equal(joined.player.piece,'king');assert.equal(joined.startingPiece,'king');
+  assert.deepEqual([joined.companion.x,joined.companion.y],[4,3]);
+  assert.equal(joined.captures,0);assert.equal(joined.turns,1);
+  const order=['move','companion-recruit','companion-phase','companion-move','enemy-phase'].map((type)=>joined.events.findIndex((event)=>event.type===type));
+  assert.ok(order.every((index,i)=>index>=0&&(!i||index>order[i-1])));
+  assert.ok(!joined.events.some((event)=>event.type==='companion-capture'));
+  assert.deepEqual(act(state,move(4,5)),joined,'companion choices replay deterministically');
+  // At your side, it captures first, then the monsters answer.
+  const beside=scenario();beside.companion=ally('rook',4,5);beside.enemies=[foe('guard','king',4,2),foe('target','knight',0,7)];
+  const next=act(beside,move(3,6));
   assert.deepEqual([next.companion.x,next.companion.y],[4,2]);
   assert.equal(next.captures,1);assert.equal(next.gold,1);assert.equal(next.exit.open,false);assert.equal(next.turns,1);
-  const phases=['move','companion-recruit','companion-phase','companion-move','companion-capture','enemy-phase'].map((type)=>next.events.findIndex((event)=>event.type===type));
+  const phases=['move','companion-phase','companion-move','companion-capture','enemy-phase'].map((type)=>next.events.findIndex((event)=>event.type===type));
   assert.ok(phases.every((index,i)=>index>=0&&(!i||index>phases[i-1])));
-  assert.deepEqual(act(state,move(4,5)),next,'companion choices replay deterministically');
 });
 
 test('black resolves enemy, player and companion phases in that order',()=>{
@@ -112,8 +123,10 @@ test('black resolves enemy, player and companion phases in that order',()=>{
   const next=act(state,move(4,5));
   const phase=(type)=>next.events.findIndex((event)=>event.type===type);
   assert.ok(phase('enemy-phase')<phase('move')&&phase('move')<phase('companion-phase'));
-  assert.equal(next.captures,1);assert.equal(next.turns,1);
-  assert.deepEqual([next.companion.x,next.companion.y],[4,3]);
+  // The monster king stepped into the joining rook's file, but a recruit takes nothing the turn it joins.
+  assert.equal(next.captures,0);assert.equal(next.turns,1);
+  assert.deepEqual([next.enemies[0].x,next.enemies[0].y],[4,3]);
+  assert.deepEqual([next.companion.x,next.companion.y],[4,4]);
 });
 
 test('companions prioritize captures, otherwise approach the nearest enemy without overshooting',()=>{
@@ -221,10 +234,13 @@ test('a pawn recruited on the far rank promotes before its first move, even with
     assert.equal(next.companion.piece,'queen');assert.equal(next.companion.basePiece,'pawn');
     assert.ok(next.events.some((event)=>event.type==='companion-promotion'));
     if(hasEnemy) {
-      assert.deepEqual([next.companion.x,next.companion.y],[6,0]);assert.equal(next.captures,1);
+      // It moves as a queen, beside the king it may not take the turn it joins.
+      assert.deepEqual([next.companion.x,next.companion.y],[5,0]);assert.equal(next.captures,0);
       const promotion=next.events.findIndex((event)=>event.type==='companion-promotion');
       const movement=next.events.findIndex((event)=>event.type==='companion-move');
       assert.ok(promotion<movement);assert.equal(next.events[movement].piece,'queen');
+      const taken=act(next,move(3,1));
+      assert.deepEqual([taken.companion.x,taken.companion.y],[6,0]);assert.equal(taken.captures,1);
     } else assert.deepEqual([next.companion.x,next.companion.y],[3,0]);
   }
 });
@@ -233,13 +249,17 @@ test('a recruit never captures the challenge piece, even when it is the only cap
   const state=scenario('queen','white',7,7);state.powers.freeze=3;
   state.items=[{type:'companion',piece:'rook',x:6,y:7}];state.enemies=[foe('target','knight',6,2)];
   const next=act(state,move(6,7));
-  assert.equal(next.message,'A rook joins you this floor. It cannot capture knights.');
+  assert.equal(next.message,'A rook joins you this floor. It can capture from your next move on, but never knights.');
   assert.equal(next.captures,0);assert.equal(next.enemies.length,1);
-  assert.ok(!(next.companion.x===6&&next.companion.y===2));
+  assert.deepEqual([next.companion.x,next.companion.y],[6,3]);
+  // From then on it could capture, but still never the challenge piece beside it.
+  const later=act(next,move(7,7));
+  assert.equal(later.captures,0);assert.equal(later.enemies.length,1);
+  assert.ok(!(later.companion.x===6&&later.companion.y===2));
   // A single challenge piece is named with "the".
   const royal=scenario('queen','white',7,7);royal.powers.freeze=3;royal.objective={piece:'king',complete:false};
   royal.items=[{type:'companion',piece:'queen',x:6,y:7}];royal.enemies=[foe('target','king',6,2)];
   const crowned=act(royal,move(6,7));
-  assert.equal(crowned.message,'A queen joins you this floor. It cannot capture the king.');
+  assert.equal(crowned.message,'A queen joins you this floor. It can capture from your next move on, but never the king.');
   assert.equal(crowned.captures,0);assert.ok(!(crowned.companion.x===6&&crowned.companion.y===2));
 });

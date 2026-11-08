@@ -50,7 +50,7 @@ function replay(daily) {
     assert.ok(next.player.hp >= initial.player.hp - livesSpendable(initial));
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
-    if (royalRules(next)) assert.ok(next.companion === null || ['rook', 'queen', 'king'].includes(next.companion.basePiece));
+    if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.deepEqual(next.companionOrders, []);

@@ -694,9 +694,22 @@ function pawnFormation(state) {
   return chosen.map(({ x, y }) => [x, y]);
 }
 // The king floor plays by royal rules: a smarter king and guards (enemyTurn)
-// and a stronger recruit (setFloor) that may help certify the room (fairness.js).
+// and a recruit (setFloor) that may help certify the room (fairness.js).
 export function royalRules(state) { return state.floor === 2; }
-const KING_FLOOR_RECRUITS = ['rook', 'queen', 'king'];
+// The king floor always recruits a king. Of rook, queen and king, the king
+// recruit helped every piece most (or as much) and almost never cleared the
+// floor in one or two steered moves, as a queen or rook could by taking the
+// king from across the room; a rook player can castle with it.
+const KING_FLOOR_RECRUITS = ['king'];
+// A pawn recruit that can't wait on an open file is another piece (setFloor).
+const PAWNLESS = PIECES.filter((piece) => piece !== 'pawn');
+// Is the file ahead of `tile` free of walls all the way to the far rank, so a
+// pawn there can walk up and promote? Monsters move, so only walls count, as
+// for the player's own promotion file.
+function openFile(state, tile) {
+  for (let y = tile.y - 1; y >= 0; y--) if (!walkable(state, tile.x, y)) return false;
+  return true;
+}
 function openingSquares(foe) {
   const deltas = foe.piece === 'pawn' ? [[0, 1], ...(foe.y === 1 ? [[0, 2]] : [])]
     : foe.piece === 'knight' ? KNIGHT
@@ -888,20 +901,31 @@ function setFloor(state, kingRecruit = false) {
     // Add the recruit after the layout is fixed; older editions keep their map.
     // Its own random stream leaves walls, monsters and coins untouched.
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
-    // Under royal rules the recruit is a rook, queen or king: a second attacker
-    // strong enough to corner a dodging king, even beside a pawn or a bishop.
+    // Under royal rules the recruit is a king (KING_FLOOR_RECRUITS): a second
+    // attacker that helps corner a dodging king beside any piece.
     // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
     // a king keep that king; the tile draw is the same either way.
     const pool = royalRules(state) ? KING_FLOOR_RECRUITS : PIECES;
     const drawn = pool[Math.floor(recruitRng() * pool.length)];
-    const piece = !royalRules(state) && kingRecruit ? 'king' : drawn;
+    let piece = !royalRules(state) && kingRecruit ? 'king' : drawn;
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
     let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
     if (!tiles.length) {
       tiles = [];
       for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (layoutPiece !== 'bishop' || (x+y)%2===0) && (layoutPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
     }
-    const tile = tiles[Math.floor(recruitRng()*tiles.length)];
+    let tile = tiles[Math.floor(recruitRng()*tiles.length)];
+    // A pawn recruit waits only where its file is open to the far rank, so it
+    // can walk up and promote. Drawn on a walled file, it moves to one of the
+    // same squares whose file is open, or, with none, it is another piece on
+    // the square drawn. Either takes one more draw from its own stream, so
+    // nothing else in the room moves.
+    if (piece === 'pawn' && tile && !openFile(state, tile)) {
+      const lanes = tiles.filter((entry) => openFile(state, entry));
+      const roll = recruitRng();
+      if (lanes.length) tile = lanes[Math.floor(roll * lanes.length)];
+      else piece = PAWNLESS[Math.floor(roll * PAWNLESS.length)];
+    }
     if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
@@ -1187,7 +1211,8 @@ class RecruitPhase {
  * position as its phase begins (after your move, a close-range hit and, as
  * black, the monsters' first move; `board.events[phase]` is its
  * 'companion-phase'), and `moves` its legal squares, captures of any monster
- * included. On the bishop pair's turn `hop` is true: `moves` are then the
+ * included, except on the move it joins you, when it can't capture (see
+ * companionTurn). On the bishop pair's turn `hop` is true: `moves` are then the
  * squares of the other colour it may hop to, and it may not hold unless there
  * are none. Changes nothing.
  */
@@ -1243,7 +1268,12 @@ function hopToOtherColour(state, unit, square) {
 
 // The recruit's move, once per turn after the player's. Returns false for an
 // order it can't carry out, which makes the whole action no action.
-function companionTurn(state, order) {
+// `joined`: the recruit joined with this very move. Then it can't capture,
+// on Manual or Auto: monsters never steer clear of a waiting recruit's lines,
+// so it would otherwise take whatever walked into them the moment you joined
+// it. Holding, a quiet move or the bishop pair's hop are left, and castling
+// can't come up (the recruit wasn't beside you when you moved).
+function companionTurn(state, order, joined = false) {
   const unit = state.companion;
   if (!unit) return !squareOrder(order);
   unit.sharing = same(unit,state.player);
@@ -1255,8 +1285,9 @@ function companionTurn(state, order) {
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
   const hop = pairHop(state, unit);
+  const legal = () => movesFor(state,unit).filter((move) => !joined || !move.capture);
   if (order === RECRUIT_PROBE) {
-    const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : movesFor(state,unit).map(({x,y,capture}) => ({x,y,capture}));
+    const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : legal().map(({x,y,capture}) => ({x,y,capture}));
     throw new RecruitPhase(state, phase, moves, Boolean(hop));
   }
   // The bishop pair's hop is its move this turn: it may only stay put (or be
@@ -1269,14 +1300,18 @@ function companionTurn(state, order) {
   }
   if (order === 'hold') return true;
   if (order !== undefined) {
-    const ordered = movesFor(state,unit).find((move) => same(move,order));
+    const ordered = legal().find((move) => same(move,order));
     if (ordered) moveCompanion(state,unit,ordered);
     return Boolean(ordered);
   }
   if (!state.enemies.length) return true;
-  const candidates = movesFor(state,unit).filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
+  const candidates = legal().filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
   const nearest = (move) => Math.min(...state.enemies.map((foe)=>distance(move,foe)));
-  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${state.turns}:${move.x},${move.y}`);
+  // Like the monsters' (monsterTie), its tie-break counts this floor's moves, not
+  // the run's, so a floor plays the same however long the earlier ones took. A
+  // king recruit, with its many equal steps, leans on it often.
+  const clock = state.classicMonsters === true ? state.turns : state.turns - (state.floorStart?.turns ?? 0);
+  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${clock}:${move.x},${move.y}`);
   candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
   const destination = candidates[0];
   if (destination) moveCompanion(state,unit,destination);
@@ -1555,7 +1590,9 @@ function play(previous, action) {
     if (!state.exit.open) { settle(state); state.message = 'Promoted to queen for the rest of this floor.'; }
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
-  if (recruit && !state.companion) {
+  // A recruit captures nothing on the turn it joins (companionTurn).
+  const joined = Boolean(recruit && !state.companion);
+  if (joined) {
     state.items = state.items.filter((item)=>item!==recruit);
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
@@ -1565,8 +1602,8 @@ function play(previous, action) {
     settle(state);
     state.message = huntsAlone(state) ? `A ${recruit.piece} joins you and hunts on its own for the rest of this room.`
       : action.recruit === undefined
-      ? `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`
-      : `A ${recruit.piece} joins you this floor. You move it after each of your moves, and it can capture ${challengeName(state)} too.`;
+      ? `A ${recruit.piece} joins you this floor. It can capture from your next move on, but never ${challengeName(state)}.`
+      : `A ${recruit.piece} joins you this floor. You move it after each of your moves. It can capture from your next move on, even ${challengeName(state)}.`;
   }
   // Pick up the relic before applying the magnet, so it works immediately.
   const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
@@ -1598,7 +1635,7 @@ function play(previous, action) {
   // Castling was the recruit's move, so an order to move it again is no action.
   // A cleared floor 1 or 2 ignores orders: the recruit hunts on its own there.
   const order = huntsAlone(state) ? undefined : action.recruit;
-  if (castle ? squareOrder(order) : !companionTurn(state, order)) return previous;
+  if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
   if (!castle) settle(state);
   if (state.playerColor === 'white') { enemyTurn(state, Boolean(close)); settle(state); }
   collapseTick(state); settle(state);
