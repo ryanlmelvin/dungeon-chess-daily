@@ -1934,7 +1934,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if ((value.modifier ?? 'none') !== (daily.modifier ?? 'none')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
     if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0) || (value.screens ?? 0) !== (daily.screens ?? 0)) return false;
-    if (value.seed !== daily.seed || value.edition !== daily.edition || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
+    // Not `edition`: the number moved when the archive began at 2026-11-01, and seed and date pin the day.
+    if (value.seed !== daily.seed || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
     // Collapse days may add reinforcements to a floor (up to a cap).
     const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + floorDecoys(daily, floor).length + extraPopulation(value.modifier);
     const reinforced = value.reinforcements ?? 0;
@@ -1956,12 +1957,12 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const companionCost = orders.reduce((sum, entry) => sum + COMPANIONS.find((recruit) => recruit.piece === entry.piece).cost, 0);
     const spent = companionCost + value.purchases.reduce((sum, id) => sum + purchaseCost(id), 0);
     if (!Array.isArray(value.records) || !Array.isArray(value.enemies) || !Array.isArray(value.species)) return false;
-    // Gold comes from coins and optional captures. Runs through the 2026-11-06 edition began
+    // Gold comes from coins and optional captures. Runs of the 2026-11-05 and 11-06 editions began
     // under the old rule that paid every capture, so they may hold up to one gold per capture.
     const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent - tacticGold(value.feats) : value.paidCaptures;
     const bonus = bonusCaptures(value);
     // Gold dropped in cave-ins (src/cave-in.js) leaves the ledger too.
-    if (!integer(paid, bonus, value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent - (value.dropped ?? 0)) return false;
+    if (!integer(paid, bonus, value.date >= '2026-11-05' && value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent - (value.dropped ?? 0)) return false;
     // Special moves the player made: absent in older saves.
     // Forks and combos are bounded by captures (validTactics), the rest by 30.
     if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.filter((feat) => !TACTIC_KINDS.includes(feat?.kind)).length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'

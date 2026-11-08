@@ -60,7 +60,7 @@ function renamed(species) {
 test('display variety preserves legacy edition metadata and valid saved runs', () => {
   const legacy = JSON.parse(readFileSync(new URL('./fixtures/schema3-run.json', import.meta.url), 'utf8'));
   const daily = getRawDaily(legacy.date);
-  for (const key of ['seed', 'edition', 'targets']) assert.deepEqual(daily[key], legacy[key], key);
+  for (const key of ['seed', 'targets']) assert.deepEqual(daily[key], legacy[key], key);
   // Targets keep their palettes; a decoy's may move so floor-mates never share one.
   assert.deepEqual(daily.species.slice(0, 3), legacy.species.slice(0, 3).map(renamed));
   assert.deepEqual(daily.species.map(({ id, piece }) => ({ id, piece })), legacy.species.map(({ id, piece }) => ({ id, piece })));

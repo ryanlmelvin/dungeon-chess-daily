@@ -255,8 +255,16 @@
   </dialog>
   <dialog id="archive-dialog" aria-labelledby="archive-title">
     <div class="dialog-heading"><h2 id="archive-title">Archive</h2><button class="icon-button" data-close aria-label="Close archive">✕</button></div>
-    <p id="archive-summary"></p>
-    <ol id="archive-list" class="archive-list"></ol>
+    <div class="archive-nav">
+      <button id="archive-previous" class="archive-arrow" type="button" aria-label="Previous month">◀</button>
+      <h3 id="archive-month" aria-live="polite"></h3>
+      <button id="archive-next" class="archive-arrow" type="button" aria-label="Next month">▶</button>
+    </div>
+    <div class="archive-calendar">
+      <div class="archive-weekdays" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+      <ol id="archive-days" class="archive-days"></ol>
+    </div>
+    <p class="archive-key"><span class="is-won">★ Won</span> <span class="is-lost">✕ Lost</span> <span class="is-playing">• Playing</span></p>
   </dialog>
   <dialog id="piece-dialog" aria-labelledby="piece-title">
     <div class="dialog-heading"><h2 id="piece-title">Choose piece</h2><button class="icon-button" data-close aria-label="Cancel piece selection">✕</button></div>

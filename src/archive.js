@@ -7,15 +7,6 @@ const STATUSES = new Set(['playing', 'won', 'lost']);
 /** Official v7 save key for a date, relative to the app's storage prefix. */
 export const dailySaveKey = (date) => `daily:v7:${date}`;
 
-/** Past editions from `first` up to the day before `today`, newest first. */
-export function archiveDates(today, first) {
-  const end = Date.parse(today), start = Date.parse(first);
-  if (!Number.isFinite(end) || !Number.isFinite(start)) throw new TypeError('Invalid archive date.');
-  const dates = [];
-  for (let time = end - DAY; time >= start; time -= DAY) dates.push(new Date(time).toISOString().slice(0, 10));
-  return dates;
-}
-
 /** True when `date` is a past edition that the archive offers. */
 export function isArchiveDate(date, today, first) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
@@ -38,11 +29,31 @@ export function savedStatus(raw, date) {
   } catch { return 'unplayed'; }
 }
 
-/** Archive rows for the menu; `read(key)` returns the stored string or null. */
-export function archiveEntries(today, first, read) {
-  return archiveDates(today, first).map((date) => ({
-    date, edition: editionNumber(date, first), status: savedStatus(read(dailySaveKey(date)), date),
-  }));
+/** The 'YYYY-MM' month `by` months after `month`. */
+export function shiftMonth(month, by) {
+  const [year, index] = month.split('-').map(Number);
+  return new Date(Date.UTC(year, index - 1 + by, 1)).toISOString().slice(0, 7);
+}
+
+/**
+ * One month of the archive calendar, weeks starting Sunday: `blanks` empty
+ * cells before the 1st, then a day per date. A day opens when it is an edition
+ * from `first` through `today`; `read(key)` returns the stored save or null.
+ * `previous` and `next` say whether the arrows lead to a month with editions.
+ */
+export function archiveMonth(month, today, first, read) {
+  const [year, index] = month.split('-').map(Number);
+  const start = Date.UTC(year, index - 1, 1);
+  const length = new Date(Date.UTC(year, index, 0)).getUTCDate();
+  const days = Array.from({ length }, (_, offset) => {
+    const date = new Date(start + offset * DAY).toISOString().slice(0, 10);
+    const open = date >= first && date <= today;
+    return { date, day: offset + 1, open, today: date === today, status: open ? savedStatus(read(dailySaveKey(date)), date) : 'unplayed' };
+  });
+  return {
+    month, blanks: new Date(start).getUTCDay(), days,
+    previous: shiftMonth(month, -1) >= first.slice(0, 7), next: shiftMonth(month, 1) <= today.slice(0, 7),
+  };
 }
 
 export const STATUS_LABELS = { won: 'Won', lost: 'Lost', playing: 'In progress', unplayed: 'Not played' };

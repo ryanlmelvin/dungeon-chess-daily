@@ -9,7 +9,7 @@ import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
-import { archiveEntries, dailySaveKey, isArchiveDate, savedStatus, STATUS_LABELS } from './archive.js';
+import { archiveMonth, dailySaveKey, isArchiveDate, shiftMonth, STATUS_LABELS } from './archive.js';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
 import { recruitChoice } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
@@ -1319,36 +1319,45 @@ function openEdition(date) {
   renderPaper(); switchScreen('paper');
   $('start-button').focus({ preventScroll: true });
 }
-function archiveRow({ date, status, today = false }) {
+const ARCHIVE_MARKS = { won: '★', lost: '✕', playing: '•', unplayed: '' };
+let archiveShown = null;
+function archiveDay({ date, day, open, today, status }) {
   const item = document.createElement('li');
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = `archive-entry is-${status}`;
-  if (date === daily.date) button.setAttribute('aria-current', 'true');
-  const title = document.createElement('span'); title.className = 'archive-title';
-  title.textContent = today ? `Today · ${shareDate(date)}` : shareDate(date);
-  const badge = document.createElement('span'); badge.className = 'archive-status';
-  badge.textContent = STATUS_LABELS[status];
-  button.append(title, badge);
-  button.addEventListener('click', () => openEdition(date));
+  button.className = `archive-day is-${status}`;
+  button.classList.toggle('is-today', today);
+  button.disabled = !open;
+  if (date === daily.date) button.setAttribute('aria-current', 'date');
+  button.setAttribute('aria-label', `${shareDate(date)}${today ? ', today' : ''}${open ? `, ${STATUS_LABELS[status].toLowerCase()}` : ''}`);
+  const number = document.createElement('span'); number.textContent = day;
+  const mark = document.createElement('span'); mark.className = 'archive-mark'; mark.textContent = ARCHIVE_MARKS[status];
+  button.append(number, mark);
+  if (open) button.addEventListener('click', () => openEdition(date));
   item.append(button);
   return item;
+}
+function renderArchive() {
+  const read = (name) => { try { return localStorage.getItem(`${prefix}${name}`); } catch { return null; } };
+  const view = archiveMonth(archiveShown, getDaily().date, FIRST_EDITION_DATE, read);
+  const [year, month] = view.month.split('-').map(Number);
+  $('archive-month').textContent = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  $('archive-previous').disabled = !view.previous;
+  $('archive-next').disabled = !view.next;
+  const blanks = Array.from({ length: view.blanks }, () => { const item = document.createElement('li'); item.setAttribute('aria-hidden', 'true'); return item; });
+  $('archive-days').replaceChildren(...blanks, ...view.days.map(archiveDay));
 }
 function openArchive() {
   if (turnLocked) return;
   save();
-  const today = getDaily();
-  const read = (name) => { try { return localStorage.getItem(`${prefix}${name}`); } catch { return null; } };
-  const past = archiveEntries(today.date, FIRST_EDITION_DATE, read);
-  const todayStatus = savedStatus(read(dailySaveKey(today.date)), today.date);
-  $('archive-list').replaceChildren(archiveRow({ date: today.date, status: todayStatus, today: true }), ...past.map(archiveRow));
-  const unplayed = past.filter(entry => entry.status === 'unplayed').length;
-  $('archive-summary').textContent = past.length
-    ? `${past.length} past ${past.length === 1 ? 'edition' : 'editions'} · ${unplayed} not played yet. Past editions keep their own saves and share as archive results.`
-    : 'Today’s paper is the first edition. Past editions will collect here from tomorrow.';
+  archiveShown = daily.date.slice(0, 7);
+  renderArchive();
   $('menu-dialog').close();
   $('archive-dialog').showModal();
-  $('archive-list').querySelector('[aria-current]')?.focus({ preventScroll: true });
+  $('archive-days').querySelector('[aria-current]')?.focus({ preventScroll: true });
+}
+for (const [id, by] of [['archive-previous', -1], ['archive-next', 1]]) {
+  $(id).addEventListener('click', () => { archiveShown = shiftMonth(archiveShown, by); renderArchive(); });
 }
 $('archive-button').addEventListener('click', openArchive);
 $('today-button').addEventListener('click', () => openEdition(getDaily().date));

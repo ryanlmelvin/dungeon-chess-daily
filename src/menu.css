@@ -277,14 +277,26 @@ body.playing:has(.pwa-bar button:not([hidden])) { padding-bottom: 0; }
 body.playing:has(.pwa-bar .update-button:not([hidden])) .game-screen { bottom: var(--pwa-bar-h); }
 body:has(.pwa-bar button:not([hidden])) .notice { bottom: calc(var(--pwa-bar-h) + 12px); }
 
-/* Archive: past editions with this device's saved result for each. */
-.archive-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: min(60vh, 520px); overflow-y: auto; }
-.archive-entry { width: 100%; margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; }
-.archive-status { font-size: 18px; color: #bdb1bf; white-space: nowrap; }
-.archive-entry.is-won .archive-status { color: var(--gold); }
-.archive-entry.is-playing .archive-status { color: #9fd6c2; }
-.archive-entry.is-unplayed .archive-title { color: var(--paper); }
-.archive-entry[aria-current] { border-color: var(--gold); }
+/* Archive: a month calendar of editions with this device's saved result for each. */
+.archive-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 12px; }
+.archive-nav h3 { margin: 0; font: 400 26px/1 'VT323', monospace; color: var(--paper); text-align: center; }
+dialog .archive-arrow { min-width: 44px; padding: 9px 0; color: var(--gold); }
+.archive-weekdays, .archive-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.archive-weekdays { margin-bottom: 6px; text-align: center; font-size: 18px; color: #bdb1bf; }
+.archive-days { list-style: none; margin: 0; padding: 0; }
+dialog .archive-day {
+  width: 100%; aspect-ratio: 1; min-height: 40px; margin: 0; padding: 2px 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  font-size: 22px; line-height: 1; color: var(--paper);
+}
+dialog .archive-day:disabled { opacity: 1; color: #5d5260; background: transparent; border-color: #302a35; box-shadow: none; }
+.archive-mark { height: 16px; font-size: 16px; line-height: 16px; }
+.archive-day.is-won .archive-mark, .archive-key .is-won { color: var(--gold); }
+.archive-day.is-lost .archive-mark, .archive-key .is-lost { color: #ef8b94; }
+.archive-day.is-playing .archive-mark, .archive-key .is-playing { color: #9fd6c2; }
+dialog .archive-day.is-today { border-color: var(--gold); }
+dialog .archive-day[aria-current] { background: #653942; }
+.archive-key { display: flex; justify-content: center; gap: 16px; margin: 14px 0 0; font-size: 18px; }
 .archive-banner {
   max-width: 780px; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
   font: 400 22px/1.1 'VT323', monospace; color: var(--gold);

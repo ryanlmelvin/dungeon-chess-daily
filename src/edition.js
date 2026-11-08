@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 const DAY = 86_400_000;
-const EPOCH = Date.UTC(2026, 10, 5);
+const EPOCH = Date.UTC(2026, 10, 1);
 /** Edition #1. The archive lists every edition from this date onward. */
 export const FIRST_EDITION_DATE = new Date(EPOCH).toISOString().slice(0, 10);
 import { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
