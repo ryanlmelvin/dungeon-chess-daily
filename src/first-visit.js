@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
-// The "How to play" guide opens by itself once, the first time a brand-new
-// player enters a dungeon. The flag lives outside the save prefix (like the
-// tactic explainers' flags) so backups never carry it and restores never
-// reject it.
+// The Quick start (the first pages of "How to play") opens by itself once, the
+// first time a brand-new player enters a dungeon. The flag lives outside the
+// save prefix (like the tactic explainers' flags) so backups never carry it and
+// restores never reject it.
 export const guideSeenKey = (scope) => `dchess-guide-seen:${scope}`;
 
 /**

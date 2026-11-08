@@ -674,14 +674,14 @@ function enterGame() {
   updateGame();
   openFirstVisitGuide();
 }
-// A brand-new player lands on the board with "How to play" already open, once.
-// Closing it leaves them on the board, ready for their first move.
+// A brand-new player lands on the board with the Quick start open, once. Play
+// (or closing it) leaves them on the board, ready for their first move.
 function openFirstVisitGuide() {
   if (!guidePending || screen !== 'game' || state?.status !== 'playing' || document.querySelector('dialog[open]')) return;
   guidePending = false;
   try { markGuideSeen(localStorage, scope); } catch {}
   openMenu();
-  guide.openFirstPage();
+  guide.openQuickStart();
 }
 $('start-button').addEventListener('click', enterGame);
 // Monster pawns always march down the board, toward the side the player started on.

@@ -131,20 +131,29 @@ dialog .icon-button, .app-bar .icon-button {
 /* The illustrated guide and every dynamic dialog use the same controls. */
 #guide .dialog-heading { margin-bottom: 0; }
 dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0; box-shadow: none; }
-#guide-contents ol { padding-left: 24px; }
-#guide-contents li { font-size: 20px; color: var(--gold); }
 #guide-contents button {
   font-size: 22px;
-  padding: 12px;
-  margin: 6px 0;
+  padding: 10px 12px;
   border: 2px solid var(--menu-edge);
   color: var(--paper);
 }
+#guide-contents .guide-quick button { color: var(--gold); border-color: var(--gold); }
 .move-diagrams figcaption, .guide-lives dd { font-size: 20px; }
 .guide-page h3 { font-size: 22px; color: var(--gold); }
 .move-dot { width: 8px; height: 8px; border-radius: 0; }
 .guide-keyboard { font-size: 20px; }
+.guide-pickups dd { line-height: 1.15; }
 #guide-pagination { border-top: 2px solid #51424f; }
+#guide-count { font-size: 20px; color: #bdb1bf; }
+/* Short screens (an iPhone SE in Safari) still fit each guide page without scrolling. */
+@media (max-height: 600px) {
+  .guide-page p, .guide-pickups dd { font-size: 18px; line-height: 1.15; }
+  .guide-page p { margin: 6px 0; }
+  .guide-page h3 { margin: 8px 0 0; }
+  .guide-page .guide-wide { margin: 8px auto 2px; }
+  .guide-pickups { gap: 2px; margin-top: 8px; }
+  #guide-pagination { margin-top: 8px; padding-top: 8px; }
+}
 .shop-items { gap: 8px; }
 .shop-items button { padding: 12px; }
 .shop-items strong { font-size: 24px; line-height: 1; margin-bottom: 4px; }

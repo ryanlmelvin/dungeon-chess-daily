@@ -118,29 +118,36 @@
       <button id="guide-back" class="guide-back">← Menu</button>
       <nav id="guide-contents" aria-label="Table of contents">
         <ol>
-          <li><button data-guide-page="0">Capture targets <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="1">Move your piece <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="2">Turns &amp; lives <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="3">Pickups <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="4">Special moves <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="5">Room modifiers <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="6">Forks &amp; combos <span aria-hidden="true">→</span></button></li>
-          <li><button data-guide-page="7">Clues &amp; hints <span aria-hidden="true">→</span></button></li>
+          <li class="guide-quick"><button data-guide-section="quick">Quick start</button></li>
+          <li><button data-guide-section="moving">Moving</button></li>
+          <li><button data-guide-section="turns">Turns &amp; lives</button></li>
+          <li><button data-guide-section="gold">Gold &amp; items</button></li>
+          <li><button data-guide-section="recruits">Recruits</button></li>
+          <li><button data-guide-section="special">Special moves</button></li>
+          <li><button data-guide-section="tactics">Forks &amp; combos</button></li>
+          <li><button data-guide-section="modifiers">Room modifiers</button></li>
+          <li><button data-guide-section="hints">Hints &amp; par</button></li>
         </ol>
+        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p><p>Then your recruit: arrows + Enter: move it · Space: keep it still</p></details>
       </nav>
-      <article class="guide-page" hidden>
-        <p>Clear <b>3 floors.</b></p>
-        <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to open the exit door onto the stairs."></canvas>
-        <p>Use the paper’s clues and monsters’ moves to find every target. The last floor targets the king.</p>
-        <p>Capture them all to open the door behind the back rank. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
-        <p>On floors 1 and 2, opening the door cracks the ceiling. It caves in after a few moves (waiting counts), fewer on harder days, and <b>🪨 Caving in</b> at the top counts them down. Gold you grab now is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you drop that gold, the coins and pickup still lying there are buried, and the rubble carries you down the stairs to the shop.</p>
-        <p>If the targets left end up where your piece can never land (say, pawns stuck against walls on a bishop’s other colour), the game tells you. Choose <b>Restart this floor</b> there or in the menu: you keep the lives, gold and powers you arrived with.</p>
-        <p>Each floor shows a <b>Par</b>: about how many moves a careful player needs to finish that floor’s challenge, steering their recruit. Your move count stops the moment you capture the last target, so gathering leftover gold and walking to the stairs costs no score. Your share card shows how far over or under par you finished each floor. Only the official piece and color have a par.</p>
-        <p><b>Every daily can be won.</b> Before an edition goes out, a bot plays it through with the official piece and color: no powerups, no bought help, no lost lives (pawn days may spend up to four), and no ally but the recruit on floor 3. After you win, <b>Watch the bot’s run</b> to see how a careful bot played it.</p>
-        <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
+      <!-- Every page fits a phone screen. The Quick start pages come first: a new
+           player reads only those; the game explains the rest as it comes up. -->
+      <article class="guide-page" data-section="quick" data-title="The goal" hidden>
+        <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every target to open the exit door onto the stairs."></canvas>
+        <p>Clear <b>3 floors.</b> On each, capture every target to open the door, then take the stairs. The last floor’s target is the king.</p>
+        <p>The fewer moves, the better.</p>
       </article>
-      <article class="guide-page" hidden>
-        <p>Tap your piece for legal moves. Land on a monster to capture it.</p>
+      <article class="guide-page" data-section="quick" data-title="Monsters" hidden>
+        <canvas class="guide-wide" data-clue-art="unmask" width="400" height="100" role="img" aria-label="A captured monster’s rook pops out of its square, and its look-alikes now wear a small rook badge."></canvas>
+        <p>Every monster is a chess piece in disguise. Look-alikes move alike: watch them to spot the targets.</p>
+        <p>Each capture reveals a monster’s piece.</p>
+      </article>
+      <article class="guide-page" data-section="quick" data-title="Danger" hidden>
+        <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
+        <p>A red path shows where a monster will capture next: step off it.</p>
+        <p>Up close there’s no warning: next to a monster, or a knight’s jump from one, you can be captured at once. Being captured costs a life.</p>
+      </article>
+      <article class="guide-page" data-section="moving" data-title="Moving" hidden>
         <div class="move-diagrams">
           <figure><canvas data-guide-art="move-pawn" width="200" height="200" role="img" aria-label="Pawn: forward into empty space, up to two squares on its first move; capture diagonally forward."></canvas><figcaption>Pawn</figcaption></figure>
           <figure><canvas data-guide-art="move-knight" width="200" height="200" role="img" aria-label="Knight: two squares then one sideways, jumping over obstacles."></canvas><figcaption>Knight</figcaption></figure>
@@ -150,27 +157,11 @@
           <figure><canvas data-guide-art="move-king" width="200" height="200" role="img" aria-label="King: one square in any direction."></canvas><figcaption>King</figcaption></figure>
         </div>
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
-        <p>Obstacles block paths; knights jump. Pawns may open with two steps. A pawn reaching the last rank promotes to a queen until the floor ends.</p>
-        <p>Pawns can capture <b>en passant</b>, your rook can <b>castle</b> with a king recruit (a practice king with a rook recruit, too), and a bishop recruit joining your bishop hops to the other colour (the <b>bishop pair</b>): see <b>Special moves</b>.</p>
-        <details class="guide-keyboard"><summary>Keyboard</summary><p>Arrows / WASD: select · Enter: move · Space: wait · Esc: clear · Tab: controls</p><p>Then your recruit: arrows + Enter: move it · Space: keep it still</p></details>
+        <p>Tap your piece to see its moves. Pawns may open with two steps, and a pawn on the last rank becomes a queen for the floor.</p>
       </article>
-      <article class="guide-page" hidden>
-        <h3 id="guide-order-title">Who moves first</h3>
-        <p>Your daily piece is white. In practice you can play black, which changes the turn order:</p>
-        <div class="turn-order" aria-labelledby="guide-order-title">
-          <p><canvas data-guide-art="piece-pawn" width="40" height="40" aria-hidden="true"></canvas><span>White: you move, then enemies</span></p>
-          <p><canvas data-guide-art="black-pawn" width="40" height="40" aria-hidden="true"></canvas><span>Black: enemies move, then you</span></p>
-        </div>
-        <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
-        <p>Red paths show where monsters will capture next. As white, step off them to dodge. As black, monsters capture before your move, so a red path on your square means you’re captured. If enemies block the square you chose, pick another; they won’t move again first.</p>
-        <h3 id="guide-close-title">Close range</h3>
-        <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
-        <p>After a close-range capture the monsters still move, but none can capture you again that turn: a red path on your square waits. Step off it on your next move.</p>
-        <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. A king, a practice-only choice, can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
-        <p>Tap <b>Wait</b>, just above the board’s top-right corner, to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can capture it first.</p>
-        <h3 id="guide-off-balance-title">Off-balance</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="off-balance" width="200" height="200" role="img" aria-label="Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it."></canvas></figure>
-        <p>Step off a red path and the monster still lunges, landing on the square you left. Stars circle its head: it’s off-balance until your next move ends, so it can’t capture you, even up close. Bait a lunge, sidestep, then strike!</p>
+      <article class="guide-page" data-section="turns" data-title="Turns &amp; lives" hidden>
+        <p>Your daily piece is white: you move, then the monsters. In practice you can play black, and they move first.</p>
+        <p>Tap <b>Wait</b> to skip a move. Far-off queens, rooks and bishops step closer and show a red path before they capture.</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
           <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
@@ -180,64 +171,70 @@
           <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
           <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King, practice only"></canvas></dt><dd>1</dd></div>
         </dl>
-        <p>Each capture costs a life, and turns a promoted queen back into a pawn. Running out of lives sends you back to floor 1 and costs a try.</p>
+        <p>Lose them all and you’re back to floor 1.</p>
       </article>
-      <article class="guide-page" hidden>
-        <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop. It always sells an extra life for 10 gold (limit 1 per shop), plus three other items drawn for that shop and the same for everyone that day: a bone ward, a coin magnet, or a tool you use when you choose from buttons beside your lives. Hourglasses turn up only in rooms. With no shop after it, the last floor holds no coins.</p>
-        <p>Gold you earn after a floor’s door opens is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you lose it, a pickup still lying in that room is buried, and the rubble carries you down to this shop (see <b>Capture targets</b>).</p>
+      <article class="guide-page" data-section="turns" data-title="Off-balance" hidden>
+        <canvas class="hint-art" data-guide-art="off-balance" width="200" height="200" role="img" aria-label="Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it."></canvas>
+        <p>Step off a red path and the monster still lunges, onto the square you left. Stars mean it’s off-balance: it can’t capture you until your next move ends.</p>
+        <p>Bait a lunge, sidestep, then strike!</p>
+      </article>
+      <article class="guide-page" data-section="gold" data-title="Gold" hidden>
+        <p>Coins and extra captures pay 1 gold each; targets pay nothing. Spend gold in the shop after floors 1 and 2.</p>
+        <p>Opening the door cracks the ceiling. Gold you grab after that is <b>at risk:</b> if the ceiling caves in before you take the stairs, you drop it.</p>
+      </article>
+      <article class="guide-page" data-section="gold" data-title="Items" hidden>
         <dl class="guide-pickups">
-          <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one capture. Stacks up to 3.</dd></div>
-          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Found in rooms, never sold. Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
-          <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd>Collect coins within 2 squares after each move</dd></div>
-          <div><dt><canvas data-guide-art="power-pin" width="40" height="40" role="img" aria-label="Pin"></canvas></dt><dd>4 gold, floor 2 only. Tap Pin, then any monster: it can’t move or capture for 3 moves.</dd></div>
-          <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Squares with a ghosted knight (a ghosted queen if you’re a knight) and gold corners move like that piece. They’re optional: only taking one spends it. Tap Borrow to point them out.</dd></div>
-          <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
-          <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece (a pawn always waits on a file open to the far rank); on the last floor, always a king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts, but not on the turn it joins. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself. In auto mode, it can’t capture targets. Once floor 1 or 2 is cleared, it moves itself and hunts for gold while you explore. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
+          <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd><b>Bone ward:</b> blocks one capture.</dd></div>
+          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd><b>Frost hourglass:</b> freezes every monster for 3 moves.</dd></div>
+          <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd><b>Coin magnet:</b> grabs coins within 2 squares.</dd></div>
+          <div><dt><canvas data-guide-art="power-pin" width="40" height="40" role="img" aria-label="Pin"></canvas></dt><dd><b>Pin:</b> freezes one monster for 3 moves.</dd></div>
+          <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd><b>Borrowed move:</b> one knight move (a queen move, if you’re a knight).</dd></div>
+          <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd><b>Take-back:</b> undo your last move.</dd></div>
+          <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd><b>Extra life:</b> one more life.</dd></div>
         </dl>
-        <p>Land on pickups to activate them.</p>
       </article>
-      <article class="guide-page" hidden>
-        <h3 id="guide-en-passant-title">En passant</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-player" width="200" height="200" role="img" aria-label="Animated board: an enemy pawn advances two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped."></canvas></figure>
-        <p>When a monster pawn advances two squares past your pawn, capture it on your very next move as if it had moved only one: step diagonally into the square it skipped.</p>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="en-passant-enemy" width="200" height="200" role="img" aria-label="Animated board: your pawn advances two squares past an enemy pawn, which captures it by moving diagonally into the square your pawn skipped."></canvas></figure>
-        <p>It works both ways: advance your own pawn two squares past a monster pawn and it captures you the same way, at once. This is called ‘en passant!’</p>
-        <h3 id="guide-castle-title">Castling</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook crosses over the king to the square beside it."></canvas></figure>
-        <p>Your rook and a king recruit (or a practice king and a rook recruit) can trade places in one move when they stand on the same rank with exactly two open squares between them. The king slides two squares toward the rook, and the rook crosses over the king to the square beside it. Items may lie between, monsters and walls may not.</p>
-        <p>Playing the rook, tap your king; playing a practice king, tap its landing square. As in chess, the king can’t castle out of, through or into check. Castling is your recruit’s move for that turn. This is called ‘castling!’</p>
-        <h3 id="guide-bishop-pair-title">Bishop pair</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="bishop-pair" width="200" height="200" role="img" aria-label="Animated board: your bishop steps onto a waiting bishop recruit and the squares of its colour light up, half the board. The recruit hops one square sideways onto the other colour, and the rest of the board lights up too."></canvas></figure>
-        <p>A bishop stays on one square colour, so a bishop recruit on your colour would only reach squares you already can. When your bishop recruits a bishop, its move that turn is a hop to a side square (up, down, left or right) on the other colour; if all four are blocked, any free square of the other colour. On Manual, tap the green square it hops to: it can’t stay put. Now your two bishops cover every square. Chess players call this the ‘bishop pair!’</p>
+      <article class="guide-page" data-section="recruits" data-title="Recruits" hidden>
+        <canvas class="hint-art" data-guide-art="recruit" width="200" height="200" role="img" aria-label="Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line."></canvas>
+        <p>Each floor’s recruit waits in a green ring. Step onto it and it joins you.</p>
+        <p>After each move, tap a green square to move it, or tap it to stay put. It can capture targets too, except on <b>Auto</b> (in the menu), where it moves itself.</p>
       </article>
-      <article class="guide-page" hidden>
-        <p>Many days add one <b>room modifier</b> to all three floors. The paper’s bulletin and the top of the board name it. About half the days are plain.</p>
+      <article class="guide-page" data-section="special" data-title="En passant" hidden>
+        <div class="guide-pair">
+          <canvas class="hint-art" data-guide-art="en-passant-player" width="200" height="200" role="img" aria-label="Animated board: an enemy pawn advances two squares past your pawn, and your pawn captures it by moving diagonally into the square it skipped."></canvas>
+          <canvas class="hint-art" data-guide-art="en-passant-enemy" width="200" height="200" role="img" aria-label="Animated board: your pawn advances two squares past an enemy pawn, which captures it by moving diagonally into the square your pawn skipped."></canvas>
+        </div>
+        <p>As in chess: a pawn that steps two squares past an enemy pawn can be captured as if it had stepped one, on the very next move only. It works both ways.</p>
+      </article>
+      <article class="guide-page" data-section="special" data-title="Castling" hidden>
+        <canvas class="hint-art guide-castle" data-guide-art="castle" width="240" height="120" role="img" aria-label="Animated board: a king slides two squares toward a rook, and the rook crosses over the king to the square beside it."></canvas>
+        <p>Your rook can castle with a king recruit, as in chess: same row, two open squares between, not out of, through or into check. Tap the king.</p>
+        <p>A practice king castles with a rook recruit: tap where the king lands.</p>
+      </article>
+      <article class="guide-page" data-section="special" data-title="Bishop pair" hidden>
+        <canvas class="hint-art" data-guide-art="bishop-pair" width="200" height="200" role="img" aria-label="Animated board: your bishop steps onto a waiting bishop recruit and the squares of its colour light up, half the board. The recruit hops one square sideways onto the other colour, and the rest of the board lights up too."></canvas>
+        <p>When your bishop recruits a bishop, the recruit hops to a side square on the other colour (on Manual, tap the green one). Together they cover every square.</p>
+      </article>
+      <article class="guide-page" data-section="tactics" data-title="Forks &amp; combos" hidden>
+        <div class="guide-pair">
+          <canvas class="hint-art" data-guide-art="fork" width="200" height="200" role="img" aria-label="Animated board: a knight hops to a square that attacks two monsters at once, then captures one of them."></canvas>
+          <canvas class="hint-art" data-guide-art="combo" width="200" height="200" role="img" aria-label="Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three."></canvas>
+        </div>
+        <p><b>Fork 🔱</b> Attack two or more monsters at once, then capture one on your very next move: +2 gold.</p>
+        <p><b>Combo 🔥</b> Capture on moves in a row. The third in a row, and each one after, pays +1 gold.</p>
+      </article>
+      <article class="guide-page" data-section="modifiers" data-title="Room modifiers" hidden>
+        <p>Some days add one modifier to every floor. Tap its name above the board for a reminder.</p>
         <h3>🧊 Ice</h3>
-        <p>Pale, glinting squares are ice. A rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square the same way if that square is open and empty. Captures stop you dead. The move preview draws an arrow to where you’ll land. Monsters and recruits are sure-footed: only your piece slides.</p>
+        <p>End a move on ice and your piece skids one more square the same way, if it’s open. Knights and kings don’t skid, and captures stop you. Monsters never skid.</p>
         <h3>🧱 Collapse</h3>
-        <p>Every 10 moves on a floor, one more monster (never the floor’s target, never a pawn) walks in on the square in front of the door. If anyone is standing there, you or your recruit included, it drops in on the nearest empty square instead, so you can’t hold the door shut. It doesn’t strike as it lands: like any monster, it winds up first. At most 3 per floor, and none once the stairs are open. The top of the board counts down to the next arrival.</p>
+        <p>Every 10 moves, a new monster walks in at the door. At most 3 per floor, and none once the stairs open.</p>
       </article>
-      <article class="guide-page" hidden>
-        <h3 id="guide-fork-title">Fork 🔱</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="fork" width="200" height="200" role="img" aria-label="Animated board: a knight hops to a square that attacks two monsters at once, then captures one of them."></canvas></figure>
-        <p>End a move where your piece attacks two or more monsters at once and they light up gold: that’s a fork. Walls and other monsters still block lines; knights jump. Capture one of them on your very next move for <b>+2 bonus gold</b>.</p>
-        <h3 id="guide-combo-title">Combo 🔥</h3>
-        <figure class="special-moves"><canvas class="hint-art" data-guide-art="combo" width="200" height="200" role="img" aria-label="Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three."></canvas></figure>
-        <p>Capture on moves in a row to build a combo; the counter appears beside your gold. The third capture in a row, and every one after it, pays <b>+1 bonus gold</b>. Waiting, a move without a capture, or a new floor ends it.</p>
+      <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
+        <p>Each story in the paper describes one floor’s target. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
+        <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target.</p>
+        <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece.</p>
       </article>
-      <article class="guide-page" hidden>
-        <h3>The paper</h3>
-        <p>Each story says how one floor’s target moves, never who it is, and lines up two <b>suspects</b>: the target’s kind and one other kind of monster that can turn up there. Watch how they move to tell which is which.</p>
-        <h3>Unmasking</h3>
-        <canvas class="guide-wide" data-clue-art="unmask" width="400" height="100" role="img" aria-label="A captured monster’s rook pops out of its square, and its look-alikes now wear a small rook badge."></canvas>
-        <p>Every capture <b>unmasks</b> a monster: its true piece pops out. A kind of monster keeps one piece all day, so its look-alikes wear that piece as a badge.</p>
-        <h3>Hints</h3>
-        <p>Tap <b>Hint</b> beside the objective. The first is free: how the target moves. The next two each add <b>+1 move</b> to the floor’s score, and the button then reads <b>Hint · +1</b>:</p>
-        <p><b>Identify the target</b> rings the targets on the board and names their kind. <b>Show danger map</b> hatches in black and white every square where ending your move gets you captured at once.</p>
-        <p>Paid hints count like moves: in your move count, against par and on your share card, even after <b>Restart this floor</b>. Flip back through the hints you have with <b>‹ ›</b> or a swipe; that’s free.</p>
-      </article>
-      <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Previous</button><button id="guide-next">Next →</button></nav>
+      <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Back</button><span id="guide-count" hidden></span><button id="guide-toc">Contents</button><button id="guide-next">Next →</button></nav>
     </section>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title">
