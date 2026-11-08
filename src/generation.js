@@ -24,8 +24,14 @@ const cache = new Map();
 export const ATTEMPTS = 4;
 export const SEARCH_BUDGET = 12_000;
 
+/**
+ * Salt for candidate layout seeds, frozen at the rules version that first used
+ * it so a rules bump doesn't re-roll the layout of every day that took a
+ * later candidate. Change it only to re-roll those layouts on purpose.
+ */
+export const LAYOUT_SEED_VERSION = 7;
 /** Layout seed of a date's numbered candidate; the same for every tier. */
-export const candidateSeed = (base, attempt) => (attempt === 0 ? base.seed : hash(`${GENERATOR_VERSION}:${base.seed}:${attempt}`));
+export const candidateSeed = (base, attempt) => (attempt === 0 ? base.seed : hash(`${LAYOUT_SEED_VERSION}:${base.seed}:${attempt}`));
 
 /** The uncertified edition a tier's knobs build for a raw daily. */
 export function candidateFor(base, tier, knobs, attempt = 0) {

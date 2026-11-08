@@ -1157,5 +1157,7 @@ Any change to gameplay, generation, search budgets/order, calibration, the
 human-like bot (whose gap now picks candidates), or fallback selection can
 change an edition. Bump the generator/rules version and save-key version
 together for such a release; `HUMAN_BOT_VERSION` alone only recomputes
-remembered pars. Version 5 archives earlier saved editions
+remembered pars. Candidate layouts after the first are seeded by
+`LAYOUT_SEED_VERSION` (src/generation.js), not the rules version, so a bump
+keeps every day's layout unless the new rules make its stored route fail. Version 5 archives earlier saved editions
 in backups instead of interpreting their old layouts as certified new games.

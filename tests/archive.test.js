@@ -45,13 +45,13 @@ test('only valid past editions can be reopened from the archive', () => {
   }
 });
 
-test('saved status reads each day from its official v7 key', () => {
+test('saved status reads each day from its official v8 key', () => {
   const date = '2026-11-05';
   const saved = new Map([
     [dailySaveKey('2026-11-07'), JSON.stringify({ date: '2026-11-07', status: 'won' })],
     [dailySaveKey('2026-11-06'), JSON.stringify({ date: '2026-11-06', status: 'playing' })],
     [dailySaveKey(date), '{not json'],
-    ['practice:v7:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
+    ['practice:v8:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
     ['daily:v5:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
   ]);
   const { days } = archiveMonth('2026-11', '2026-11-09', FIRST_EDITION_DATE, (name) => saved.get(name) ?? null);

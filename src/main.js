@@ -55,8 +55,8 @@ let parToast = null;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v7:${daily.date}`;
-const practiceModeKey = () => `${prefix}practice:active:v7:${daily.date}`;
+const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v8:${daily.date}`;
+const practiceModeKey = () => `${prefix}practice:active:v8:${daily.date}`;
 function setPracticeMode(enabled) {
   practice = enabled;
   try {
@@ -1412,7 +1412,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:v7:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice)saves[`daily:v8:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);progressStatus('Backup download requested.');
 });
