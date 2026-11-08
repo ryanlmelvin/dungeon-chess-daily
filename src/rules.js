@@ -764,15 +764,12 @@ function regainBalance(state) {
   for (const foe of state.enemies) delete foe.offBalance;
 }
 
-function connectedBoard(state) {
-  const layoutPiece = state.layoutPiece ?? state.startingPiece;
-  const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
-  // Flood fill with movesFor's rules on an empty board (piece is never a pawn
-  // here): sliders run until a wall, knights and kings step once.
-  const open = new Uint8Array(64);
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) open[y * 8 + x] = walkable(state, x, y) ? 1 : 0;
+// The squares (index y * 8 + x) a piece can reach from `from` over this
+// floor's walls: a flood fill with movesFor's rules on an empty board (never
+// a pawn): sliders run until a wall, knights and kings step once.
+function reachableFrom(state, piece, from) {
   const visited = new Uint8Array(64);
-  const queue = [4 + 6 * 8];
+  const queue = [from.x + from.y * 8];
   visited[queue[0]] = 1;
   const directions = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
   const range = rays(piece) ? 7 : 1;
@@ -781,16 +778,79 @@ function connectedBoard(state) {
     for (const [dx, dy] of directions) {
       for (let step = 1; step <= range; step++) {
         const x = qx + dx * step, y = qy + dy * step;
-        if (x < 0 || y < 0 || x > 7 || y > 7 || !open[y * 8 + x]) break;
+        if (!walkable(state, x, y)) break;
         if (!visited[y * 8 + x]) { visited[y * 8 + x] = 1; queue.push(y * 8 + x); }
       }
     }
   }
+  return visited;
+}
+
+function connectedBoard(state) {
+  const layoutPiece = state.layoutPiece ?? state.startingPiece;
+  const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
+  const visited = reachableFrom(state, piece, { x: 4, y: 6 });
   // Bishops need every open square of their own color; other pieces need all.
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if (open[y * 8 + x] && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited[y * 8 + x]) return false;
+    if (walkable(state, x, y) && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited[y * 8 + x]) return false;
   }
   return true;
+}
+
+// Practice with another piece plays the official room, whose walls, recruit
+// and power-up square suit the day's piece: a practice bishop couldn't reach
+// the power-up on more than half its floors or the recruit on four in five,
+// and now and then a practice knight had every jump from its start walled
+// off. So, on its own random stream, leaving monsters and the other walls
+// where the official room has them: a practice piece with no move from its
+// start has the walls on its first moves cleared; the waiting recruit stands
+// on one of its first moves, as it does for the day's piece (a pawn recruit
+// on a file open to the far rank); a coin or power-up it can't reach moves to
+// a square it can, two or more steps away (the room's middle rows when it
+// can). Pawns only advance, so their rooms are left as they are.
+function fitPracticeRoom(state, layoutPiece) {
+  const piece = state.startingPiece;
+  if (!state.practice || piece === layoutPiece || piece === 'pawn') return;
+  let reach = reachableFrom(state, piece, state.player);
+  if (reach.every((seen, index) => !seen || index === state.player.x + state.player.y * 8)) {
+    const steps = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
+    for (const [dx, dy] of steps) {
+      const x = state.player.x + dx, y = state.player.y + dy;
+      if (!inside(x, y) || walkable(state, x, y)) continue;
+      state.map[y] = state.map[y].slice(0, x) + '.' + state.map[y].slice(x + 1);
+      state.props = state.props.filter((prop) => prop.x !== x || prop.y !== y);
+    }
+    reach = reachableFrom(state, piece, state.player);
+  }
+  const reached = (tile) => reach[tile.y * 8 + tile.x] === 1;
+  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:practice-pickups:${state.floor}`));
+  const recruit = state.items.find((item) => item.type === 'companion');
+  if (recruit) {
+    const fits = (tile) => !same(tile, state.exit) && !enemyAt(state, tile.x, tile.y) && !state.items.some((other) => other !== recruit && same(other, tile))
+      && (recruit.piece !== 'pawn' || openFile(state, tile));
+    const first = movesFor(state, { ...state.player, piece }).filter(fits);
+    if (!first.some((tile) => same(tile, recruit))) {
+      const anywhere = [];
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (reached({ x, y }) && !same({ x, y }, state.player) && fits({ x, y })) anywhere.push({ x, y });
+      const pool = first.length ? first : anywhere;
+      const tile = pool[Math.floor(rng() * pool.length)];
+      if (tile) Object.assign(recruit, { x: tile.x, y: tile.y });
+    }
+  }
+  for (const item of state.items) {
+    if ((item.type !== 'coin' && item.type !== 'powerup') || reached(item)) continue;
+    const free = [];
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      const tile = { x, y };
+      if (!reached(tile) || Math.max(Math.abs(x - state.player.x), Math.abs(y - state.player.y)) <= 1 || same(tile, state.exit)
+        || enemyAt(state, x, y) || state.items.some((other) => same(other, tile))) continue;
+      free.push(tile);
+    }
+    const middle = free.filter((tile) => tile.y >= 3 && tile.y <= 5);
+    const pool = middle.length ? middle : free;
+    const tile = pool[Math.floor(rng() * pool.length)];
+    if (tile) Object.assign(item, tile);
+  }
 }
 
 // Walls never land on a monster's opening moves, so none spawns boxed in (a
@@ -1068,6 +1128,7 @@ function setFloor(state, kingRecruit = false) {
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
   if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
+  fitPracticeRoom(state, layoutPiece);
   // The day's modifier (ice tiles, reinforcement count) once the room is fixed.
   setupFloorModifier(state);
   const order = (state.companionOrders ?? []).find((entry) => entry.floor === state.floor);

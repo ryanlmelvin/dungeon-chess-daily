@@ -2,6 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialPiece, legalMoves, PIECES, PIECE_LIVES, unreachablePickups, validateSave } from '../src/game.js';
+import { createGame as createRawGame } from '../src/rules.js';
+import { candidateFor } from '../src/generation.js';
+import { getRawDaily } from '../src/edition.js';
 
 const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
 const move = (x, y) => ({ type: 'move', x, y });
@@ -10,6 +13,10 @@ const layout = (state) => ({
   map: state.map, props: state.props, items: state.items, objective: state.objective,
   enemies: state.enemies.map(({ phase, target, intent, ...enemy }) => enemy),
 });
+// What a practice room always keeps from the official one: its monsters and challenge.
+const kept = (state) => ({ objective: state.objective, enemies: layout(state).enemies });
+const walls = (state) => state.map.flatMap((row, y) => [...row].flatMap((cell, x) => (cell === '#' ? [`${x},${y}`] : [])));
+const pickups = (state) => state.items.map(({ x, y, ...item }) => JSON.stringify(item)).sort();
 
 // Complete the room in a fixture so layout/validation tests exercise real
 // descent without trying to solve an intentionally uncertified variant.
@@ -33,7 +40,7 @@ function exhaust(previous) {
   return act(state, move(4, 5));
 }
 
-test('all twelve choices keep every official layout across all floors and validate only as practice', () => {
+test('all twelve choices keep every official room across all floors, fitted to the piece, and validate only as practice', () => {
   for (const date of dates) {
     const daily = getDaily(date);
     const floors = [createGame(daily)];
@@ -41,7 +48,16 @@ test('all twelve choices keep every official layout across all floors and valida
     for (const piece of PIECES) for (const color of ['white', 'black']) {
       let practice = createPracticeGame(daily, { piece, color });
       for (let floor = 0; floor < 3; floor++) {
-        assert.deepEqual(layout(practice), layout(floors[floor]), `${date}: ${color} ${piece}, floor ${floor}`);
+        const label = `${date}: ${color} ${piece}, floor ${floor}`;
+        // The day's own piece, and a pawn, play the official room as it is.
+        if (piece === daily.playerPiece || piece === 'pawn') assert.deepEqual(layout(practice), layout(floors[floor]), label);
+        else {
+          // Another piece keeps its monsters and pickups, may lose walls, and reaches every pickup.
+          assert.deepEqual(kept(practice), kept(floors[floor]), label);
+          assert.ok(walls(practice).every((wall) => walls(floors[floor]).includes(wall)), `${label}: practice only clears walls`);
+          assert.deepEqual(pickups(practice), pickups(floors[floor]), label);
+          assert.deepEqual(unreachablePickups(practice), [], label);
+        }
         assert.equal(practice.startingPiece, piece); assert.equal(practice.playerColor, color);
         assert.equal(practice.player.maxHp, PIECE_LIVES[piece]); assert.equal(practice.player.hp, PIECE_LIVES[piece]);
         assert.equal(practice.layoutPiece, daily.playerPiece); assert.equal(practice.practice, true);
@@ -55,16 +71,35 @@ test('all twelve choices keep every official layout across all floors and valida
   }
 });
 
-test('alternate construction accepts unreachable pickups without changing or certifying the official layout', () => {
+test('a practice room fits its piece without changing or certifying the official room', () => {
   const daily = getDaily('2026-11-05');
   const before = structuredClone(daily);
   const practice = createPracticeGame(daily, { piece: 'bishop', color: 'black' });
-  assert.ok(unreachablePickups(practice).length > 0);
+  // The official pawn room's power-up and recruit sit off a bishop's colour; practice moves them.
+  assert.deepEqual(unreachablePickups(practice), []);
+  const recruit = practice.items.find((item) => item.type === 'companion');
+  assert.ok(legalMoves(practice).some((move) => move.x === recruit.x && move.y === recruit.y), 'the recruit waits one move away');
   assert.deepEqual(getDaily(daily.date), before);
   assert.deepEqual(daily, before);
   for (const options of [{ piece: 'dragon' }, { color: 'red' }, { piece: null }, { color: null }]) {
     assert.throws(() => createPracticeGame(daily, options), RangeError);
   }
+});
+
+test('a practice piece walled in at its start gets the walls on its first moves cleared', () => {
+  // 2027-01-04, a Gentle rook day, with the knobs it had when this was found:
+  // every jump from a knight's start is a wall in the official room.
+  const knobs = { obstacleBase: 10, decoys: 2, scatter: 1, guards: 2, screens: 3 };
+  const official = candidateFor(getRawDaily('2027-01-04'), 'gentle', knobs);
+  const room = createRawGame(official);
+  const jumps = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]]
+    .map(([dx, dy]) => [room.player.x + dx, room.player.y + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < 8 && y < 8);
+  assert.ok(jumps.every(([x, y]) => room.map[y][x] === '#'), 'the official room walls off every jump');
+  const practice = createRawGame({ ...official, playerPiece: 'knight', practice: true, layoutPiece: official.playerPiece });
+  assert.equal(legalMoves(practice).length, jumps.length);
+  assert.deepEqual(walls(practice), walls(room).filter((wall) => !jumps.some(([x, y]) => wall === `${x},${y}`)), 'only the jumps were cleared');
+  assert.ok(practice.props.every((prop) => practice.map[prop.y][prop.x] === '#'));
+  assert.deepEqual(unreachablePickups(practice), []);
 });
 
 test('practice choices control movement and the selected color controls who acts first', () => {
