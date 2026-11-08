@@ -9,6 +9,11 @@ const WHITE = 0xeee8e1;
 const RED = 0xd13959;
 const MINT = 0x8af4d5;
 const MOVE_COLOR = 0x56dcff;
+// Manual recruit control's green dot on a square the recruit can move to. A
+// coin or powerup lying there is drawn over the dot, so on its square the dot
+// grows past it and a rim of green still shows. A coin is 0.3 wide, a
+// powerup's art about 0.41 of its 0.55 (updateItems).
+const RECRUIT_DOT = { square: 0.15, coin: 0.25, powerup: 0.31 };
 const ICE_COLOR = 0xbfeaff;
 // Choosing a pin: a white crosshair, never mistaken for a fork's gold ring.
 const PIN_TARGET = 0xffffff;
@@ -605,13 +610,15 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       }
     }
     // Manual recruit control, waiting for the recruit's order: green dots on its
-    // squares (a ring around a monster it can capture), never your piece's filled
-    // blue squares, and green corners on the recruit itself, which holds it
-    // (except on the bishop pair's hop, which can't hold: recruitHold false).
+    // squares (larger under a pickup, RECRUIT_DOT; a ring around a monster it
+    // can capture), never your piece's filled blue squares, and green corners
+    // on the recruit itself, which holds it (except on the bishop pair's hop,
+    // which can't hold: recruitHold false).
     if (next.recruitMoves && next.companion) {
       recruitMaterial = basic(MINT, { transparent: true, opacity: 0.85, depthWrite: false });
       for (const tile of next.recruitMoves) {
-        const mark = new THREE.Mesh(tile.capture ? new THREE.RingGeometry(0.39, 0.47, 20) : new THREE.CircleGeometry(0.15, 16), recruitMaterial);
+        const pickup = next.items?.find((item) => item.x === tile.x && item.y === tile.y && item.type !== 'companion');
+        const mark = new THREE.Mesh(tile.capture ? new THREE.RingGeometry(0.39, 0.47, 20) : new THREE.CircleGeometry(RECRUIT_DOT[pickup?.type] ?? RECRUIT_DOT.square, 20), recruitMaterial);
         mark.rotation.x = -Math.PI / 2;
         // Just above a fork's gold ring, so the two never flicker on one monster.
         mark.position.set(tile.x, 0.055, tile.y);
