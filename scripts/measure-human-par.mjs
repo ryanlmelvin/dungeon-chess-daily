@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Measure the human-like bot (src/human-bot.js) over the precomputed editions:
 // by tier and piece, how often its runs clear each floor, its par against the
-// certified route's moves per floor (medians), the human gap (src/difficulty.js
-// humanGap, mean) and the certificate's difficultyScore (mean) beside it.
+// certified route's moves per floor (medians), the raw and capped human gap
+// (src/difficulty.js humanGap and cappedGap, the tiers' measure; means) and the
+// certificate's difficultyScore (mean) beside them.
 // Prints Markdown tables. Read-only: it never writes src/editions.js.
 //   node scripts/measure-human-par.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N]
 import { availableParallelism } from 'node:os';
@@ -10,7 +11,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { EDITIONS_RANGE } from '../src/editions.js';
 import { generateDaily } from '../src/generation.js';
 import { humanPar } from '../src/human-bot.js';
-import { humanGap, DIFFICULTY_TIERS } from '../src/difficulty.js';
+import { humanGap, cappedGap, DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { PLAYABLE_PIECES, PIECE_LIVES } from '../src/pieces.js';
 
 const DAY = 86_400_000;
@@ -28,7 +29,7 @@ function measure(date) {
     // The result card shows the bot when every floor has a run and, as one run, it would have survived (humanRun).
     shown: human.runs.every((run) => run !== null)
       && human.runs.reduce((sum, run, floor) => sum + human.results[floor][run].livesLost, 0) < PIECE_LIVES[daily.playerPiece],
-    gap: humanGap(human).total, ms: performance.now() - began,
+    gap: humanGap(human).total, capped: cappedGap(human), ms: performance.now() - began,
   };
 }
 
@@ -61,12 +62,13 @@ if (!isMainThread) {
       floors.map((floor) => median(group.map((row) => row.certified[floor]))).join(' / '),
       `${median(group.map((row) => sum(row.par)))} / ${median(group.map((row) => sum(row.certified)))}`,
       mean(group.map((row) => row.gap)),
+      mean(group.map((row) => row.capped)),
       mean(group.map((row) => row.score)),
     ];
   };
-  const header = '| Tier | Piece | Days | Runs won F1 / F2 / F3 | Floors failed | Par F1 / F2 / F3 | Certified F1 / F2 / F3 | Total par / certified | Human gap | Score |\n|---|---|---|---|---|---|---|---|---|---|';
+  const header = '| Tier | Piece | Days | Runs won F1 / F2 / F3 | Floors failed | Par F1 / F2 / F3 | Certified F1 / F2 / F3 | Total par / certified | Human gap | Capped gap | Score |\n|---|---|---|---|---|---|---|---|---|---|---|';
   const line = (tier, piece, group) => `| ${tier} | ${piece} | ${summarize(group).join(' | ')} |`;
-  console.log(`Human-like bot over ${rows.length} editions (${start} to ${end}); medians of par and moves, means of gap and score.\n`);
+  console.log(`Human-like bot over ${rows.length} editions (${start} to ${end}); medians of par and moves, means of the gaps and score.\n`);
   console.log(header);
   for (const tier of Object.keys(DIFFICULTY_TIERS)) {
     for (const piece of PLAYABLE_PIECES) {

@@ -5,7 +5,8 @@ import { createGame, RULES_VERSION } from './rules.js';
 import { hash } from './random.js';
 import { findWinningRoute, verifyWinningRoute } from './fairness.js';
 import { FALLBACKS } from './fallbacks.js';
-import { DIFFICULTY_TIERS, tierForDate, knobsFor, difficultyScore, bandDistance, freebieFloor } from './difficulty.js';
+import { DIFFICULTY_TIERS, tierForDate, knobsFor, difficultyScore, cappedGap, bandDistance, freebieFloor } from './difficulty.js';
+import { humanPar } from './human-bot.js';
 export { DIFFICULTY_TIERS, tierForDate } from './difficulty.js';
 import { MODIFIERS } from './modifiers.js';
 import { EDITIONS } from './editions.js';
@@ -35,9 +36,16 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
 }
 
 /**
- * Bounded search plus independent replay. `status` is 'solved' (with actions,
- * metrics and score), 'unknown' (the budget ran out) or 'invalid' (a route the
- * replay rejected); `explored` counts the search's simulated transitions.
+ * Bounded search plus independent replay, then the human-like bot on the
+ * route. `status` is 'solved' (with actions, metrics, the score, the bot's
+ * `human` result, src/human-bot.js humanPar, and the capped human gap `gap`
+ * the tiers' bands measure), 'unknown' (the budget ran out) or 'invalid' (a
+ * route the replay rejected); `explored` counts the search's simulated
+ * transitions. The bot plays each floor from the route's own standard start
+ * with the same seeds and the same default recruit policy as the edition's
+ * par (humanPar's own default: Auto today, a steered recruit once par
+ * assumes Manual play), so a generated edition's par is the one measured
+ * here. Never pass a policy here that par doesn't use.
  * `recruit` and `everyRecruit` pick the recruit mode (src/fairness.js
  * RECRUIT_MODES): generation always certifies on Auto; tooling may measure a
  * steered recruit.
@@ -48,24 +56,30 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = '
   if (result.status !== 'solved') return { status: 'unknown', explored: result.explored };
   const proof = verifyWinningRoute(createGame(candidate), result.actions, options);
   if (!proof.valid) return { status: 'invalid', explored: result.explored };
-  return { status: 'solved', explored: result.explored, actions: result.actions, metrics: proof.metrics, score: difficultyScore(proof.metrics, candidate.playerPiece) };
+  const human = humanPar({ ...candidate, generation: { certificate: { actions: result.actions } } });
+  return {
+    status: 'solved', explored: result.explored, actions: result.actions, metrics: proof.metrics,
+    score: difficultyScore(proof.metrics, candidate.playerPiece), human, gap: human ? cappedGap(human) : null,
+  };
 }
 
 /**
  * Which candidate generateDaily keeps: `found` lists each attempt's
- * searchCandidate() result (or null) in order; only solved ones count. The first one inside the
+ * searchCandidate() result (or null) in order; only solved ones with a
+ * capped human gap (`gap`) count. The first one whose gap lies inside the
  * tier's band wins; otherwise the one closest to it (the earlier on a tie).
- * Candidates with too few threatened decisions never count, nor (Tricky and
- * up) ones whose route clears a floor in under `minFloorMoves` moves (no
- * freebie floors; tooling may pass 0 to compare without the rule).
- * -1 means fallback. Calibration (scripts/calibrate-difficulty.mjs) replays
- * this same choice.
+ * The difficulty score plays no part. Candidates with too few threatened
+ * decisions never count, nor (Tricky and up) ones whose route clears a floor
+ * in under `minFloorMoves` moves (no freebie floors; tooling may pass 0 to
+ * compare without the rule). -1 means fallback. Calibration
+ * (scripts/calibrate-difficulty.mjs) replays this same choice.
  */
 export function chooseCandidate(found, tier, minThreatenedDecisions, minFloorMoves) {
   let best = -1, bestDistance = Infinity;
   for (const [index, entry] of found.entries()) {
-    if (!entry?.metrics || entry.metrics.threatenedDecisions < minThreatenedDecisions || freebieFloor(entry.metrics, tier, minFloorMoves)) continue;
-    const distance = bandDistance(entry.score, tier);
+    if (!entry?.metrics || !Number.isFinite(entry.gap) || entry.metrics.threatenedDecisions < minThreatenedDecisions
+      || freebieFloor(entry.metrics, tier, minFloorMoves)) continue;
+    const distance = bandDistance(entry.gap, tier);
     if (distance < bestDistance) { best = index; bestDistance = distance; }
     if (distance === 0) break;
   }
@@ -76,15 +90,16 @@ export function chooseCandidate(found, tier, minThreatenedDecisions, minFloorMov
  * generateDaily's candidate searches for a raw daily, in order, up to `count`
  * (ATTEMPTS): it tries the first layout and stops at the first candidate
  * chooseCandidate keeps inside the tier's band; otherwise it searches the
- * next. Every search has the same fixed budget, so which ones run is a pure
- * function of the date. Returns each searchCandidate() result.
+ * next. Every search has the same fixed budget and the bot's runs are
+ * seeded, so which ones run is a pure function of the date. Returns each
+ * searchCandidate() result.
  */
 export function searchCandidates(base, tier, settings, count = ATTEMPTS) {
   const found = [];
   for (let attempt = 0; attempt < count; attempt++) {
     found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
     if (chooseCandidate(found, tier, settings.minThreatenedDecisions) === attempt
-      && bandDistance(found[attempt].score, tier) === 0) break;
+      && bandDistance(found[attempt].gap, tier) === 0) break;
   }
   return found;
 }

@@ -153,6 +153,8 @@ function certTask({ date, tier, attempt }) {
       const { threatenedDecisions, floorMoves, turns, livesLost } = result.metrics;
       entry.metrics = { threatenedDecisions, floorMoves, turns, livesLost };
       entry.score = result.score;
+      // The capped human gap the tiers' bands judge (chooseCandidate treats a candidate without one as unmeasured).
+      entry.gap = result.gap;
       if (recruit === 'steer') {
         entry.recruit = result.metrics.recruit;
         // Would the same moves still win with the recruit left to Auto (every floor's recruit may join)?

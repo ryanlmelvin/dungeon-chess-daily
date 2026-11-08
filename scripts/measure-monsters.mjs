@@ -13,8 +13,9 @@
 // the headline. Tricky and up take the rule; Gentle and Fair have none under
 // every rule. It also reports how often each candidate certifies, par per
 // floor (the certified route's moves until each floor's challenge was
-// complete) and the difficulty score under the adopted rule, the fallback
-// share with only the first two candidates, and search time. Fallback days
+// complete), the capped human gap and the difficulty score under the adopted
+// rule, the fallback share with only the first two candidates, and search
+// time (with the human-like bot's runs). Fallback days
 // have no par here: the bank holds one fixed template per tier, piece and
 // modifier. The knobs are calibrated for an earlier search and rules;
 // recalibrating eases or tightens the layouts, which moves these numbers.
@@ -56,7 +57,8 @@ if (!isMainThread) {
     const began = performance.now();
     const result = searchCandidate(candidate);
     const metrics = result.metrics ? Object.fromEntries(KEPT_METRICS.map((name) => [name, result.metrics[name]])) : null;
-    parentPort.postMessage({ id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null });
+    // chooseCandidate picks by the capped human gap (searchCandidate runs the bot).
+    parentPort.postMessage({ id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null, gap: result.gap ?? null });
   });
 } else {
   const args = process.argv.slice(2);
@@ -126,7 +128,7 @@ if (!isMainThread) {
   };
   const mean = (values) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null);
   const summarize = (entries) => {
-    const row = { days: 0, certified: Array(attempts).fill(0), fallbacks: RULES.map(() => 0), fallbacksTwo: 0, classic: 0, inBand: 0, floors: [[], [], []], totals: [], scores: [], ms: 0, searches: 0 };
+    const row = { days: 0, certified: Array(attempts).fill(0), fallbacks: RULES.map(() => 0), fallbacksTwo: 0, classic: 0, inBand: 0, floors: [[], [], []], totals: [], scores: [], gaps: [], ms: 0, searches: 0 };
     for (const { tier, piece, date } of entries) {
       const knobs = knobsFor(tier, piece);
       const searched = found[`${date}:tier`];
@@ -138,11 +140,11 @@ if (!isMainThread) {
       if (classic && chooseCandidate(found[`${date}:classic`], tier, knobs.minThreatenedDecisions, 0) < 0) row.classic++;
       const chosen = chooseCandidate(searched, tier, knobs.minThreatenedDecisions, ruleFor(tier, RULES[0].rule));
       if (chosen < 0) continue;
-      const { metrics, score } = searched[chosen];
-      if (bandDistance(score, tier) === 0) row.inBand++;
+      const { metrics, score, gap } = searched[chosen];
+      if (bandDistance(gap, tier) === 0) row.inBand++;
       metrics.floorMoves.forEach((moves, floor) => row.floors[floor].push(moves));
       row.totals.push(metrics.floorMoves.reduce((sum, moves) => sum + moves, 0));
-      row.scores.push(score);
+      row.scores.push(score); row.gaps.push(gap);
     }
     return row;
   };
@@ -167,10 +169,10 @@ if (!isMainThread) {
   if (classic) console.log(`| classic monsters, off | ${groups.map(([, row]) => pct(row.classic, row.days)).join(' | ')} |`);
   console.log('');
   const detail = ['n', ...RULES.map(({ name }) => `fallback, ${name}`), ...Array.from({ length: attempts }, (_, attempt) => `cand. ${attempt + 1} certifies`),
-    'median par F1/F2/F3', 'median total par', 'mean score', 'in band', 'ms per search'];
+    'median par F1/F2/F3', 'median total par', 'mean gap', 'mean score', 'in band', 'ms per search'];
   const detailCells = (row) => [`${row.days}`, ...ruleColumns(row), ...row.certified.map((count) => pct(count, row.days)),
-    pars(row), num(median(row.totals), 1), num(mean(row.scores)), pct(row.inBand, row.days), `${Math.round(row.ms / Math.max(1, row.searches))}`];
-  console.log(`Par, score and band under ${RULES[0].name}; certifies: alone, under that rule and the threat minimum.\n`);
+    pars(row), num(median(row.totals), 1), num(mean(row.gaps)), num(mean(row.scores)), pct(row.inBand, row.days), `${Math.round(row.ms / Math.max(1, row.searches))}`];
+  console.log(`Par, capped human gap (the band's measure), score and band under ${RULES[0].name}; certifies: alone, under that rule and the threat minimum.\n`);
   console.log(table('Tier', detail, groups.map(([name, row]) => [name, detailCells(row)])));
   console.log('');
   console.log(table('Tier · piece', detail, [...cells.values()].map((cell) => [`${DIFFICULTY_TIERS[cell.tier].name} · ${cell.piece}`, detailCells(summarize(entriesOf((other) => other === cell)))])));

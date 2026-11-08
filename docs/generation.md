@@ -114,11 +114,15 @@ searching the entire game tree for every proposed decoration.
    damage, restarts, moves after a clear, and deadline failures. Automatic
    pickups remain on the board; the route must avoid them rather than simulate
    a different game.
-4. If the first candidate fails, or its route's difficulty score lies outside
-   the tier's band, the next layout seed is derived from the date and generator
-   version and searched the same way, up to four candidates (`ATTEMPTS`,
-   `searchCandidates`). The generator keeps the first candidate in the band, or
-   else the certified one closest to it (`chooseCandidate`). From Tricky on, a
+4. The human-like bot ([Par and the human gap](#par-and-the-human-gap)) plays
+   each solved candidate's route from every floor's standard start, which
+   gives the candidate its capped human gap ([The capped human
+   gap](#the-capped-human-gap)). If the first candidate fails, or its gap lies
+   outside the tier's band, the next layout seed is derived from the date and
+   generator version and searched the same way, up to four candidates
+   (`ATTEMPTS`, `searchCandidates`). The generator keeps the first candidate in
+   the band, or else the certified one closest to it (`chooseCandidate`); the
+   difficulty score no longer takes part. From Tricky on, a
    candidate whose route clears any floor in fewer than `minFloorMoves` (3)
    moves is rejected like an unsolved one (no freebie floors); `certify`
    rejects such a stored or remembered route too, and the fallback bank is
@@ -282,10 +286,13 @@ own; `humanPlayer` takes a recruit policy that can add an order to each action.
 route was, not how hard a route is to find. `humanGap` (`src/difficulty.js`)
 measures that: per floor, the human-like bot's expected moves (the mean of its
 five runs, a failed run counting as the whole 40-move cap) minus the
-certificate's moves, summed over the floors. It sits beside the score and does
-not pick tiers. `node scripts/measure-human-par.mjs` reports, by tier and piece,
-how often runs clear each floor, par against the certificate per floor, the gap
-and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06):
+certificate's moves, summed over the floors. This raw gap is for measurement:
+one failed floor costs it about 30, so the tiers use its capped form ([The
+capped human gap](#the-capped-human-gap)). `node scripts/measure-human-par.mjs`
+reports, by tier and piece, how often runs clear each floor, par against the
+certificate per floor, both gaps and the score. Over the 733 stored editions
+(2026-11-05 to 2028-11-06), before the smarter monsters and the per-floor
+search:
 
 | Tier | Runs won F1 / F2 / F3 | Total par / certified (median) | Human gap | Score |
 | --- | --- | --- | --- | --- |
@@ -298,10 +305,10 @@ and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06):
 By piece the gap is knight 14.4, queen 15.5, rook 20.0, bishop 30.2 and pawn
 45.5: the bot clears a bishop's king floor in 31% of runs and a pawn's in 42%
 (a pawn day's relic sits on the pawn's own file, and the bot, like the
-certificate, never takes it). The gap rises only a little through the week but
-differs widely between pieces, which is what a recalibration on it would fix.
-The bot is software with blind spots too, so a failed floor is evidence that a
-day is hard to figure out, not proof.
+certificate, never takes it). The gap rose only a little through the week but
+differed widely between pieces, which is why the tiers are now calibrated on
+it. The bot is software with blind spots too, so a failed floor is evidence
+that a day is hard to figure out, not proof.
 
 ### Smarter monsters by tier
 
@@ -367,7 +374,8 @@ new monsters cost generation (see [Measuring the monsters](#measuring-the-monste
 ## Weekly difficulty
 
 Difficulty rises through the week. `src/difficulty.js` defines five tiers, each
-a band of the difficulty score, and maps the UTC weekday to a tier:
+a band of the capped human gap ([below](#the-capped-human-gap)), and maps the
+UTC weekday to a tier:
 
 | Day | Tier |
 | --- | --- |
@@ -394,8 +402,160 @@ to the fallback bank, and three moves was the owner's choice (see [Measuring
 the monsters](#measuring-the-monsters)). `minFloorMoves` may also list each
 floor's own minimum (`floorMinimums`), which tooling uses to price other rules.
 
-**The score.** Every certified edition gets one number from its certificate's
-verifier metrics and its piece (`difficultyScore`):
+### The capped human gap
+
+The tiers are bands of the *capped human gap* (`cappedGap`): how much harder a
+day is for the human-like bot than for the certifying search. Generation plays
+the bot on every solved candidate's route (`searchCandidate`, with the seeds
+and the default recruit policy of the edition's par, `humanPar`'s own
+default), so a generated edition's par comes from the very runs its band was
+judged on. Everything below was measured with that default on Auto; par is
+moving to a steered recruit, which changes the numbers a lot ([With a steered
+recruit](#with-a-steered-recruit)).
+
+    per run   = won ? clamp(bot's moves − route's moves, 0, 10) : 10
+    per floor = mean of the floor's five runs
+    gap       = floor 1 + floor 2 + ½ × floor 3     (0 to 25, rounded to tenths)
+
+- **A run counts 0 to 10 extra moves** (`GAP_RUN_CAP`), and a failed run
+  counts 10: a slow floor's worth, about the 90th percentile of winning runs'
+  extra moves on floors 1 and 2 (10 to 14 by piece). The raw gap counts a
+  failure as the 40-move cap less the route, about 30, so a floor the bot
+  can't play swamps its day: the raw gap's spread within a tier was 20, the
+  capped gap's 5.
+- **A run that beats the route counts 0.** The route is a witnessed one, not
+  the shortest (the search wanders on some king floors), so a bot that beats
+  it found the floor easy, not "negatively hard".
+- **The king floor counts half** (`GAP_FLOOR_WEIGHTS`). The tiers' monster
+  smarts never reach it (royal rules), and on Auto the bot doesn't steer its
+  recruit there while certificates lean on theirs: it fails 72% of a bishop's
+  king-floor runs and 32% of a rook's, nearly all by running out of moves,
+  against 7% of a knight's or queen's, and the knobs hardly move that (a
+  bishop's king floor alone kept about 8 of its 10 at every tier). Steering
+  removes most of that, so revisit the weight when par steers.
+- **Pawn days stay hard, and noisy, for the bot on Auto.** A pawn day's relic
+  always sits on the pawn's own file, and the bot never takes it, so its pawn must
+  capture its way around and often stands still under attack: about half of
+  its pawn runs fail on floors 1 and 2, mostly by losing all eight lives, and
+  one setting's pawn gap swings from 7 to 25 between dates. On a single
+  candidate the pawn's gap averaged 11 to 14 on every Gentle layout tried (13
+  on the plain layout), against 1 to 11 for the other pieces, so Gentle pawn
+  days lean on the choice among four candidates (the dry run's best Gentle
+  pawn layout, 4 walls and 4 decoys, averaged 7.5 that way over 4 dates).
+  Decoys help the bot here, since they are what its pawn captures its way
+  around with: on Fiendish more decoys made a pawn day *easier*, so
+  calibration skips monotone dominance for pawns. A steered recruit removes
+  most of this blind spot (it clears the pawn's way); a bot that takes a relic
+  blocking its pawn's file would remove the rest.
+
+Measured 2026-11-07 under the current rules (smarter monsters, the 3-move
+freebie rule on Tricky and up, the per-floor search, four candidates) with the
+knobs still fitted to the old score bands: 24 dates per tier and piece from
+2026-11-05 (600 dates; 550 certified, the rest fell back), each date's
+candidate chosen by the score band as generation then did:
+
+| Tier | Days | Runs won F1 / F2 / F3 | Raw gap | Capped gap (sd) | Score |
+| --- | --- | --- | --- | --- | --- |
+| Gentle | 115 | 93% / 91% / 63% | 22.7 | 8.3 (5.4) | 9.2 |
+| Fair | 120 | 86% / 87% / 66% | 27.2 | 11.3 (5.4) | 11.3 |
+| Tricky | 98 | 83% / 74% / 67% | 34.8 | 13.7 (5.1) | 12.6 |
+| Tough | 106 | 74% / 79% / 68% | 36.6 | 15.0 (5.8) | 13.6 |
+| Fiendish | 111 | 64% / 74% / 60% | 42.6 | 17.2 (4.7) | 15.4 |
+
+| Piece | Runs won F1 / F2 / F3 | Raw gap | Capped gap | Capped gap, Gentle → Fiendish |
+| --- | --- | --- | --- | --- |
+| Pawn | 48% / 51% / 34% | 54.9 | 17.6 | 15.5 / 16.7 / 17.8 / 18.5 / 19.3 |
+| Rook | 86% / 85% / 68% | 31.9 | 13.6 | 9.9 / 12.6 / 13.9 / 14.8 / 16.8 |
+| Knight | 90% / 93% / 93% | 18.4 | 10.0 | 4.5 / 9.1 / 10.3 / 11.4 / 15.9 |
+| Bishop | 90% / 88% / 28% | 35.0 | 12.5 | 8.0 / 10.8 / 16.3 / 14.2 / 16.2 |
+| Queen | 86% / 88% / 93% | 23.9 | 11.3 | 5.2 / 7.2 / 11.7 / 15.6 / 17.3 |
+
+The capped gap correlates only weakly with the score (0.31 over every solved
+candidate). What the knobs can reach, from 12 dates per piece and the first
+candidate that certifies (easy: 4 walls, no decoys; plain: 7 walls, 2 decoys;
+hard: 13 walls, 4 decoys, all guards, scattered targets):
+
+| Piece | Gentle monsters: easy / plain / hard | Fiendish monsters: easy / plain / hard |
+| --- | --- | --- |
+| Pawn | 11.2 (67% fall back) / 13.1 / 14.1 | 25.0 (92% fall back) / 21.5 / 17.5 |
+| Rook | 1.1 / 4.2 / 10.9 | all fall back / all fall back / 13.9 |
+| Knight | 6.8 / 8.2 / 11.7 | 9.8 (58% fall back) / 13.5 (42% fall back) / 16.4 |
+| Bishop | 7.8 / 11.0 / 11.2 | 10.6 (58% fall back) / 16.5 / 17.7 |
+| Queen | 0.9 / 3.7 / 11.3 | all fall back / all fall back / 15.4 |
+
+On Fiendish, easy rook and queen layouts fall in under three moves, so the
+freebie rule sends them all to the bank. **The bands** (for the bot on Auto,
+as in the code today) rise by 3 a tier:
+Gentle 5–8, Fair 8–11, Tricky 11–14, Tough 14–17, Fiendish 17–20. Gentle is
+where rook, knight, bishop and queen layouts reach at their easiest; Fiendish
+is where the hardest reach (the current Fiendish knobs give 16 to 17, and the
+best of four candidates lifts that). A band is about two thirds of one
+setting's day-to-day spread (sd 4.4; a date's four candidates differ by 2.9),
+so the candidate choice matters. Under the score's knobs only 25% of days
+fall inside these bands: the knobs must be recalibrated
+([Calibration](#knobs-and-calibration)) before the bands mean anything.
+
+### With a steered recruit
+
+Par is to assume a steered recruit, as default Manual play does: the bot will
+give its recruit orders through `humanPlayer`'s recruit hook (the policy is
+`steerRecruit` in `scripts/recruit-policy.mjs` for now). Generation, the
+calibration fit and `build-fallbacks` all call `humanPar` without a policy, so
+they follow whatever default `src/human-bot.js` gives it; nothing here
+hard-codes Auto. On 12 dates per tier and piece (889 candidates that
+certify under the current knobs), the same routes with the recruit on Auto
+and steered:
+
+| Piece | Runs failed F1 / F2 / F3, Auto → steered | Capped gap, Auto → steered |
+| --- | --- | --- |
+| Pawn | 43→13% / 48→23% / 62→14% | 16.4 → 7.2 |
+| Rook | 13→11% / 13→11% / 35→4% | 13.6 → 9.0 |
+| Knight | 7→6% / 6→4% / 4→2% | 9.1 → 6.5 |
+| Bishop | 7→5% / 11→8% / 71→4% | 12.5 → 7.5 |
+| Queen | 12→9% / 10→6% / 7→7% | 10.8 → 9.0 |
+
+By tier the gap falls from 7.4 / 10.9 / 14.0 / 15.0 / 16.7 to 3.4 / 6.6 / 9.1
+/ 10.1 / 11.9, and the pieces close up (Fiendish 9.8 to 13.2). What the knobs
+reach with the bot steering (first certified candidate, 12 dates):
+
+| Piece | Gentle monsters: easy / plain / hard | Fiendish monsters: easy / plain / hard |
+| --- | --- | --- |
+| Pawn | 3.3 (67% fall back) / 3.5 / 7.7 | 12.8 (92% fall back) / 8.6 / 10.5 |
+| Rook | 0.5 / 3.3 / 4.3 | all fall back / all fall back / 12.8 |
+| Knight | 4.4 / 6.2 / 9.4 | 6.1 (58% fall back) / 10.6 (42% fall back) / 10.8 |
+| Bishop | 2.3 / 2.8 / 7.2 | 8.0 (58% fall back) / 10.4 / 11.2 |
+| Queen | 0.7 / 2.8 / 9.9 | all fall back / all fall back / 13.9 |
+
+So when par steers, the bands must come down with it. A provisional set by
+the same recipe: Gentle 2–4.5, Fair 4.5–7, Tricky 7–9.5, Tough 9.5–12,
+Fiendish 12–14.5 (2.5 wide; one setting's day-to-day spread is 4.0). The
+king floor fails about as often as floors 1 and 2 with a steered recruit, so
+it can likely count in full (`GAP_FLOOR_WEIGHTS` [1, 1, 1]: steered gaps then
+rise by 1 to 2.5), and pawns may no longer need to skip dominance. The
+recruit rules coming before calibration (a king recruit on every king floor,
+no capture on the turn a recruit joins, pawn recruits only on files open to
+the far rank) will move the gap again, so measure once more after them and
+before the shortlist, for example with `node scripts/measure-monsters.mjs`
+(its mean gap per tier and piece) and a small `--fast` dry run like the one
+below. The switch, in order:
+
+1. Make the steering policy `humanPar`'s and `humanRun`'s default in
+   `src/human-bot.js` (the result card replays `humanRun` with par's runs, so
+   both must agree), bump `HUMAN_BOT_VERSION` and the rules version.
+2. Land the recruit rule changes; measure as above.
+3. Set the bands (and the king floor's weight) from that measurement.
+4. Run the calibration and rebuild ([After a rules, monster, modifier,
+   search or bot change](#after-a-rules-monster-modifier-search-or-bot-change)).
+
+The calibration data's behaviour fingerprint (below) changes with the default
+policy, so data measured with the bot on Auto is refused even if a version
+bump is forgotten.
+
+**The score** (for reference). Every certified edition also gets one number
+from its certificate's verifier metrics and its piece (`difficultyScore`). It
+says how dangerous the certified route was; it no longer picks candidates, but
+it is stored on the certificate (`generation.certificate.score`) and reported
+beside the gap by calibration and the measurement scripts:
 
     pressure = threatenedDecisions + 2 × narrowEscapes + turns / 4 + 20 × unsafeShare
     score    = pressure / √(lives left at the end of the route)
@@ -407,8 +567,10 @@ alternatives along the route that would have lost a life. Lives left are the
 piece's lives (pawn 8, rook/knight/bishop 2, queen 1) minus those the route
 spent: spare lives forgive mistakes, with diminishing returns. Without that
 divisor a pawn's long, life-spending route always out-scores a queen day that
-ends at the first slip, and no knob setting brings them together. The score is
-stored on the certificate (`generation.certificate.score`).
+ends at the first slip. The score's bands were 9–10.5, 10.5–12, 12–13.5,
+13.5–15 and 15–16.5.
+
+### Knobs and calibration
 
 **Knobs.** Generation reads a row of knobs per (tier, piece) from the
 generated table `src/calibration.js`:
@@ -438,35 +600,56 @@ edition's.
 **Calibration.** `npm run calibrate:difficulty` (`scripts/calibrate-difficulty.mjs`)
 searches every candidate layout generation may try (four) of ten dates per
 piece under a grid of knob settings, with the runtime search budget, in
-parallel workers. It then replays
-`chooseCandidate` for every tier, setting and threat minimum, and keeps the
-cheapest setting per (tier, piece): distance outside the band, days outside the
-band, and fallbacks (ten times as costly as a missed day, since they repeat a layout) all cost. Search time no longer counts by default, because editions are certified at build time (`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on searches over 1.5 times as slow as the piece's plain layout. It writes `src/calibration.js` (the table plus
-`CALIBRATION_REPORT`, the measured scores behind it) and
+parallel workers, and plays the human-like bot on every solved route, exactly
+as generation does before it checks the band. It then replays
+`chooseCandidate` (on the capped human gap) for every tier, setting and threat
+minimum, and keeps the cheapest setting per (tier, piece): distance outside the
+band, days outside the band, and fallbacks (ten times as costly as a missed
+day, since they repeat a layout) all cost. Search time no longer counts by
+default, because editions are certified at build time
+(`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on
+searches over 1.5 times as slow as the piece's plain layout. It writes
+`src/calibration.js` (the table plus `CALIBRATION_REPORT`, the measured gaps
+behind it with the mean score beside them) and
 `scripts/calibration-data.json`: one row per search with its status (`solved`,
 `unknown` when the budget ran out, or `invalid` when replay rejected the route),
-solver expansions, route moves and wall time, plus min/median/p90/max summaries
-per piece and knob setting. `--reuse` refits from that file without searching
-again (after editing the score or bands), `--merge` measures only what the file
-lacks, `--pieces`, `--obstacles` and `--grid quick` narrow the grid, and
-`--dry-run` leaves the table alone. A full brute-force run uses every core but
-one (`--jobs N` overrides) and takes well over an hour.
+solver expansions, route moves, wall time (search and bot), the metrics and
+the bot's runs per floor (`human`: each run's moves, `null` where it failed),
+plus min/median/p90/max summaries per piece and knob setting. `--reuse`
+refits from that file without searching again (after editing the measure, its
+cap and weights, or the bands), `--merge` measures only what the file lacks,
+`--pieces`, `--obstacles` and `--grid quick` narrow the grid, and `--dry-run`
+leaves the table alone. A full brute-force run uses every core but one
+(`--jobs N` overrides) and takes about three hours (146,400 searches).
 
 Monsters grow smarter with the tier, so every setting is measured once per
 tier, with that tier's monsters, and competes only for that tier: five times
 the searches of a shared measurement (shortlist screening and dominance work
-per tier too). Setting keys end in `@tier`, and data measured before tiered
-monsters has none, so it can't be reused. Rows keep the route's `floorMoves`,
-so the fit applies the no-freebie-floor rule as generation does.
+per tier too). Setting keys end in `@tier`. Rows keep the route's `floorMoves`,
+so the fit applies the no-freebie-floor rule as generation does, and the
+route's side of the gap.
+
+Data files are stamped (`dataVersion` 2, `rulesVersion`, `humanBotVersion`,
+`attempts` and a behaviour fingerprint; `scripts/calibration-search.mjs`), and
+`--reuse`, `--merge`, `--replay` and `--confirm` refuse a file without the
+bot's runs or one made under other rules, another bot or another candidate
+count. The fingerprint (`behaviourFingerprint`) hashes what the search and the
+bot do on three fixed plain-layout candidates (`FINGERPRINT_DAYS`: a knight,
+a bishop and a pawn day), through `searchCandidate`, so with the bot's
+default recruit policy: switching that policy, or any rules, monster, search
+or bot change that touches those days, refuses old data even without a
+version bump. So the `scripts/calibration-data.json` measured for the score
+bands (two candidates, the whole-run search, no bot runs) can't be reused;
+the next confirm replaces it.
 
 ### Shortlist, then confirm (the quick way)
 
-Two commands replace the hour-long run with a few minutes of screening and a
-targeted full check:
+Two commands replace the three-hour run with about half an hour: screening,
+then a targeted full check:
 
 ```sh
-npm run calibrate:shortlist   # minutes; writes scripts/calibration-shortlist.json only
-npm run calibrate:confirm     # full-budget check of the shortlist; writes src/calibration.js
+npm run calibrate:shortlist   # 20-27 min; writes scripts/calibration-shortlist.json only
+npm run calibrate:confirm     # 5-9 min, full-budget check of the shortlist; writes src/calibration.js
 ```
 
 **Shortlist** (`--fast`) screens the whole grid cheaply and never touches
@@ -480,12 +663,15 @@ and then unsolved screens advance). The helpers live in
 `scripts/calibration-search.mjs`:
 
 - a per-piece least-squares surrogate (knobs plus pairwise products) fitted to
-  the stage-1 scores; its `--surrogate-keep` (3) best predictions per tier also
-  advance, which guards against one unlucky date (`--no-surrogate`);
-- monotone dominance: difficulty mostly rises with obstacles, decoys, guards and
+  the stage-1 gaps (each date's first solved candidate); its
+  `--surrogate-keep` (3) best predictions per tier also advance, which guards
+  against one unlucky date (`--no-surrogate`);
+- monotone dominance: the gap mostly rises with obstacles, decoys, guards and
   screens, so a setting at least as hard as one already `--dominance-margin`
-  (1.5) above the hardest band, or at most as hard as one that far below the
-  easiest, is dropped (same scatter only; never by its own mean; `--no-dominance`);
+  (two band widths, 6: one date's gap scatters by about 5) above the tier's
+  band, or at most as hard as one that far below it, is dropped (same scatter
+  only; never by its own mean; never for pawns, whose gap can fall as decoys
+  rise; `--no-dominance`);
 - sequential stopping: finalists share dates and layouts, and one stops gaining
   dates once a paired test shows its per-day cost clearly worse (`--stop-z` 2.5
   standard errors, four dates at least) than the leader's for every tier
@@ -505,8 +691,9 @@ Then it fits and writes the table and `scripts/calibration-data.json` as usual
 a confirm can never choose a setting that does worse than the current table on
 the same dates.
 
-Why not trust the shortlist on its own: on 2026-11-07, a full `--fast` refit
-(3.5 minutes) scored worse than the brute-force table on the same ten dates.
+Why not trust the shortlist on its own: on 2026-11-07, with the score bands, a
+full `--fast` refit (3.5 minutes) scored worse than the brute-force table on
+the same ten dates.
 
 | | Shortlist alone | Brute force |
 |---|---|---|
@@ -524,10 +711,43 @@ smaller budget is that search cut short), and `--choices-out file` saves the
 chosen table and its report. Every run prints its searches, expansions and
 wall time.
 
-### After a rules, monster, modifier or search change
+### Recalibrating for the capped gap: dry run and runtime
 
-Monster AI, room modifiers, rules and search changes all shift difficulty.
-After any of them:
+The table in `src/calibration.js` was fitted to the score bands, with two
+candidates and the whole-run search, so it needs the commands below once
+(they are the same as after any rules change). Dry run on 2026-11-07, all
+five pieces, `--grid quick --obstacles 4,13` (41 settings per tier, 21 for
+pawns), 4 dates per piece, data to a scratch file and `--dry-run`:
+
+```sh
+node scripts/calibrate-difficulty.mjs --fast --samples 4 --stage2-dates 2 --grid quick --obstacles 4,13 --data /tmp/shortlist.json
+node scripts/calibrate-difficulty.mjs --confirm /tmp/shortlist.json --dry-run --data /tmp/data.json
+```
+
+The shortlist screened 925 settings (stage 1: 3,700 searches), kept 152 for
+stage 2 and 90 for the finals, 5,276 searches in 18 minutes on six workers;
+the confirm measured 115 settings on every date, 1,840 searches in 3 minutes.
+Both ran beside other jobs (load average 10 to 40), which about doubled the
+time per search. Its fit put every (tier, piece) mean inside its band but
+Tricky pawn (14.2) and Tricky knight (9.9); tier by tier the pieces' means
+spanned 6.1–8, 9.2–10.5, 9.9–14.2, 15.4–16.5 and 17.2–19.5. Four dates per
+piece flatter a fit, so expect wider spreads from the real run.
+
+Single-threaded, a search with its bot runs costs about 1.04 CPU seconds for a
+pawn, 0.62 for a queen, 0.29 for a bishop, 0.21 for a rook and 0.15 for a
+knight, sampled over the full grid. The full shortlist searches at most
+20,640 candidates (stage 1: every one of the 3,660 settings on one date,
+14,640 searches; stage 2: at most 10 settings per tier and piece on 4 dates;
+finals: at most 4 per tier and piece on the last 5) and the confirm at most
+6,000 (about 30 settings per piece on 10 dates): about 10,000 to 11,000 CPU
+seconds, or 25 to 35 minutes on seven workers of an idle 8-core M2
+(shortlist 20 to 27, confirm 5 to 9). Brute force (146,400 searches) is about
+57,000 CPU seconds, three hours.
+
+### After a rules, monster, modifier, search or bot change
+
+Monster AI, room modifiers, rules, search and human-like bot changes all shift
+difficulty. After any of them:
 
 ```sh
 npm run calibrate:shortlist          # or calibrate:difficulty for full brute force
@@ -539,8 +759,10 @@ npm test
 ```
 
 `verify:fallbacks` fails if a fallback was built for knobs the table no longer
-holds. The script warns when a (tier, piece) mean misses its band; then widen
-the grid, add a knob, or move the bands.
+holds. The script warns when a (tier, piece) mean gap misses its band; then
+widen the grid, add a knob, or move the bands. Afterwards
+`node scripts/measure-monsters.mjs` and `node scripts/measure-human-par.mjs`
+show the fallback share and the gaps generation actually produces.
 
 ## Measuring the monsters
 
@@ -553,7 +775,8 @@ at least 3 moves (adopted), every floor at least 4, floor 1 at least 4, and
 none (Gentle and Fair have no rule under any of them). It prints the fallback
 share per rule by tier, the adopted rule first, plus the adopted rule with only
 the first two candidates; then per tier and per tier and piece how often each
-candidate certifies, the route's moves per floor, the score and search time.
+candidate certifies, the route's moves per floor, the capped human gap
+(which the band check now uses), the score and search time.
 `--classic` also searches the classic monsters and adds their fallback share
 with no rule, which prices the smarts themselves. 16 dates take under two
 minutes on seven workers.
@@ -750,7 +973,9 @@ choosing captures, and advancing a pawn to promotion. These are measurements of
 one successful route. They do **not** establish shortest solution length, forced
 tactics, a unique solution, or a minimum difficulty. In particular, the presence
 of a warned lane does not imply that it threatens the player's current square.
-Human playtesting is still needed to check the score and tiers against real play.
+Human playtesting is still needed to check the capped human gap, the score and
+the tiers against real play: the human-like bot is a model of a player, with
+blind spots of its own.
 The winnability acceptance condition stays unchanged when difficulty is tuned.
 
 ## Changing and auditing content
@@ -768,7 +993,9 @@ third argument forces that tier on every date. Its timing measurements are diagn
 selected dungeon. To author a new fallback bank after a deliberate rules change,
 run `node scripts/build-fallbacks.mjs`, inspect the results, and verify it again.
 
-Any change to gameplay, generation, search budgets/order, calibration, or fallback
-selection can change an edition. Bump the generator/rules version and save-key
-version together for such a release. Version 5 archives earlier saved editions
+Any change to gameplay, generation, search budgets/order, calibration, the
+human-like bot (whose gap now picks candidates), or fallback selection can
+change an edition. Bump the generator/rules version and save-key version
+together for such a release; `HUMAN_BOT_VERSION` alone only recomputes
+remembered pars. Version 5 archives earlier saved editions
 in backups instead of interpreting their old layouts as certified new games.
