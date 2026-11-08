@@ -914,6 +914,8 @@ $('modifier-status').addEventListener('click', () => { if (state) notify(modifie
 // cavedIn). An explainer that opened on the same move goes first.
 const CAVE_IN_TO_SHOP_MS = 1400;
 let caveNews = null;
+// The shop's last purchase, shown on its gold line until the shop closes.
+let shopNote = '';
 function announceCaveIn(event) {
   const caved = state;
   caveNews = { game: gameKey(state), floor: state.floor, event };
@@ -1051,7 +1053,7 @@ function renderShop() {
     const loss = event ? caveInLoss(event) : '';
     news.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'The ceiling caved in!' }), ...(loss ? [` ${loss}`] : []));
   }
-  $('shop-gold').textContent = `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
+  $('shop-gold').textContent = shopNote ? `${shopNote} · ${state.gold} gold left` : `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
   for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);
@@ -1067,11 +1069,9 @@ function renderShop() {
       const text = document.createElement('div');
       text.append(title, detail);
       button.append(icon, text);
+      // A purchase is confirmed on the gold line, so the shop never grows (and never scrolls).
       button.addEventListener('click', () => {
-        if (takeAction({type:'buy', id:power.id})) {
-          $('shop-feedback').hidden = false;
-          $('shop-feedback').textContent = `${power.name} purchased.`;
-        }
+        if (takeAction({type:'buy', id:power.id})) { shopNote = `${power.name} bought`; renderShop(); }
       });
       $('shop-items').append(button);
     }
@@ -1095,8 +1095,8 @@ function takeStairs() {
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || !state.exit.open || pendingOrder() || document.querySelector('dialog[open]')) return;
   if (refreshFromOtherWindow() || !state.exit.open) return;
   if (state.floor === 2) { takeAction({type:'descend'}); return; }
+  shopNote = '';
   renderShop();
-  $('shop-feedback').hidden = true;
   $('shop-dialog').showModal();
   $('shop-descend').focus();
 }

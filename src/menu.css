@@ -155,9 +155,40 @@ dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0;
   #guide-pagination { margin-top: 8px; padding-top: 8px; }
 }
 .shop-items { gap: 8px; }
-.shop-items button { padding: 12px; }
+.shop-items button { padding: 8px 12px; min-height: 0; }
+#shop-dialog .dialog-heading { margin-bottom: 12px; padding-bottom: 8px; }
 .shop-items strong { font-size: 24px; line-height: 1; margin-bottom: 4px; }
 .shop-items span { font-size: 20px; line-height: 1.2; }
+/* The shop never scrolls on a phone: it tightens on short screens (a 402×680
+   iPhone 17 in Safari, cave-in news and all), drops its icons on the shortest
+   (an iPhone SE in Safari), goes two columns on its side, and Descend stays on
+   screen whatever happens. */
+.shop-descend { position: sticky; bottom: 0; }
+@media (max-height: 720px) {
+  #shop-dialog .dialog-heading { margin-bottom: 8px; padding-bottom: 6px; }
+  #shop-dialog p { font-size: 18px; line-height: 1.15; }
+  #shop-gold { margin-bottom: 8px; }
+  .shop-news { margin-bottom: 6px; }
+  .shop-items { gap: 6px; }
+  .shop-items button { padding: 6px 10px; gap: 10px; }
+  .shop-items strong { font-size: 21px; margin-bottom: 2px; }
+  .shop-items span { font-size: 18px; line-height: 1.1; }
+  .shop-icon { width: 40px; height: 40px; }
+  .shop-descend { margin-top: 8px; }
+}
+@media (max-height: 600px) {
+  .shop-icon { display: none; }
+  .shop-items strong { font-size: 19px; }
+  .shop-items span { font-size: 16px; }
+  #shop-dialog p { font-size: 16px; }
+  #shop-dialog .dialog-heading { margin-bottom: 6px; padding-bottom: 4px; }
+  #shop-dialog .dialog-heading h2 { font-size: 28px; }
+}
+/* A phone on its side: a wider shop with its offers in two columns. */
+@media (max-height: 500px) and (min-width: 640px) {
+  #shop-dialog { max-width: 720px; }
+  .shop-items { grid-template-columns: 1fr 1fr; }
+}
 .piece-controls label { font-size: 20px; }
 .piece-controls select {
   font-size: 22px;
@@ -313,6 +344,30 @@ dialog .archive-day[aria-current] { background: #653942; }
 .game-message .message-what { margin-left: 6px; vertical-align: middle; }
 #special-move-dialog { max-width: 420px; }
 .special-move-continue { display: block; width: 100%; margin-top: 16px; color: var(--gold); }
+/* Explainers never scroll on a phone either: the art shrinks with the screen,
+   short screens tighten the text, and Continue stays on screen regardless. */
+#special-move-art { width: min(100%, 240px, 28svh); }
+.special-move-continue { position: sticky; bottom: 0; }
+@media (max-height: 720px) {
+  #special-move-dialog .dialog-heading { margin-bottom: 8px; padding-bottom: 6px; }
+  #special-move-dialog p { font-size: 18px; line-height: 1.15; margin: 0; }
+  #special-move-art { margin-bottom: 8px; }
+  .special-move-continue { margin-top: 10px; }
+}
+/* The menu fits a phone without scrolling too (Saved progress folded). */
+@media (max-height: 800px) {
+  #menu-home .dialog-heading { margin-bottom: 8px; padding-bottom: 6px; }
+  #menu-home .menu-run { margin: 6px 0; }
+  #menu-home .menu-actions { gap: 6px; }
+  #menu-home .menu-actions button { padding-top: 7px; padding-bottom: 7px; }
+  #menu-home .sound-setting { margin-top: 4px; padding-top: 6px; padding-bottom: 6px; }
+  #menu-home .credits { margin: 6px 0 2px; padding-top: 6px; }
+}
+@media (max-height: 600px) {
+  #special-move-art, #hint-dialog .hint-art { width: min(100%, 240px, 23svh); }
+  #special-move-dialog p { font-size: 16px; }
+  #special-move-dialog .dialog-heading h2 { font-size: 28px; }
+}
 .special-moves { margin: 12px 0 8px; }
 .result-en-passant { color: var(--ink); background: none; border: 2px solid #777; font-size: 20px; min-height: 44px; padding: 4px 14px; margin: 0 0 8px; }
 
