@@ -1548,6 +1548,9 @@ function replayFrame() {
   const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose|take the stairs)\b|^\s*Your score\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed').replace(/\bYou dropped\b/, 'The bot dropped') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
+  // Drop the live game's placement (an inline top plus the replay's own
+  // bottom would stretch the log's dark box over the board).
+  placeMessageLog();
   $('game-message').classList.remove('scrollable'); $('game-message').style.maxHeight = '';
   $('replay-play').textContent = last ? '↻' : replay.playing ? '❚❚' : '▶';
   $('replay-play').setAttribute('aria-label', last ? 'Watch again' : replay.playing ? 'Pause replay' : 'Play replay');
