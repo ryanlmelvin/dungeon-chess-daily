@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import { drawSprite, SPRITE_SIZE, STONE_SIZE, paintStone, spritePalette, piecePalette, COMPANION_PALETTE } from './sprites.js';
-import { drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
+import { drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawOffBalanceDemo, OFF_BALANCE_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
 
 const INK = '#17131d';
 const MINT = '#a5e2cc';
@@ -198,6 +198,7 @@ const ANIMATED = {
   'bishop-pair': (canvas, time) => drawBishopPairDemo(canvas, time ?? BISHOP_PAIR_STILL),
   fork: (canvas, time) => drawForkDemo(canvas, time ?? FORK_STILL),
   combo: (canvas, time) => drawComboDemo(canvas, time ?? COMBO_STILL),
+  'off-balance': (canvas, time) => drawOffBalanceDemo(canvas, time ?? OFF_BALANCE_STILL),
 };
 
 /** One frame of every animated guide canvas under `root`, `time` ms into its loop. */

@@ -74,7 +74,7 @@
             <thead><tr id="bot-head"></tr></thead>
             <tbody id="bot-rows"></tbody>
           </table>
-          <p class="bot-note">The bot’s run certified this dungeon: no powerups, no lost lives (pawn days may spend four), no ally but the floor 3 recruit.</p>
+          <p id="bot-note" class="bot-note"></p>
         </section>
         <div id="result-actions" class="result-actions"><button id="practice-button">Practice this dungeon</button><button id="result-paper-button">Read the paper</button></div>
         <p class="next-edition" id="next-edition"></p>
@@ -133,10 +133,10 @@
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every matching target to open the exit door onto the stairs."></canvas>
         <p>Use the paper’s clues and monsters’ moves to find every target. The last floor targets the king.</p>
         <p>Capture them all to open the door behind the back rank. Then tap the stairs, or <b>Take stairs</b> from anywhere.</p>
-        <p>On floors 1 and 2, opening the door cracks the ceiling. It caves in after a few moves (waiting counts), fewer on harder days, and <b>🪨 Caving in</b> at the top counts them down. Gold you grab now is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you drop that gold, the coins and pickup still lying there are buried, and nothing else in that room pays.</p>
+        <p>On floors 1 and 2, opening the door cracks the ceiling. It caves in after a few moves (waiting counts), fewer on harder days, and <b>🪨 Caving in</b> at the top counts them down. Gold you grab now is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you drop that gold, the coins and pickup still lying there are buried, and the rubble carries you down the stairs to the shop.</p>
         <p>If the targets left end up where your piece can never land (say, pawns stuck against walls on a bishop’s other colour), the game tells you. Choose <b>Restart this floor</b> there or in the menu: you keep the lives, gold and powers you arrived with.</p>
-        <p>Each floor shows a <b>Par</b>: the moves the certified route needed to finish that floor’s challenge. Your move count stops the moment you capture the last target, so gathering leftover gold and walking to the stairs costs no score. Your share card shows how far over or under par you finished each floor. Only the official piece and color have a par.</p>
-        <p><b>Every daily can be won.</b> Before an edition goes out, a bot plays it through with the official piece and color: no powerups, no bought help, no lost lives (pawn days may spend up to four), and no ally but the recruit on floor 3. Each par is that real run’s move count, so it has been done. After you win, <b>Watch the bot’s run</b> to see how.</p>
+        <p>Each floor shows a <b>Par</b>: about how many moves a careful player needs to finish that floor’s challenge, steering their recruit. Your move count stops the moment you capture the last target, so gathering leftover gold and walking to the stairs costs no score. Your share card shows how far over or under par you finished each floor. Only the official piece and color have a par.</p>
+        <p><b>Every daily can be won.</b> Before an edition goes out, a bot plays it through with the official piece and color: no powerups, no bought help, no lost lives (pawn days may spend up to four), and no ally but the recruit on floor 3. After you win, <b>Watch the bot’s run</b> to see how a careful bot played it.</p>
         <p>After you win or lose a try, practice with any piece and color. Only the official piece and color earn a shareable result.</p>
       </article>
       <article class="guide-page" hidden>
@@ -165,8 +165,12 @@
         <p>Red paths show where monsters will capture next. As white, step off them to dodge. As black, monsters capture before your move, so a red path on your square means you’re captured. If enemies block the square you chose, pick another; they won’t move again first.</p>
         <h3 id="guide-close-title">Close range</h3>
         <p>Ending your move right next to a monster that attacks your square, or where a knight attacks it, gets you captured at once, with no warning. That includes taking a monster that another one guards.</p>
+        <p>After a close-range capture the monsters still move, but none can capture you again that turn: a red path on your square waits. Step off it on your next move.</p>
         <p>Queens, rooks and bishops give warning: step into their line from farther away and they close in one square and show their red path first. A king, a practice-only choice, can’t move into check, so squares a nearby monster attacks aren’t offered.</p>
         <p>Tap <b>Wait</b>, just above the board’s top-right corner, to skip your move and let the monsters come to you. A monster that walks into range only takes aim, so you can capture it first.</p>
+        <h3 id="guide-off-balance-title">Off-balance</h3>
+        <figure class="special-moves"><canvas class="hint-art" data-guide-art="off-balance" width="200" height="200" role="img" aria-label="Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it."></canvas></figure>
+        <p>Step off a red path and the monster still lunges, landing on the square you left. Stars circle its head: it’s off-balance until your next move ends, so it can’t capture you, even up close. Bait a lunge, sidestep, then strike!</p>
         <h3 id="guide-lives-title">Starting lives</h3>
         <dl class="guide-lives" aria-labelledby="guide-lives-title">
           <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
@@ -180,7 +184,7 @@
       </article>
       <article class="guide-page" hidden>
         <p>You start with no gold. Coins and optional captures earn 1 gold each; targets pay nothing. After each of the first two floors, the stairs open a shop. It always sells an extra life for 10 gold (limit 1 per shop), plus three other items drawn for that shop and the same for everyone that day: a bone ward, a coin magnet, or a tool you use when you choose from buttons beside your lives. Hourglasses turn up only in rooms. With no shop after it, the last floor holds no coins.</p>
-        <p>Gold you earn after a floor’s door opens is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you lose it, and a pickup still lying in that room is buried (see <b>Capture targets</b>).</p>
+        <p>Gold you earn after a floor’s door opens is <b>at risk</b> until you take the stairs. If the ceiling caves in first, you lose it, a pickup still lying in that room is buried, and the rubble carries you down to this shop (see <b>Capture targets</b>).</p>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd>Block one capture. Stacks up to 3.</dd></div>
           <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd>Found in rooms, never sold. Freeze enemies for your next 3 moves. Unused moves don’t carry over between floors.</dd></div>
@@ -189,7 +193,7 @@
           <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd>3 gold. Squares with a ghosted knight (a ghosted queen if you’re a knight) and gold corners move like that piece. They’re optional: only taking one spends it. Tap Borrow to point them out.</dd></div>
           <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd>4 gold. Undo your last move on this floor, even one that cost a life or ended the run.</dd></div>
           <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd>10 gold, in every shop. One more life for the rest of the run.</dd></div>
-          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece; on the last floor, a rook, queen or king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself. In auto mode, it can’t capture targets. Once floor 1 or 2 is cleared, it moves itself and hunts for gold while you explore. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
+          <div><dt><canvas data-guide-art="companion" width="40" height="40" role="img" aria-label="Mint companion piece with a plus sign"></canvas></dt><dd>Every floor holds a recruit. On floors 1 and 2 it can be any piece (a pawn always waits on a file open to the far rank); on the last floor, always a king. Step onto it and it joins you for that floor. After each of your moves you move it too: tap a square marked green, or tap it to keep it still. It can capture any monster, even a target, and that counts, but not on the turn it joins. Set <b>Recruit control</b> to <b>Auto</b> in the menu to let it move itself. In auto mode, it can’t capture targets. Once floor 1 or 2 is cleared, it moves itself and hunts for gold while you explore. A king recruit can castle with your rook, and a bishop recruit joining your bishop hops to the other colour.</dd></div>
         </dl>
         <p>Land on pickups to activate them.</p>
       </article>
@@ -212,7 +216,7 @@
         <h3>🧊 Ice</h3>
         <p>Pale, glinting squares are ice. A rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square the same way if that square is open and empty. Captures stop you dead. The move preview draws an arrow to where you’ll land. Monsters and recruits are sure-footed: only your piece slides.</p>
         <h3>🧱 Collapse</h3>
-        <p>Every 10 moves on a floor, one more monster (never the floor’s target, never a pawn) walks in on the square in front of the door if it’s free; otherwise it waits there. At most 3 per floor, and none once the stairs are open. The top of the board counts down to the next arrival.</p>
+        <p>Every 10 moves on a floor, one more monster (never the floor’s target, never a pawn) walks in on the square in front of the door. If anyone is standing there, you or your recruit included, it drops in on the nearest empty square instead, so you can’t hold the door shut. It doesn’t strike as it lands: like any monster, it winds up first. At most 3 per floor, and none once the stairs are open. The top of the board counts down to the next arrival.</p>
       </article>
       <article class="guide-page" hidden>
         <h3 id="guide-fork-title">Fork 🔱</h3>

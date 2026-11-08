@@ -9,9 +9,10 @@ import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
 import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
 import { PLAYABLE_PIECES as PIECES } from '../src/pieces.js';
-import { TIER_IDS, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
+import { TIER_IDS, knobsFor, difficultyScore, cappedGap, bandDistance, freebieFloor } from '../src/difficulty.js';
 import { candidateFor, generateDaily, fallbackKey } from '../src/generation.js';
 import { MODIFIERS } from '../src/modifiers.js';
+import { humanPar } from '../src/human-bot.js';
 
 // Every daily is white (src/edition.js), so only white needs a fallback.
 const colors = ['white'];
@@ -38,8 +39,8 @@ if (process.argv.includes('--verify')) {
     const state = stateFor(entry, tier, knobs);
     const proof = verifyWinningRoute(state, entry.actions);
     if (state.startingPiece !== piece || state.playerColor !== color || !proof.valid
-      || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) {
-      throw new Error(`Invalid ${key} certificate: ${proof.reason ?? 'profile mismatch'}`);
+      || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions || freebieFloor(proof.metrics, tier)) {
+      throw new Error(`Invalid ${key} certificate: ${proof.reason ?? (freebieFloor(proof.metrics, tier) ? 'a floor cleared under the tier’s minimum moves' : 'profile mismatch')}`);
     }
     // The runtime path: forcing the fallback rebuilds and replays the same dungeon.
     const daily = generateDaily(entry.date, { difficulty: tier, maxAttempts: 0 });
@@ -50,9 +51,12 @@ if (process.argv.includes('--verify')) {
 } else {
   const budget = Number(process.env.FALLBACK_BUDGET ?? 100_000);
   const bank = {}, best = {}, tries = {};
-  // Prefer a certificate whose score lies in the tier's band; settle for the
-  // closest after 12 certified tries. Skip the first two editions: their seeds
-  // keep legacy layouts (LEGACY_LAYOUT_SEEDS, FIXED_PAWN_FORMATION_SEEDS).
+  // Prefer a certificate whose capped human gap (the human-like bot on its
+  // route, src/difficulty.js cappedGap) lies in the tier's band; settle for
+  // the closest after 12 certified tries. A day that falls back plays the
+  // bot with its own date's seeds, so its gap differs a little from the
+  // template's. Skip the first two editions: their seeds keep legacy layouts
+  // (LEGACY_LAYOUT_SEEDS, FIXED_PAWN_FORMATION_SEEDS).
   let maxExplored = 0;
   for (let offset = 2; offset < 3660 && Object.keys(bank).length < wanted.length; offset++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + offset)));
@@ -64,17 +68,20 @@ if (process.argv.includes('--verify')) {
       const found = findWinningRoute(state, { maxExpansions: budget, beamWidth: 48 });
       if (found.status !== 'solved') continue;
       const proof = verifyWinningRoute(state, found.actions);
-      if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) continue;
+      // Tricky and up, no floor may be a freebie (DIFFICULTY_TIERS minFloorMoves).
+      if (!proof.valid || proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions || freebieFloor(proof.metrics, tier)) continue;
       maxExplored = Math.max(maxExplored, found.explored);
       entry.score = difficultyScore(proof.metrics, piece);
       entry.actions = found.actions;
-      const distance = bandDistance(entry.score, tier);
-      if (!best[key] || distance < best[key].distance) best[key] = { entry, distance, proof, explored: found.explored };
+      const human = humanPar({ ...candidateFor(raw, tier, knobs), dungeonSeed: entry.dungeonSeed, generation: { certificate: { actions: found.actions } } });
+      const gap = human ? cappedGap(human) : Infinity;
+      const distance = bandDistance(gap, tier);
+      if (!best[key] || distance < best[key].distance) best[key] = { entry, gap, distance, proof, explored: found.explored };
       tries[key] = (tries[key] ?? 0) + 1;
       if (distance === 0 || tries[key] >= 12) {
         bank[key] = best[key].entry;
         const { metrics } = best[key].proof;
-        console.log(`${key}: ${bank[key].date}, score ${bank[key].score}${best[key].distance ? ` (${Math.round(best[key].distance * 10) / 10} off band)` : ''}, ${metrics.turns} moves, ${best[key].explored} expansions, ${metrics.threatenedDecisions} threatened decisions (${wanted.length - Object.keys(bank).length} remaining)`);
+        console.log(`${key}: ${bank[key].date}, gap ${best[key].gap}${best[key].distance ? ` (${Math.round(best[key].distance * 10) / 10} off band)` : ''}, score ${bank[key].score}, ${metrics.turns} moves, ${best[key].explored} expansions, ${metrics.threatenedDecisions} threatened decisions (${wanted.length - Object.keys(bank).length} remaining)`);
       }
     }
   }

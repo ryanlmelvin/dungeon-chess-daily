@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable } from '../src/rules.js';
+import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable, RULES_VERSION } from '../src/rules.js';
 import { findWinningRoute, livesSpendable, verifyWinningRoute } from '../src/fairness.js';
 import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 import { TIER_IDS, knobsFor } from '../src/difficulty.js';
@@ -50,7 +50,7 @@ function replay(daily) {
     assert.ok(next.player.hp >= initial.player.hp - livesSpendable(initial));
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
-    if (royalRules(next)) assert.ok(next.companion === null || ['rook', 'queen', 'king'].includes(next.companion.basePiece));
+    if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.deepEqual(next.companionOrders, []);
@@ -83,8 +83,8 @@ test('forced fallbacks certify every piece and difficulty with the production ru
       for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens']) assert.equal(daily[knob], profile[knob], knob);
       assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= profile.minThreatenedDecisions);
       const { initial } = replay(daily);
-      assert.equal(initial.schema, 6);
-      assert.equal(initial.rulesVersion, 6);
+      assert.equal(initial.schema, RULES_VERSION);
+      assert.equal(initial.rulesVersion, RULES_VERSION);
       const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
       assert.equal(proof.valid, true, `${difficulty}:${identity}: ${proof.reason}`);
       assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);

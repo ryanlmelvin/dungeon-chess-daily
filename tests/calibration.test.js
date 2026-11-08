@@ -76,15 +76,20 @@ test('the calibration table covers every tier and piece with valid knobs, and th
   assert.throws(() => knobsFor('standard', 'rook'), RangeError);
 });
 
-test('generateDaily keeps the first candidate in the band, else the closest', () => {
+test('generateDaily keeps the first candidate whose capped human gap is in the band, else the closest', () => {
   const [low, high] = DIFFICULTY_TIERS.tricky.band;
-  const found = (score, threatenedDecisions = 9) => ({ score, metrics: { threatenedDecisions } });
+  const found = (gap, threatenedDecisions = 9, score = 12) => ({ gap, score, metrics: { threatenedDecisions } });
   assert.equal(chooseCandidate([found(low), found(low + 0.1)], 'tricky', 0), 0);
   assert.equal(chooseCandidate([found(low - 5), found(low)], 'tricky', 0), 1);
   assert.equal(chooseCandidate([found(low - 5), found(high + 1)], 'tricky', 0), 1);
   assert.equal(chooseCandidate([found(low - 1), found(high + 1)], 'tricky', 0), 0, 'ties keep the earlier');
   assert.equal(chooseCandidate([null, found(low, 1)], 'tricky', 2), -1, 'too few threatened decisions');
   assert.equal(chooseCandidate([], 'tricky', 0), -1);
+  // The difficulty score is kept for reference only: it never picks.
+  assert.equal(chooseCandidate([found(high + 4, 9, (low + high) / 2), found(high, 9, 99)], 'tricky', 0), 1);
+  // A solved candidate without a measured gap can't be judged against the band.
+  assert.equal(chooseCandidate([{ score: 12, metrics: { threatenedDecisions: 9 } }, found(low)], 'tricky', 0), 1);
+  assert.equal(chooseCandidate([{ ...found(low), gap: null }], 'tricky', 0), -1);
 });
 
 test('the public edition takes its tier from the weekday and its knobs from the table, deterministically', () => {

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import { validateSave } from './game.js';
 
-const SAVE_KEY = /^daily:(?:(v[3-6]):)?(\d{4}-\d{2}-\d{2})$/;
+const SAVE_KEY = /^daily:(?:(v[3-7]):)?(\d{4}-\d{2}-\d{2})$/;
 const STATUS_RANK = { lost: 0, playing: 1, won: 2 };
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isSound = (value) => value === 'on' || value === 'off';
@@ -16,8 +16,8 @@ function readRun(key, serialized) {
     if (!isRecord(run) || run.date !== date || typeof run.status !== 'string' || !Object.hasOwn(STATUS_RANK, run.status)) return null;
     const schemas = version ? [Number(version.slice(1))] : [2, 3];
     if (!schemas.includes(run.schema) || !Number.isInteger(run.floor) || run.floor < 0 || run.floor > 2) return null;
-    if (version === 'v6' && !validateSave(run, date)) return null;
-    return { run, archived: version !== 'v6' };
+    if (version === 'v7' && !validateSave(run, date)) return null;
+    return { run, archived: version !== 'v7' };
   } catch { return null; }
 }
 

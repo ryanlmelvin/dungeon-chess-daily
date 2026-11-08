@@ -6,13 +6,13 @@
 // that room is at risk until the stairs bank it. After a few more moves (waits
 // count; fewer on harder days, CAVE_IN_MOVES) the ceiling caves in: the gold at
 // risk is dropped, the coins and the powerup still lying there are buried, and
-// nothing more in that room pays. A waiting recruit stays: it pays nothing.
-// The last floor has no coins and no shop, so its ceiling holds.
+// the rubble carries you down the stairs to the shop, as if you'd taken them.
+// The room is over: no more moves, waits or pins there (cavedIn), only the
+// shop and the stairs down, or a Take-back of the move that caved it in. The
+// last floor has no coins and no shop, so its ceiling holds.
 //
-// The cave-in changes gold and pickups only. It never moves a piece or changes
-// a move, so every certified route (some spend up to 30 moves on a cleared
-// floor, and none ever collects a powerup) replays unchanged; you stay put and
-// the stairs stay open.
+// Certified routes take the stairs right after each clear (src/fairness.js),
+// so no certified route ever meets a cave-in.
 //
 // state.caveIn, absent until the door opens and on every new floor:
 //   moves   moves left before the ceiling caves in, 0 once it has
@@ -64,10 +64,8 @@ export function caveInTick(state, before) {
     say(state, `The ceiling starts to crack! It caves in after ${moves} more moves, and gold you grab now is at risk until you take the stairs.`);
     return;
   }
-  if (!cave.moves) {
-    if (won) { drop(state, won); say(state, `The rubble swallows that ${won} gold: nothing pays after a cave-in.`); }
-    return;
-  }
+  // A caved-in room takes no more moves (cavedIn), so nothing ticks there.
+  if (!cave.moves) return;
   cave.risk += won;
   if (--cave.moves) {
     const risk = goldAtRisk(state);
@@ -83,12 +81,22 @@ export function caveInTick(state, before) {
   state.items = state.items.filter((item) => !buriable(item));
   state.events.push({ type: 'cave-in', x: state.player.x, y: state.player.y, gold: lost, coins, ...(power && { power }) });
   const buried = [coins && (coins === 1 ? 'the last coin' : 'the coins left'), power && `the ${POWER_NAMES[power] ?? 'pickup'}`].filter(Boolean);
-  say(state, `The ceiling caved in!${lost ? ` You dropped ${lost} gold.` : ''}${buried.length ? ` The rubble buries ${buried.join(' and ')}.` : ''} Nothing here pays now: take the stairs.`);
+  say(state, `The ceiling caved in!${lost ? ` You dropped ${lost} gold.` : ''}${buried.length ? ` The rubble buries ${buried.join(' and ')}.` : ''} It carries you down the stairs to the shop.`);
 }
 
 /** True while the ceiling is counting down: the room can still pay, and Wait stays on offer. */
 export function caveInRunning(state) {
   return state?.status === 'playing' && state.caveIn?.moves > 0;
+}
+
+/**
+ * True once the ceiling has caved in: the rubble carried the player down the
+ * stairs to the shop, so the room takes no more moves, waits or pins. What's
+ * left is the shop, the stairs down (they finish the floor as if you'd taken
+ * them yourself), and a held Take-back.
+ */
+export function cavedIn(state) {
+  return state?.status === 'playing' && state.caveIn?.moves === 0;
 }
 
 /** Gold a cave-in would take right now: what the stairs would bank. */
@@ -105,7 +113,7 @@ export function caveInStatus(state) {
 
 /** What tapping the chip says, with the day's own count. */
 export function caveInExplain(state) {
-  return `Cave-in: on floors 1 and 2 the open door cracks the ceiling. Today it caves in ${caveInMoves(state)} moves after the door opens (fewer on harder days). Gold you grab before then is at risk until you take the stairs. If it caves in first, you drop that gold, the coins and pickup left are buried, and nothing more in that room pays.`;
+  return `Cave-in: on floors 1 and 2 the open door cracks the ceiling. Today it caves in ${caveInMoves(state)} moves after the door opens (fewer on harder days). Gold you grab before then is at risk until you take the stairs. If it caves in first, you drop that gold, the coins and pickup left are buried, and the rubble carries you down the stairs to the shop.`;
 }
 
 /**

@@ -297,8 +297,8 @@ test('100 consecutive certified dates win without powers, and only pawn routes s
       state = next;
       assert.equal(validateSave(state, state.date), true, `${state.date} save after move ${state.turns}`);
       assert.ok(state.player.hp >= state.player.maxHp - (state.startingPiece === 'pawn' ? 4 : 0));
-      // Only the king floor's own recruit (a rook, queen or king) may help, under royal rules.
-      if (royalRules(state)) assert.ok(state.companion === null || ['rook', 'queen', 'king'].includes(state.companion.basePiece));
+      // Only the king floor's own recruit (a king) may help, under royal rules.
+      if (royalRules(state)) assert.ok(state.companion === null || state.companion.basePiece === 'king');
       else assert.equal(state.companion, null);
       assert.deepEqual(state.companionOrders, []);
       assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
@@ -361,6 +361,8 @@ test('walls block sliding, pawn double steps and attack lanes, while knights jum
   state.player.piece = 'knight';
   assert.equal(hasMove(state, 3, 4), true);
   state.player.piece = 'king'; state.enemies = [monster('rook', 'rook', 4, 0)];
+  // The rook's step is a seeded tie-break: pin the seed, not whichever candidate the day certifies.
+  state.dungeonSeed = state.seed;
   assert.deepEqual(dangerTiles(act(state, move(3, 6))), []);
 });
 

@@ -114,7 +114,8 @@ test('a monster pawn captures a double-stepping pawn en passant at once', () => 
   assert.equal(next.player.hp, hp - 1);
   assert.deepEqual(find(next, 'close-capture'), { type: 'close-capture', id: 'p', x: 5, y: 4, enPassant: true });
   assert.equal(find(next, 'player-captured').enPassant, true);
-  assert.equal(find(next, 'enemy-phase'), undefined);
+  // The monsters still take their turn after the hit.
+  assert.ok(find(next, 'enemy-phase'));
   assert.match(next.message, /Ice bat captured you en passant as you passed it\./);
   // As in chess, the capturing pawn lands on the square the double step skipped.
   assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [4, 5]);

@@ -1,14 +1,14 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-import { hash, random } from './random.js';
+import { hash, hashMore, random } from './random.js';
 import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
-import { chooseMonsterMove } from './monster-ai.js';
-import { caveInTick, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
+import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
+import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-export const RULES_VERSION = 6;
+export const RULES_VERSION = 7;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -27,6 +27,9 @@ export const PIN_MOVES = 3;
 /** The piece a Borrowed move moves like: a knight, or a queen for a knight. */
 export const borrowedPiece = (state) => (state.player.piece === 'knight' ? 'queen' : 'knight');
 const pinned = (foe) => foe.pinned > 0;
+// A monster that lunged and missed is off-balance until the player's next move
+// ends (enemyTurn): like a pinned one, it can't capture at all.
+const offBalance = (foe) => foe.offBalance === true;
 /** The state a Take-back returns to, or null when there is nothing to take back. */
 export function takebackTarget(state) {
   return state?.status === 'playing' && state.undo?.powers?.takeback > 0 ? state.undo : null;
@@ -60,21 +63,41 @@ function same(a, b) { return a.x === b.x && a.y === b.y; }
 function distance(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 function inside(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < 8 && y < 8; }
 export function walkable(state, x, y) { return inside(x, y) && state.map?.[y]?.[x] !== '#'; }
-export function enemyAt(state, x, y) { return state.enemies.find((foe) => foe.x === x && foe.y === y); }
+// Hot in the certification search: a plain loop, no closure per call.
+export function enemyAt(state, x, y) {
+  const { enemies } = state;
+  for (let i = 0; i < enemies.length; i++) if (enemies[i].x === x && enemies[i].y === y) return enemies[i];
+  return undefined;
+}
 
+// Shared, never mutated: a queen's rays and a king's steps.
+const EIGHT_WAYS = Object.freeze([...ORTHOGONAL, ...DIAGONAL]);
 function rays(piece) {
   if (piece === 'rook') return ORTHOGONAL;
   if (piece === 'bishop') return DIAGONAL;
-  if (piece === 'queen') return [...ORTHOGONAL, ...DIAGONAL];
+  if (piece === 'queen') return EIGHT_WAYS;
   return null;
 }
 
 function movesFor(state, unit, enemy = false, attacksOnly = false) {
   const moves = [];
+  // The squares monsters stand on, as two 32-square bit masks, so an empty
+  // square skips enemyAt's scan.
+  let low = 0, high = 0;
+  for (const foe of state.enemies) {
+    if (!inside(foe.x, foe.y)) continue;
+    const bit = foe.y * 8 + foe.x;
+    if (bit < 32) low |= 1 << bit; else high |= 1 << (bit - 32);
+  }
+  const monsterOn = (x, y) => {
+    if (!inside(x, y)) return enemyAt(state, x, y);
+    const bit = y * 8 + x;
+    return ((bit < 32 ? low >>> bit : high >>> (bit - 32)) & 1) ? enemyAt(state, x, y) : undefined;
+  };
   const occupant = (x, y) => {
     if (enemy && state.companion && state.companion.x === x && state.companion.y === y) return 'friend';
     if (unit === state.companion && state.player.x === x && state.player.y === y) return 'friend';
-    const foe = enemyAt(state, x, y);
+    const foe = monsterOn(x, y);
     if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
     if (enemy && state.player.x === x && state.player.y === y && state.player.hp) return 'opponent';
     return null;
@@ -98,14 +121,108 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
       for (let step = 1; step < 8; step++) if (!push(unit.x + dx * step, unit.y + dy * step)) break;
     }
   } else {
-    for (const [dx, dy] of unit.piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]) push(unit.x + dx, unit.y + dy);
+    for (const [dx, dy] of unit.piece === 'knight' ? KNIGHT : EIGHT_WAYS) push(unit.x + dx, unit.y + dy);
   }
   return moves;
 }
 
+// movesFor's occupant, standalone: 'friend', 'opponent' or null.
+function occupantFor(state, unit, enemy, x, y) {
+  const { companion, player } = state;
+  if (enemy && companion && companion.x === x && companion.y === y) return 'friend';
+  if (unit === companion && player.x === x && player.y === y) return 'friend';
+  const foe = enemyAt(state, x, y);
+  if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
+  if (enemy && player.x === x && player.y === y && player.hp) return 'opponent';
+  return null;
+}
+
+/**
+ * Would movesFor(state, unit, enemy) list a capture on (x, y), with the unit
+ * moving like `piece`? The same verdict without building the move list: the
+ * monster AI asks it of every square it weighs.
+ */
+function capturesAt(state, unit, enemy, x, y, piece = unit.piece) {
+  // The geometry first: it's the cheapest test and usually decides.
+  const dx = x - unit.x, dy = y - unit.y;
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  const lines = rays(piece);
+  if (piece === 'pawn' ? !(ax === 1 && dy === (enemy ? 1 : -1))
+    : !lines ? !(piece === 'knight' ? ax + ay === 3 && ax > 0 && ay > 0 : Math.max(ax, ay) === 1)
+    : !(((dx === 0) !== (dy === 0) && lines !== DIAGONAL) || (ax === ay && ax > 0 && lines !== ORTHOGONAL))) return false;
+  if (!walkable(state, x, y) || occupantFor(state, unit, enemy, x, y) !== 'opponent') return false;
+  if (piece === 'pawn' || !lines) return true;
+  // A line piece: every square between must be open.
+  const n = Math.max(ax, ay);
+  if (n > 7) return false;
+  const sx = Math.sign(dx), sy = Math.sign(dy);
+  for (let k = 1; k < n; k++) {
+    const cx = unit.x + sx * k, cy = unit.y + sy * k;
+    if (!walkable(state, cx, cy) || occupantFor(state, unit, enemy, cx, cy) !== null) return false;
+  }
+  return true;
+}
+// Would monster `foe` capture the player from where it stands?
+function strikesPlayer(state, foe) {
+  return capturesAt(state, foe, true, state.player.x, state.player.y);
+}
+
+/**
+ * The squares movesFor(state, unit, true, true) lists for a monster, as a set
+ * (`has`) with their `count`, without building the list: the monster AI asks
+ * it of every step it weighs.
+ */
+class Reach {
+  constructor(low, high, count) { this.low = low; this.high = high; this.count = count; }
+  has(square) {
+    if (!inside(square.x, square.y)) return false;
+    const bit = square.y * 8 + square.x;
+    return Boolean((bit < 32 ? this.low >>> bit : this.high >>> (bit - 32)) & 1);
+  }
+}
+const PAWN_STRIKES = Object.freeze([[-1, 1], [1, 1]]);
+function attackReach(state, unit) {
+  const ux = unit.x, uy = unit.y;
+  // Off the grid (never in play) nothing is inside the board: movesFor lists nothing.
+  if (!Number.isInteger(ux) || !Number.isInteger(uy)) return new Reach(0, 0, 0);
+  const { map, companion, player } = state;
+  // The squares monsters stand on, so an empty square skips enemyAt's scan.
+  let monstersLow = 0, monstersHigh = 0;
+  for (const foe of state.enemies) {
+    if (!inside(foe.x, foe.y)) continue;
+    const bit = foe.y * 8 + foe.x;
+    if (bit < 32) monstersLow |= 1 << bit; else monstersHigh |= 1 << (bit - 32);
+  }
+  const lines = rays(unit.piece);
+  const directions = unit.piece === 'pawn' ? PAWN_STRIKES : lines ?? (unit.piece === 'knight' ? KNIGHT : EIGHT_WAYS);
+  const longest = lines ? 7 : 1;
+  let low = 0, high = 0, count = 0;
+  for (const [dx, dy] of directions) {
+    for (let step = 1; step <= longest; step++) {
+      // movesFor's push with attacksOnly: an unwalkable square or a friend ends the line unlisted.
+      const x = ux + dx * step, y = uy + dy * step;
+      if (x < 0 || y < 0 || x > 7 || y > 7 || map?.[y]?.[x] === '#') break;
+      const bit = y * 8 + x;
+      // movesFor's occupant for a monster.
+      if (companion && companion.x === x && companion.y === y) break;
+      if (unit === companion && player.x === x && player.y === y) break;
+      if ((bit < 32 ? monstersLow >>> bit : monstersHigh >>> (bit - 32)) & 1) {
+        const foe = enemyAt(state, x, y);
+        if (foe && foe !== unit) break;
+      }
+      if (bit < 32) low |= 1 << bit; else high |= 1 << (bit - 32);
+      count++;
+      // The player (with lives) is listed as a capture and ends the line.
+      if (player.x === x && player.y === y && player.hp) break;
+    }
+  }
+  return new Reach(low, high, count);
+}
+
 /**
  * The player's legal chess destinations. A pawn captures only diagonally. A king may not step into close range.
- * On ice days a move that will skid carries its resting square as `slide`.
+ * On ice days a move that will skid carries its resting square as `slide`. None
+ * once the room has caved in: the rubble carried the player to the stairs (src/cave-in.js).
  */
 export function legalMoves(state) {
   const moves = chessMoves(state);
@@ -113,7 +230,7 @@ export function legalMoves(state) {
   return moves.map((move) => { const slide = iceSlide(state, move); return slide ? { ...move, slide } : move; });
 }
 function chessMoves(state) {
-  if (!state || state.status !== 'playing') return [];
+  if (!state || state.status !== 'playing' || cavedIn(state)) return [];
   const moves = movesFor(state, state.player);
   // A held Borrowed move adds the borrowed piece's squares as optional moves;
   // `borrowed` names that piece so the board can ghost it there.
@@ -174,22 +291,39 @@ function enPassantVictim(state, ep) {
 // passes (x, 5), which a monster pawn beside the landing square attacks.
 function enPassantStriker(state, square) {
   if (state.powers?.freeze > 0 || square.y !== 4) return null;
-  return state.enemies.find((foe) => !pinned(foe) && foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
+  return state.enemies.find((foe) => !pinned(foe) && !offBalance(foe) && foe.piece === 'pawn' && foe.y === 4 && Math.abs(foe.x - square.x) === 1) ?? null;
 }
 
 /**
  * The first monster that would capture the player at once on `square`: one
  * adjacent to it, or a knight. Distant sliders still give a turn of warning.
- * Evaluated on a copy with the player on `square` and any monster there taken.
+ * Pinned and off-balance monsters never capture.
+ * Judged as if the player stood on `square`, with any monster there taken.
  */
 export function closeAttacker(state, square) {
   if (state.powers?.freeze > 0) return null;
-  // A companion sharing the player's square never shields it.
-  const companion = state.companion && !same(state.companion, square) ? state.companion : null;
-  const board = { ...state, companion, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
-  const free = board.enemies.filter((foe) => !pinned(foe));
-  return free.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
-    && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
+  // Exactly what movesFor would say with the player moved onto `square` (any
+  // monster there taken, a companion sharing it not shielding it): a capture
+  // needs a walkable square and a player with lives, and a monster one step
+  // away (or a knight's jump) can't be blocked, so the step's geometry decides.
+  // The hottest check in the certification search: no board copy, no move lists.
+  if (!state.player.hp || !walkable(state, square.x, square.y)) return null;
+  for (const foe of state.enemies) {
+    if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe)) continue;
+    const dx = square.x - foe.x, dy = square.y - foe.y;
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (foe.piece === 'knight') {
+      if (ax + ay === 3 && ax && ay) return foe;
+      continue;
+    }
+    if (Math.max(ax, ay) !== 1) continue;
+    if (foe.piece === 'rook' ? ax + ay === 1
+      : foe.piece === 'bishop' ? ax === 1 && ay === 1
+      // A monster pawn captures one square diagonally forward, down the board.
+      : foe.piece === 'pawn' ? ax === 1 && dy === 1
+      : true) return foe;
+  }
+  return null;
 }
 
 /**
@@ -362,7 +496,7 @@ function attackPath(state, foe, target) {
 }
 
 function aimAtPlayer(state, foe) {
-  if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return false;
+  if (!strikesPlayer(state, foe)) return false;
   foe.phase = 'aim';
   foe.target = { x: state.player.x, y: state.player.y };
   foe.intent = attackPath(state, foe, state.player);
@@ -387,15 +521,41 @@ function promoteMonster(state, foe) {
 function moveMonster(state, foe) {
   const candidates = movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
   if (!candidates.length) return;
-  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
   // Each role steps with its own habits (src/monster-ai.js).
-  const step = chooseMonsterMove(state, foe, candidates, { movesFor, closeAttacker, tie });
+  const step = chooseMonsterMove(state, foe, candidates, monsterEngine(state, foe));
   const from = { x: foe.x, y: foe.y };
   foe.x = step.x; foe.y = step.y; foe.moved = true;
   state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
-  aimAtPlayer(state, foe);
+  windUp(state, foe);
+}
+
+// The rules.js internals src/monster-ai.js consults for one monster.
+function monsterEngine(state, foe) {
+  // The clock and the monster stay put while it weighs its steps, so the
+  // tie-break's prefix is hashed once per decision (it ends in ':', so the
+  // hash continues exactly as over the whole text).
+  let prefix = null;
+  const tie = (move) => (hashMore(prefix ??= hashMore(2166136261, tiePrefix(state, foe)), `${move.x},${move.y}`) >>> 0) / 4294967296;
+  return { movesFor, capturesAt, strikesPlayer, attackReach, closeAttacker, borrowedPiece, tie, steps: () => monsterMoves(state, foe) };
+}
+
+// Off the king floor, a monster that can strike the player winds up, except
+// that from Tricky on a rook, bishop, queen or decoy king waits for a square
+// where the player can't take it, or a guarded one (src/monster-ai.js).
+function windUp(state, foe) {
+  return strikesPlayer(state, foe)
+    && safeToStrike(state, foe, monsterEngine(state, foe)) && aimAtPlayer(state, foe);
+}
+
+// From Tough on, a guard first blocks a line into a target the player could take.
+function screenTarget(state, foe) {
+  const block = screenStep(state, foe, monsterEngine(state, foe));
+  if (!block) return false;
+  relocate(state, foe, block);
+  windUp(state, foe);
+  return true;
 }
 
 // A pawn's double step opens an en passant window on the square it skipped.
@@ -413,9 +573,11 @@ function hypothetically(unit, square, evaluate) {
   unit.x = square.x; unit.y = square.y;
   try { return evaluate(); } finally { unit.x = x; unit.y = y; }
 }
+// The player's reach counts a held Borrowed move, which can take the king too.
 function kingThreatened(state, king) {
-  const hits = (unit) => movesFor(state, unit).some((move) => move.capture && same(move, king));
-  return (state.player.hp > 0 && hits(state.player)) || Boolean(state.companion && hits(state.companion));
+  const hits = (unit, piece) => capturesAt(state, unit, false, king.x, king.y, piece);
+  const borrowed = () => state.powers?.leap > 0 && hits(state.player, borrowedPiece(state));
+  return (state.player.hp > 0 && (hits(state.player) || borrowed())) || Boolean(state.companion && hits(state.companion));
 }
 function monsterMoves(state, foe) {
   return movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
@@ -427,15 +589,24 @@ function relocate(state, foe, move) {
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
 }
+// A monster's seeded tie-break between equally good steps, in [0, 1). It counts
+// moves on this floor, not in the whole run, so a floor plays the same however
+// long the earlier ones took, par included. (Hashing only the board left more
+// monsters pacing between two squares for good while the player waited.)
+// Classic monsters (comparisons only) count the whole run, as all once did.
 function monsterTie(state, foe, move) {
-  return hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${state.turns}:${foe.id}:${move.x},${move.y}`) / 4294967296;
+  return hash(`${tiePrefix(state, foe)}${move.x},${move.y}`) / 4294967296;
+}
+function tiePrefix(state, foe) {
+  const clock = state.classicMonsters === true ? state.turns : state.turns - state.floorStart.turns;
+  return `${state.dungeonSeed ?? state.seed}:${state.floor}:${clock}:${foe.id}:`;
 }
 function safeKingMoves(state, king) {
   return monsterMoves(state, king).filter((move) => !hypothetically(king, move, () => kingThreatened(state, king)));
 }
 function moveKing(state, king) {
   const best = safeKingMoves(state, king).map((move) => hypothetically(king, move, () => {
-    const strikes = movesFor(state, king, true, true).some((m) => m.capture && same(m, state.player));
+    const strikes = strikesPlayer(state, king);
     const company = state.enemies.filter((o) => o !== king && chebyshev(o, move) <= 1).length;
     return {
       move,
@@ -462,8 +633,9 @@ function royalGuardTurn(state, foe, king) {
   const candidates = monsterMoves(state, foe);
   const keepsKing = (move) => !hypothetically(foe, move, () => kingThreatened(state, king));
   if (threatened) {
-    const block = candidates.filter(keepsKing)
-      .sort((a, b) => distance(a, foe) + monsterTie(state, foe, a) * 0.1 - distance(b, foe) - monsterTie(state, foe, b) * 0.1)[0];
+    // Each step's distance and tie-break once, compared exactly as before.
+    const block = candidates.filter(keepsKing).map((move) => ({ move, near: distance(move, foe), tie: monsterTie(state, foe, move) }))
+      .sort((a, b) => a.near + a.tie * 0.1 - b.near - b.tie * 0.1)[0]?.move;
     if (block) { relocate(state, foe, block); aimAtPlayer(state, foe); return; }
   }
   if (aimAtPlayer(state, foe)) return;
@@ -477,7 +649,7 @@ function royalGuardTurn(state, foe, king) {
   };
   const score = (m) => 0.6 * distance(m, state.player) + 0.4 * distance(m, king) + 0.35 * distance(m, foe)
     + 0.7 * monsterTie(state, foe, m) - (between(m) ? 2 : 0);
-  const pick = pool.sort((a, b) => score(a) - score(b))[0];
+  const pick = pool.map((move) => ({ move, score: score(move) })).sort((a, b) => a.score - b.score)[0]?.move;
   if (!pick) return;
   relocate(state, foe, pick);
   aimAtPlayer(state, foe);
@@ -529,14 +701,19 @@ function capturePlayer(state, foe, close = false, enPassant = false) {
 
 // A distant rook, bishop or queen with the player in its line steps one square
 // closer along it before aiming, so a line it can already strike is pressed.
+// From Tricky on it only steps where the player can't take it (src/monster-ai.js).
 function closeIn(state, foe) {
   if (!['rook', 'bishop', 'queen'].includes(foe.piece) || chebyshev(foe, state.player) <= 1) return;
-  if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return;
+  if (!strikesPlayer(state, foe)) return;
   const step = attackPath(state, foe, state.player)[0];
-  if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))) relocate(state, foe, step);
+  if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))
+    && safeCloseIn(state, foe, step, monsterEngine(state, foe))) relocate(state, foe, step);
 }
 
-function enemyTurn(state) {
+// `hit`: the player was already captured this turn (at close range). At most
+// one hit a turn, so no monster captures again: a strike that would land holds,
+// still wound up, and everything else moves and winds up as usual.
+function enemyTurn(state, hit = false) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   // A pinned monster sits out this turn; the pin wears off after PIN_MOVES of them.
   const held = new Set(state.enemies.filter(pinned));
@@ -544,39 +721,55 @@ function enemyTurn(state) {
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
   const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
+  const missed = [];
   for (const foe of order) {
     if (held.has(foe)) continue;
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
-        && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
+        && strikesPlayer(state, foe);
+      if (capture && hit) continue;
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
-      if (capture) return;
+      if (capture) { announceMisses(state, missed); return; }
       const destination = movesFor(state, foe, true).find((move) => same(move, foe.target) && !move.capture && preservesPawnLane(state, move));
       if (destination && royal && !royalStepOk(state, foe, royal, destination)) { /* stay put */ }
       else if (destination) relocate(state, foe, destination);
-      foe.phase = 'ready'; foe.intent = []; foe.target = null;
-      state.events.push({ type: 'miss', x: foe.x, y: foe.y });
+      // The lunge missed: it spent its turn and is off-balance until the player's next move ends.
+      foe.phase = 'ready'; foe.intent = []; foe.target = null; foe.offBalance = true;
+      missed.push(foe);
+      state.events.push({ type: 'miss', id: foe.id, x: foe.x, y: foe.y });
     } else if (royal && foe === royal) {
       royalKingTurn(state, foe);
     } else if (royal && state.enemies.includes(royal)) {
       royalGuardTurn(state, foe, royal);
-    } else {
+    } else if (!screenTarget(state, foe)) {
       closeIn(state, foe);
-      if (!aimAtPlayer(state, foe)) moveMonster(state, foe);
+      if (!windUp(state, foe)) moveMonster(state, foe);
     }
   }
+  announceMisses(state, missed);
 }
 
-function connectedBoard(state) {
-  const layoutPiece = state.layoutPiece ?? state.startingPiece;
-  const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
-  // Flood fill with movesFor's rules on an empty board (piece is never a pawn
-  // here): sliders run until a wall, knights and kings step once.
-  const open = new Uint8Array(64);
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) open[y * 8 + x] = walkable(state, x, y) ? 1 : 0;
+// One line for the phase's missed lunges, after its other news; none once a
+// lost run has cleared the room.
+function announceMisses(state, missed) {
+  const shown = missed.filter((foe) => state.enemies.includes(foe));
+  if (!shown.length) return;
+  settle(state);
+  state.message = shown.length === 1 ? `${shown[0].name} lunged and missed — it’s off-balance!` : `${shown.length} monsters lunged and missed — they’re off-balance!`;
+}
+
+// The player's move (or wait) is over: off-balance monsters find their feet.
+function regainBalance(state) {
+  for (const foe of state.enemies) delete foe.offBalance;
+}
+
+// The squares (index y * 8 + x) a piece can reach from `from` over this
+// floor's walls: a flood fill with movesFor's rules on an empty board (never
+// a pawn): sliders run until a wall, knights and kings step once.
+function reachableFrom(state, piece, from) {
   const visited = new Uint8Array(64);
-  const queue = [4 + 6 * 8];
+  const queue = [from.x + from.y * 8];
   visited[queue[0]] = 1;
   const directions = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
   const range = rays(piece) ? 7 : 1;
@@ -585,16 +778,79 @@ function connectedBoard(state) {
     for (const [dx, dy] of directions) {
       for (let step = 1; step <= range; step++) {
         const x = qx + dx * step, y = qy + dy * step;
-        if (x < 0 || y < 0 || x > 7 || y > 7 || !open[y * 8 + x]) break;
+        if (!walkable(state, x, y)) break;
         if (!visited[y * 8 + x]) { visited[y * 8 + x] = 1; queue.push(y * 8 + x); }
       }
     }
   }
+  return visited;
+}
+
+function connectedBoard(state) {
+  const layoutPiece = state.layoutPiece ?? state.startingPiece;
+  const piece = layoutPiece === 'pawn' ? 'queen' : layoutPiece;
+  const visited = reachableFrom(state, piece, { x: 4, y: 6 });
   // Bishops need every open square of their own color; other pieces need all.
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if (open[y * 8 + x] && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited[y * 8 + x]) return false;
+    if (walkable(state, x, y) && (piece !== 'bishop' || (x + y) % 2 === 0) && !visited[y * 8 + x]) return false;
   }
   return true;
+}
+
+// Practice with another piece plays the official room, whose walls, recruit
+// and power-up square suit the day's piece: a practice bishop couldn't reach
+// the power-up on more than half its floors or the recruit on four in five,
+// and now and then a practice knight had every jump from its start walled
+// off. So, on its own random stream, leaving monsters and the other walls
+// where the official room has them: a practice piece with no move from its
+// start has the walls on its first moves cleared; the waiting recruit stands
+// on one of its first moves, as it does for the day's piece (a pawn recruit
+// on a file open to the far rank); a coin or power-up it can't reach moves to
+// a square it can, two or more steps away (the room's middle rows when it
+// can). Pawns only advance, so their rooms are left as they are.
+function fitPracticeRoom(state, layoutPiece) {
+  const piece = state.startingPiece;
+  if (!state.practice || piece === layoutPiece || piece === 'pawn') return;
+  let reach = reachableFrom(state, piece, state.player);
+  if (reach.every((seen, index) => !seen || index === state.player.x + state.player.y * 8)) {
+    const steps = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
+    for (const [dx, dy] of steps) {
+      const x = state.player.x + dx, y = state.player.y + dy;
+      if (!inside(x, y) || walkable(state, x, y)) continue;
+      state.map[y] = state.map[y].slice(0, x) + '.' + state.map[y].slice(x + 1);
+      state.props = state.props.filter((prop) => prop.x !== x || prop.y !== y);
+    }
+    reach = reachableFrom(state, piece, state.player);
+  }
+  const reached = (tile) => reach[tile.y * 8 + tile.x] === 1;
+  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:practice-pickups:${state.floor}`));
+  const recruit = state.items.find((item) => item.type === 'companion');
+  if (recruit) {
+    const fits = (tile) => !same(tile, state.exit) && !enemyAt(state, tile.x, tile.y) && !state.items.some((other) => other !== recruit && same(other, tile))
+      && (recruit.piece !== 'pawn' || openFile(state, tile));
+    const first = movesFor(state, { ...state.player, piece }).filter(fits);
+    if (!first.some((tile) => same(tile, recruit))) {
+      const anywhere = [];
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (reached({ x, y }) && !same({ x, y }, state.player) && fits({ x, y })) anywhere.push({ x, y });
+      const pool = first.length ? first : anywhere;
+      const tile = pool[Math.floor(rng() * pool.length)];
+      if (tile) Object.assign(recruit, { x: tile.x, y: tile.y });
+    }
+  }
+  for (const item of state.items) {
+    if ((item.type !== 'coin' && item.type !== 'powerup') || reached(item)) continue;
+    const free = [];
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      const tile = { x, y };
+      if (!reached(tile) || Math.max(Math.abs(x - state.player.x), Math.abs(y - state.player.y)) <= 1 || same(tile, state.exit)
+        || enemyAt(state, x, y) || state.items.some((other) => same(other, tile))) continue;
+      free.push(tile);
+    }
+    const middle = free.filter((tile) => tile.y >= 3 && tile.y <= 5);
+    const pool = middle.length ? middle : free;
+    const tile = pool[Math.floor(rng() * pool.length)];
+    if (tile) Object.assign(item, tile);
+  }
 }
 
 // Walls never land on a monster's opening moves, so none spawns boxed in (a
@@ -636,9 +892,22 @@ function pawnFormation(state) {
   return chosen.map(({ x, y }) => [x, y]);
 }
 // The king floor plays by royal rules: a smarter king and guards (enemyTurn)
-// and a stronger recruit (setFloor) that may help certify the room (fairness.js).
+// and a recruit (setFloor) that may help certify the room (fairness.js).
 export function royalRules(state) { return state.floor === 2; }
-const KING_FLOOR_RECRUITS = ['rook', 'queen', 'king'];
+// The king floor always recruits a king. Of rook, queen and king, the king
+// recruit helped every piece most (or as much) and almost never cleared the
+// floor in one or two steered moves, as a queen or rook could by taking the
+// king from across the room; a rook player can castle with it.
+const KING_FLOOR_RECRUITS = ['king'];
+// A pawn recruit that can't wait on an open file is another piece (setFloor).
+const PAWNLESS = PIECES.filter((piece) => piece !== 'pawn');
+// Is the file ahead of `tile` free of walls all the way to the far rank, so a
+// pawn there can walk up and promote? Monsters move, so only walls count, as
+// for the player's own promotion file.
+function openFile(state, tile) {
+  for (let y = tile.y - 1; y >= 0; y--) if (!walkable(state, tile.x, y)) return false;
+  return true;
+}
 function openingSquares(foe) {
   const deltas = foe.piece === 'pawn' ? [[0, 1], ...(foe.y === 1 ? [[0, 2]] : [])]
     : foe.piece === 'knight' ? KNIGHT
@@ -830,24 +1099,36 @@ function setFloor(state, kingRecruit = false) {
     // Add the recruit after the layout is fixed; older editions keep their map.
     // Its own random stream leaves walls, monsters and coins untouched.
     const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
-    // Under royal rules the recruit is a rook, queen or king: a second attacker
-    // strong enough to corner a dodging king, even beside a pawn or a bishop.
+    // Under royal rules the recruit is a king (KING_FLOOR_RECRUITS): a second
+    // attacker that helps corner a dodging king beside any piece.
     // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
     // a king keep that king; the tile draw is the same either way.
     const pool = royalRules(state) ? KING_FLOOR_RECRUITS : PIECES;
     const drawn = pool[Math.floor(recruitRng() * pool.length)];
-    const piece = !royalRules(state) && kingRecruit ? 'king' : drawn;
+    let piece = !royalRules(state) && kingRecruit ? 'king' : drawn;
     const clear = (tile) => walkable(state,tile.x,tile.y) && !enemyAt(state,tile.x,tile.y) && !same(tile,state.player) && !same(tile,state.exit) && !state.items.some((item)=>same(item,tile));
     let tiles = movesFor(state,{...state.player,piece:layoutPiece}).filter(clear);
     if (!tiles.length) {
       tiles = [];
       for(let y=0;y<8;y++) for(let x=0;x<8;x++) if(clear({x,y}) && (layoutPiece !== 'bishop' || (x+y)%2===0) && (layoutPiece !== 'pawn' || (x===4 && y<6))) tiles.push({x,y});
     }
-    const tile = tiles[Math.floor(recruitRng()*tiles.length)];
+    let tile = tiles[Math.floor(recruitRng()*tiles.length)];
+    // A pawn recruit waits only where its file is open to the far rank, so it
+    // can walk up and promote. Drawn on a walled file, it moves to one of the
+    // same squares whose file is open, or, with none, it is another piece on
+    // the square drawn. Either takes one more draw from its own stream, so
+    // nothing else in the room moves.
+    if (piece === 'pawn' && tile && !openFile(state, tile)) {
+      const lanes = tiles.filter((entry) => openFile(state, entry));
+      const roll = recruitRng();
+      if (lanes.length) tile = lanes[Math.floor(roll * lanes.length)];
+      else piece = PAWNLESS[Math.floor(roll * PAWNLESS.length)];
+    }
     if (tile) state.items.push({type:'companion',piece,x:tile.x,y:tile.y});
   }
   // Drop the coins only once walls and the recruit are placed, so the room keeps its layout.
   if (coinlessFloor(state)) state.items = state.items.filter((item) => item.type !== 'coin');
+  fitPracticeRoom(state, layoutPiece);
   // The day's modifier (ice tiles, reinforcement count) once the room is fixed.
   setupFloorModifier(state);
   const order = (state.companionOrders ?? []).find((entry) => entry.floor === state.floor);
@@ -856,7 +1137,7 @@ function setFloor(state, kingRecruit = false) {
     state.companion = { piece: order.piece, basePiece: order.piece, x: state.player.x, y: state.player.y, moved: false, sharing: true };
     state.events.push({ type: 'companion-recruit', piece: order.piece, x: state.player.x, y: state.player.y });
   }
-  if (state.playerColor === 'white') for (const foe of state.enemies) aimAtPlayer(state, foe);
+  if (state.playerColor === 'white') for (const foe of state.enemies) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
 }
 
 const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
@@ -869,7 +1150,23 @@ function trapped(state) {
 }
 
 // Running out of lives or out of moves ends the try: back to floor 1, with one more try on the share card.
+// The certification search (src/fairness.js) throws away every transition
+// that ends the run, so while it runs a run-ending capture only marks the
+// restart instead of building a fresh dungeon (a seventh of its time before).
+let markRestartsOnly = false;
+/** Run `search` with restarts only marked; the search discards them anyway. */
+export function whileSearching(search) {
+  const was = markRestartsOnly;
+  markRestartsOnly = true;
+  try { return search(); } finally { markRestartsOnly = was; }
+}
+
 function restartRun(state, events, message) {
+  if (markRestartsOnly) {
+    state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
+    state.message = message;
+    return state;
+  }
   const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
   // Count today's attempts; saves from before this counter only know a restart happened.
   const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
@@ -902,6 +1199,8 @@ export function createGame(daily = getRawDaily()) {
   // Plain days carry no modifier field, so their saves keep their shape.
   if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
+  // Old-versus-new comparisons only: Gentle habits on every tier and turn-hashed tie-breaks (src/monster-ai.js).
+  if (daily.classicMonsters === true) state.classicMonsters = true;
   setFloor(state);
   markFloorStart(state);
   return state;
@@ -1127,7 +1426,8 @@ class RecruitPhase {
  * position as its phase begins (after your move, a close-range hit and, as
  * black, the monsters' first move; `board.events[phase]` is its
  * 'companion-phase'), and `moves` its legal squares, captures of any monster
- * included. On the bishop pair's turn `hop` is true: `moves` are then the
+ * included, except on the move it joins you, when it can't capture (see
+ * companionTurn). On the bishop pair's turn `hop` is true: `moves` are then the
  * squares of the other colour it may hop to, and it may not hold unless there
  * are none. Changes nothing.
  */
@@ -1183,7 +1483,12 @@ function hopToOtherColour(state, unit, square) {
 
 // The recruit's move, once per turn after the player's. Returns false for an
 // order it can't carry out, which makes the whole action no action.
-function companionTurn(state, order) {
+// `joined`: the recruit joined with this very move. Then it can't capture,
+// on Manual or Auto: monsters never steer clear of a waiting recruit's lines,
+// so it would otherwise take whatever walked into them the moment you joined
+// it. Holding, a quiet move or the bishop pair's hop are left, and castling
+// can't come up (the recruit wasn't beside you when you moved).
+function companionTurn(state, order, joined = false) {
   const unit = state.companion;
   if (!unit) return !squareOrder(order);
   unit.sharing = same(unit,state.player);
@@ -1195,8 +1500,9 @@ function companionTurn(state, order) {
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
   const hop = pairHop(state, unit);
+  const legal = () => movesFor(state,unit).filter((move) => !joined || !move.capture);
   if (order === RECRUIT_PROBE) {
-    const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : movesFor(state,unit).map(({x,y,capture}) => ({x,y,capture}));
+    const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : legal().map(({x,y,capture}) => ({x,y,capture}));
     throw new RecruitPhase(state, phase, moves, Boolean(hop));
   }
   // The bishop pair's hop is its move this turn: it may only stay put (or be
@@ -1209,16 +1515,22 @@ function companionTurn(state, order) {
   }
   if (order === 'hold') return true;
   if (order !== undefined) {
-    const ordered = movesFor(state,unit).find((move) => same(move,order));
+    const ordered = legal().find((move) => same(move,order));
     if (ordered) moveCompanion(state,unit,ordered);
     return Boolean(ordered);
   }
   if (!state.enemies.length) return true;
-  const candidates = movesFor(state,unit).filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
+  const candidates = legal().filter((move) => !move.capture || recruitMayTake(state, enemyAt(state,move.x,move.y)));
   const nearest = (move) => Math.min(...state.enemies.map((foe)=>distance(move,foe)));
-  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${state.turns}:${move.x},${move.y}`);
-  candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
-  const destination = candidates[0];
+  // Like the monsters' (monsterTie), its tie-break counts this floor's moves, not
+  // the run's, so a floor plays the same however long the earlier ones took. A
+  // king recruit, with its many equal steps, leans on it often.
+  const clock = state.classicMonsters === true ? state.turns : state.turns - (state.floorStart?.turns ?? 0);
+  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${clock}:${move.x},${move.y}`);
+  // Each candidate's keys once, compared exactly as before.
+  const ranked = candidates.map((move) => ({ move, capture: Number(move.capture), nearest: nearest(move), away: distance(move,unit), tie: tie(move) }));
+  ranked.sort((a,b) => b.capture-a.capture || a.nearest-b.nearest || b.away-a.away || a.tie-b.tie);
+  const destination = ranked[0]?.move;
   if (destination) moveCompanion(state,unit,destination);
   return true;
 }
@@ -1242,9 +1554,6 @@ function grantPower(state, id) {
   state.message = `${power.name} acquired.`;
 }
 
-// Fields act() never changes in place: the floor snapshot (replaced whole by
-// markFloorStart, copied by resetFloor) and the day's theme and species. The
-// next state shares them instead of deep-copying them on every move.
 // structuredClone's result for plain JSON-like data, faster: objects and arrays
 // are copied key by key, shared references stay shared (`seen`), and anything
 // else that is not a primitive falls back to structuredClone.
@@ -1273,15 +1582,23 @@ function replaceCopy(value, seen) {
   seen.set(value, copy);
   return copy;
 }
-const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species']);
+// Fields act() never changes in place: the floor snapshot (replaced whole by
+// markFloorStart, copied by resetFloor), the day's theme and species, and the
+// room's props (replaced whole when a floor is set up). The next state shares
+// them instead of deep-copying them on every move.
+const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species', 'props']);
 function nextState(previous) {
   const seen = new Map();
   // Same key order as a whole-state copy, so saves serialize identically.
   const state = {};
-  for (const key of Object.keys(previous)) state[key] = SHARED_FIELDS.has(key) ? previous[key] : deepCopy(previous[key], seen);
-  delete state.notes;
-  // Saves from when a Borrowed move had to be armed first.
-  delete state.leaping;
+  for (const key of Object.keys(previous)) {
+    // Left out rather than deleted after (a delete slows every later read of
+    // the state): the last action's notes, and `leaping`, from saves made when
+    // a Borrowed move had to be armed first.
+    if (key === 'notes' || key === 'leaping') continue;
+    // Every caller starts its own events, so the last action's are never copied.
+    state[key] = SHARED_FIELDS.has(key) ? previous[key] : key === 'events' ? [] : deepCopy(previous[key], seen);
+  }
   state.companionOrders ??= [];
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
@@ -1290,7 +1607,7 @@ function nextState(previous) {
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
   state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - tacticGold(state.feats);
   // Older saves only recorded exhaustion in the last action's events.
-  if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
+  if (previous.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
 }
 
@@ -1368,6 +1685,8 @@ function play(previous, action) {
     state.message = 'You took back your last move.';
     return state;
   }
+  // A caved-in room is over: what's left is the shop, the stairs down and a Take-back.
+  if (cavedIn(previous) && (action.type === 'wait' || action.type === 'pin')) return previous;
   if (action.type === 'pin') {
     const foe = previous.enemies.find((entry) => entry.id === action.id);
     if (!(previous.powers.pin > 0) || !pinUsable(previous) || !foe || pinned(foe)) return previous;
@@ -1401,7 +1720,7 @@ function play(previous, action) {
       settle(state);
     }
     // Waiting is the player's move, so it spends any en passant window.
-    state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state);
+    state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state); regainBalance(state);
     if (!companionTurn(state, huntsAlone(state) ? undefined : action.recruit)) return previous;
     settle(state);
     if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
@@ -1493,7 +1812,9 @@ function play(previous, action) {
     if (!state.exit.open) { settle(state); state.message = 'Promoted to queen for the rest of this floor.'; }
   }
   const recruit = state.items.find((item) => item.type === 'companion' && same(item,state.player));
-  if (recruit && !state.companion) {
+  // A recruit captures nothing on the turn it joins (companionTurn).
+  const joined = Boolean(recruit && !state.companion);
+  if (joined) {
     state.items = state.items.filter((item)=>item!==recruit);
     state.companion = {piece:recruit.piece,basePiece:recruit.piece,x:recruit.x,y:recruit.y,moved:false,sharing:true};
     state.events.push({type:'companion-recruit',piece:recruit.piece,x:recruit.x,y:recruit.y});
@@ -1503,8 +1824,8 @@ function play(previous, action) {
     settle(state);
     state.message = huntsAlone(state) ? `A ${recruit.piece} joins you and hunts on its own for the rest of this room.`
       : action.recruit === undefined
-      ? `A ${recruit.piece} joins you this floor. It cannot capture ${challengeName(state)}.`
-      : `A ${recruit.piece} joins you this floor. You move it after each of your moves, and it can capture ${challengeName(state)} too.`;
+      ? `A ${recruit.piece} joins you this floor. It can capture from your next move on, but never ${challengeName(state)}.`
+      : `A ${recruit.piece} joins you this floor. You move it after each of your moves. It can capture from your next move on, even ${challengeName(state)}.`;
   }
   // Pick up the relic before applying the magnet, so it works immediately.
   const relic = state.items.find((item) => item.type === 'powerup' && same(item, state.player));
@@ -1515,7 +1836,7 @@ function play(previous, action) {
     state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
   // Ending a move in close range of a monster is captured at once: no warning
-  // turn. At most one hit per move, so white's enemy phase is then skipped.
+  // turn. At most one hit per move, so white's enemy phase then captures no one.
   // A double step can instead be taken en passant by a pawn beside it.
   const guard = closeAttacker(state, state.player);
   const close = guard ?? (doubleStep ? enPassantStriker(state, state.player) : null);
@@ -1530,14 +1851,15 @@ function play(previous, action) {
     const skipped = { x: state.player.x, y: state.player.y + 1 };
     if (passing && hit === 'captured' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
   }
+  regainBalance(state);
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
   // Castling was the recruit's move, so an order to move it again is no action.
   // A cleared floor 1 or 2 ignores orders: the recruit hunts on its own there.
   const order = huntsAlone(state) ? undefined : action.recruit;
-  if (castle ? squareOrder(order) : !companionTurn(state, order)) return previous;
+  if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
   if (!castle) settle(state);
-  if (state.playerColor === 'white' && !close) { enemyTurn(state); settle(state); }
+  if (state.playerColor === 'white') { enemyTurn(state, Boolean(close)); settle(state); }
   collapseTick(state); settle(state);
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
@@ -1670,6 +1992,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
       if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
+      // Saves from before missed lunges unbalanced a monster have no flag; a missed lunge resets its wind-up.
+      if (foe.offBalance !== undefined && !(foe.offBalance === true && foe.phase === 'ready')) return false;
       if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
       return foe.phase === 'aim' ? foe.intent.length > 0 && inside(foe.target?.x, foe.target?.y) : foe.intent.length === 0 && foe.target === null;
     })) return false;

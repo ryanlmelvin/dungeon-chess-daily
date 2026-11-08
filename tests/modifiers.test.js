@@ -9,8 +9,9 @@ import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
   MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
-  modifierFor, iceSlide, modifierStatus,
+  modifierFor, iceSlide, modifierStatus, collapseTick, arrivalSquare,
 } from '../src/modifiers.js';
+import { hash } from '../src/random.js';
 
 const day = (offset, start = '2026-11-06') => new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
 // The first date (from the modifier launch) that draws each modifier.
@@ -39,6 +40,18 @@ const strip = (state) => {
   const { modifier, floorSnapshot, ...rest } = state;
   return floorSnapshot ? { ...rest, floorSnapshot: strip(floorSnapshot) } : rest;
 };
+const kingSteps = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+// Open squares holding no monster, no player and no recruit.
+const emptySquares = (state) => {
+  const squares = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    const taken = [state.player, state.companion, ...state.enemies].some((unit) => unit && unit.x === x && unit.y === y);
+    if (state.map[y][x] !== '#' && !taken) squares.push({ x, y });
+  }
+  return squares;
+};
+// Everything a move said, oldest first (later phases file earlier lines in notes).
+const said = (state) => [...(state.notes ?? []), state.message].join(' ');
 
 test('the modifier is a pure function of the date, about one plain day in two', () => {
   const counts = { none: 0, ice: 0, collapse: 0 };
@@ -171,17 +184,168 @@ test('collapse sends a decoy in at the door every ten moves on a floor, up to th
   const decoys = [state.species[3], state.species[4]].map((creature) => creature.id);
   assert.ok(decoys.includes(arrival.species));
   assert.ok(state.events.some((event) => event.type === 'reinforcement' && event.id === 'f0-r0'));
-  // A blocked door holds the next arrival until it is free.
+  // The first arrival still stands in the doorway. With room under the army's
+  // counts for one more of its kind, the next doesn't wait: it drops in nearby, on time.
+  state.enemies = state.enemies.filter((entry) => entry.id === arrival.id || entry.role !== arrival.role);
   for (let turn = 0; turn < COLLAPSE_EVERY; turn++) state = act(state, { type: 'wait' });
-  assert.equal(state.reinforcements, 1, 'the first arrival still stands in the doorway');
-  state.enemies = state.enemies.filter((entry) => entry.id !== 'f0-r0');
-  state = act(state, { type: 'wait' });
   assert.equal(state.reinforcements, 2);
+  const first = state.enemies.find((entry) => entry.id === 'f0-r0');
+  assert.deepEqual([first.x, first.y], [state.exit.x, state.exit.y]);
+  const second = state.enemies.find((entry) => entry.id === 'f0-r1');
+  assert.equal(kingSteps(second, state.exit), Math.min(...emptySquares(state).map((tile) => kingSteps(tile, state.exit)), kingSteps(second, state.exit)));
+  assert.match(said(state), /The ceiling groans: the door is blocked, so .+ drops in nearby\./);
   for (let turn = 0; turn < COLLAPSE_EVERY * 6; turn++) {
     state.enemies = state.enemies.filter((entry) => !entry.id.includes('-r'));
     state = act(state, { type: 'wait' });
   }
   assert.equal(state.reinforcements, COLLAPSE_CAP);
+});
+
+// An empty room on the first collapse day, one move short of its first arrival.
+function doorRoom() {
+  const state = createGame(getRawDaily(firstDate('collapse')));
+  state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
+  Object.assign(state.player, { x: 4, y: 6, moved: true });
+  state.powers.freeze = 1000;
+  state.turns = state.floorStart.turns + COLLAPSE_EVERY - 1;
+  return state;
+}
+const waitHolding = (state) => act(state, { type: 'wait', recruit: 'hold' });
+// The rule spelled out: the door square, else the nearest empty square, the lowest seed hash among equals.
+function expectedArrival(state, n = 0) {
+  const door = state.exit;
+  if (emptySquares(state).some((tile) => tile.x === door.x && tile.y === door.y)) return { x: door.x, y: door.y };
+  const tie = (tile) => hash(`${state.dungeonSeed ?? state.seed}:arrival:${state.floor}:${n}:${tile.x},${tile.y}`);
+  return emptySquares(state).sort((a, b) => kingSteps(a, door) - kingSteps(b, door) || tie(a) - tie(b))[0];
+}
+
+test('an arrival never waits at the door: whoever stands there, it enters on the nearest empty square', () => {
+  for (const [who, setup] of [
+    ['nobody', () => {}],
+    ['the player', (state) => Object.assign(state.player, { x: 4, y: 0 })],
+    ['the recruit', (state) => { state.companion = { piece: 'rook', basePiece: 'rook', x: 4, y: 0, moved: true, sharing: false }; }],
+    ['a monster', (state) => { state.enemies = [foe('m', 'knight', 4, 0)]; }],
+  ]) {
+    const state = doorRoom();
+    setup(state);
+    const expected = expectedArrival(state);
+    const next = waitHolding(state);
+    assert.equal(next.reinforcements, 1, who);
+    assert.equal(next.reinforcementsSkipped, 0, who);
+    const arrival = next.enemies.find((entry) => entry.id === 'f0-r0');
+    assert.deepEqual([arrival.x, arrival.y], [expected.x, expected.y], who);
+    assert.deepEqual(next.events.find((event) => event.type === 'reinforcement'), { type: 'reinforcement', id: 'f0-r0', x: expected.x, y: expected.y }, who);
+    if (who === 'nobody') {
+      assert.deepEqual([arrival.x, arrival.y], [4, 0]);
+      assert.match(said(next), /The ceiling groans: .+ stumbles in through the door\./);
+    } else {
+      // The door square's five neighbours are all empty, so it lands on one of them.
+      assert.equal(kingSteps(arrival, next.exit), 1, who);
+      assert.match(said(next), /The ceiling groans: the door is blocked, so .+ drops in nearby\./, who);
+    }
+    // Nobody is pushed aside.
+    if (who === 'the player') assert.deepEqual([next.player.x, next.player.y], [4, 0]);
+    if (who === 'the recruit') assert.deepEqual([next.companion.x, next.companion.y], [4, 0]);
+    if (who === 'a monster') assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [4, 0]);
+  }
+});
+
+test('with the door’s neighbours full too it comes in further away, and the day’s seed breaks ties', () => {
+  const picks = new Set();
+  for (const seed of [101, 102, 103, 104, 105, 106]) {
+    const state = doorRoom();
+    state.dungeonSeed = seed;
+    Object.assign(state.player, { x: 4, y: 0 });
+    // Walls, two monsters and the recruit fill every square one king step from the door.
+    wall(state, 3, 0); wall(state, 5, 1);
+    state.enemies = [foe('a', 'knight', 5, 0), foe('b', 'bishop', 3, 1)];
+    state.companion = { piece: 'rook', basePiece: 'rook', x: 4, y: 1, moved: true, sharing: false };
+    const expected = expectedArrival(state);
+    assert.equal(kingSteps(expected, state.exit), 2);
+    const next = waitHolding(state);
+    const arrival = next.enemies.find((entry) => entry.id === 'f0-r0');
+    assert.deepEqual([arrival.x, arrival.y], [expected.x, expected.y], `seed ${seed}`);
+    assert.deepEqual(arrivalSquare(state, 0), expected);
+    assert.deepEqual(waitHolding(state), next, 'the same day always picks the same square');
+    picks.add(`${arrival.x},${arrival.y}`);
+  }
+  assert.ok(picks.size > 1, 'different days break the tie differently');
+  // Each arrival on a floor draws its own tie-break.
+  const state = doorRoom();
+  Object.assign(state.player, { x: 4, y: 0 });
+  for (const n of [0, 1, 2]) assert.deepEqual(arrivalSquare(state, n), expectedArrival(state, n));
+});
+
+test('an arrival that lands next to you never strikes as it lands: it winds up on its next turn', () => {
+  const state = doorRoom();
+  state.powers.freeze = 0;
+  Object.assign(state.player, { x: 4, y: 0 });
+  // Only queens can arrive, and a queen beside you attacks your square.
+  state.species = state.species.map((creature, index) => (index === 3 || index === 4 ? { ...creature, piece: 'queen' } : creature));
+  const landed = waitHolding(state);
+  const queen = landed.enemies.find((entry) => entry.id === 'f0-r0');
+  assert.equal(queen.piece, 'queen');
+  assert.equal(kingSteps(queen, landed.player), 1);
+  assert.equal(landed.player.hp, state.player.hp);
+  assert.equal(queen.phase, 'ready');
+  assert.ok(!landed.events.some((event) => event.type === 'player-captured' || event.type === 'close-capture'));
+  // Its next turn is the warning: it aims at you, and you still have your move to get away.
+  const warned = waitHolding(landed);
+  assert.equal(warned.player.hp, state.player.hp);
+  const aiming = warned.enemies.find((entry) => entry.id === 'f0-r0');
+  assert.equal(aiming.phase, 'aim');
+  assert.deepEqual(aiming.target, { x: 4, y: 0 });
+});
+
+test('the chip counts down to every arrival: none ever waits at the door', () => {
+  const state = doorRoom();
+  Object.assign(state.player, { x: 4, y: 0 });
+  state.turns = state.floorStart.turns + 7;
+  assert.equal(modifierStatus(state), '🧱 Next arrival in 3');
+  let next = waitHolding(waitHolding(state));
+  assert.equal(modifierStatus(next), '🧱 Next arrival in 1');
+  next = waitHolding(next);
+  assert.equal(next.reinforcements, 1, 'standing on the door square holds nothing off');
+  assert.equal(modifierStatus(next), '🧱 Next arrival in 10');
+  // A save from when arrivals waited may already be overdue: it comes after your next move.
+  const overdue = doorRoom();
+  overdue.turns = overdue.floorStart.turns + 15;
+  assert.equal(modifierStatus(overdue), '🧱 Next arrival in 1');
+  assert.equal(waitHolding(overdue).reinforcements, 1);
+});
+
+test('on a board with no empty square left the arrival is called off and still counts', () => {
+  const state = doorRoom();
+  state.map = Array(8).fill('########');
+  state.map[0] = '###..###';
+  Object.assign(state.player, { x: 4, y: 0 });
+  state.enemies = [foe('m', 'knight', 3, 0)];
+  state.turns = state.floorStart.turns + COLLAPSE_EVERY;
+  assert.equal(arrivalSquare(state, 0), null);
+  collapseTick(state);
+  assert.equal(state.reinforcements, 0);
+  assert.equal(state.reinforcementsSkipped, 1);
+  assert.equal(state.enemies.length, 1);
+  assert.match(state.message, /nothing comes through the door/);
+});
+
+test('saves stay valid when an arrival drops in beside a blocked door', () => {
+  const date = firstDate('collapse');
+  const daily = getDaily(date);
+  for (const blocker of ['player', 'monster']) {
+    let state = createGame(daily);
+    state.powers.freeze = 1000;
+    if (blocker === 'player') Object.assign(state.player, { x: 4, y: 0, moved: true });
+    else Object.assign(state.enemies.find((entry) => entry.role !== state.objective.piece), { x: 4, y: 0 });
+    const held = new Set([state.player, ...state.enemies].map((unit) => `${unit.x},${unit.y}`));
+    for (let turn = 0; turn < COLLAPSE_EVERY; turn++) state = waitHolding(state);
+    assert.equal(state.reinforcements, 1, blocker);
+    const arrival = state.enemies.find((entry) => entry.id === 'f0-r0');
+    assert.ok(!held.has(`${arrival.x},${arrival.y}`), blocker);
+    // The test's endless freeze is beyond what a save may hold; the rest must validate.
+    const saved = JSON.parse(JSON.stringify({ ...state, powers: { ...state.powers, freeze: 0 } }));
+    assert.equal(validateSave(saved, date, daily), true, blocker);
+  }
 });
 
 test('collapse stops once the stairs open and other modifiers never reinforce', () => {

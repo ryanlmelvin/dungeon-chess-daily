@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 // Animated explainers for the tactic rewards (tactics.js): a knight fork and a
-// three-capture combo, drawn on a 5x5 board crop like the other guide art.
+// three-capture combo, drawn on a 5x5 board crop like the other guide art. The
+// off-balance punish (a missed lunge, rules.js) is drawn the same way.
 import { drawSprite, SPRITE_SIZE, spritePalette, COMPANION_PALETTE } from './sprites.js';
 
 const MINT = '#a5e2cc';
@@ -152,6 +153,71 @@ export function drawComboDemo(canvas, time, { playerPalette = {}, monsterPalette
 }
 /** A still for reduced motion and the guide: the third capture's payoff. */
 export const COMBO_STILL = 3000;
+// A small four-point sparkle, outlined so it reads on any tile.
+function sparkle(ctx, x, y, size) {
+  ctx.fillStyle = '#100f14';
+  ctx.fillRect(x - 2, y - size - 1, 4, size * 2 + 2);
+  ctx.fillRect(x - size - 1, y - 2, size * 2 + 2, 4);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(x - 1, y - size, 2, size * 2);
+  ctx.fillRect(x - size, y - 1, size * 2, 2);
+  ctx.fillStyle = '#fff3c4';
+  ctx.fillRect(x - 1, y - 1, 2, 2);
+}
+/** Stars circling above a dizzy monster's head, `time` ms into their spin. */
+function dizzy(ctx, x, y, time) {
+  for (let i = 0; i < 3; i++) {
+    const angle = time / 170 + i * Math.PI * 2 / 3;
+    sparkle(ctx, Math.round(x + Math.cos(angle) * 16), Math.round(y - 25 + Math.sin(angle) * 5), Math.sin(angle) < 0 ? 4 : 5);
+  }
+}
+
+/**
+ * One frame of the off-balance explainer, looping every 5.6 s: a monster winds
+ * up on your rook, the rook sidesteps, the monster lunges into the empty square
+ * and wobbles with stars over its head, and the rook captures it.
+ */
+export function drawOffBalanceDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet') } = {}) {
+  const t = ((time % 5600) + 5600) % 5600;
+  frame(canvas, (ctx) => {
+    // Monster (2,0) aims down at the rook (2,3); the rook steps to (0,3).
+    const windUp = beat(t, 300, 700) * (1 - beat(t, 2100, 2400));
+    const sidestep = beat(t, 1500, 2000);
+    const lunge = beat(t, 2100, 2450);
+    const landed = t >= 2450;
+    const take = beat(t, 3900, 4400);
+    const reset = beat(t, 5300, 5600);
+    const pulse = 0.75 + 0.25 * Math.sin(t / 120);
+    if (windUp > 0) {
+      ctx.save();
+      ctx.globalAlpha = windUp * 0.45 * pulse;
+      ctx.fillStyle = RED;
+      for (const y of [1, 2, 3]) ctx.fillRect(80 + 2, y * 40 + 2, 36, 36);
+      ctx.restore();
+      line(ctx, center(2), center(0) + 14, center(2), center(3), RED, windUp * pulse);
+    }
+    // Your chance: a mint line from the rook to the dizzy monster.
+    line(ctx, center(0) + 16, center(3), center(2) - 16, center(3), MINT, beat(t, 3000, 3300) * (1 - take));
+    ctx.globalAlpha = (1 - reset) * (1 - beat(t, 4400, 4600));
+    const monsterY = lerp(center(0), center(3), lunge);
+    if (landed) {
+      ctx.save();
+      ctx.translate(center(2), center(3) + 16);
+      ctx.rotate(Math.sin(t / 110) * 0.22 * (1 - take));
+      sprite(ctx, 'bat', 0, -16, monsterPalette);
+      ctx.restore();
+      if (take < 1) dizzy(ctx, center(2), center(3), t);
+    } else sprite(ctx, 'bat', center(2), monsterY, monsterPalette);
+    ctx.globalAlpha = 1 - reset;
+    burst(ctx, center(2), center(3), beat(t, 4400, 4900), GOLD);
+    const rookX = take ? lerp(center(0), center(2), take) : lerp(center(2), center(0), sidestep);
+    sprite(ctx, 'piece-rook', rookX, center(3), playerPalette);
+    label(ctx, 'OFF-BALANCE!', 100, 182, GOLD, beat(t, 2500, 2700) * (1 - beat(t, 4400, 4600)), 26);
+    ctx.globalAlpha = 1;
+  });
+}
+/** A still for reduced motion and the guide: the dizzy monster, open to capture. */
+export const OFF_BALANCE_STILL = 3400;
 
 /**
  * One frame of the recruit explainer, looping every 5.6 s: a monster's line
@@ -273,12 +339,12 @@ export const BISHOP_PAIR_COPY = Object.freeze({
 /** A waiting recruit's explainer, from its line's What? button, in the same dialog as the tactics. */
 export const RECRUIT_COPY = Object.freeze({
   title: 'A recruit is waiting',
-  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. Once floor 1 or 2 is cleared, it hunts on its own. Or set Recruit control to Auto in the menu to let it move itself. In auto mode, it can’t capture targets.',
+  text: 'The piece in a green ring with a + is this floor’s recruit. It is not on your side yet, and monster lines pass right through it. Step onto its square to recruit it: it becomes your ally, and from then on it blocks monster lines. After each of your moves you steer it (tap a square marked green, or tap it to stay put), and anything it captures counts, even a target. It can’t capture on the turn it joins. Once floor 1 or 2 is cleared, it hunts on its own. Or set Recruit control to Auto in the menu to let it move itself. In auto mode, it can’t capture targets.',
   art: 'Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line.',
   draw: drawRecruitDemo, still: RECRUIT_STILL,
 });
 
-/** Congratulation copy for the first fork and combo, shown with the art above. */
+/** Congratulation copy for the first fork and combo, and the off-balance explainer, shown with the art above. */
 export const TACTIC_COPY = Object.freeze({
   fork: {
     title: 'You won a fork!',
@@ -291,5 +357,12 @@ export const TACTIC_COPY = Object.freeze({
     text: 'You captured on three moves in a row. Every capture you keep chaining from here pays +1 bonus gold. Waiting or a move without a capture ends the combo.',
     art: 'Animated board: a rook captures three monsters on three moves in a row while a flame counter climbs to three.',
     draw: drawComboDemo, still: COMBO_STILL,
+  },
+  // Opened from the "What?" button on a missed lunge's message.
+  'off-balance': {
+    title: 'Off-balance!',
+    text: 'You stepped off a monster’s red path, so its lunge missed. Now it’s off-balance until your next move ends: stars circle its head, and it can’t capture you at all, even up close. Bait a lunge, sidestep, then strike!',
+    art: 'Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it.',
+    draw: drawOffBalanceDemo, still: OFF_BALANCE_STILL,
   },
 });
