@@ -80,8 +80,13 @@ export function caveInTick(state, before) {
   cave.buried = coins;
   state.items = state.items.filter((item) => !buriable(item));
   state.events.push({ type: 'cave-in', x: state.player.x, y: state.player.y, gold: lost, coins, ...(power && { power }) });
+  say(state, `The ceiling caved in! ${caveInText({ gold: lost, coins, power })}`);
+}
+
+/** What a cave-in cost, from its event: "You dropped 4 gold. The rubble buries … It carries you down the stairs to the shop." */
+export function caveInText({ gold, coins, power }) {
   const buried = [coins && (coins === 1 ? 'the last coin' : 'the coins left'), power && `the ${POWER_NAMES[power] ?? 'pickup'}`].filter(Boolean);
-  say(state, `The ceiling caved in!${lost ? ` You dropped ${lost} gold.` : ''}${buried.length ? ` The rubble buries ${buried.join(' and ')}.` : ''} It carries you down the stairs to the shop.`);
+  return [gold && `You dropped ${gold} gold.`, buried.length && `The rubble buries ${buried.join(' and ')}.`, 'It carries you down the stairs to the shop.'].filter(Boolean).join(' ');
 }
 
 /** True while the ceiling is counting down: the room can still pay, and Wait stays on offer. */

@@ -22,7 +22,7 @@ import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRan
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
-import { caveInStatus, caveInExplain, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
+import { caveInStatus, caveInExplain, caveInRunning, caveInText, cavedIn, goldAtRisk } from './cave-in.js';
 import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 
@@ -104,8 +104,6 @@ function paperDate(date) {
 }
 function notify(message, persistent = false) {
   clearTimeout(noticeTimer);
-  // Only the cave-in toast wears its own colors (announceCaveIn).
-  $('notice').classList.remove('cave-toast');
   $('notice').textContent = message;
   $('notice').hidden = !message;
   if (!persistent) noticeTimer = setTimeout(() => { $('notice').hidden = true; }, 5500);
@@ -910,15 +908,21 @@ $('modifier-status').addEventListener('click', () => { if (state) notify(modifie
 // The cave-in countdown chip sits beside the modifier chip; tapping explains it.
 $('modifier-status').after(Object.assign(document.createElement('button'), { id: 'cave-status', type: 'button', hidden: true }));
 $('cave-status').addEventListener('click', () => { if (state) notify(caveInExplain(state)); });
-// "The ceiling caved in! You dropped 3 gold." pops up as the room shakes (renderer.js);
-// the message log says what the rubble buried. Then the shop opens: the rubble
-// carried the player down the stairs (src/cave-in.js cavedIn).
-const CAVE_IN_TO_SHOP_MS = 1400;
+// The room shakes (renderer.js), then a modal says what the cave-in cost.
+// Closing it, however it's closed, opens the shop: the rubble carried the
+// player down the stairs (src/cave-in.js cavedIn).
+const CAVE_IN_MODAL_MS = 900;
 function announceCaveIn(event) {
-  notify(`The ceiling caved in!${event.gold ? ` You dropped ${event.gold} gold.` : ''}`);
-  const notice = $('notice');
-  notice.classList.remove('cave-toast'); void notice.offsetWidth; notice.classList.add('cave-toast');
+  const caved = state;
+  setTimeout(() => {
+    if (state !== caved || !cavedIn(state) || screen !== 'game') return;
+    document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+    $('cave-text').textContent = caveInText(event);
+    $('cave-dialog').showModal();
+    $('cave-continue').focus();
+  }, CAVE_IN_MODAL_MS);
 }
+$('cave-dialog').addEventListener('close', () => { if (cavedIn(state)) setTimeout(takeStairs); });
 $('wait-button').addEventListener('click', () => (pendingOrder() ? giveOrder('hold') : takeAction({ type: 'wait' })));
 $('hint-dialog').addEventListener('close', () => cancelAnimationFrame(hintFrame));
 $('news-button').addEventListener('click', () => {$('menu-dialog').close();renderPaper();switchScreen('paper');$('start-button').focus({preventScroll:true});});
@@ -949,9 +953,6 @@ function takeAction(action) {
   const caveIn = state.events.find(event => event.type === 'cave-in');
   if (caveIn) {
     announceCaveIn(caveIn);
-    // The rubble carries you down the stairs to the shop, as if you'd taken them.
-    const caved = state;
-    setTimeout(() => { if (state === caved && cavedIn(state)) takeStairs(); }, CAVE_IN_TO_SHOP_MS);
   }
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
