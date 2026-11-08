@@ -26,14 +26,17 @@
 // route reaches there, so one floor's par never depends on another's.
 import { createGame, act, legalMoves, floorScoredMoves, scoredMoves } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
+import { HUMAN_MOVE_CAP } from './difficulty.js';
 import { hash, random } from './random.js';
 
 /** Bump when the bot's play changes, so remembered pars are recomputed. */
 export const HUMAN_BOT_VERSION = 1;
 /** Seeded runs per floor; par is the median of the ones that succeed. */
 export const HUMAN_RUNS = 5;
-/** A run that hasn't completed its floor in this many moves gives up. */
-export const HUMAN_MOVE_CAP = 40;
+// A run that hasn't completed its floor in HUMAN_MOVE_CAP moves gives up. It
+// lives in difficulty.js, beside humanGap, so that difficulty.js imports no
+// game module: the monsters (src/monster-ai.js) read its tiers as they load.
+export { HUMAN_MOVE_CAP };
 /** Par on a floor every run failed: the certified route's moves plus 25%, rounded up. */
 export const failedFloorPar = (certified) => Math.ceil(certified * 1.25);
 

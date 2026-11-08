@@ -8,7 +8,13 @@
 // bounds or a claim that every winning strategy encounters these decisions.
 import { CALIBRATION } from './calibration.js';
 import { PIECE_LIVES } from './pieces.js';
-import { HUMAN_MOVE_CAP } from './human-bot.js';
+
+// This module imports no game module: src/monster-ai.js reads the tiers while
+// it loads, and the rules import the monsters, so a cycle back here (once
+// through the human-like bot) left DIFFICULTY_TIERS unset for any page or
+// test that imported this module first.
+/** The human-like bot (src/human-bot.js) gives up a floor after this many moves. */
+export const HUMAN_MOVE_CAP = 40;
 
 /**
  * Tiers from easiest to hardest. `band` is the [low, high] target range of
