@@ -1457,7 +1457,7 @@ getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`
 // human-like bot when it cleared every floor, else the certified route.
 // Practice wins never reveal it, so it cannot spoil a daily run still in play.
 const BOT_NOTES = {
-  human: 'This bot plays like a careful player: it sees only what you see and uses no powerups. Its moves on each floor set that floor’s par.',
+  human: 'This bot plays like a careful player: it sees only what you see, steers its recruit, and never goes out of its way for a powerup. Its moves on each floor set that floor’s par.',
   certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, no lost lives (pawn days may spend four), no ally but the floor 3 recruit.',
 };
 let botCache = null;

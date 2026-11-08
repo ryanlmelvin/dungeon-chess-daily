@@ -9,7 +9,7 @@ const same = (a, b) => a.x === b.x && a.y === b.y;
 /**
  * Who moves the recruit on a route. Every shipped certificate is 'auto': no
  * action carries a recruit order, so the recruit's own AI moves it and never
- * takes a target, and only the king floor's own recruit (a rook, queen or king
+ * takes a target, and only the king floor's own recruit (a king
  * one move from the start) may join; bought companions, powerups and earlier
  * floors' recruits never help. 'steer' (tooling only, to measure what Manual
  * recruit control could certify) plays the recruit like a Manual player: each

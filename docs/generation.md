@@ -19,7 +19,7 @@ Every returned edition has an explicit sequence of legal actions that:
   captures, piece color, turn order, promotion rules, and automatic pickups from
   the production engine.
 - Collects or purchases no powerups and recruits no companion, except the final
-  floor's own recruit (a rook, queen or king). The recruits on floors 1 and 2,
+  floor's own recruit (always a king). The recruits on floors 1 and 2,
   which may be any piece, are never used: the route never steps on them. A
   route carries no recruit orders, so its recruit plays on Auto, where no
   recruit may capture its floor's challenge piece: on the final floor the
@@ -260,8 +260,20 @@ from a bot that plays like a person, `src/human-bot.js`:
   recruit when it costs at most a move; take a decoy when that costs nothing;
   otherwise wait, since monsters often walk into range, and after a few waits
   try a sideways move. A pawn goes after a king only once promoted. When every
-  move is risky it takes the least risky one. No powerups and no shopping,
-  like the certificate.
+  move is risky it takes the least risky one. No shopping, and it never goes
+  out of its way for a powerup; but a relic on its pawn's file ahead (where a
+  pawn day's relic lies, rows 2–3) is the pawn's only way forward, so it walks
+  onto it as a person would, and the powerup applies. The certificate still
+  takes none.
+- **It steers its recruit** like a player on Manual recruit control, the
+  default (`steerRecruit` in `src/recruit-policy.js`, its default policy): keep
+  blocking a red lane through its square, else step into one, take a target,
+  take a decoy, or step nearer the closest target over the walls; on the
+  bishop pair's hop, the hop square nearest a target. Its squares come from
+  `recruitChoice`, so it keeps a player's rules (no capture the turn the
+  recruit joins, no orders once floor 1 or 2 is cleared). Par, the result
+  card's run and the human gap all assume a steered recruit; `autoRecruit`
+  leaves it on Auto, for measurement.
 - **Each floor is played from its standard start**, the position the
   certificate reaches there, so a floor's par never depends on how another
   floor went. Five seeded runs per floor (`HUMAN_RUNS`; each seed is the date,
@@ -279,13 +291,17 @@ each floor, or `null` where the bot failed. `--verify` checks both. A date past
 the window works par out once on the device (`src/par.js`) and remembers it in
 local storage. The result card's Dungeon Bot is the human-like bot when it
 cleared every floor without losing as many lives as the piece has (its floors
-are then the day's pars), else the certificate. Today the recruit moves on its
-own; `humanPlayer` takes a recruit policy that can add an order to each action.
+are then the day's pars), else the certificate. Its replay plays the stored
+runs again from their seeds with the same deterministic policy (`humanRun`), so
+its recruit orders come out the same and only the run numbers are stored.
+`HUMAN_BOT_VERSION` (now 2) keys the pars a device remembers, so a changed bot
+works them out again.
 
 **The human gap.** `difficultyScore` measures how dangerous the certificate's
 route was, not how hard a route is to find. `humanGap` (`src/difficulty.js`)
 measures that: per floor, the human-like bot's expected moves (the mean of its
 five runs, a failed run counting as the whole 40-move cap) minus the
+<<<<<<< HEAD
 certificate's moves, summed over the floors. This raw gap is for measurement:
 one failed floor costs it about 30, so the tiers use its capped form ([The
 capped human gap](#the-capped-human-gap)). `node scripts/measure-human-par.mjs`
@@ -293,6 +309,14 @@ reports, by tier and piece, how often runs clear each floor, par against the
 certificate per floor, both gaps and the score. Over the 733 stored editions
 (2026-11-05 to 2028-11-06), before the smarter monsters and the per-floor
 search:
+=======
+certificate's moves, summed over the floors. It sits beside the score and does
+not pick tiers. `node scripts/measure-human-par.mjs` reports, by tier and piece,
+how often runs clear each floor, par against the certificate per floor, the gap
+and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06), first
+run, with the bot's recruit on Auto, the pawn kept off its relic, and the
+recruit rules before stage 2 (see below for the steered bot):
+>>>>>>> worktree-agent-ad8991c385c39c83e
 
 | Tier | Runs won F1 / F2 / F3 | Total par / certified (median) | Human gap | Score |
 | --- | --- | --- | --- | --- |
@@ -309,6 +333,32 @@ certificate, never takes it). The gap rose only a little through the week but
 differed widely between pieces, which is why the tiers are now calibrated on
 it. The bot is software with blind spots too, so a failed floor is evidence
 that a day is hard to figure out, not proof.
+
+**The steered bot.** With the recruit rules adopted after the recruit study
+([Measuring the recruits](#measuring-the-recruits)) and the bot steering its
+recruit and walking onto a relic in its pawn's way, over the first 365 dates
+from 2026-11-05 (331 of them; the other 34 need a fallback the bank can no
+longer replay until it is rebuilt), certificates still from the knobs before
+recalibration, steered against Auto:
+
+| Tier | Runs won F1 / F2 / F3, steered | Same, Auto | Total par (median), steered / Auto | Human gap, steered / Auto |
+| --- | --- | --- | --- | --- |
+| Gentle | 100% / 100% / 100% | 98% / 98% / 86% | 18 / 27 | 2.2 / 12.0 |
+| Fair | 97% / 95% / 99% | 93% / 92% / 90% | 27 / 33 | 6.5 / 16.4 |
+| Tricky | 94% / 85% / 100% | 92% / 76% / 91% | 26 / 36 | 11.3 / 24.8 |
+| Tough | 87% / 91% / 96% | 75% / 81% / 87% | 31 / 44 | 14.7 / 31.2 |
+| Fiendish | 85% / 87% / 90% | 76% / 82% / 76% | 31 / 41 | 18.4 / 34.0 |
+
+By piece the steered gap is pawn 7.7, bishop 8.9, rook 12.5, knight 13.4 and
+queen 19.3 (on Auto 26.1, 34.9, 26.6, 20.6 and 23.9): a steered recruit
+narrows the spread between pieces, and par now falls 6–13 moves short of an
+Auto player's. On the 82 pawn days among them, walking onto the relic in the
+pawn's way (47% of runs do) raised the steered bot's runs won from 82% / 76% /
+91% to 89% / 88% / 94%, halved its failed floors (26 → 13) and cut the gap
+from 13.4 to 7.7; the median floor pars went 9 / 9 / 8 → 9 / 9 / 7 (total
+30 → 28), since floors that used to fail, and took the certificate's moves
+plus 25%, now take the bot's own. On Auto the same change lifts pawn runs won
+from 53% / 49% / 51% to 74% / 75% / 93% (gap 48.3 → 26.1).
 
 ### Smarter monsters by tier
 
@@ -362,7 +412,11 @@ was tried first: in 200 floor-1 rooms with the player waiting 30 times, 51 of
 1,036 monsters ended pacing between two squares for the last 8 waits (44 when
 the hash also covered every unit's square), against 29 to 31 with a move count.
 A board-only loop can never break while the player waits, so a floor-local
-count it is. On floor 1 it is exactly the old tie-break.
+count it is. On floor 1 it is exactly the old tie-break. The recruit's own
+tie-break on Auto (`companionTurn`) counts the same floor clock. It used to
+hash the run's moves, which rarely mattered while the king floor recruited a
+rook or queen; a king recruit, with its many equally good steps, made the
+king floor depend on how long the floors before it took.
 
 `classicMonsters: true` on a candidate (comparisons only, never on an edition)
 restores the old monsters on every tier: Gentle smarts and the whole-run move
@@ -887,8 +941,9 @@ no orders.
   from its start with full lives, its recruit swapped for each piece in turn
   (same square) and once removed; the floor searched alone (6,000 transitions)
   on Auto and steered, and the human-like bot's five runs on Auto and with a
-  steering policy (`scripts/recruit-policy.mjs`: keep blocking a red lane, take
-  a target, take a decoy, else close in on the nearest target).
+  steering policy (`src/recruit-policy.js`, now the bot's default: keep
+  blocking a red lane, take a target, take a decoy, else close in on the
+  nearest target).
 - `placement`: two placement rules priced on the same floors, by moving the
   recruit to the first square generation could have drawn that keeps them.
 - `static`: on every candidate, which recruits would take a target on the turn
@@ -963,6 +1018,52 @@ The recruit matching, with the bot's runs won (none / Auto / steered):
   moves; open, 52% and 6 moves. Moving a walled one to an open-file square
   generation could have drawn (possible for 76% of them) takes the bot from 85%
   to 91% of runs won.
+
+### What was adopted
+
+The owner kept the Auto option, and certificates stay on Auto. Four changes
+followed the study (the king floor's bishop pair was not adopted):
+
+- **The king floor always recruits a king** (`KING_FLOOR_RECRUITS` in
+  `src/rules.js`). Its stream still spends one draw on the piece, so the
+  recruit waits on the square it always did; a rook player can castle with it.
+- **A recruit can't capture on the turn it joins**, on Manual or Auto
+  (`companionTurn`): `recruitChoice` offers only quiet squares that turn, so
+  an order to capture is no action, and Auto picks a quiet move. Holding, the
+  bishop pair's hop (which never captures) and a cleared floor's hunting stay
+  as they were; castling needs the recruit beside you before you move, so it
+  never falls on the joining move.
+- **A pawn recruit waits only on a file with no wall between it and the far
+  rank**, as the player's promotion file is kept. Drawn on a walled file, it
+  takes one more draw from its own stream: a square among the same ones (one
+  move from the start) whose file is open, or, with none, another piece on the
+  square drawn. Over 365 dates × 4 candidates × 3 floors, walls, monsters,
+  coins and powerups never moved: 220 of 470 pawn recruits were on walled
+  files, 182 moved and 38 became another piece, and 36 ice-day floors had
+  their ice laid differently around the moved recruit (ice avoids pickups).
+- **Par assumes a steered recruit**: the human-like bot steers by default
+  (see [Par and the human gap](#par-and-the-human-gap)).
+
+Before and after, on 800 candidate layouts (8 dates per tier and piece × 4
+candidates), each floor searched alone from its start (3,000 transitions),
+steered and on Auto as a certificate plays it: "Manual only" counts floors a
+steered recruit clears in under three moves where the Auto search does not.
+This counts every layout, not only those an Auto certificate picks, so it runs
+higher than the "Auto days" column above.
+
+| | Before | After |
+| --- | --- | --- |
+| Steered clear in <3, F1 / F2 / king floor | 15.3% / 15.6% / 16.8% | 14.1% / 12.9% / 0.4% |
+| King floor in a single steered move | 4.9% | 0% |
+| Manual only, F1 / F2 / king floor | 3.5% / 5.9% / 16.8% | 2.5% / 3.0% / 0.3% |
+| Manual only, any floor (Tricky and up) | 23.6% (21.7%) | 5.4% (2.9%) |
+| Quick steered clears taking a target as the recruit joins | 45% | 0% |
+| King floor solved, Auto / steered (queen days steered) | 93% / 97% (89%) | 98% / 95% (73%) |
+
+The king recruit makes the king floor easier to certify on Auto (bishop days
+80% → 96%), while the steered search, which spends its small budget on
+orders, solves fewer queen days' king floors. Recalibration will move all of
+these.
 
 ## Difficulty and chess learning
 

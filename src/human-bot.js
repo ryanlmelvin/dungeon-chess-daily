@@ -19,8 +19,11 @@
 // target by the safest short way (squares no monster strikes up close, or the
 // wall-aware move tables of src/move-tables.js when there is none); pick up
 // the recruit when it's about on the way; take a decoy when that costs
-// nothing; otherwise wait, since monsters often walk into range. No powerups
-// and no shopping, like the certificate.
+// nothing; otherwise wait, since monsters often walk into range. It steers
+// its recruit as a player on Manual recruit control (the default) would
+// (src/recruit-policy.js), so par assumes a steered recruit. No shopping, and
+// it never goes out of its way for a powerup: it steps on one only when it
+// stands on its pawn's file ahead, the pawn's one way forward.
 //
 // Each floor is played from its standard start, the position the certified
 // route reaches there, so one floor's par never depends on another's.
@@ -28,9 +31,10 @@ import { createGame, act, legalMoves, floorScoredMoves, scoredMoves } from './ru
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 import { HUMAN_MOVE_CAP } from './difficulty.js';
 import { hash, random } from './random.js';
+import { steerRecruit } from './recruit-policy.js';
 
 /** Bump when the bot's play changes, so remembered pars are recomputed. */
-export const HUMAN_BOT_VERSION = 1;
+export const HUMAN_BOT_VERSION = 2;
 /** Seeded runs per floor; par is the median of the ones that succeed. */
 export const HUMAN_RUNS = 5;
 // A run that hasn't completed its floor in HUMAN_MOVE_CAP moves gives up. It
@@ -55,6 +59,8 @@ const open = (view, x, y) => x >= 0 && y >= 0 && x < 8 && y < 8 && view.map[y][x
  * piece they move as only when a player could know it: the target species'
  * role, a species unmasked by a capture (`known`, species → role), or a
  * crowned (promoted) pawn's queen. Red lanes are the wind-ups on the board.
+ * `powerups` are the relics the bot keeps off, which is all of them but one
+ * standing on its pawn's file ahead (pawnPath).
  */
 export function observe(state, known = new Map()) {
   const targetSpecies = state.species[state.floor]?.id;
@@ -64,13 +70,22 @@ export function observe(state, known = new Map()) {
     player: { x: state.player.x, y: state.player.y, piece: state.player.piece, hp: state.player.hp },
     companion: state.companion ? { x: state.companion.x, y: state.companion.y, piece: state.companion.piece } : null,
     recruit: recruit ? { x: recruit.x, y: recruit.y, piece: recruit.piece } : null,
-    powerups: state.items.filter((item) => item.type === 'powerup').map(({ x, y }) => ({ x, y })),
+    powerups: state.items.filter((item) => item.type === 'powerup' && !pawnPath(state.player, item)).map(({ x, y }) => ({ x, y })),
     monsters: state.enemies.map((foe) => ({
       id: foe.id, species: foe.species, x: foe.x, y: foe.y, target: foe.species === targetSpecies,
       piece: foe.promoted ? 'queen' : foe.species === targetSpecies ? state.objective.piece : known.get(foe.species) ?? null,
       lane: foe.phase === 'aim' ? foe.intent.map(({ x, y }) => ({ x, y })) : null,
     })),
   };
+}
+
+// Is `item` on a pawn's way forward: on its own file, ahead of it? A pawn only
+// moves up its file (or takes diagonally), so a relic there blocks it. A
+// person walks onto it, and so does the bot, though it never goes out of its
+// way for a powerup otherwise (stepping onto one applies it, as for anyone).
+// On pawn days the room's relic lies on the pawn's starting file, rows 2-3.
+function pawnPath(player, item) {
+  return player.piece === 'pawn' && item.x === player.x && item.y < player.y;
 }
 
 // Would a monster moving as `piece` on `foe`'s square take a player standing
@@ -277,13 +292,19 @@ function tableApproach(view, from, piece, gone) {
   return best === Infinity ? 0 : best;
 }
 
-/** No recruit order: the recruit moves on its own, as it does today. */
+/** No recruit order: the recruit moves on its own, as on Auto (for measurement). */
 export const autoRecruit = () => undefined;
+/**
+ * The bot's recruit policy unless told otherwise: it steers the recruit like
+ * a Manual player (src/recruit-policy.js). Par, the result card's run and the
+ * human gap all come from it.
+ */
+export const defaultRecruit = steerRecruit;
 
 /**
  * A run's habits, drawn once from its seed: how many waits in a row before it
  * tries a move that doesn't gain ground, and whether it bothers with the
- * recruit (always on the last floor, whose recruit is a rook, queen or king).
+ * recruit (always on the last floor, whose recruit is a king).
  */
 function styleFor(rng, floor) {
   const patience = 1 + Math.floor(rng() * 3);
@@ -359,9 +380,10 @@ export function decide(view, legal, memory, rng, style) {
  * led to (a capture unmasks the taken monster's species). `recruit` is the
  * recruit policy: given the state, the chosen action and the view, it may
  * return an order to add to the action; undefined leaves the recruit to move
- * on its own, as it does today.
+ * on its own that turn. It steers by default (defaultRecruit); autoRecruit
+ * leaves the recruit on Auto.
  */
-export function humanPlayer(start, { seed, recruit = autoRecruit } = {}) {
+export function humanPlayer(start, { seed, recruit = defaultRecruit } = {}) {
   const rng = random(seed >>> 0);
   const style = styleFor(rng, start.floor);
   const memory = { waits: 0, visits: new Map([[index(start.player), 1]]) };
@@ -391,7 +413,7 @@ export function humanPlayer(start, { seed, recruit = autoRecruit } = {}) {
  * (or those it played before failing), the lives it lost, its actions, and,
  * with `frames`, every position. `recruit` is the recruit policy (humanPlayer).
  */
-export function playFloor(start, { seed, recruit = autoRecruit, cap = HUMAN_MOVE_CAP, frames: keep = false } = {}) {
+export function playFloor(start, { seed, recruit = defaultRecruit, cap = HUMAN_MOVE_CAP, frames: keep = false } = {}) {
   const player = humanPlayer(start, { seed, recruit });
   const floor = start.floor, hp = start.player.hp, actions = [], frames = keep ? [start] : null;
   let state = start;
@@ -436,14 +458,15 @@ export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.
 
 /**
  * Par for a certified edition from `runs` seeded runs per floor, each from the
- * floor's standard start. A floor's par is the lower median of the scored
+ * floor's standard start, steering the recruit (`recruit`, defaultRecruit):
+ * par assumes Manual recruit control. A floor's par is the lower median of the scored
  * moves of its successful runs, and `runs[floor]` names a run with exactly
  * that count (medianRun; the one the result card replays). A floor no run
  * completes gets failedFloorPar() of the certified route's moves and a null
  * run. `certified` holds the route's own moves per floor; `results` every
  * run's outcome (for measurement). Null without a replayable certificate.
  */
-export function humanPar(daily, { runs = HUMAN_RUNS, recruit = autoRecruit } = {}) {
+export function humanPar(daily, { runs = HUMAN_RUNS, recruit = defaultRecruit } = {}) {
   const certified = certifiedFloors(daily);
   if (!certified) return null;
   const par = [], shown = [], results = [];
@@ -481,8 +504,11 @@ export function medianRun(outcomes, certified) {
  * takes the stairs out). Same shape as botRun(), plus `livesLost`. Null if
  * any floor has no run, a run doesn't complete its floor, or the three lost
  * as many lives as the piece has (as one run it would not have survived).
+ * Each run is played again from its seed with the same recruit policy as
+ * humanPar, which is deterministic, so its recruit orders come out the same
+ * and nothing but the run numbers needs storing.
  */
-export function humanRun(daily, runs, { recruit = autoRecruit } = {}) {
+export function humanRun(daily, runs, { recruit = defaultRecruit } = {}) {
   if (!Array.isArray(runs) || runs.length !== 3 || !runs.every((run) => Number.isInteger(run) && run >= 0)) return null;
   const certified = certifiedFloors(daily);
   if (!certified) return null;

@@ -123,7 +123,7 @@ test('an ordered recruit may capture the last floor’s king; the stairs then wi
   assert.ok(legalMoves(state).some((tile) => tile.x === pickup.x && tile.y === pickup.y));
   state = act(state, move(pickup.x, pickup.y, 'hold'));
   assert.equal(state.companion.basePiece, pickup.piece); assert.equal(state.companion.sharing, true);
-  assert.match(state.message, /joins you this floor\. You move it after each of your moves, and it can capture the king too\./);
+  assert.match(state.message, /joins you this floor\. You move it after each of your moves\. It can capture from your next move on, even the king\./);
   assert.equal(validateSave(JSON.parse(JSON.stringify(state)), state.date), true);
   // Stand the king on a square the recruit can reach.
   const square = recruitChoice(state, wait()).moves.find((tile) => !tile.capture);
@@ -169,9 +169,9 @@ test('the turn you recruit, the new recruit may stay on your square or move off 
   assert.ok(types(held).includes('companion-recruit') && !types(held).includes('companion-move'));
   const sent = act(state, move(4, 5, { x: 2, y: 3 }));
   assert.deepEqual(at(sent.companion), [2, 3]); assert.equal(sent.companion.sharing, false);
-  // The joining line says who moves it; Auto keeps its own.
-  assert.equal(sent.message, 'A bishop joins you this floor. You move it after each of your moves, and it can capture knights too.');
-  assert.equal(act(state, move(4, 5)).message, 'A bishop joins you this floor. It cannot capture knights.');
+  // The joining line says who moves it, and that it captures from your next move on; Auto keeps its own.
+  assert.equal(sent.message, 'A bishop joins you this floor. You move it after each of your moves. It can capture from your next move on, even knights.');
+  assert.equal(act(state, move(4, 5)).message, 'A bishop joins you this floor. It can capture from your next move on, but never knights.');
   // A recruit you stand on again shares your square while it holds.
   const back = act(sent, move(2, 5, 'hold'));
   const shared = act(back, move(2, 3, 'hold'));
@@ -214,14 +214,18 @@ test('a pawn recruit promotes when ordered onto the far rank, and on it before i
   const straight = act(state, move(7, 6, { x: 3, y: 0 }));
   assert.equal(straight.companion.piece, 'queen'); assert.equal(straight.companion.basePiece, 'pawn');
   assert.ok(types(straight).includes('companion-promotion'));
-  // Recruited on the far rank, it chooses its first move as a queen.
+  // Recruited on the far rank, it chooses its first move as a queen; it captures from your next move on.
   const far = scenario('queen', { x: 2, y: 1 }); far.powers.freeze = 3;
   far.items = [{ type: 'companion', piece: 'pawn', x: 2, y: 0 }]; far.enemies = [foe('target', 'knight', 7, 5)];
   const choice = recruitChoice(far, move(2, 0));
   assert.equal(choice.board.companion.piece, 'queen');
-  assert.ok(choice.moves.some((tile) => tile.x === 7 && tile.y === 5 && tile.capture));
-  const queen = act(far, move(2, 0, { x: 7, y: 5 }));
-  assert.equal(queen.companion.piece, 'queen'); assert.equal(queen.captures, 1); assert.equal(queen.objective.complete, true);
+  assert.ok(choice.moves.some((tile) => tile.x === 6 && tile.y === 4) && choice.moves.every((tile) => !tile.capture));
+  assert.equal(act(far, move(2, 0, { x: 7, y: 5 })), far);
+  const queen = act(far, move(2, 0, 'hold'));
+  assert.equal(queen.companion.piece, 'queen');
+  assert.ok(recruitChoice(queen, move(2, 1)).moves.some((tile) => tile.x === 7 && tile.y === 5 && tile.capture));
+  const taken = act(queen, move(2, 1, { x: 7, y: 5 }));
+  assert.equal(taken.captures, 1); assert.equal(taken.objective.complete, true);
 });
 
 test('recruit captures pay gold but never feed your combo; a fork it breaks still pays on your capture', () => {
@@ -386,17 +390,22 @@ test('the challenge-complete message mentions your recruit on floors 1 and 2, on
 
 test('a recruit that joins after the clear hunts on its own from its first move', () => {
   const state = scenario('rook', { x: 7, y: 7 }); state.powers.freeze = 6;
-  state.items = [{ type: 'companion', piece: 'knight', x: 0, y: 4 }];
-  state.enemies = [foe('target', 'knight', 0, 7), foe('decoy', 'bishop', 2, 3)];
+  state.items = [{ type: 'companion', piece: 'rook', x: 0, y: 4 }];
+  state.enemies = [foe('target', 'knight', 0, 7), foe('decoy', 'bishop', 0, 1)];
   const cleared = act(state, move(0, 7));
   assert.equal(cleared.exit.open, true);
   assert.ok(!said(cleared).includes('watch your back'), 'it hasn’t joined yet');
   assert.equal(recruitChoice(cleared, move(0, 4)), null);
   const joined = act(cleared, move(0, 4));
-  assert.ok(said(joined).includes('A knight joins you and hunts on its own for the rest of this room.'));
-  assert.deepEqual(at(joined.companion), [2, 3]);
-  assert.equal(joined.captures, cleared.captures + 1);
+  assert.ok(said(joined).includes('A rook joins you and hunts on its own for the rest of this room.'));
+  // Like any recruit it captures nothing the turn it joins: it closes in on the bishop it could have taken.
+  assert.deepEqual(at(joined.companion), [0, 2]);
+  assert.equal(joined.captures, cleared.captures);
   assert.deepEqual(act(cleared, move(0, 4, 'hold')), joined);
+  // From your next move on it hunts as before.
+  const hunted = act(joined, wait());
+  assert.deepEqual(at(hunted.companion), [0, 1]);
+  assert.equal(hunted.captures, joined.captures + 1); assert.equal(hunted.gold, joined.gold + 1);
   // Taking the last target where it stood on the waiting recruit clears the floor
   // and recruits in one move: both lines stay in the log.
   const both = scenario('rook', { x: 7, y: 7 }); both.powers.freeze = 6;

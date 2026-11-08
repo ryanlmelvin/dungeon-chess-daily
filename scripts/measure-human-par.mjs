@@ -3,24 +3,25 @@
 // by tier and piece, how often its runs clear each floor, its par against the
 // certified route's moves per floor (medians), the raw and capped human gap
 // (src/difficulty.js humanGap and cappedGap, the tiers' measure; means) and the
-// certificate's difficultyScore (mean) beside them.
+// certificate's difficultyScore (mean) beside them. The
+// bot steers its recruit, as par assumes; --auto leaves the recruit on Auto.
 // Prints Markdown tables. Read-only: it never writes src/editions.js.
-//   node scripts/measure-human-par.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N]
+//   node scripts/measure-human-par.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--auto]
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { EDITIONS_RANGE } from '../src/editions.js';
 import { generateDaily } from '../src/generation.js';
-import { humanPar } from '../src/human-bot.js';
+import { humanPar, autoRecruit } from '../src/human-bot.js';
 import { humanGap, cappedGap, DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { PLAYABLE_PIECES, PIECE_LIVES } from '../src/pieces.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const index = process.argv.indexOf(`--${name}`); return index > 0 ? process.argv[index + 1] : fallback; };
 
-function measure(date) {
+function measure(date, auto) {
   const began = performance.now();
   const daily = generateDaily(date);
-  const human = humanPar(daily);
+  const human = auto ? humanPar(daily, { recruit: autoRecruit }) : humanPar(daily);
   return {
     date, tier: daily.difficulty, piece: daily.playerPiece, score: daily.generation.certificate.score,
     certified: human.certified, par: human.par, failed: human.runs.map((run) => run === null),
@@ -34,7 +35,7 @@ function measure(date) {
 }
 
 if (!isMainThread) {
-  for (const date of workerData.dates) parentPort.postMessage(measure(date));
+  for (const date of workerData.dates) parentPort.postMessage(measure(date, workerData.auto));
 } else {
   const start = arg('start', EDITIONS_RANGE.start), end = arg('end', EDITIONS_RANGE.end);
   const dates = [];
@@ -43,7 +44,7 @@ if (!isMainThread) {
   const rows = [];
   const began = performance.now();
   await Promise.all(Array.from({ length: jobs }, (_, job) => new Promise((resolve, reject) => {
-    const worker = new Worker(new URL(import.meta.url), { workerData: { dates: dates.filter((_, index) => index % jobs === job) } });
+    const worker = new Worker(new URL(import.meta.url), { workerData: { dates: dates.filter((_, index) => index % jobs === job), auto: process.argv.includes('--auto') } });
     worker.on('message', (row) => rows.push(row));
     worker.on('error', reject);
     worker.on('exit', (code) => (code ? reject(new Error(`Worker exited with ${code}`)) : resolve()));

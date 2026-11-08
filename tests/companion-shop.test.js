@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {act,createGame,getDaily,legalMoves,validateSave,COMPANIONS} from '../src/game.js';
 import {COMPANIONS as RULE_COMPANIONS,createGame as createCandidate,validateSave as validateCandidate} from '../src/rules.js';
 import {getRawDaily} from '../src/edition.js';
+import {findFloorRoute} from '../src/fairness.js';
 
 const move=(x,y)=>({type:'move',x,y});
 const daily=getDaily('2026-11-05');
@@ -29,25 +30,30 @@ function legacyOrder(state,piece,floor=state.floor+1) {
   next.gold-=COMPANIONS.find((offer)=>offer.piece===piece).cost;
   return next;
 }
-function children(state) {
-  const actions=state.exit.open?[{type:'descend'}]:legalMoves(state).map(({x,y})=>move(x,y));
-  return actions.map((action)=>act(state,action)).filter((next)=>next!==state&&next.status!=='lost'&&!next.events.some((event)=>event.type==='restart'));
-}
-function score(state) {
-  if(state.status==='won')return 100000;
-  const targets=state.enemies.filter((foe)=>foe.role===state.objective.piece);
-  const distance=targets.length?Math.min(...targets.map((foe)=>Math.abs(foe.x-state.player.x)+Math.abs(foe.y-state.player.y))):0;
-  return state.floor*10000+(state.exit.open?8000:0)+state.captures*100+state.player.hp*20-state.turns-distance*3;
-}
+// Clears a room with an older paid ally at your side by the certificate search,
+// whatever the day's layout: the search treats an order as bought help, so it
+// sees the room without the ledger, which changes nothing about how it plays.
 function finishRoom(initial) {
+  const probe=structuredClone(initial);probe.companionOrders=[];
+  const found=findFloorRoute(probe,{recruit:'auto',everyRecruit:true});
+  assert.equal(found.status,'solved','an assisted run clears the room');
   let state=initial;
-  for(let step=0;step<80&&!state.exit.open;step++) {
-    const options=children(state).map((next)=>({next,value:Math.max(score(next),...children(next).map(score))})).sort((a,b)=>b.value-a.value||score(b.next)-score(a.next));
-    assert.ok(options.length,'an assisted run needs a safe continuation');
-    state=options[0].next;
+  for(const action of found.actions) {
+    if(action.type==='descend')break;
+    state=act(state,action);
     assert.equal(validateSave(state,state.date),true);
   }
-  assert.equal(state.exit.open,true,'the assisted room must finish within the action bound');
+  assert.equal(state.exit.open,true,'the assisted room is cleared');
+  return state;
+}
+// Clears the room the run has just entered with the certificate's own moves there
+// (gold and feats never change how a room plays), whatever the day's layout.
+function certifiedRoom(initial) {
+  const actions=daily.generation.certificate.actions;
+  const descents=actions.flatMap((action,index)=>action.type==='descend'?[index]:[]);
+  let state=initial;
+  for(const action of actions.slice(descents[initial.floor-1]+1,descents[initial.floor])) state=act(state,action);
+  assert.equal(state.exit.open,true,'the certificate clears the room');
   return state;
 }
 
@@ -60,7 +66,7 @@ test('the shop rejects every companion on both visits while powerups still sell'
   const first=bank();const original=structuredClone(first);
   for(const offer of COMPANIONS) assert.equal(act(first,{type:'buy',id:offer.id}),first);
   assert.deepEqual(first,original,'a rejected order must not mutate the save');
-  const second=finishRoom(act(first,{type:'descend'}));
+  const second=certifiedRoom(act(first,{type:'descend'}));
   assert.equal(second.floor,1);assert.equal(second.exit.open,true);
   const rich=structuredClone(second);rich.paidCaptures=rich.captures;rich.gold=rich.treasure+rich.captures;
   assert.equal(validateSave(rich,rich.date),true);assert.ok(rich.gold>=8);
@@ -116,7 +122,7 @@ test('an older paid ally expires after its floor and the final floor keeps its o
   const finished=finishRoom(arrived);const next=act(finished,{type:'descend'});
   assert.equal(next.floor,2);assert.equal(next.companion,null);
   const recruits=next.items.filter((item)=>item.type==='companion');
-  assert.equal(recruits.length,1);assert.ok(['rook','queen','king'].includes(recruits[0].piece));
+  assert.equal(recruits.length,1);assert.equal(recruits[0].piece,'king');
   assert.deepEqual(next.companionOrders,[{floor:1,piece:'queen'}]);
   assert.equal(validateSave(next,next.date),true);
 });
