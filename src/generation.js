@@ -16,7 +16,11 @@ export const GENERATOR_VERSION = RULES_VERSION;
 // The public edition's tier comes from its UTC weekday, the same for everyone;
 // there is deliberately no player-specific adaptive seed.
 const cache = new Map();
-export const ATTEMPTS = 2;
+// Candidate layouts a date may search before it falls back to the bank. Each
+// has the same fixed budget (SEARCH_BUDGET simulated transitions), so the
+// edition stays a pure function of the date. Four instead of two sent far
+// fewer days to the bank (docs/generation.md, "Measuring the monsters").
+export const ATTEMPTS = 4;
 export const SEARCH_BUDGET = 12_000;
 
 /** Layout seed of a date's numbered candidate; the same for every tier. */
@@ -62,6 +66,23 @@ export function chooseCandidate(found, tier, minThreatenedDecisions, minFloorMov
     if (distance === 0) break;
   }
   return best;
+}
+
+/**
+ * generateDaily's candidate searches for a raw daily, in order, up to `count`
+ * (ATTEMPTS): it tries the first layout and stops at the first candidate
+ * chooseCandidate keeps inside the tier's band; otherwise it searches the
+ * next. Every search has the same fixed budget, so which ones run is a pure
+ * function of the date. Returns each searchCandidate() result.
+ */
+export function searchCandidates(base, tier, settings, count = ATTEMPTS) {
+  const found = [];
+  for (let attempt = 0; attempt < count; attempt++) {
+    found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
+    if (chooseCandidate(found, tier, settings.minThreatenedDecisions) === attempt
+      && bandDistance(found[attempt].score, tier) === 0) break;
+  }
+  return found;
 }
 
 function certify(daily, actions, source, attempt, knobs) {
@@ -118,15 +139,7 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
       if (accepted) return accepted;
     }
   }
-  // Try the first layout; only when its witnessed route scores outside the
-  // tier's band, also try the second. Both use the same fixed budgets, so the
-  // choice stays a pure function of the date.
-  const found = [];
-  for (let attempt = 0; attempt < searches; attempt++) {
-    found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
-    if (chooseCandidate(found, tier, settings.minThreatenedDecisions) === attempt
-      && bandDistance(found[attempt].score, tier) === 0) break;
-  }
+  const found = searchCandidates(base, tier, settings, searches);
   const chosen = chooseCandidate(found, tier, settings.minThreatenedDecisions);
   if (chosen >= 0) {
     const accepted = certify(candidateFor(base, tier, settings, chosen), found[chosen].actions, 'generated', chosen, settings);

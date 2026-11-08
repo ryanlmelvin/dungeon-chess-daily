@@ -24,7 +24,8 @@
 //   would, and writes the table. Keeping the current settings in the running
 //   means a confirm can never pick worse than the live table on its own data.
 //
-// Phase 1 (slow) searches both candidate layouts of `samples` dates per piece
+// Phase 1 (slow) searches every candidate layout generation may try (ATTEMPTS,
+// four) of `samples` dates per piece
 // under every grid setting, in parallel workers, at the runtime search budget.
 // Monsters grow smarter with the tier (src/monster-ai.js), so every setting is
 // measured once per tier, with that tier's monsters, and competes only for
@@ -49,12 +50,13 @@ const load = (path) => import(new URL(path, root).href);
 
 if (!isMainThread) {
   const { getRawDaily } = await load('src/edition.js');
-  const { candidateFor, searchCandidate } = await load('src/generation.js');
+  const { candidateFor, searchCandidate, ATTEMPTS } = await load('src/generation.js');
   // floorMoves lets the fit apply the no-freebie-floor rule (chooseCandidate).
   const SCORE_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves'];
   parentPort.on('message', ({ id, date, setting, budget }) => {
     const base = getRawDaily(date);
-    const found = [0, 1].map((attempt) => {
+    // Every candidate generation may search before the fallback bank (ATTEMPTS).
+    const found = Array.from({ length: ATTEMPTS }, (_, attempt) => attempt).map((attempt) => {
       const began = performance.now();
       // Monsters grow smarter with the tier (src/monster-ai.js), so each
       // setting is measured under the tier it is a candidate for.
@@ -431,8 +433,12 @@ if (!isMainThread) {
     let fallbacks = 0, inBand = 0, distance = 0;
     for (const found of Object.values(byDate)) {
       const candidates = scored(found, piece);
-      const first = chooseCandidate(candidates.slice(0, 1), tier, minThreatenedDecisions);
-      const searched = first === 0 && bandDistance(candidates[0].score, tier) === 0 ? 1 : ATTEMPTS;
+      // generateDaily (searchCandidates) stops at the first candidate it keeps inside the band.
+      let searched = Math.min(ATTEMPTS, candidates.length);
+      for (let count = 1; count < searched; count++) {
+        const pick = chooseCandidate(candidates.slice(0, count), tier, minThreatenedDecisions);
+        if (pick === count - 1 && bandDistance(candidates[pick].score, tier) === 0) { searched = count; break; }
+      }
       ms.push(found.slice(0, searched).reduce((sum, entry) => sum + entry.ms, 0));
       const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
       if (index < 0) { fallbacks++; continue; }

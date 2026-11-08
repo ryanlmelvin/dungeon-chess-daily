@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECE_LIVES } from './pieces.js';
 import { act, legalMoves, dangerTiles, unreachablePickups, royalRules, scoredMoves } from './rules.js';
+import { distanceTable, UNREACHABLE } from './move-tables.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 // The king floor's own recruit (a rook, queen or king one move
@@ -19,41 +20,58 @@ const relicAt = (state, tile) => state.items.some((item) => (item.type === 'powe
 const powered = (state) => hasPowers(state) || state.events.some((event) =>
   ['powerup', 'shield', 'recruit'].includes(event.type) || (event.type.startsWith('companion') && !allyFloor(state)));
 
-// Time is part of the position: enemy tie-breaking uses the total turn count.
-// Enemy order, pawn history, and complete committed lanes also affect act().
-function positionKey(state, includeTime = true) {
+// Moves made on the floor in progress.
+const floorMoves = (state) => state.turns - (state.floorStart?.turns ?? 0);
+
+/**
+ * The search's identity of a position: everything that decides how it plays
+ * on. Enemy order, pawn history, complete committed lanes, off-balance and
+ * pinned monsters, the en passant window and Collapse arrivals all affect
+ * act(), and so does time, but only the floor's own: monster tie-breaks,
+ * Collapse arrivals and every countdown count the moves made on this floor
+ * (src/rules.js monsterTie), never the whole run's, so two paths into the
+ * same floor position are one position however long the earlier floors took.
+ * Only the classic monsters of old-versus-new comparisons hash the whole
+ * run's count, so for them it stays. Coins only pay gold, which no route
+ * spends, so they are left out. `includeTime: false` drops the clock (the
+ * rollout's revisit heuristic).
+ */
+export function positionKey(state, includeTime = true) {
   return JSON.stringify([
-    state.floor, includeTime ? state.turns : null, state.status, state.exit.open,
-    state.playerColor, state.awaitingPlayer,
+    state.floor, includeTime ? floorMoves(state) : null, includeTime && state.classicMonsters === true ? state.turns : null,
+    state.status, state.exit.open, state.playerColor, state.awaitingPlayer,
     state.player.x, state.player.y, state.player.piece, state.player.hp, state.player.moved,
     state.enemies.map((enemy) => [enemy.id, enemy.x, enemy.y, enemy.piece, enemy.role,
-      enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true]),
-    state.items, state.powers, state.companion, state.companions, state.enPassant ?? null,
+      enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true, enemy.pinned ?? 0]),
+    state.items.filter((item) => item.type !== 'coin'), state.powers, state.companion, state.companions, state.enPassant ?? null,
     state.reinforcements ?? null, state.reinforcementsSkipped ?? null,
   ]);
 }
 
-function targetDistance(state, target) {
-  const dx = Math.abs(state.player.x - target.x), dy = Math.abs(state.player.y - target.y);
-  if (!dx && !dy) return 0;
-  switch (state.player.piece) {
-    case 'queen': return !dx || !dy || dx === dy ? 1 : 2;
-    case 'rook': return !dx || !dy ? 1 : 2;
-    case 'bishop': return (dx + dy) % 2 ? 8 : dx === dy ? 1 : 2;
-    case 'king': return Math.max(dx, dy);
-    case 'pawn': return dy + (dx ? 3 : 0);
-    default: return Math.ceil(Math.max(dx, dy) / 2) + ((dx + dy) % 2);
-  }
+// A target the piece can never land on from here (a bishop's other colour, a
+// pawn's walled-off lanes) counts as this many moves away.
+const FAR = 10;
+
+/**
+ * Fewest moves for the player's piece to land on `target`'s square, over the
+ * room's walls: the move tables of src/move-tables.js (monsters come and go,
+ * so they never block there). A pawn's count takes diagonally and includes
+ * promoting on the way. `table` lets a caller reuse the floor's table.
+ */
+export function targetDistance(state, target, table = distanceTable(state.map, state.player.piece)) {
+  const moves = table[(state.player.y * 8 + state.player.x) * 64 + target.y * 8 + target.x];
+  return moves === UNREACHABLE ? FAR : moves;
 }
 
-function score(state) {
+function score(state, tableFor) {
   if (state.status === 'won') return 1_000_000;
   const targets = state.enemies.filter((enemy) => enemy.role === state.objective.piece);
   // A pawn can't take a dodging king: promote first, then hunt as a queen.
   const promoteFirst = state.startingPiece === 'pawn' && state.objective.piece === 'king';
-  const nearest = targets.length && !(promoteFirst && state.player.piece === 'pawn') ? Math.min(...targets.map((target) => targetDistance(state, target))) : 0;
+  const table = tableFor(state.player.piece);
+  const nearest = targets.length && !(promoteFirst && state.player.piece === 'pawn') ? Math.min(...targets.map((target) => targetDistance(state, target, table))) : 0;
   return state.floor * 2000 + (state.exit.open ? 1600 : 0) + state.captures * 35
-    - nearest * 8 - state.turns * 0.7
+    - nearest * 8 - floorMoves(state) * 0.7
     - (PIECE_LIVES[state.startingPiece] - state.player.hp) * 150
     + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? (promoteFirst ? 300 : 50) : 0)
     + (state.player.piece === 'pawn' ? (6 - state.player.y) * (promoteFirst ? 30 : 6) : 0)
@@ -61,8 +79,12 @@ function score(state) {
 }
 
 function actionsFor(state) {
-  // Waiting lets monsters come to the player; never useful once the stairs are open.
-  const actions = state.exit.open ? [{ type: 'descend' }] : [{ type: 'wait' }];
+  // Stairs right after a clear: once the floor's challenge is complete the
+  // only action is to take them, so a route never moves on a cleared floor
+  // (and never meets its cave-in, src/cave-in.js).
+  if (state.exit.open) return [{ type: 'descend' }];
+  // Waiting lets monsters come to the player.
+  const actions = [{ type: 'wait' }];
   for (const tile of legalMoves(state)) {
     // Relics and companions activate automatically. Avoiding their pickups
     // makes this an exact playable route without special solver-only rules.
@@ -133,6 +155,10 @@ export function verifyWinningRoute(initial, actions) {
     if (!action || !['move', 'descend', 'wait'].includes(action.type) || action.recruit !== undefined) {
       return { valid: false, reason: 'Only chess moves, waiting and stairs are allowed.' };
     }
+    // It takes the stairs right after each clear, so it never meets a cave-in.
+    if (state.exit.open && action.type !== 'descend') {
+      return { valid: false, reason: 'The route keeps moving after a floor’s challenge is complete.' };
+    }
     if (action.type === 'move') {
       const alternatives = legalMoves(state);
       if (!alternatives.some((tile) => same(tile, action)) || relicAt(state, action)) {
@@ -176,73 +202,154 @@ export function verifyWinningRoute(initial, actions) {
   return { valid: true, state, metrics };
 }
 
+// Expansions each floor's two-ply rollout may spend before its beam search
+// takes over (fewer when the candidate's budget is nearly spent).
+export const ROLLOUT_BUDGET = 2000;
+
+// Of the floor clears among `nodes`, the one that kept the most lives (the
+// first of those): only a pawn's route may spend any, and every life left
+// carries to the next floor.
+function bestClear(nodes) {
+  let best = null;
+  for (const node of nodes) if (node.state.exit.open && (!best || node.state.player.hp > best.state.player.hp)) best = node;
+  return best;
+}
+
+/**
+ * Search one floor from `start` until its challenge is complete, then take the
+ * stairs at once, never dropping below `minHp` lives. `budget` is the
+ * candidate's, shared by its floors: { explored, maxExpansions, beamWidth };
+ * `explored` grows. Returns the floor's actions (the stairs last) and the
+ * state after the stairs (the next floor's start, or the won run), or null
+ * when the budget runs out or every line loses too many lives first.
+ */
+function searchFloor(start, budget, minHp) {
+  const { maxExpansions, beamWidth } = budget;
+  // The room's walls are fixed for the floor; a pawn may also hunt as a queen.
+  const tables = {};
+  const tableFor = (piece) => (tables[piece] ??= distanceTable(start.map, piece));
+  const value = (state) => score(state, tableFor);
+  const root = { state: start, parent: null, action: null };
+  const expand = (node) => {
+    const result = [];
+    for (const action of actionsFor(node.state)) {
+      if (budget.explored >= maxExpansions) break;
+      budget.explored++;
+      const state = routeTransition(node.state, action);
+      if (state && state.player.hp >= minHp) result.push({ state, parent: node, action });
+    }
+    return result;
+  };
+  // The stairs right after the clear are no choice, so they spend no budget.
+  const done = (node) => {
+    const state = routeTransition(node.state, { type: 'descend' });
+    return state && { actions: [...routeFor(node), { type: 'descend' }], state };
+  };
+  // Generation keeps a short route search budget; players have unlimited moves.
+  const horizon = (MAX_ROUTE_MOVES - start.turns) * 2 + 1;
+  if (start.exit.open) return done(root);
+
+  // A clear that kept every life ends a floor's search at once; one that spent
+  // lives (pawns only) waits until the step or layer it was found in is done,
+  // in case another clear there kept more.
+  const intact = (node) => node.state.player.hp === start.player.hp;
+
+  // Most ordinary rooms yield to a cheap two-ply rollout. Revisiting a board
+  // is penalized only as a heuristic; the beam's identity keeps the clock.
+  let current = root;
+  const visits = new Map();
+  const rolloutLimit = Math.min(maxExpansions, budget.explored + ROLLOUT_BUDGET);
+  for (let depth = 0; depth < horizon && budget.explored < rolloutLimit; depth++) {
+    const key = positionKey(current.state, false);
+    visits.set(key, (visits.get(key) ?? 0) + 1);
+    const choices = expand(current);
+    if (!choices.length) break;
+    let clear = bestClear(choices);
+    if (clear && intact(clear)) return done(clear);
+    let best = null, bestValue = -Infinity;
+    for (const choice of choices) {
+      if (choice.state.exit.open) continue;
+      const future = budget.explored < rolloutLimit ? expand(choice) : [];
+      const futureClear = bestClear(future);
+      if (futureClear) {
+        clear = bestClear([clear ?? futureClear, futureClear]);
+        if (intact(clear)) return done(clear);
+        continue;
+      }
+      const ahead = value(choice.state);
+      const estimate = (future.length ? Math.max(...future.map((node) => value(node.state))) : ahead)
+        + ahead * 0.05 - (visits.get(positionKey(choice.state, false)) ?? 0) * 40;
+      if (estimate > bestValue) { bestValue = estimate; best = choice; }
+    }
+    if (clear) return done(clear);
+    current = best;
+  }
+
+  // Then a beam search over the floor from its start.
+  let frontier = [root];
+  for (let depth = 0; depth < horizon && frontier.length && budget.explored < maxExpansions; depth++) {
+    const unique = new Map();
+    let clear = null;
+    for (const node of frontier) {
+      for (const next of expand(node)) {
+        if (next.state.exit.open) {
+          clear = bestClear([clear ?? next, next]);
+          if (intact(clear)) return done(clear);
+          continue;
+        }
+        const key = positionKey(next.state);
+        if (!unique.has(key)) unique.set(key, next);
+      }
+      if (budget.explored >= maxExpansions) break;
+    }
+    if (clear) return done(clear);
+    frontier = [...unique.values()].map((node) => ({ node, value: value(node.state) }))
+      .sort((a, b) => b.value - a.value).slice(0, beamWidth).map((entry) => entry.node);
+  }
+  return null;
+}
+
 /**
  * A bounded deterministic witness finder, not an exhaustive impossibility
  * oracle. A failed/pruned search is always "unknown", never "unwinnable".
  * maxExpansions counts simulated transitions, not elapsed wall-clock time, so
  * generation cannot diverge between fast and slow devices.
+ *
+ * It certifies floor by floor: each floor is searched from its standard
+ * start, where the route before it arrived, until its challenge is complete,
+ * and then the route takes the stairs. Nothing else carries over that could
+ * change a floor's play: the piece reverts at the stairs, monster tie-breaks
+ * and Collapse arrivals count the floor's own moves, and routes never buy, so
+ * gold doesn't matter. What does carry over is lives and the run's 50-move
+ * cap. A pawn's route may spend up to 4 lives across the run, so each floor's
+ * search prefers the clear that kept the most, and when a later floor can't
+ * be certified with the lives left, a floor that spent some is searched again
+ * keeping one more. The floors share one budget, in order, so a quick floor
+ * leaves more for the next.
  */
 export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 24 } = {}) {
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
     throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
   }
   if (!initial || initial.status !== 'playing' || hasPowers(initial) || unreachablePickups(initial).length) return { status: 'unknown', explored: 0 };
-  let explored = 0;
-  const root = { state: initial, parent: null, action: null };
-  const expand = (node) => {
-    const result = [];
-    for (const action of actionsFor(node.state)) {
-      if (explored >= maxExpansions) break;
-      explored++;
-      const state = routeTransition(node.state, action);
-      if (state) result.push({ state, parent: node, action });
+  const budget = { explored: 0, maxExpansions, beamWidth };
+  let blocked = false;
+  // The route from `state` to the end of the run, or null.
+  const finish = (state) => {
+    for (let minHp = PIECE_LIVES[state.startingPiece] - livesSpendable(state); ;) {
+      const floor = searchFloor(state, budget, minHp);
+      if (!floor) return null;
+      if (floor.state.status === 'won') return floor.actions;
+      // A later floor with an unreachable pickup can't be certified by any route.
+      if (unreachablePickups(floor.state).length) { blocked = true; return null; }
+      const rest = finish(floor.state);
+      if (rest) return [...floor.actions, ...rest];
+      // Too few lives left for what follows? Keep one more on this floor.
+      const kept = floor.state.player.hp;
+      if (blocked || kept === state.player.hp || budget.explored >= maxExpansions) return null;
+      minHp = kept + 1;
     }
-    return result;
   };
-  const solved = (node) => ({ status: 'solved', actions: routeFor(node), explored });
-  // Generation keeps a short route search budget; players have unlimited moves.
-  const horizon = (MAX_ROUTE_MOVES - initial.turns) * 2 + 3 - initial.floor;
-
-  // Most ordinary rooms yield to a cheap two-ply rollout. Revisiting a board
-  // is penalized only as a heuristic; exact search identity still keeps time.
-  let current = root;
-  const visits = new Map();
-  const greedyBudget = Math.min(maxExpansions, Math.max(1000, Math.floor(maxExpansions / 3)));
-  for (let depth = 0; depth < horizon && explored < greedyBudget; depth++) {
-    if (current.state.status === 'won') return solved(current);
-    const key = positionKey(current.state, false);
-    visits.set(key, (visits.get(key) ?? 0) + 1);
-    const choices = expand(current);
-    if (!choices.length) break;
-    const winner = choices.find((node) => node.state.status === 'won');
-    if (winner) return solved(winner);
-    let best = null, bestValue = -Infinity;
-    for (const choice of choices) {
-      const future = explored < greedyBudget ? expand(choice) : [];
-      const futureWinner = future.find((node) => node.state.status === 'won');
-      if (futureWinner) return solved(futureWinner);
-      const value = (future.length ? Math.max(...future.map((node) => score(node.state))) : score(choice.state))
-        + score(choice.state) * 0.05 - (visits.get(positionKey(choice.state, false)) ?? 0) * 40;
-      if (value > bestValue) { bestValue = value; best = choice; }
-    }
-    current = best;
-  }
-  if (current.state.status === 'won') return solved(current);
-
-  // Search the complete run together; retaining alternative histories matters
-  // because both arrival time and pawn promotion affect later rooms.
-  let frontier = [root];
-  for (let depth = 0; depth < horizon && frontier.length && explored < maxExpansions; depth++) {
-    const unique = new Map();
-    for (const node of frontier) {
-      for (const next of expand(node)) {
-        if (next.state.status === 'won') return solved(next);
-        const key = positionKey(next.state);
-        if (!unique.has(key)) unique.set(key, next);
-      }
-      if (explored >= maxExpansions) break;
-    }
-    frontier = [...unique.values()].sort((a, b) => score(b.state) - score(a.state)).slice(0, beamWidth);
-  }
-  return { status: 'unknown', explored };
+  const actions = finish(initial);
+  return actions ? { status: 'solved', actions, explored: budget.explored } : { status: 'unknown', explored: budget.explored };
 }
