@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Offline authoring: measure how hard each piece's editions are under a grid of
 // generation knobs, then write src/calibration.js, mapping every (tier, piece)
-// to the knobs whose certified editions land closest to that tier's score band.
-// Re-run after any change to rules, monster AI, room modifiers, search, or the
-// difficulty score; then rebuild the fallback bank (scripts/build-fallbacks.mjs).
+// to the knobs whose certified editions land closest to that tier's band of
+// the capped human gap (src/difficulty.js cappedGap: the human-like bot's
+// extra moves over the certified route). Re-run after any change to rules,
+// monster AI, room modifiers, search, the human-like bot or the measure; then
+// rebuild the fallback bank (scripts/build-fallbacks.mjs).
 //
 //   node scripts/calibrate-difficulty.mjs [--samples 8] [--start 2026-11-07]
 //     [--jobs N] [--pieces pawn,rook] [--grid full|quick]
@@ -26,20 +28,26 @@
 //
 // Phase 1 (slow) searches every candidate layout generation may try (ATTEMPTS,
 // four) of `samples` dates per piece
-// under every grid setting, in parallel workers, at the runtime search budget.
+// under every grid setting, in parallel workers, at the runtime search budget,
+// and plays the human-like bot (src/human-bot.js humanPar) on every solved
+// candidate's route, exactly as generation does before it checks the band.
 // Monsters grow smarter with the tier (src/monster-ai.js), so every setting is
 // measured once per tier, with that tier's monsters, and competes only for
 // that tier: five times the searches of one shared measurement.
 // It writes every search to --data: status ('solved', 'unknown' when the
 // budget ran out, 'invalid' when replay rejected the route), solver expansions,
-// route moves (final turns), wall time and the metrics the score needs, plus
-// min/median/p90/max summaries per piece and setting. --reuse loads that file
-// instead of searching again, so the fit can be repeated after editing the
-// score or the bands.
+// route moves (final turns), wall time (search and bot), the metrics the
+// score and the freebie rule need and the bot's runs per floor (`human`: each
+// run's moves, null where it failed), plus min/median/p90/max summaries per
+// piece and setting. --reuse loads that file instead of searching again, so
+// the fit can be repeated after editing the measure or the bands. A file from
+// other rules, another bot or before the gap (scripts/calibration-search.mjs
+// DATA_VERSION) is refused.
 // Phase 2 (fast) replays generateDaily's own candidate choice
-// (chooseCandidate, including the tier's minimum floor moves) for every tier,
-// its settings and threat minimum, and keeps the cheapest: off-band distance,
-// fallbacks and slow searches all cost.
+// (chooseCandidate on the capped human gap, including the tier's minimum floor
+// moves) for every tier, its settings and threat minimum, and keeps the
+// cheapest: off-band distance, fallbacks and slow searches all cost. The
+// difficulty score is reported beside the gap but chooses nothing.
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -51,7 +59,9 @@ const load = (path) => import(new URL(path, root).href);
 if (!isMainThread) {
   const { getRawDaily } = await load('src/edition.js');
   const { candidateFor, searchCandidate, ATTEMPTS } = await load('src/generation.js');
-  // floorMoves lets the fit apply the no-freebie-floor rule (chooseCandidate).
+  const { compactRuns } = await import('./calibration-search.mjs');
+  // floorMoves lets the fit apply the no-freebie-floor rule (chooseCandidate)
+  // and is the route's side of the human gap.
   const SCORE_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves'];
   parentPort.on('message', ({ id, date, setting, budget }) => {
     const base = getRawDaily(date);
@@ -60,9 +70,10 @@ if (!isMainThread) {
       const began = performance.now();
       // Monsters grow smarter with the tier (src/monster-ai.js), so each
       // setting is measured under the tier it is a candidate for.
+      // searchCandidate also plays the human-like bot on a solved route.
       const result = searchCandidate(candidateFor(base, setting.tier, setting, attempt), budget);
       const metrics = result.metrics ? Object.fromEntries(SCORE_METRICS.map((name) => [name, result.metrics[name]])) : null;
-      return { status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics };
+      return { status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, human: compactRuns(result.human) };
     });
     parentPort.postMessage({ id, found });
   });
@@ -97,6 +108,21 @@ if (!isMainThread) {
   const { getRawDaily } = await load('src/edition.js');
   const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, difficultyScore, bandDistance } = await load('src/difficulty.js');
   const { chooseCandidate, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
+  const { RULES_VERSION } = await load('src/rules.js');
+  const { HUMAN_BOT_VERSION } = await load('src/human-bot.js');
+  const { dataStamp, dataProblem, storedGap } = await import('./calibration-search.mjs');
+  // Data measured under other rules, another bot, another candidate count or
+  // before the capped human gap (no bot runs) must not reach the fit.
+  const stamp = { rules: RULES_VERSION, bot: HUMAN_BOT_VERSION, attempts: ATTEMPTS };
+  const refuseStale = (file, path, remedy) => {
+    const problem = dataProblem(file, stamp);
+    if (problem) throw new Error(`${path} can't be reused: ${problem}. ${remedy}`);
+  };
+  if (shortlist) refuseStale(shortlist, confirmPath, 'Make a new one with npm run calibrate:shortlist.');
+  // A search's measures as generation sees them: its metrics, the capped human
+  // gap from the bot's stored runs (the tiers' measure) and the score beside it.
+  const scored = (found, piece) => found.map((entry) => (entry.metrics
+    ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece), gap: storedGap(entry) } : null));
   const quantiles = (values) => {
     if (!values.length) return null;
     const sorted = [...values].sort((a, b) => a - b);
@@ -167,8 +193,10 @@ if (!isMainThread) {
   let replay = null, replayMs = 0;
   if (option('replay')) {
     replay = {};
-    for (const row of JSON.parse(await readFile(option('replay'), 'utf8')).rows) {
-      (((replay[row.piece] ??= {})[row.setting] ??= {})[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics };
+    const file = JSON.parse(await readFile(option('replay'), 'utf8'));
+    refuseStale(file, option('replay'), 'Replay only a data file measured under these rules.');
+    for (const row of file.rows) {
+      (((replay[row.piece] ??= {})[row.setting] ??= {})[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics, human: row.human };
     }
   }
   const elapsedSeconds = () => (replay ? replayMs / 1000 / jobs : (Date.now() - runBegan) / 1000);
@@ -179,7 +207,7 @@ if (!isMainThread) {
       // so a smaller budget is the same search cut short).
       for (const task of tasks) {
         const found = replay[task.piece][settingKey(task.setting)][task.date].map((entry) => (entry.explored <= budget
-          ? entry : { status: 'unknown', explored: budget, ms: Math.round(entry.ms * budget / entry.explored), metrics: null }));
+          ? entry : { status: 'unknown', explored: budget, ms: Math.round(entry.ms * budget / entry.explored), metrics: null, human: null }));
         ((into[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = found;
         searchCount += found.length; expansionCount += found.reduce((sum, entry) => sum + entry.explored, 0);
         replayMs += found.reduce((sum, entry) => sum + entry.ms, 0);
@@ -215,15 +243,18 @@ if (!isMainThread) {
   // settings that could win a tier (successive halving). Stage 1 runs each
   // setting on --stage1-dates dates (default 1) and stage 2 on --stage2-dates
   // more (default 4), both at a screening budget; the closest settings per tier
-  // advance. Two filters shape stage 1: a least-squares surrogate (knobs plus
-  // pairwise products, per piece) smooths one-date noise, and its top picks per
-  // tier advance alongside the observed ranks; monotone dominance drops settings
-  // at least as hard as one already far above the hardest band, or at most as
-  // hard as one far below the easiest. Finalists are re-measured at the full
+  // advance. Two filters shape stage 1: a least-squares surrogate of the
+  // capped human gap (knobs plus pairwise products, per piece) smooths
+  // one-date noise, and its top picks per tier advance alongside the observed
+  // ranks; monotone dominance drops settings at least as hard as one already
+  // far above the tier's band, or at most as hard as one far below it
+  // (--dominance-margin, two band widths by default; never for pawns, whose
+  // gap isn't monotone in the knobs). Finalists are re-measured at the full
   // runtime budget on common dates, a few at a time; a setting stops gaining
-  // dates once a paired comparison shows it clearly worse than the current best
-  // for every tier. Only full-budget data reaches the fit. A setting with no
-  // solved screening search advances: running out of budget often means hard.
+  // dates once a paired comparison shows it clearly worse than the current
+  // best for every tier. Only full-budget data reaches the fit. A setting
+  // with no solved screening search advances: running out of budget often
+  // means hard.
   const fastMeasure = async (tasks) => {
     const { fitSurrogate, dominatedOut, clearlyWorse } = await import('./calibration-search.mjs');
     // Default: screen at the full budget. At 3000 expansions most queen and
@@ -235,7 +266,10 @@ if (!isMainThread) {
     const useSurrogate = !args.includes('--no-surrogate');
     const surrogateKeep = Number(option('surrogate-keep', '3'));
     const useDominance = !args.includes('--no-dominance');
-    const margin = Number(option('dominance-margin', '1.5'));
+    // Two band widths by default (6): one date's gap scatters by about 5, more
+    // than a band is wide, and a setting is only ever dropped on another's mean.
+    const bandWidth = (DIFFICULTY_TIERS[TIER_IDS.at(-1)].band[1] - DIFFICULTY_TIERS[TIER_IDS[0]].band[0]) / TIER_IDS.length;
+    const margin = Number(option('dominance-margin', String(2 * bandWidth)));
     const useStopping = !args.includes('--no-stopping');
     const finalFirst = Number(option('final-first', '4')), finalStep = Number(option('final-step', '2'));
     const stopZ = Number(option('stop-z', '2.5'));
@@ -250,11 +284,11 @@ if (!isMainThread) {
     // Per-date cost: the fit's cost terms for one day (a fallback costs 11).
     const dayCost = (found, piece, tier, minThreatenedDecisions) => {
       const [low, high] = DIFFICULTY_TIERS[tier].band, width = high - low;
-      const candidates = found.map((entry) => (entry.metrics ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece) } : null));
+      const candidates = scored(found, piece);
       const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
       if (index < 0) return 11;
-      const score = candidates[index].score, off = bandDistance(score, tier);
-      return off / width + (off > 0 ? 1 : 0) + 0.2 * Math.abs(score - (low + high) / 2) / width;
+      const gap = candidates[index].gap, off = bandDistance(gap, tier);
+      return off / width + (off > 0 ? 1 : 0) + 0.2 * Math.abs(gap - (low + high) / 2) / width;
     };
     const costsFor = (piece, id, tier, dates, source = finals) => {
       const byDate = source[piece][id.split('|')[1]];
@@ -281,10 +315,11 @@ if (!isMainThread) {
       }
       const survivors = new Set();
       for (const piece of new Set(alive.map((id) => id.split('|')[0]))) {
-        // Mean screened score so far (a candidate scores if either layout solved).
+        // Mean screened gap so far: each date's first solved candidate, if any.
         const ranked = alive.filter((id) => id.startsWith(`${piece}|`)).map((id) => {
-          const scores = Object.values(screened[piece]?.[id.split('|')[1]] ?? {}).map((found) => found.find((entry) => entry.metrics)).filter(Boolean).map((entry) => difficultyScore(entry.metrics, piece));
-          return { id, setting: settingsOf.get(id), mean: scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null };
+          const gaps = Object.values(screened[piece]?.[id.split('|')[1]] ?? {}).map((found) => found.find((entry) => entry.metrics)).filter(Boolean)
+            .map(storedGap).filter((gap) => gap !== null);
+          return { id, setting: settingsOf.get(id), mean: gaps.length ? gaps.reduce((sum, value) => sum + value, 0) / gaps.length : null };
         });
         const measured = ranked.filter((entry) => entry.mean !== null);
         // Below the full budget an unsolved screen may just mean hard, so it advances.
@@ -306,7 +341,9 @@ if (!isMainThread) {
             mine(ranked).sort((a, b) => byCenter(model.predict(a.setting), band) - byCenter(model.predict(b.setting), band)).slice(0, surrogateKeep).forEach((entry) => pick.add(entry.id));
             console.log(`  ${piece} ${tier}: surrogate residual sd ${model.residualSd.toFixed(2)} on ${mine(measured).length} settings`);
           }
-          if (useDominance) for (const id of dominatedOut(mine(ranked), band[0] - margin, band[1] + margin)) out.add(id);
+          // Not for pawns: the bot's pawn gap can fall as knobs rise (on
+          // Fiendish, decoys are what it captures its way past its relic with).
+          if (useDominance && piece !== 'pawn') for (const id of dominatedOut(mine(ranked), band[0] - margin, band[1] + margin)) out.add(id);
         }
         for (const id of pick) if (!out.has(id)) survivors.add(id);
         if (out.size) console.log(`  ${piece}: monotone dominance rules out ${out.size} settings`);
@@ -361,9 +398,11 @@ if (!isMainThread) {
   let measurements = {};
   let rows = [];
   const loadRows = async (filter) => {
-    for (const row of JSON.parse(await readFile(dataPath, 'utf8')).rows.filter(filter)) {
+    const file = JSON.parse(await readFile(dataPath, 'utf8'));
+    refuseStale(file, fileURLToPath(dataPath), 'Measure again without --reuse or --merge.');
+    for (const row of file.rows.filter(filter)) {
       const byDate = ((measurements[row.piece] ??= {})[row.setting] ??= {});
-      (byDate[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics };
+      (byDate[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics, human: row.human };
     }
   };
   if (args.includes('--reuse')) {
@@ -396,7 +435,7 @@ if (!isMainThread) {
   if (searchCount) console.log(`Searched ${searchCount} candidate layouts, ${expansionCount} expansions in all, ${Math.round(elapsedSeconds())} s wall time${replay ? " (replayed)" : ""} on ${jobs} workers.`);
   for (const [piece, bySetting] of Object.entries(measurements)) for (const [setting, byDate] of Object.entries(bySetting)) {
     for (const [date, found] of Object.entries(byDate)) for (const [attempt, entry] of found.entries()) {
-      rows.push({ piece, setting, date, attempt, status: entry.status, explored: entry.explored, turns: entry.metrics?.turns ?? null, ms: entry.ms, metrics: entry.metrics });
+      rows.push({ piece, setting, date, attempt, status: entry.status, explored: entry.explored, turns: entry.metrics?.turns ?? null, ms: entry.ms, metrics: entry.metrics, human: entry.human ?? null });
     }
   }
   if (!args.includes('--reuse')) {
@@ -409,8 +448,11 @@ if (!isMainThread) {
       }
     }
     // One row per search, compact: the raw numbers behind the table and the budgets.
-    const source = `{"generated":${JSON.stringify(new Date().toISOString())},"start":${JSON.stringify(start)},"samples":${samples},"grid":${JSON.stringify(gridName)},`
-      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards[/screens]@tier","summary":${JSON.stringify(summary)},\n"rows":[\n`
+    // The stamp (data version, rules, bot, candidates) lets a later run refuse stale data.
+    const header = JSON.stringify({ ...dataStamp(stamp), measure: 'cappedGap' }).slice(1, -1);
+    const source = `{"generated":${JSON.stringify(new Date().toISOString())},${header},"start":${JSON.stringify(start)},"samples":${samples},"grid":${JSON.stringify(gridName)},`
+      + `"searchBudget":${SEARCH_BUDGET},"settingKey":"obstacleBase/decoys/scatter/guards[/screens]@tier","humanRuns":"row.human: per floor, each bot run's moves when it won, else null",`
+      + `"summary":${JSON.stringify(summary)},\n"rows":[\n`
       + rows.map((row) => JSON.stringify(row)).join(',\n') + '\n]}\n';
     await writeFile(dataPath, source);
     console.log(`Wrote ${rows.length} searches to ${fileURLToPath(dataPath)}.`);
@@ -419,7 +461,6 @@ if (!isMainThread) {
   // Phase 2: replay generateDaily's choice for every tier, setting and minimum.
   // The table's knobs: the setting without the tier it was measured for.
   const parse = (key) => { const { tier, ...knobs } = parseKey(key); return knobs; };
-  const scored = (found, piece) => found.map((entry) => (entry.metrics ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece) } : null));
   const stats = (values) => {
     if (!values.length) return { n: 0, mean: null, sd: null, min: null, max: null };
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -427,9 +468,11 @@ if (!isMainThread) {
     const round = (value) => Math.round(value * 10) / 10;
     return { n: values.length, mean: round(mean), sd: round(sd), min: round(Math.min(...values)), max: round(Math.max(...values)) };
   };
-  // What generateDaily would do with these measurements for one tier.
+  const average = (values) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 : null);
+  // What generateDaily would do with these measurements for one tier: the
+  // chosen candidates' capped human gaps (and their scores, for reference).
   const simulate = (byDate, tier, minThreatenedDecisions, piece) => {
-    const chosen = [], ms = [];
+    const gaps = [], scores = [], ms = [];
     let fallbacks = 0, inBand = 0, distance = 0;
     for (const found of Object.values(byDate)) {
       const candidates = scored(found, piece);
@@ -437,19 +480,19 @@ if (!isMainThread) {
       let searched = Math.min(ATTEMPTS, candidates.length);
       for (let count = 1; count < searched; count++) {
         const pick = chooseCandidate(candidates.slice(0, count), tier, minThreatenedDecisions);
-        if (pick === count - 1 && bandDistance(candidates[pick].score, tier) === 0) { searched = count; break; }
+        if (pick === count - 1 && bandDistance(candidates[pick].gap, tier) === 0) { searched = count; break; }
       }
       ms.push(found.slice(0, searched).reduce((sum, entry) => sum + entry.ms, 0));
       const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
       if (index < 0) { fallbacks++; continue; }
-      const score = candidates[index].score;
-      chosen.push(score);
-      const off = bandDistance(score, tier);
+      const { gap, score } = candidates[index];
+      gaps.push(gap); scores.push(score);
+      const off = bandDistance(gap, tier);
       if (off === 0) inBand++;
       distance += off;
     }
     const days = Object.keys(byDate).length;
-    return { scores: chosen, fallbackRate: fallbacks / days, inBandRate: inBand / days, distance: chosen.length ? distance / chosen.length : Infinity, ms: stats(ms) };
+    return { gaps, scores, fallbackRate: fallbacks / days, inBandRate: inBand / days, distance: gaps.length ? distance / gaps.length : Infinity, ms: stats(ms) };
   };
   // Lower is better: mean distance outside the band (in band widths), missed
   // days, fallbacks (a repeated layout), slow generation (a phone is slower
@@ -459,25 +502,26 @@ if (!isMainThread) {
   const cost = (result, tier, plainMs) => {
     const [low, high] = DIFFICULTY_TIERS[tier].band;
     const width = high - low;
-    const mean = result.scores.length ? result.scores.reduce((sum, value) => sum + value, 0) / result.scores.length : low;
+    const mean = result.gaps.length ? result.gaps.reduce((sum, value) => sum + value, 0) / result.gaps.length : low;
     // The last term centers otherwise equal settings, so pieces bunch together.
     return result.distance / width + (1 - result.inBandRate) + 10 * result.fallbackRate
       + timeWeight * Math.max(0, result.ms.mean / plainMs - 1.5) + 0.2 * Math.abs(mean - (low + high) / 2) / width;
   };
   const minimums = [0, 1, 2, 3, 4, 6];
-  const calibration = {}, report = { generated: new Date().toISOString().slice(0, 10), start, samples, grid: gridName, uncalibrated: {}, tiers: {} };
+  const calibration = {}, report = { generated: new Date().toISOString().slice(0, 10), start, samples, grid: gridName, measure: 'cappedGap', uncalibrated: {}, tiers: {} };
   for (const piece of pieces) {
     const bySetting = measurements[piece];
     if (!bySetting) throw new Error(`No measurements for ${piece}.`);
     const plainOf = (tier) => bySetting[settingKey({ ...DEFAULT_KNOBS, tier })];
     // Before: the old single profile (the plain layout, the first certified candidate), Gentle monsters.
     const plain = plainOf('gentle');
-    const before = [];
+    const before = [], beforeScores = [];
     for (const found of Object.values(plain ?? {})) {
-      const index = scored(found, piece).findIndex((entry) => entry && entry.metrics.threatenedDecisions >= DEFAULT_KNOBS.minThreatenedDecisions);
-      if (index >= 0) before.push(scored(found, piece)[index].score);
+      const candidates = scored(found, piece);
+      const entry = candidates.find((candidate) => candidate && candidate.gap !== null && candidate.metrics.threatenedDecisions >= DEFAULT_KNOBS.minThreatenedDecisions);
+      if (entry) { before.push(entry.gap); beforeScores.push(entry.score); }
     }
-    report.uncalibrated[piece] = { knobs: { ...DEFAULT_KNOBS }, ...stats(before) };
+    report.uncalibrated[piece] = { knobs: { ...DEFAULT_KNOBS }, ...stats(before), score: average(beforeScores) };
     for (const tier of TIER_IDS) {
       const plainRuns = Object.values(plainOf(tier) ?? {}).map((found) => found[0].ms);
       const plainMs = Math.max(1, plainRuns.reduce((sum, ms) => sum + ms, 0) / Math.max(1, plainRuns.length));
@@ -491,7 +535,7 @@ if (!isMainThread) {
       if (!best) throw new Error(`No ${tier} measurements for ${piece}: data from before tiered monsters can't be reused.`);
       (calibration[tier] ??= {})[piece] = { ...parse(best.key), minThreatenedDecisions: best.minThreatenedDecisions };
       ((report.tiers[tier] ??= {})[piece] = {
-        ...stats(best.result.scores), inBand: Math.round(best.result.inBandRate * 100) / 100,
+        ...stats(best.result.gaps), score: average(best.result.scores), inBand: Math.round(best.result.inBandRate * 100) / 100,
         fallback: Math.round(best.result.fallbackRate * 100) / 100, meanMs: best.result.ms.mean, maxMs: best.result.ms.max,
         searches: (({ searches, unknown, invalid, turns, explored }) => ({ searches, unknown, invalid, turns, explored }))(
           searchSummary(rows.filter((row) => row.piece === piece && row.setting === best.key))),
@@ -508,21 +552,21 @@ if (!isMainThread) {
     console.log(`  ${piece.padEnd(7)} ${entry.searches} searches, ${entry.unknown} unknown, ${entry.invalid} invalid; moves ${fmt(entry.turns)}; expansions (solved) ${fmt(entry.explored)}`);
   }
 
-  // Print before/after spreads.
-  console.log('\nBefore (one profile for every day):');
+  // Print before/after spreads of the capped human gap (the score beside it).
+  console.log('\nBefore (one profile for every day), capped human gap:');
   for (const piece of pieces) {
     const entry = report.uncalibrated[piece];
-    console.log(`  ${piece.padEnd(7)} mean ${entry.mean}  sd ${entry.sd}  range ${entry.min}-${entry.max}`);
+    console.log(`  ${piece.padEnd(7)} mean ${entry.mean}  sd ${entry.sd}  range ${entry.min}-${entry.max}  (score ${entry.score})`);
   }
   const spread = (values) => (values.length ? `${Math.min(...values)}-${Math.max(...values)} (spread ${Math.round((Math.max(...values) - Math.min(...values)) * 10) / 10})` : 'n/a');
   console.log(`  piece means ${spread(pieces.map((piece) => report.uncalibrated[piece].mean).filter((value) => value !== null))}`);
-  console.log('\nAfter (calibrated, per tier):');
+  console.log('\nAfter (calibrated, per tier), capped human gap:');
   for (const tier of TIER_IDS) {
     const [low, high] = DIFFICULTY_TIERS[tier].band;
     console.log(`  ${tier} [${low}, ${high}]: piece means ${spread(pieces.map((piece) => report.tiers[tier][piece].mean).filter((value) => value !== null))}`);
     for (const piece of pieces) {
       const knobs = calibration[tier][piece], entry = report.tiers[tier][piece];
-      console.log(`    ${piece.padEnd(7)} ${JSON.stringify(knobs)} mean ${entry.mean} sd ${entry.sd} in band ${Math.round(entry.inBand * 100)}% fallback ${Math.round(entry.fallback * 100)}% ~${entry.meanMs} ms (max ${entry.maxMs})`);
+      console.log(`    ${piece.padEnd(7)} ${JSON.stringify(knobs)} gap ${entry.mean} sd ${entry.sd} in band ${Math.round(entry.inBand * 100)}% fallback ${Math.round(entry.fallback * 100)}% (score ${entry.score}) ~${entry.meanMs} ms (max ${entry.maxMs})`);
       console.log(`            moves ${fmt(entry.searches.turns)}, expansions ${fmt(entry.searches.explored)}, ${entry.searches.unknown}/${entry.searches.searches} unknown`);
     }
   }
@@ -530,7 +574,7 @@ if (!isMainThread) {
     const mean = report.tiers[tier][piece].mean;
     return mean === null || bandDistance(mean, tier) > 0;
   }).map((piece) => `${tier}/${piece}`));
-  if (misses.length) console.warn(`\nWarning: mean score outside the band for ${misses.join(', ')}. Consider a wider grid, new knobs, or new bands.`);
+  if (misses.length) console.warn(`\nWarning: mean capped human gap outside the band for ${misses.join(', ')}. Consider a wider grid, new knobs, or new bands.`);
 
   // --choices-out: the chosen knobs and their measured report, for comparing methods.
   const choicesOut = option('choices-out');
@@ -552,10 +596,11 @@ if (!isMainThread) {
     for (const tier of TIER_IDS) mergedReport.tiers[tier] = { ...previousReport?.tiers?.[tier], ...report.tiers[tier] };
     const source = '// SPDX-License-Identifier: GPL-3.0-only\n'
       + '// Generated by scripts/calibrate-difficulty.mjs. Do not edit by hand: re-run it\n'
-      + '// after changing rules, monster AI, modifiers, search or the score, then\n'
-      + '// rebuild the fallback bank (node scripts/build-fallbacks.mjs).\n'
+      + '// after changing rules, monster AI, modifiers, search, the human-like bot or the\n'
+      + '// measure, then rebuild the fallback bank (node scripts/build-fallbacks.mjs).\n'
       + '// CALIBRATION[tier][piece] holds the generation knobs (src/difficulty.js knobsFor).\n'
-      + '// CALIBRATION_REPORT records the measured scores behind them; it is not used at runtime.\n'
+      + '// CALIBRATION_REPORT records the measured capped human gaps behind them (mean,\n'
+      + '// sd, min, max; `score` is the mean difficulty score beside them); it is not used at runtime.\n'
       + `export const CALIBRATION = ${JSON.stringify(merged, null, 2)};\n`
       + `export const CALIBRATION_REPORT = ${JSON.stringify(mergedReport, null, 2)};\n`;
     await writeFile(new URL('src/calibration.js', root), source);

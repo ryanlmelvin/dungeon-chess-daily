@@ -1,8 +1,46 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Pure helpers for scripts/calibrate-difficulty.mjs --fast: a least-squares
-// surrogate of score on the knobs, monotone-dominance pruning, and a paired
-// test for sequential stopping. None of this touches generation or the fit:
-// it only decides which settings get full-budget searches.
+// Pure helpers for scripts/calibrate-difficulty.mjs. For the data file: the
+// human-like bot's runs kept per search and the capped human gap they give,
+// and the check that refuses data measured under other rules. For --fast: a
+// least-squares surrogate of the gap on the knobs, monotone-dominance
+// pruning, and a paired test for sequential stopping. None of the --fast
+// helpers touches generation or the fit: they only decide which settings get
+// full-budget searches.
+import { cappedGap } from '../src/difficulty.js';
+
+/**
+ * Version of the calibration data files (--data, the --fast shortlist). 2:
+ * every solved search keeps the human-like bot's runs (`human`), searched
+ * with the per-floor search and four candidates. Files without it, or made
+ * under other rules, another bot or another candidate count, are refused.
+ */
+export const DATA_VERSION = 2;
+
+/** The header fields a data file must carry for these rules (dataProblem checks them). */
+export const dataStamp = ({ rules, bot, attempts }) => ({ dataVersion: DATA_VERSION, rulesVersion: rules, humanBotVersion: bot, attempts });
+
+/**
+ * Why a data file (its parsed JSON) can't be reused under these rules, or
+ * null when it can. `expected` is dataStamp()'s input.
+ */
+export function dataProblem(file, expected) {
+  const stamp = dataStamp(expected);
+  if (file?.dataVersion !== DATA_VERSION) return 'it was measured before the tiers used the capped human gap (no human-like bot runs)';
+  for (const [key, value] of Object.entries(stamp)) if (file[key] !== value) return `it was measured with ${key} ${file[key]}, not ${value}`;
+  return null;
+}
+
+/** A search's bot runs, compact for the data file: per floor, each run's moves when it won, else null. */
+export function compactRuns(human) {
+  return human ? human.results.map((runs) => runs.map((run) => (run.won ? run.moves : null))) : null;
+}
+
+/** The capped human gap of a stored search: its compactRuns() and its route's moves per floor. Null without both. */
+export function storedGap(entry) {
+  if (!Array.isArray(entry?.human) || !Array.isArray(entry.metrics?.floorMoves)) return null;
+  const results = entry.human.map((runs) => runs.map((moves) => ({ won: moves !== null, moves: moves ?? 0 })));
+  return cappedGap({ results, certified: entry.metrics.floorMoves });
+}
 
 /** Knobs that make a layout harder (difficulty mostly rises with each). */
 export const MONOTONE_KNOBS = ['obstacleBase', 'decoys', 'guards', 'screens'];
