@@ -12,6 +12,9 @@ difficulty, device-dependent seed, or server dependency.
 Every returned edition has an explicit sequence of legal actions that:
 
 - Completes all three capture objectives and takes the final stairs within 50 moves (`MAX_ROUTE_MOVES`; the search prunes any line past it).
+- Takes each floor's stairs as soon as its challenge is complete: no move or
+  wait on a cleared floor, so no certified route ever meets a cave-in
+  (`src/cave-in.js`). The verifier rejects a route that lingers.
 - Uses the actual obstacles, enemy movement, attack warnings, close-range
   captures, piece color, turn order, promotion rules, and automatic pickups from
   the production engine.
@@ -37,9 +40,13 @@ The day's room modifier (`src/modifiers.js`) is part of the game state
 under it: ice slides, collapse reinforcements and their timing are all part of
 the certified play. Dark changes only rendering, so its routes are plain routes.
 
-Pawn promotion is an ordinary chess rule and is permitted. The proof carries the
-promoted piece, turn count, and all other state through the entire run; three
-separate room proofs would not be sufficient. Black's enemy phase can invalidate
+Pawn promotion is an ordinary chess rule and is permitted; the promoted queen
+turns back into a pawn at the stairs. The proof is one replay of the entire run,
+carrying every piece of state from floor to floor. The search finds it one
+floor at a time (see [The search](#the-search)), which is sound because
+nothing that changes how a floor plays carries over from the floor before
+except lives: the piece reverts, and monster tie-breaks and Collapse arrivals
+count the floor's own moves. Black's enemy phase can invalidate
 a clicked destination, so a certificate can include a re-selection that costs no
 player move. Extraction also costs no move. Waiting is an ordinary action that
 spends a move; certificates may wait so monsters walk into range. Under
@@ -81,8 +88,9 @@ and promote to queen before exploring the remaining squares. Revisiting squares
 is allowed, so this is a reachability problem, not a knight's-tour problem. Enemy movement also keeps an unpromoted player's forward file
 open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 50-move route. These rules reduce the search space; they do not replace combat replay.
 
-There is no mutate-until-it-passes loop. Each edition gets at most two candidates
-and 12,000 simulated transitions per candidate, then one certified fallback.
+There is no mutate-until-it-passes loop. Each edition gets at most four candidates
+(`ATTEMPTS` in `src/generation.js`) and 12,000 simulated transitions per
+candidate, then one certified fallback.
 Every rejection, next seed, and fallback choice is a pure function of the date,
 tier, calibration table, and rules version. The fallback builder is an offline authoring tool
 with its own finite scan; it is not an unbounded runtime repair operation.
@@ -98,24 +106,67 @@ searching the entire game tree for every proposed decoration.
 ## Generation and certification
 
 1. The UTC date selects the piece, species, target roles, and first layout. The piece is always white.
-2. A bounded two-ply rollout and beam search try to find a complete route. Search
+2. A bounded search finds a complete route floor by floor, each floor by a
+   two-ply rollout and then a beam search ([The search](#the-search)). Search
    uses fixed transition counts and stable ordering, never a wall-clock timeout.
 3. An independent replay of the returned action list calls the same `act()` used
    by gameplay. It rejects illegal actions, incomplete victories, powerup effects,
-   damage, restarts, and deadline failures. Automatic pickups remain on the board;
-   the route must avoid them rather than simulate a different game.
+   damage, restarts, moves after a clear, and deadline failures. Automatic
+   pickups remain on the board; the route must avoid them rather than simulate
+   a different game.
 4. If the first candidate fails, or its route's difficulty score lies outside
-   the tier's band, a second layout seed is derived from the date and generator
-   version and searched the same way. The generator keeps the first candidate in
-   the band, or else the certified one closest to it (`chooseCandidate`). From
-   Tricky on, a candidate whose route clears any floor in fewer than
-   `minFloorMoves` (4) moves is rejected like an unsolved one (no freebie
-   floors); `certify` rejects such a stored or remembered route too, and the
-   fallback bank is built and verified to the same rule.
-5. If neither candidate is accepted, the generator selects a previously certified
+   the tier's band, the next layout seed is derived from the date and generator
+   version and searched the same way, up to four candidates (`ATTEMPTS`,
+   `searchCandidates`). The generator keeps the first candidate in the band, or
+   else the certified one closest to it (`chooseCandidate`). From Tricky on, a
+   candidate whose route clears any floor in fewer than `minFloorMoves` (3)
+   moves is rejected like an unsolved one (no freebie floors); `certify`
+   rejects such a stored or remembered route too, and the fallback bank is
+   built and verified to the same rule.
+5. If no candidate is accepted, the generator selects a previously certified
    full-dungeon template for the same tier, piece, and color. Date-specific
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
+
+### The search
+
+`findWinningRoute` (`src/fairness.js`) certifies one floor at a time. Each
+floor is searched from its standard start, the position where the route so
+far arrives, until its challenge is complete; then the route takes the stairs
+at once, which is the only action a cleared floor offers it and costs no
+budget. Three separate searches are enough because nothing that changes a
+floor's play carries over from the floor before but lives: a promoted pawn
+reverts at the stairs, monster tie-breaks and Collapse arrivals count the
+floor's own moves (`monsterTie`), and routes never buy, so gold is irrelevant.
+The run's 50-move cap carries over too.
+
+- **Lives.** A pawn's route may spend 4 of its 8 lives across the run. Each
+  floor's search takes the clear that kept the most lives among those it
+  finds together, and when a later floor can't be certified with the lives
+  left, a floor that spent some is searched again keeping one more. Over 800
+  sampled candidates this lifted pawn days from 63% to 72% solved.
+- **Identity.** The beam merges positions by `positionKey`: everything that
+  decides how a position plays on, with the floor's own move count (tie-breaks,
+  Collapse timing) but not the run's, and without coins, which only pay gold.
+  Classic comparison monsters hash the run's count, so for them it stays.
+- **Distance.** Positions are ranked by progress, captures, lives and the
+  distance to the nearest target, measured in real moves for the player's
+  piece around the room's walls (`targetDistance`, the BFS tables of
+  `src/move-tables.js`; a pawn's count includes promoting on the way), not in
+  coordinates. A target the piece can never land on counts as 10 moves.
+- **Budget.** A candidate's 12,000 transitions are shared by its floors in
+  order, so a quick floor leaves more for the next. Each floor's rollout may
+  spend 2,000 of them (`ROLLOUT_BUDGET`) before its beam (24 wide) takes over.
+  Every limit is a fixed count, so a smaller budget is the same search cut
+  short.
+
+On 800 sampled candidates (8 dates per tier and piece, 4 candidates each,
+current knobs), the per-floor search solved 85% within budget against 78% for
+the whole-run search it replaced, in half the time (380 against 804 ms per
+search). Of the old search's routes, 69% took every floor's stairs right
+after its clear; the rest wandered a cleared room first. Rollout budgets of
+1,000 to 4,000 changed nothing; a 36-wide beam solved about 1 point more at
+30% more time, so the beam stays at 24.
 
 The fallback bank covers all 75 combinations of five difficulty tiers, five
 playable pieces (always white), and plain, ice or collapse rules, each built with that
@@ -308,8 +359,8 @@ count it is. On floor 1 it is exactly the old tie-break.
 
 `classicMonsters: true` on a candidate (comparisons only, never on an edition)
 restores the old monsters on every tier: Gentle smarts and the whole-run move
-count. `node scripts/measure-monsters.mjs` uses it to show what the new
-monsters cost generation (see [Measuring the monsters](#measuring-the-monsters)).
+count. `node scripts/measure-monsters.mjs --classic` uses it to show what the
+new monsters cost generation (see [Measuring the monsters](#measuring-the-monsters)).
 
 ## Difficulty and chess learning
 
@@ -333,9 +384,15 @@ else about the dungeon.
 
 The tier also sets how smart the monsters are ([Smarter monsters by
 tier](#smarter-monsters-by-tier)), the main step from one tier to the next, and
-from Tricky on its `minFloorMoves` (4) rules out freebie floors: every floor of
-the certified route, and so every par, takes at least four moves. The route
-records them as `metrics.floorMoves`.
+from Tricky on its `minFloorMoves` (3) rules out freebie floors: every floor of
+the certified route takes at least three moves. The route records them as
+`metrics.floorMoves`. Each floor's rollout first looks two moves ahead from
+the floor's start, so when the route needs three, the search found no quicker
+clear by its rules (no pickups, no lives past its allowance). The rule was 4
+at first; with two candidates and the old search that sent about 40% of Tricky-and-up days
+to the fallback bank, and three moves was the owner's choice (see [Measuring
+the monsters](#measuring-the-monsters)). `minFloorMoves` may also list each
+floor's own minimum (`floorMinimums`), which tooling uses to price other rules.
 
 **The score.** Every certified edition gets one number from its certificate's
 verifier metrics and its piece (`difficultyScore`):
@@ -379,8 +436,9 @@ every knob, and `validateSave` rejects a save whose knobs differ from the
 edition's.
 
 **Calibration.** `npm run calibrate:difficulty` (`scripts/calibrate-difficulty.mjs`)
-searches both candidate layouts of ten dates per piece under a grid of knob
-settings, with the runtime search budget, in parallel workers. It then replays
+searches every candidate layout generation may try (four) of ten dates per
+piece under a grid of knob settings, with the runtime search budget, in
+parallel workers. It then replays
 `chooseCandidate` for every tier, setting and threat minimum, and keeps the
 cheapest setting per (tier, piece): distance outside the band, days outside the
 band, and fallbacks (ten times as costly as a missed day, since they repeat a layout) all cost. Search time no longer counts by default, because editions are certified at build time (`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on searches over 1.5 times as slow as the piece's plain layout. It writes `src/calibration.js` (the table plus
@@ -486,19 +544,56 @@ the grid, add a knob, or move the bands.
 
 ## Measuring the monsters
 
-`node scripts/measure-monsters.mjs` prices smarter monsters and the
-no-freebie-floor rule. For 16 real dates per (tier, piece) (`--samples`), half
-plain and a quarter each ice and collapse, it searches both candidates with
-the current knobs twice: *old* (`classicMonsters`, no minimum floor moves:
-exactly how editions were certified before; its choices matched the shipped
-`src/editions.js` on all 385 sampled dates inside its window) and *new*. It
-replays `chooseCandidate` and prints, per tier and per tier and piece, how
-often each candidate certifies, the fallback share, par per floor, the score
-and how many candidates the freebie rule rejected, plus two what-ifs for the
-new monsters: no freebie rule, and `--attempts N` candidates instead of two.
-It takes about four minutes on seven workers.
+`node scripts/measure-monsters.mjs` prices the no-freebie-floor rule, rule by
+rule. For 16 real dates per (tier, piece) (`--samples`), half plain and a
+quarter each ice and collapse, it searches every candidate generation may try
+(four; `--attempts`) with the current knobs, the tier's monsters and the
+production search, then replays `chooseCandidate` under each rule: every floor
+at least 3 moves (adopted), every floor at least 4, floor 1 at least 4, and
+none (Gentle and Fair have no rule under any of them). It prints the fallback
+share per rule by tier, the adopted rule first, plus the adopted rule with only
+the first two candidates; then per tier and per tier and piece how often each
+candidate certifies, the route's moves per floor, the score and search time.
+`--classic` also searches the classic monsters and adds their fallback share
+with no rule, which prices the smarts themselves. 16 dates take under two
+minutes on seven workers.
 
-Its first run (2026-11-07, 400 dates, knobs still calibrated for the old
+### The freebie rule with the per-floor search
+
+Run 2026-11-07 with the per-floor search and four candidates, 32 dates per
+tier and piece (800 dates, 3,200 searches, under four minutes), before
+recalibration: the knobs were still fitted for the whole-run search, two
+candidates and a four-move rule. Share of days that fall back to the bank:
+
+| Rule | Gentle | Fair | Tricky | Tough | Fiendish | Tricky to Fiendish | All |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Every floor ≥3 moves (adopted) | 3% | 1% | 18% | 11% | 8% | 12% | 8% |
+| Every floor ≥4 moves | 3% | 1% | 34% | 25% | 15% | 25% | 16% |
+| Floor 1 ≥4 moves | 3% | 1% | 19% | 11% | 9% | 13% | 8% |
+| No rule | 3% | 1% | 4% | 2% | 0% | 2% | 2% |
+| Every floor ≥3, first two candidates only | 8% | 7% | 26% | 21% | 17% | 21% | 16% |
+
+- The same rules priced with the whole-run search and two candidates sent
+  40%, 21%, 21% and 6% of Tricky-and-up days to the bank (see below); the
+  per-floor search and four candidates cut that to 25%, 12%, 13% and 2%.
+- The adopted rule still sends 12% of Tricky-and-up days to the bank, 10
+  points of it for quick floors. Bishops pay most (Tricky 44%, Tough 41%):
+  37% of their solved Tricky-and-up candidates clear floor 1 or 2 in under
+  three moves, against 27% for queens, 24% for knights, 13% for rooks and 3%
+  for pawns. The king floor almost never falls that fast.
+- What is left without any rule is the search: pawn candidates go unsolved
+  most often (36% of Tricky-and-up searches, against 20% for bishops and
+  10–14% for the rest), so Gentle and Tricky pawn days fall back 16% and 19%
+  of the time even with no rule.
+- Recalibration will move these numbers; rerun the script after it.
+
+### Pricing the smarter monsters (first run)
+
+The script's first version compared *old* monsters (`classicMonsters`, no
+minimum floor moves: exactly how editions were certified before; its choices
+matched the shipped `src/editions.js` on all 385 sampled dates inside its
+window) with *new* ones, using the whole-run search and two candidates. Its
+first run (2026-11-07, 400 dates, knobs still calibrated for the old
 monsters), old → new:
 
 | Tier | Candidate 1 certifies | Candidate 2 certifies | Fallback | No freebie rule | 4 candidates | Median par F1/F2/F3 | Median total par | Mean score |
