@@ -456,13 +456,13 @@ day is for the human-like bot than for the certifying search. Generation plays
 the bot on every solved candidate's route (`searchCandidate`, with the seeds
 and the default recruit policy of the edition's par, `humanPar`'s own
 default), so a generated edition's par comes from the very runs its band was
-judged on. Everything below was measured with that default on Auto; par is
-moving to a steered recruit, which changes the numbers a lot ([With a steered
-recruit](#with-a-steered-recruit)).
+judged on. The measurements in this section were taken with that default on
+Auto, before par steered its recruit; [Stage 2 bands](#stage-2-bands) has the
+numbers the tiers use now.
 
     per run   = won ? clamp(bot's moves − route's moves, 0, 10) : 10
     per floor = mean of the floor's five runs
-    gap       = floor 1 + floor 2 + ½ × floor 3     (0 to 25, rounded to tenths)
+    gap       = floor 1 + floor 2 + floor 3     (0 to 30, rounded to tenths)
 
 - **A run counts 0 to 10 extra moves** (`GAP_RUN_CAP`), and a failed run
   counts 10: a slow floor's worth, about the 90th percentile of winning runs'
@@ -473,13 +473,14 @@ recruit](#with-a-steered-recruit)).
 - **A run that beats the route counts 0.** The route is a witnessed one, not
   the shortest (the search wanders on some king floors), so a bot that beats
   it found the floor easy, not "negatively hard".
-- **The king floor counts half** (`GAP_FLOOR_WEIGHTS`). The tiers' monster
-  smarts never reach it (royal rules), and on Auto the bot doesn't steer its
-  recruit there while certificates lean on theirs: it fails 72% of a bishop's
-  king-floor runs and 32% of a rook's, nearly all by running out of moves,
-  against 7% of a knight's or queen's, and the knobs hardly move that (a
-  bishop's king floor alone kept about 8 of its 10 at every tier). Steering
-  removes most of that, so revisit the weight when par steers.
+- **Every floor counts the same** (`GAP_FLOOR_WEIGHTS` [1, 1, 1]). The king
+  floor counted half while the bot left its recruit on Auto: the tiers'
+  monster smarts never reach it (royal rules), and certificates lean on
+  their recruit there, so the bot failed 72% of a bishop's king-floor runs
+  and 32% of a rook's, nearly all by running out of moves, against 7% of a
+  knight's or queen's (a bishop's king floor alone kept about 8 of its 10 at
+  every tier). With par's steered recruit and a king recruit on every king
+  floor it fails 0 to 18%, as on floors 1 and 2, so it counts in full.
 - **Pawn days stay hard, and noisy, for the bot on Auto.** A pawn day's relic
   always sits on the pawn's own file, and the bot never takes it, so its pawn must
   capture its way around and often stands still under attack: about half of
@@ -531,11 +532,11 @@ hard: 13 walls, 4 decoys, all guards, scattered targets):
 | Queen | 0.9 / 3.7 / 11.3 | all fall back / all fall back / 15.4 |
 
 On Fiendish, easy rook and queen layouts fall in under three moves, so the
-freebie rule sends them all to the bank. **The bands** (for the bot on Auto,
-as in the code today) rise by 3 a tier:
-Gentle 5–8, Fair 8–11, Tricky 11–14, Tough 14–17, Fiendish 17–20. Gentle is
+freebie rule sends them all to the bank. **The bands** for the bot on Auto
+(replaced in stage 2, [below](#stage-2-bands)) rose by 3 a tier:
+Gentle 5–8, Fair 8–11, Tricky 11–14, Tough 14–17, Fiendish 17–20. Gentle was
 where rook, knight, bishop and queen layouts reach at their easiest; Fiendish
-is where the hardest reach (the current Fiendish knobs give 16 to 17, and the
+where the hardest reach (the Fiendish knobs then gave 16 to 17, and the
 best of four candidates lifts that). A band is about two thirds of one
 setting's day-to-day spread (sd 4.4; a date's four candidates differ by 2.9),
 so the candidate choice matters. Under the score's knobs only 25% of days
@@ -596,7 +597,43 @@ below. The switch, in order:
 
 The calibration data's behaviour fingerprint (below) changes with the default
 policy, so data measured with the bot on Auto is refused even if a version
-bump is forgotten.
+bump is forgotten. All four steps are done; the measurement and the bands are
+in [Stage 2 bands](#stage-2-bands).
+
+### Stage 2 bands
+
+Measured 2026-11-07 under the stage 2 rules: par's steered recruit (the bot
+steps onto a relic that blocks its pawn's file), a king recruit on every king
+floor, no capture on the turn a recruit joins, pawn recruits only on open
+files, rules version 7. Twelve dates per piece from 2026-11-07 (half plain, a
+quarter each ice and collapse), the same dates under every tier's monsters,
+and each date's first candidate generation would accept (solved, the threat
+minimum, no freebie floor on Tricky and up), bands ignored. Capped gap with
+every floor in full; in brackets, the share of days with no acceptable
+candidate (the fallback bank):
+
+| Piece | Gentle: easy / plain / hard / live knobs | Fiendish: easy / plain / hard / live knobs |
+| --- | --- | --- |
+| Pawn | 0.6 (92%) / 2.7 / 10.4 / 2.6 (33%) | all fall back / 8.1 (8%) / 12.9 / 9.9 (8%) |
+| Rook | 0.3 / 3.3 / 8.6 / 6.3 | all fall back / all fall back / 14.8 (8%) / 15.1 |
+| Knight | 4.4 / 8.4 / 11.5 / 1.9 | 9.3 (67%) / 16.3 (50%) / 13.9 / 12.4 (8%) |
+| Bishop | 4.0 / 5.5 / 10.1 / 4.9 | 8.5 (67%) / 12.7 (33%) / 14.1 (8%) / 14.1 (8%) |
+| Queen | 0.6 / 4.2 / 8.7 / 9.0 | all fall back / all fall back / 14.1 (8%) / 14.0 (8%) |
+
+The live knobs (still fitted to the Auto bands) average 4.9 / 7.5 / 9.7 /
+11.3 / 13.1 by tier, Gentle to Fiendish (3.7 / 6.0 / 8.0 / 10.0 / 11.1 with
+the king floor at half). With them the bot fails 0 to 18% of king-floor runs
+(rook 2 to 18%, pawn 0 to 12%, the others 0 to 5%), as on floors 1 and 2
+(0 to 27%), so the king floor now counts in full. Easy layouts reach a gap
+under 1 for a rook or queen but about 4 for a bishop, and fall back on
+Tricky and up (a floor in under three moves). The hardest layouts reach 13 to
+15 on Fiendish, a pawn's 13.
+
+**The bands** rise by 2.5 a tier: Gentle 2.5–5, Fair 5–7.5, Tricky 7.5–10,
+Tough 10–12.5, Fiendish 12.5–15. Gentle starts where the easiest bishop and
+plain pawn layouts sit; Fiendish ends where the hardest layouts reach, and
+the choice among four candidates lifts a pawn's 13 into it. As before, a band
+is about two thirds of one setting's day-to-day spread.
 
 **The score** (for reference). Every certified edition also gets one number
 from its certificate's verifier metrics and its piece (`difficultyScore`). It

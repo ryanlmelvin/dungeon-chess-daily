@@ -21,16 +21,11 @@ export const HUMAN_MOVE_CAP = 40;
  * Tiers from easiest to hardest. `band` is the [low, high] target range of
  * cappedGap() for a certified edition of that tier; neighbors share a
  * boundary. The weekday, not the gap, picks an edition's tier. The bands
- * follow the gaps measured under these rules (docs/generation.md, "The
- * capped human gap"): Gentle is what rook, knight, bishop and queen layouts
- * reach at their easiest, Fiendish what their hardest reach (16 to 18 for a
- * single candidate; generation picks among four). A single candidate's pawn
- * gap averages 11 or more on any Gentle layout (the bot never takes the relic
- * on its pawn's file), so Gentle pawn days lean on that choice. Bands are 3
- * wide, about two thirds of one setting's day-to-day spread. They were
- * measured with the bot's recruit on Auto: par is moving to a steered
- * recruit, which lowers every tier's gap by 4 to 5, so the bands must move
- * with it (docs/generation.md, "With a steered recruit").
+ * follow the gaps measured under these rules, with par's steered recruit
+ * (docs/generation.md, "Stage 2 bands"): Gentle starts where the easiest
+ * bishop and plain pawn layouts sit, Fiendish ends where the hardest layouts
+ * reach (13 to 15 for a single candidate; generation picks among four).
+ * Bands are 2.5 wide, about two thirds of one setting's day-to-day spread.
  * The rank also sets how smart the monsters are (src/monster-ai.js).
  * `minFloorMoves`: a certified route must spend at least that many moves on
  * every floor (no freebie floors); generation rejects a candidate that clears
@@ -39,11 +34,11 @@ export const HUMAN_MOVE_CAP = 40;
  * that to compare rules).
  */
 export const DIFFICULTY_TIERS = Object.freeze({
-  gentle: Object.freeze({ rank: 1, name: 'Gentle', band: Object.freeze([5, 8]), minFloorMoves: 0 }),
-  fair: Object.freeze({ rank: 2, name: 'Fair', band: Object.freeze([8, 11]), minFloorMoves: 0 }),
-  tricky: Object.freeze({ rank: 3, name: 'Tricky', band: Object.freeze([11, 14]), minFloorMoves: 3 }),
-  tough: Object.freeze({ rank: 4, name: 'Tough', band: Object.freeze([14, 17]), minFloorMoves: 3 }),
-  fiendish: Object.freeze({ rank: 5, name: 'Fiendish', band: Object.freeze([17, 20]), minFloorMoves: 3 }),
+  gentle: Object.freeze({ rank: 1, name: 'Gentle', band: Object.freeze([2.5, 5]), minFloorMoves: 0 }),
+  fair: Object.freeze({ rank: 2, name: 'Fair', band: Object.freeze([5, 7.5]), minFloorMoves: 0 }),
+  tricky: Object.freeze({ rank: 3, name: 'Tricky', band: Object.freeze([7.5, 10]), minFloorMoves: 3 }),
+  tough: Object.freeze({ rank: 4, name: 'Tough', band: Object.freeze([10, 12.5]), minFloorMoves: 3 }),
+  fiendish: Object.freeze({ rank: 5, name: 'Fiendish', band: Object.freeze([12.5, 15]), minFloorMoves: 3 }),
 });
 export const TIER_IDS = Object.freeze(Object.keys(DIFFICULTY_TIERS));
 
@@ -131,16 +126,13 @@ export function humanGap({ results, certified }, cap = HUMAN_MOVE_CAP) {
 /** In the capped human gap, no run counts more than this many extra moves, and a failed run counts exactly this. */
 export const GAP_RUN_CAP = 10;
 /**
- * How much each floor counts in the capped human gap. The king floor counts
- * half: the tiers' monster smarts never reach it (it keeps its royal rules),
- * and the human-like bot doesn't steer its recruit there while the
- * certificate leans on it. It fails 72% of a bishop's king-floor runs and 32%
- * of a rook's (7% of a knight's or queen's), mostly by running out of moves,
- * and the knobs hardly change that (docs/generation.md). With a steered
- * recruit those failures fall to 2-14%, like floors 1 and 2: when par
- * steers, measure again and likely count the king floor in full.
+ * How much each floor counts in the capped human gap: all three the same.
+ * The king floor counted half while par's bot left its recruit on Auto there
+ * and failed 72% of a bishop's king-floor runs. With the steered recruit par
+ * assumes and a king recruit on every king floor, the bot fails 0-18% of
+ * king-floor runs, as on floors 1 and 2 (docs/generation.md, "Stage 2 bands").
  */
-export const GAP_FLOOR_WEIGHTS = Object.freeze([1, 1, 0.5]);
+export const GAP_FLOOR_WEIGHTS = Object.freeze([1, 1, 1]);
 
 /**
  * The capped human gap: what the tiers' bands measure (DIFFICULTY_TIERS),
@@ -151,7 +143,7 @@ export const GAP_FLOOR_WEIGHTS = Object.freeze([1, 1, 0.5]);
  * GAP_RUN_CAP, which is also what a failed run counts; per floor, the mean
  * of its runs; then the floors' sum, weighted by GAP_FLOOR_WEIGHTS and
  * rounded to tenths. 0 is a day the bot plays as well as the search; the
- * most is 25. Unlike humanGap, one hopeless floor (the bot's blind spots,
+ * most is 30. Unlike humanGap, one hopeless floor (the bot's blind spots,
  * mostly king floors and pawn days) can't swamp the others: it costs at most
  * 10, a slow floor's worth.
  */

@@ -13,14 +13,14 @@ const lost = (moves = 12) => ({ won: false, moves, livesLost: 2 });
 
 test('each run counts its moves past the route, from 0 up to the cap, and a failed run counts the cap', () => {
   assert.equal(GAP_RUN_CAP, 10);
-  assert.deepEqual([...GAP_FLOOR_WEIGHTS], [1, 1, 0.5], 'the king floor counts half');
+  assert.deepEqual([...GAP_FLOOR_WEIGHTS], [1, 1, 1], 'every floor counts the same');
   const certified = [5, 6, 8];
   // Floor 1: 2 and 4 moves past the route. Floor 2: beating the route counts 0,
   // a very slow win no more than the cap. Floor 3: a win on the route and a failure.
   const gap = cappedGap({ results: [[won(7), won(9)], [won(4), won(30)], [won(8), lost()]], certified });
-  assert.equal(gap, (2 + 4) / 2 + (0 + 10) / 2 + 0.5 * (0 + 10) / 2);
+  assert.equal(gap, (2 + 4) / 2 + (0 + 10) / 2 + (0 + 10) / 2);
   assert.equal(cappedGap({ results: [[won(5)], [won(6)], [won(8)]], certified }), 0, 'the bot as quick as the search');
-  assert.equal(cappedGap({ results: [[lost()], [lost(40)], [lost(3)]], certified }), 2.5 * GAP_RUN_CAP, 'every run failed: the most a day measures');
+  assert.equal(cappedGap({ results: [[lost()], [lost(40)], [lost(3)]], certified }), 3 * GAP_RUN_CAP, 'every run failed: the most a day measures');
   assert.equal(cappedGap({ results: [[won(6), won(5), won(5)], [won(6)], [won(8)]], certified }), 0.3, 'rounded to tenths');
 });
 
