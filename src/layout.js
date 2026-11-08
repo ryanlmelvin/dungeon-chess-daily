@@ -11,8 +11,10 @@
 //   the margin right of it (wide screens, and phones held sideways);
 // - stacked: the objective sits centered on top and a strip below holds the
 //   log and tip (phones and tablets held upright).
-// Either way Wait sits just above the board's top-right corner, or beside that
-// corner when there is no room above it.
+// Beside, Wait sits just above the board's top-right corner, or beside that
+// corner when there is no room above it. Stacked, the page can carry Wait in
+// the objective panel's row (panels.waitInline), so the board needs no room
+// for it at all.
 
 // The narrowest side margin the objective panel and log are given beside the board.
 export const SIDE_MARGIN_MIN = 170;
@@ -76,7 +78,14 @@ export function planBoardLayout({ width, height, natural, panels }) {
   const stackedAt = (s, low) => box('stacked', s, naturalLeft(s), clamp(naturalTop(s), low, floor - hB * s), ceiling);
   const above = stackedAt(sAbove, Math.max(ceiling, waitRow - (overDoor(sAbove) ? 0 : gapR * sAbove)));
   const corner = stackedAt(sCorner, ceiling);
-  const stacked = corner.wait === 'beside' && sCorner > sAbove + 1e-3 ? corner : above;
+  let stacked = corner.wait === 'beside' && sCorner > sAbove + 1e-3 ? corner : above;
+  if (panels.waitInline) {
+    // Same size as with Wait in its own row, but top-aligned: the freed row and
+    // any spare height go to the message log below, not to a bigger board.
+    const s = stacked.scale;
+    const top = ceiling;
+    stacked = { ...box('stacked', s, naturalLeft(s), top, ceiling), wait: 'inline', waitLeft: null, waitTop: null };
+  }
 
   // Beside: side margins at least SIDE_MARGIN_MIN. The status corner either
   // stays above the board (centered, door below the status) or, when that

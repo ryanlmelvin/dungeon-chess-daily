@@ -253,7 +253,7 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeFirstTip(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pendingOrder()) { orderAt({ x, y }); return; }
       if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
@@ -360,8 +360,15 @@ function showGameFeedback() {
     }
     return line;
   }));
-  box.classList.toggle('scrollable', messageLog.length > 2);
-  box.hidden = !messageLog.length;
+  // Before the first move the log opens with how to play a turn.
+  if (state.turns === 0 && !pendingOrder()) {
+    const tip = document.createElement('p');
+    tip.className = 'log-tip';
+    tip.textContent = 'Tap your piece for legal moves. Tap Wait to skip a turn.';
+    box.prepend(tip);
+  }
+  box.classList.toggle('scrollable', box.children.length > 2);
+  box.hidden = !box.children.length;
   fitMessageLog();
 }
 // Exactly the last two lines fit, however they wrap; the rest is a scroll away.
@@ -492,8 +499,6 @@ function updateGame() {
   $('treasure').setAttribute('aria-label', `${state.captures} enemies captured`);
   showGameFeedback();
   if ($('shop-dialog').open) renderShop();
-  $('first-tip').hidden = state.turns > 0 || holding;
-  placeFirstTip();
   paintBoard();
   fitMessageLog();
   syncMusic();
@@ -507,10 +512,10 @@ function placeMessageLog() {
   box.style.top = box.style.left = box.style.width = '';
   const board = renderer?.boardRect?.();
   if (!board || replay || box.hidden) return;
-  // Whatever sits low on the screen (the install bar, the first-move tip; on
+  // Whatever sits low on the screen (the install bar; on
   // short screens the objective or stairs button) is the floor the log stays above.
   const origin = $('dungeon').getBoundingClientRect().top;
-  const floor = Math.min(board.height, ...['pwa-bar', 'first-tip', 'objective', 'descend-button'].map((id) => {
+  const floor = Math.min(board.height, ...['pwa-bar', 'objective', 'descend-button'].map((id) => {
     const rect = $(id).getBoundingClientRect();
     return rect.height && !$(id).classList.contains('beside') && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
   })) - 8;
@@ -543,9 +548,21 @@ function placeMessageLog() {
 // shrinks and slides down to keep the door clear. The sizes are only updated
 // while the panel shows, so the board doesn't jump when the stairs open.
 let waitSize = null;
+let stackedTop = null;
+// Stacked on top, the objective carries Wait at the end of its Targets and Hint
+// row, so Wait needs no row of its own above the board. Beside, Wait stands alone.
+function dockWait(inline) {
+  const wait = $('wait-button');
+  const panel = $('objective');
+  if (inline && wait.parentElement !== panel) panel.append(wait);
+  if (!inline && wait.parentElement === panel) $('descend-button').before(wait);
+  wait.classList.toggle('inline', inline);
+  if (inline) wait.style.top = wait.style.left = '';
+}
 function reserveObjectiveRoom() {
   const panel = $('objective');
   if (!renderer?.setPanels || replay) return;
+  if (panel.hidden) dockWait(false);
   if (panel.hidden && renderer.layout()?.mode !== 'natural') return;
   const area = $('dungeon').getBoundingClientRect();
   const status = document.querySelector('.game-status').getBoundingClientRect();
@@ -554,6 +571,7 @@ function reserveObjectiveRoom() {
   if (wait.offsetWidth) waitSize = { width: wait.offsetWidth, height: wait.offsetHeight };
   // Measure the panel where it sits on top, centered under the status corner.
   panel.classList.remove('beside');
+  dockWait(!panel.hidden);
   panel.style.width = panel.style.left = panel.style.top = '';
   const statusBottom = status.height ? status.bottom - area.top : 0;
   const cssTop = panel.getBoundingClientRect().top - area.top;
@@ -566,12 +584,15 @@ function reserveObjectiveRoom() {
     status: { right: Math.ceil(status.right - area.left), bottom: Math.ceil(statusBottom) },
     menu: menu.height ? { left: Math.floor(menu.left - area.left), bottom: Math.ceil(menu.bottom - area.top) } : null,
     wait: waitSize || { width: 80, height: 44 },
+    waitInline: !panel.hidden,
   });
   if (panel.hidden) return;
   if (renderer.layout()?.mode !== 'beside') {
+    stackedTop = stackTop;
     panel.style.top = `${Math.round(stackTop)}px`;
     return;
   }
+  dockWait(false);
   const board = renderer.layout();
   const width = Math.min(board.left - 24, 320);
   panel.classList.add('beside');
@@ -580,34 +601,21 @@ function reserveObjectiveRoom() {
   // Below the gold, moves and lives in the top-left corner.
   panel.style.top = `${Math.round(Math.max(board.rowTop, statusBottom + 10))}px`;
 }
-// The first-move tip sits under the board. When it would cover the board's
-// bottom row (a wide screen, where the board fills the height) it moves into
-// the empty margin right of the board instead, level with the bottom row.
-function placeFirstTip() {
-  const tip = $('first-tip');
-  tip.classList.remove('beside');
-  tip.style.top = tip.style.left = tip.style.width = '';
-  const board = renderer?.boardRect?.();
-  if (!board || tip.hidden || replay) return;
-  const origin = $('dungeon').getBoundingClientRect().top;
-  const rect = tip.getBoundingClientRect();
-  if (rect.top - origin >= board.bottom + 4) return;
-  const room = board.width - board.right - 24;
-  if (room < 120) return;
-  const width = Math.min(room, 320);
-  tip.classList.add('beside');
-  tip.style.width = `${Math.round(width)}px`;
-  tip.style.left = `${Math.round(board.right + 12)}px`;
-  tip.style.top = `${Math.round(board.bottom - tip.offsetHeight)}px`;
-}
-// Wait is the one action button off the board, so it sits on its own just
-// above the board's top-right corner, apart from the informational panels. With
-// no room there (a short screen) it goes beside the corner. The board layout
-// keeps room for it (layout.js) and says where.
+// Wait is the one action button off the board. Stacked, it rides in the
+// objective's row (dockWait); beside, it sits just above the board's top-right
+// corner, or beside the corner when there is no room above it. The board
+// layout keeps room for it (layout.js) and says where.
 function placeWaitButton() {
   const button = $('wait-button');
   const board = renderer?.layout?.();
-  if (!board || button.hidden) return;
+  if (!board || button.hidden || button.classList.contains('inline')) return;
+  // The stairs hid the objective but Wait stays for the cave-in: it takes the
+  // objective's empty row, right-aligned over the board.
+  if (board.wait === 'inline') {
+    button.style.top = `${Math.round(stackedTop ?? board.doorTop)}px`;
+    button.style.left = `${Math.round(board.right - button.offsetWidth)}px`;
+    return;
+  }
   button.style.top = `${Math.round(board.waitTop)}px`;
   button.style.left = `${Math.round(board.wait === 'beside' ? board.waitLeft : board.right - button.offsetWidth)}px`;
 }

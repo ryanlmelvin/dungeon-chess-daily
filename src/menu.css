@@ -185,6 +185,7 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .game-objective:not(.beside) #objective-text { flex-basis: 100%; }
 .game-objective:not(.beside) .target-row { flex-basis: auto; }
 .game-objective:not(.beside) .hint-button { order: 2; padding: 2px 10px; }
+.game-objective .wait-button.inline { position: static; order: 3; pointer-events: auto; flex: none; min-height: 32px; padding: 2px 12px 3px; font-size: 20px; }
 /* Tools bought in the shop sit beside the lives, only while one is held. */
 .life-row { flex-basis: 100%; display: flex; align-items: center; gap: 12px; }
 .life-row .life-markers { flex-basis: auto; }
@@ -208,7 +209,6 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .hint-pager[hidden] { display: none; }
 dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px; line-height: 1; color: var(--gold); }
 #hint-page { min-width: 5ch; text-align: center; font-size: 20px; color: #bdb1bf; }
-.first-tip { font-size: 20px; line-height: 1.2; }
 .game-message, .notice, .webgl-error { font-size: 20px; line-height: 1.2; }
 .result-paper { --paper: #c9c9c7; --ink: #252525; }
 .result-paper h2 { font: 400 48px/1 'Jacquard 24', 'VT323', monospace; letter-spacing: 0; }
@@ -227,7 +227,6 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
   dialog, .pwa-dialog, #menu-dialog { padding: 16px; }
   .dialog-heading h2, dialog h2, #guide-title { font-size: 32px; }
   .game-status { left: calc(env(safe-area-inset-left, 0px) + 12px); gap: 6px 10px; }
-  .first-tip { font-size: 18px; }
 }
 @media (max-width: 350px) {
   .wordmark { font-size: 18px; }
@@ -238,7 +237,8 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
   .sound-setting input::before { display: none; }
 }
 
-/* Install and update stay on screen at every step, never only inside a menu. */
+/* Install stays on screen on the paper and results, never only inside a menu;
+   while a floor is in play only an update shows, so the log keeps the room. */
 :root { --pwa-bar-h: calc(44px + env(safe-area-inset-bottom, 0px)); }
 .pwa-bar {
   position: fixed;
@@ -271,8 +271,10 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
 .pwa-bar button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 .pwa-bar .update-button { color: var(--gold); border-color: var(--gold); }
 body:has(.pwa-bar button:not([hidden])) { padding-bottom: calc(var(--pwa-bar-h) + 8px); }
+body.playing #install-button { display: none; }
+body.playing .pwa-bar:not(:has(.update-button:not([hidden]))) { display: none; }
 body.playing:has(.pwa-bar button:not([hidden])) { padding-bottom: 0; }
-body.playing:has(.pwa-bar button:not([hidden])) .game-screen { bottom: var(--pwa-bar-h); }
+body.playing:has(.pwa-bar .update-button:not([hidden])) .game-screen { bottom: var(--pwa-bar-h); }
 body:has(.pwa-bar button:not([hidden])) .notice { bottom: calc(var(--pwa-bar-h) + 12px); }
 
 /* Archive: past editions with this device's saved result for each. */

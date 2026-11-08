@@ -57,12 +57,13 @@ const heights = [320, 360, 375, 390, 412, 430, 480, 568, 600, 667, 720, 768, 800
 
 test('no page panel covers a square or the door at any viewport', () => {
   const problems = [];
-  for (const width of widths) for (const height of heights) for (const wideStatus of [false, true]) {
+  for (const width of widths) for (const height of heights) for (const wideStatus of [false, true]) for (const waitInline of [false, true]) {
     // A screen this small in both directions (no real phone) has no room for any arrangement.
     if (width < 400 && height < 480) continue;
-    const where = `${width}x${height}${wideStatus ? ' (wide status)' : ''}`;
+    const where = `${width}x${height}${wideStatus ? ' (wide status)' : ''}${waitInline ? ' (Wait inline)' : ''}`;
     const cam = camera(width, height);
     const { panels, stackTop, objectiveWidth } = panelsFor(width, wideStatus);
+    panels.waitInline = waitInline;
     const plan = planBoardLayout({ width, height, natural: naturalBox(cam, width, height), panels });
     applyPlan(cam, width, plan, height);
     const box = naturalBox(cam, width, height);
@@ -78,10 +79,13 @@ test('no page panel covers a square or the door at any viewport', () => {
     if (!(box.left >= 0 && box.right <= width && box.doorTop >= 0 && box.bottom <= height)) problems.push(`${where}: board off screen`);
     clear('status', { left: 12, right: panels.status.right, top: 10, bottom: panels.status.bottom });
     clear('menu', { left: panels.menu.left, right: width - 9, top: 8, bottom: panels.menu.bottom });
-    const wait = { left: plan.waitLeft, top: plan.waitTop };
-    Object.assign(wait, { right: wait.left + 72, bottom: wait.top + 40 });
-    clear('Wait', wait);
-    if (!(wait.right <= width && wait.top >= 0)) problems.push(`${where}: Wait off screen`);
+    // Inline, Wait rides in the objective panel, which is checked below.
+    const inline = plan.wait === 'inline';
+    if (inline && plan.mode !== 'stacked') problems.push(`${where}: Wait inline while ${plan.mode}`);
+    const wait = inline ? { left: 0, top: 0, right: 0, bottom: 0 } : { left: plan.waitLeft, top: plan.waitTop };
+    if (!inline) Object.assign(wait, { right: wait.left + 72, bottom: wait.top + 40 });
+    if (!inline) clear('Wait', wait);
+    if (!inline && !(wait.right <= width && wait.top >= 0)) problems.push(`${where}: Wait off screen`);
     if (plan.mode === 'beside') {
       // Objective and log share the left margin, the tip the right one.
       if (!(box.left - 24 >= 140)) problems.push(`${where}: left margin too narrow for the objective`);
@@ -113,5 +117,17 @@ test('phones and upright tablets stack the objective above the board', () => {
     const plan = planBoardLayout({ width, height, natural: naturalBox(cam, width, height), panels: panelsFor(width, false).panels });
     assert.equal(plan.mode, 'stacked', `${width}x${height}`);
     assert.ok(plan.scale > 0.8, `${width}x${height}: board shrank to ${plan.scale}`);
+  }
+});
+
+test('Wait carried in the objective row frees its row for the board and log', () => {
+  for (const [width, height] of [[375, 667], [390, 844], [440, 760]]) {
+    const cam = camera(width, height);
+    const { panels } = panelsFor(width, false);
+    const own = planBoardLayout({ width, height, natural: naturalBox(cam, width, height), panels });
+    const inline = planBoardLayout({ width, height, natural: naturalBox(cam, width, height), panels: { ...panels, waitInline: true } });
+    assert.equal(inline.wait, 'inline', `${width}x${height}`);
+    assert.ok(Math.abs(inline.scale - own.scale) < 1e-6, `${width}x${height}: board changed size`);
+    assert.ok(inline.bottom < own.bottom, `${width}x${height}: no more room below the board`);
   }
 });
