@@ -80,6 +80,7 @@ music.setEnabled(musicOn);
 let recruitManual = true;
 try { recruitManual = localStorage.getItem(`${prefix}recruit`) !== 'auto'; } catch {}
 $('recruit-control').value = recruitManual ? 'manual' : 'auto';
+$('recruit-auto-note').hidden = recruitManual;
 // Manual control: a move or wait that reaches the recruit's phase shows your
 // move first and waits here for the recruit's order. The turn is played only
 // with the order, as one action, so a save never holds half a turn. It belongs
@@ -1407,7 +1408,7 @@ $('game-menu-button').addEventListener('click',openMenu);
 document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
 $('sound-toggle').addEventListener('change',()=>{sound=$('sound-toggle').checked;try{localStorage.setItem(`${prefix}sound`,sound?'on':'off');}catch{}});
 $('music-toggle').addEventListener('change',()=>{musicOn=$('music-toggle').checked;try{localStorage.setItem(`${prefix}music`,musicOn?'on':'off');}catch{}music.setEnabled(musicOn);music.unlock();syncMusic();});
-$('recruit-control').addEventListener('change',()=>{recruitManual=$('recruit-control').value!=='auto';try{localStorage.setItem(`${prefix}recruit`,recruitManual?'manual':'auto');}catch{}});
+$('recruit-control').addEventListener('change',()=>{recruitManual=$('recruit-control').value!=='auto';try{localStorage.setItem(`${prefix}recruit`,recruitManual?'manual':'auto');}catch{}$('recruit-auto-note').hidden=recruitManual;});
 $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
