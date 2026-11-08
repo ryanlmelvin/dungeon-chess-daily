@@ -55,24 +55,48 @@ export function tierLabel(date, tier = tierForDate(date)) {
   return `Difficulty: ${DIFFICULTY_TIERS[tier].name}`;
 }
 
-/** Knobs used when a (tier, piece) pair has no calibrated row. */
+/**
+ * The plain layout (7 walls, 2 decoys, nothing else): tooling's reference
+ * point, and the residents a (tier, piece) without a calibrated row gets.
+ */
 export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter: 0, guards: 0, screens: 0, minThreatenedDecisions: 2 });
 
 /**
- * Generation knobs for a tier and the day's piece:
- * - obstacleBase: walls on the first floor; each later floor adds one.
- * - decoys (0-4): optional residents beside each floor's targets (usually 2).
- * - minThreatenedDecisions: a certificate must make at least this many moves
- *   with a committed enemy attack lane on the board.
- * - scatter (0/1): non-pawn targets start in the back four rows, off every
- *   line the player's piece covers from its start square (src/rules.js).
- * - guards (0-2): decoys moved beside a target, where they strike a player who takes it.
- * - screens (0-3): walls placed first on the squares that cut the longest open
- *   lines into the targets, so long-range pieces must close in to capture.
+ * The room recipe every tier and piece shares (docs/generation.md, "The
+ * recipe and its dial"): ten walls on the first floor, each later floor
+ * adding one; non-pawn targets scattered off every line the player's piece
+ * covers from its start square, so no floor falls to the first move (pawn
+ * targets and pawn days keep their formations); no screens; and no minimum
+ * of threatened decisions. Measured on the capped human gap, more walls make
+ * a day easier for every piece and certification fail more often, so walls
+ * are not a difficulty dial.
+ */
+export const RECIPE = Object.freeze({ obstacleBase: 10, scatter: 1, screens: 0, minThreatenedDecisions: 0 });
+
+/** The residents dial's range: decoys per floor (never 0) and guards (0 up to the decoys). */
+export const MIN_DECOYS = 1, MAX_DECOYS = 4;
+
+/**
+ * Generation knobs for a tier and the day's piece: the RECIPE, plus the
+ * residents dial from src/calibration.js (CALIBRATION[tier][piece]). From
+ * Gentle to Fiendish the tier's monsters grow smarter (src/monster-ai.js) and
+ * the dial only ever turns up:
+ * - decoys (1-4): residents beside each floor's targets. Never 0: a floor of
+ *   targets alone has one suspect in the paper's lineup, no silver to earn
+ *   and, on the king floor, no royal guard.
+ * - guards (0 up to decoys): decoys moved beside a target, where they strike a
+ *   player who takes it.
+ * The rest come from the recipe: obstacleBase (walls on the first floor; each
+ * later floor adds one), scatter (0/1: non-pawn targets start in the back four
+ * rows, off every line the player's piece covers from its start square,
+ * src/rules.js), screens (walls placed first on the squares that cut the
+ * longest open lines into the targets; 0 here) and minThreatenedDecisions (a
+ * certificate's minimum of moves made with a committed attack lane on the
+ * board). Tooling may pass any knobs to generateDaily.
  */
 export function knobsFor(tier, piece) {
   if (!Object.hasOwn(DIFFICULTY_TIERS, tier)) throw new RangeError('Unknown difficulty tier.');
-  return Object.freeze({ ...DEFAULT_KNOBS, ...(CALIBRATION[tier]?.[piece] ?? {}) });
+  return Object.freeze({ ...DEFAULT_KNOBS, ...RECIPE, ...(CALIBRATION[tier]?.[piece] ?? {}) });
 }
 
 /**

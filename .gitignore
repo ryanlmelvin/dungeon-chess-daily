@@ -6,6 +6,5 @@ test-results/
 playwright-report/
 .env
 .env.*
-scripts/calibration-shortlist.json
 # A full calibration run's data (about 46 MB); re-measure rather than commit it.
 scripts/calibration-data.json

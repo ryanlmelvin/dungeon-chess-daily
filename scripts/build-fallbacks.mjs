@@ -3,7 +3,10 @@
 // has a checked alternative when its bounded search returns unknown.
 // One fallback per (difficulty tier, piece, color, rules-changing modifier),
 // built with that tier's calibrated knobs (src/calibration.js), so re-run this
-// after recalibrating or changing rules.
+// after recalibrating or changing rules. --only-stale keeps every certificate
+// still built for the table's knobs that still replays and searches only for
+// the rest (the build is deterministic, so a full run would rebuild the kept
+// ones unchanged): after refitting a few rows, only their keys are searched.
 import { writeFile } from 'node:fs/promises';
 import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
@@ -51,6 +54,16 @@ if (process.argv.includes('--verify')) {
 } else {
   const budget = Number(process.env.FALLBACK_BUDGET ?? 100_000);
   const bank = {}, best = {}, tries = {};
+  if (process.argv.includes('--only-stale')) {
+    const { FALLBACKS: previous } = await import('../src/fallbacks.js');
+    for (const { tier, piece, key } of wanted) {
+      const entry = previous[key], knobs = knobsFor(tier, piece);
+      if (!entry || JSON.stringify(entry.knobs) !== JSON.stringify(layoutOf(knobs))) continue;
+      const proof = verifyWinningRoute(stateFor(entry, tier, knobs), entry.actions);
+      if (proof.valid && proof.metrics.threatenedDecisions >= knobs.minThreatenedDecisions && !freebieFloor(proof.metrics, tier)) bank[key] = entry;
+    }
+    console.log(`Kept ${Object.keys(bank).length} current certificates; searching for the other ${wanted.length - Object.keys(bank).length}.`);
+  }
   // Prefer a certificate whose capped human gap (the human-like bot on its
   // route, src/difficulty.js cappedGap) lies in the tier's band; settle for
   // the closest after 12 certified tries. A day that falls back plays the
