@@ -558,7 +558,10 @@ function reserveObjectiveRoom() {
   panel.style.width = panel.style.left = panel.style.top = '';
   const statusBottom = status.height ? status.bottom - area.top : 0;
   const cssTop = panel.getBoundingClientRect().top - area.top;
-  const stackTop = Math.max(cssTop, statusBottom + 8);
+  // Stacked, the panel sits just under the status corner and the menu button,
+  // not at a fixed offset, so no dead band opens above the board.
+  const menuBottom = menu.height ? menu.bottom - area.top : 0;
+  const stackTop = statusBottom || menuBottom ? Math.max(statusBottom, menuBottom) + 8 : cssTop;
   renderer.setPanels({
     stackBottom: panel.hidden ? 0 : Math.ceil(stackTop + panel.offsetHeight),
     status: { right: Math.ceil(status.right - area.left), bottom: Math.ceil(statusBottom) },
@@ -567,7 +570,7 @@ function reserveObjectiveRoom() {
   });
   if (panel.hidden) return;
   if (renderer.layout()?.mode !== 'beside') {
-    if (stackTop > cssTop) panel.style.top = `${Math.round(stackTop)}px`;
+    panel.style.top = `${Math.round(stackTop)}px`;
     return;
   }
   const board = renderer.layout();

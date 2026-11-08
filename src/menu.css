@@ -181,6 +181,10 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
 /* The objective stays click-through except for its hint button. */
 .game-objective { display: flex; align-items: center; justify-content: center; gap: 10px; }
+/* Stacked on top: the objective on its own line, then targets and Hint share one row. */
+.game-objective:not(.beside) #objective-text { flex-basis: 100%; }
+.game-objective:not(.beside) .target-row { flex-basis: auto; }
+.game-objective:not(.beside) .hint-button { order: 2; padding: 2px 10px; }
 /* Tools bought in the shop sit beside the lives, only while one is held. */
 .life-row { flex-basis: 100%; display: flex; align-items: center; gap: 12px; }
 .life-row .life-markers { flex-basis: auto; }
@@ -188,7 +192,7 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .game-status .tool-button { font-size: 18px; min-height: 30px; padding: 2px 8px; color: var(--gold); border-color: var(--gold); }
 .tool-tray[hidden] { display: none; }
 .game-status .tool-button[aria-pressed="true"] { color: var(--ink); background: var(--gold); }
-.hint-button { pointer-events: auto; flex: none; font-size: 20px; min-height: 36px; padding: 4px 10px; color: var(--gold); border-color: var(--gold); }
+.hint-button { pointer-events: auto; flex: none; font-size: 20px; min-height: 32px; padding: 4px 10px; color: var(--gold); border-color: var(--gold); }
 .hint-art { display: block; width: min(100%, 240px); height: auto; margin: 0 auto 12px; image-rendering: pixelated; }
 #hint-dialog { max-width: 420px; }
 /* One button for the next hint, priced in moves. */
@@ -235,7 +239,7 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
 }
 
 /* Install and update stay on screen at every step, never only inside a menu. */
-:root { --pwa-bar-h: calc(60px + env(safe-area-inset-bottom, 0px)); }
+:root { --pwa-bar-h: calc(44px + env(safe-area-inset-bottom, 0px)); }
 .pwa-bar {
   position: fixed;
   z-index: 15;
@@ -247,7 +251,7 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
   justify-content: center;
   align-items: center;
   gap: 10px;
-  padding: 8px calc(env(safe-area-inset-right, 0px) + 16px) calc(env(safe-area-inset-bottom, 0px) + 8px) calc(env(safe-area-inset-left, 0px) + 16px);
+  padding: 6px calc(env(safe-area-inset-right, 0px) + 16px) calc(env(safe-area-inset-bottom, 0px) + 6px) calc(env(safe-area-inset-left, 0px) + 16px);
   background: #100f14f2;
   border-top: 2px solid var(--menu-edge);
 }
@@ -258,10 +262,10 @@ dialog .hint-pager button { min-width: 44px; padding: 2px 10px; font-size: 26px;
   border-bottom-color: #443642;
   background: var(--menu-stone);
   box-shadow: 2px 2px 0 var(--menu-shadow);
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1.1;
-  min-height: 44px;
-  padding: 8px 14px;
+  min-height: 30px;
+  padding: 3px 12px;
 }
 .pwa-bar button:hover:not(:disabled) { background: #653942; border-color: #a16a72; }
 .pwa-bar button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
