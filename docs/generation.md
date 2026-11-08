@@ -752,10 +752,15 @@ and then unsolved screens advance). The helpers live in
   against one unlucky date (`--no-surrogate`);
 - monotone dominance: the gap mostly rises with obstacles, decoys, guards and
   screens, so a setting at least as hard as one already `--dominance-margin`
-  (two band widths, 6: one date's gap scatters by about 5) above the tier's
-  band, or at most as hard as one that far below it, is dropped (same scatter
-  only; never by its own mean; never for pawns, whose gap can fall as decoys
-  rise; `--no-dominance`);
+  (two band widths, 5 with the stage 2 bands: one date's gap scatters by about
+  5) above the tier's band, or at most as hard as one that far below it, is
+  dropped (same scatter only; never by its own mean; never for pawns, whose
+  gap can fall as decoys rise; `--no-dominance`). A setting's screened gap is
+  each date's first candidate generation could keep, so on Tricky and up a
+  candidate with a floor under three moves doesn't count: counted, its tiny
+  gap made harder settings look far below the band, and on the first stage 2
+  shortlist dominance dropped 755 of 920 rook settings, leaving Tricky-and-up
+  rook, knight and queen days only the plain layout, which falls back;
 - sequential stopping: finalists share dates and layouts, and one stops gaining
   dates once a paired test shows its per-day cost clearly worse (`--stop-z` 2.5
   standard errors, four dates at least) than the leader's for every tier

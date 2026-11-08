@@ -106,7 +106,7 @@ if (!isMainThread) {
     throw new Error('Usage: node scripts/calibrate-difficulty.mjs [--samples N] [--start YYYY-MM-DD] [--jobs N] [--pieces a,b] [--grid full|quick] [--records file] [--reuse] [--dry-run]');
   }
   const { getRawDaily } = await load('src/edition.js');
-  const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, difficultyScore, bandDistance } = await load('src/difficulty.js');
+  const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, difficultyScore, bandDistance, freebieFloor } = await load('src/difficulty.js');
   const { chooseCandidate, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
   const { RULES_VERSION } = await load('src/rules.js');
   const { HUMAN_BOT_VERSION } = await load('src/human-bot.js');
@@ -316,9 +316,14 @@ if (!isMainThread) {
       }
       const survivors = new Set();
       for (const piece of new Set(alive.map((id) => id.split('|')[0]))) {
-        // Mean screened gap so far: each date's first solved candidate, if any.
+        // Mean screened gap so far: each date's first candidate generation
+        // could keep (solved, and no freebie floor on the setting's tier), if
+        // any. A quick-clear candidate it would reject has a tiny gap; counted,
+        // it made harder settings look far below the band, and dominance
+        // dropped them.
         const ranked = alive.filter((id) => id.startsWith(`${piece}|`)).map((id) => {
-          const gaps = Object.values(screened[piece]?.[id.split('|')[1]] ?? {}).map((found) => found.find((entry) => entry.metrics)).filter(Boolean)
+          const tier = tierOf(id);
+          const gaps = Object.values(screened[piece]?.[id.split('|')[1]] ?? {}).map((found) => found.find((entry) => entry.metrics && !freebieFloor(entry.metrics, tier))).filter(Boolean)
             .map(storedGap).filter((gap) => gap !== null);
           return { id, setting: settingsOf.get(id), mean: gaps.length ? gaps.reduce((sum, value) => sum + value, 0) / gaps.length : null };
         });
