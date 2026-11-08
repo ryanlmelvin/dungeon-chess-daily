@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECE_LIVES } from './pieces.js';
-import { act, legalMoves, dangerTiles, unreachablePickups, royalRules, scoredMoves, recruitChoice } from './rules.js';
+import { act, legalMoves, dangerTiles, unreachablePickups, royalRules, scoredMoves, recruitChoice, whileSearching } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
@@ -244,6 +244,10 @@ function routeFor(node) {
  * cleared, floors it joined, its promotions and bishop-pair hops.
  */
 export function verifyWinningRoute(initial, actions, options) {
+  // Every run-ending transition here is rejected, so restarts are only marked.
+  return whileSearching(() => verifyRoute(initial, actions, options));
+}
+function verifyRoute(initial, actions, options) {
   const mode = recruitMode(options);
   if (!initial || initial.status !== 'playing' || initial.floor !== 0 || initial.turns !== 0
     || initial.records.length !== 0 || hasPowers(initial, mode) || initial.purchases.length !== 0) {
@@ -473,7 +477,11 @@ function searchFloor(start, budget, minHp, mode = AUTO) {
  * keeping one more. The floors share one budget, in order, so a quick floor
  * leaves more for the next.
  */
-export function findWinningRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit } = {}) {
+export function findWinningRoute(initial, budget = {}) {
+  // Every run-ending transition here is rejected, so restarts are only marked.
+  return whileSearching(() => searchRoute(initial, budget));
+}
+function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit } = {}) {
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
     throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
   }

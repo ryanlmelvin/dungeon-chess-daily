@@ -104,14 +104,14 @@ const targetsBesides = (state, foe) => state.enemies.filter((other) => other !==
  * with a held Borrowed move too, and the square is not guarded (taking it
  * would not be an instant hit); or the recruit can capture there.
  */
-function exposureOf(state, engine) {
-  const { movesFor, closeAttacker, borrowedPiece } = engine;
-  const captures = (unit) => movesFor(state, unit).filter((move) => move.capture);
-  const player = captures(state.player);
-  if (state.powers?.leap > 0) player.push(...captures({ ...state.player, piece: borrowedPiece(state) }));
-  const recruit = state.companion ? captures(state.companion) : [];
-  return (square) => recruit.some((move) => same(move, square))
-    || (player.some((move) => same(move, square)) && !closeAttacker(state, square));
+function exposureOf(state, engine, guarded = (square) => Boolean(engine.closeAttacker(state, square))) {
+  const { capturesAt, borrowedPiece } = engine;
+  const { player, companion } = state;
+  const borrowed = state.powers?.leap > 0 ? borrowedPiece(state) : null;
+  // Asked square by square (capturesAt), never building the full capture lists.
+  const takes = (unit, square, piece) => capturesAt(state, unit, false, square.x, square.y, piece);
+  return (square) => Boolean(companion && takes(companion, square))
+    || ((takes(player, square) || (borrowed !== null && takes(player, square, borrowed))) && !guarded(square));
 }
 
 const exposedCount = (targets, exposed) => targets.filter(exposed).length;
@@ -184,7 +184,8 @@ export function screenStep(state, foe, engine) {
 
 /**
  * Pick one of `candidates` (legal, non-capturing steps already filtered by
- * rules.js) for `foe`. `engine` supplies rules.js internals: movesFor,
+ * rules.js) for `foe`. `engine` supplies rules.js internals: movesFor, its
+ * single-question forms capturesAt, strikesPlayer and attackReach,
  * closeAttacker, borrowedPiece and the seeded tie-break `tie(move)` in [0, 1).
  */
 export function chooseMonsterMove(state, foe, candidates, engine) {
@@ -196,9 +197,9 @@ export function chooseMonsterMove(state, foe, candidates, engine) {
     if (safe.length) candidates = safe;
   }
   if (candidates.length < 2) return candidates[0];
-  const { movesFor, closeAttacker, tie } = engine;
+  const { movesFor, capturesAt, attackReach, closeAttacker, tie } = engine;
   const player = state.player;
-  const playerTakes = (square) => movesFor(state, player).some((move) => move.capture && same(move, square));
+  const playerTakes = (square) => capturesAt(state, player, false, square.x, square.y);
   // A square is guarded when taking a monster there would be an instant hit.
   const guarded = (square) => Boolean(closeAttacker(state, square));
   const role = foe.piece;
@@ -213,37 +214,40 @@ export function chooseMonsterMove(state, foe, candidates, engine) {
   const openBefore = screened.length ? exposedCount(screened, exposureOf(state, engine)) : 0;
 
   const score = (move) => at(foe, move, () => {
+    // Whether the step itself is guarded, asked once however many habits ask.
+    let guard;
+    const guardedHere = () => (guard ??= guarded(move));
     let value = 0.35 * distance(move, origin) + 0.7 * tie(move);
     if (role === 'knight') {
-      const reach = movesFor(state, foe, true, true);
-      const covered = destinations.filter((square) => reach.some((tile) => same(tile, square))).length;
+      const reach = attackReach(state, foe);
+      const covered = destinations.filter((square) => reach.has(square)).length;
       value += Math.abs(distance(move, player) - HABITS.knightRange)
-        - (reach.some((tile) => same(tile, player)) ? HABITS.knightAttack : 0)
+        - (reach.has(player) ? HABITS.knightAttack : 0)
         - HABITS.knightCover * Math.min(HABITS.knightCoverCap, covered)
         // From Fair on, the exposure below replaces the knights' own penalty.
         + (smarts < FAIR && playerTakes(move) ? HABITS.knightExposed : 0);
     } else if (LINE_PIECES.has(role)) {
-      const reach = movesFor(state, foe, true, true);
-      const covered = destinations.filter((square) => !same(square, move) && reach.some((tile) => same(tile, square))).length;
+      const reach = attackReach(state, foe);
+      const covered = destinations.filter((square) => !same(square, move) && reach.has(square)).length;
       value += HABITS.sliderApproach * distance(move, player)
         - HABITS.sliderCover * Math.min(HABITS.sliderCoverCap, covered)
-        - Math.min(HABITS.sliderOpenCap, HABITS.sliderOpen * reach.length);
+        - Math.min(HABITS.sliderOpenCap, HABITS.sliderOpen * reach.count);
     } else {
       value += distance(move, player);
       if (role === 'pawn' && state.enemies.some((other) => other !== foe && other.piece === 'pawn'
         && other.y === move.y - 1 && Math.abs(other.x - move.x) === 1)) value -= HABITS.pawnChain;
     }
-    if (threatened && guarded(move)) value -= HABITS.retreat;
+    if (threatened && guardedHere()) value -= HABITS.retreat;
     if (smarts < FAIR) return value;
-    const exposed = exposureOf(state, engine);
+    const exposed = exposureOf(state, engine, (square) => (same(square, move) ? guardedHere() : guarded(square)));
     if (exposed(move)) value += role === 'knight' ? HABITS.knightExposed : HABITS.exposed;
-    if (smarts >= TOUGH && target && role !== 'pawn' && guarded(move)) value -= HABITS.huddle;
+    if (smarts >= TOUGH && target && role !== 'pawn' && guardedHere()) value -= HABITS.huddle;
     if (screened.length) {
       value += HABITS.unscreen * Math.max(0, exposedCount(screened, exposed) - openBefore)
         - (screens(state, move, screened) ? HABITS.screen : 0);
     }
-    if (smarts >= FIENDISH && !target && role !== 'pawn' && guarded(move)
-      && movesFor(state, foe, true, true).some((tile) => tile.capture && same(tile, player))) value -= HABITS.bait;
+    if (smarts >= FIENDISH && !target && role !== 'pawn' && guardedHere()
+      && engine.strikesPlayer(state, foe)) value -= HABITS.bait;
     return value;
   });
   const ranked = candidates.map((move) => ({ move, value: score(move) }));
