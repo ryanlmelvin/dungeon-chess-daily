@@ -1,7 +1,7 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-import { hash, random } from './random.js';
+import { hash, hashMore, random } from './random.js';
 import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
@@ -63,21 +63,41 @@ function same(a, b) { return a.x === b.x && a.y === b.y; }
 function distance(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 function inside(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < 8 && y < 8; }
 export function walkable(state, x, y) { return inside(x, y) && state.map?.[y]?.[x] !== '#'; }
-export function enemyAt(state, x, y) { return state.enemies.find((foe) => foe.x === x && foe.y === y); }
+// Hot in the certification search: a plain loop, no closure per call.
+export function enemyAt(state, x, y) {
+  const { enemies } = state;
+  for (let i = 0; i < enemies.length; i++) if (enemies[i].x === x && enemies[i].y === y) return enemies[i];
+  return undefined;
+}
 
+// Shared, never mutated: a queen's rays and a king's steps.
+const EIGHT_WAYS = Object.freeze([...ORTHOGONAL, ...DIAGONAL]);
 function rays(piece) {
   if (piece === 'rook') return ORTHOGONAL;
   if (piece === 'bishop') return DIAGONAL;
-  if (piece === 'queen') return [...ORTHOGONAL, ...DIAGONAL];
+  if (piece === 'queen') return EIGHT_WAYS;
   return null;
 }
 
 function movesFor(state, unit, enemy = false, attacksOnly = false) {
   const moves = [];
+  // The squares monsters stand on, as two 32-square bit masks, so an empty
+  // square skips enemyAt's scan.
+  let low = 0, high = 0;
+  for (const foe of state.enemies) {
+    if (!inside(foe.x, foe.y)) continue;
+    const bit = foe.y * 8 + foe.x;
+    if (bit < 32) low |= 1 << bit; else high |= 1 << (bit - 32);
+  }
+  const monsterOn = (x, y) => {
+    if (!inside(x, y)) return enemyAt(state, x, y);
+    const bit = y * 8 + x;
+    return ((bit < 32 ? low >>> bit : high >>> (bit - 32)) & 1) ? enemyAt(state, x, y) : undefined;
+  };
   const occupant = (x, y) => {
     if (enemy && state.companion && state.companion.x === x && state.companion.y === y) return 'friend';
     if (unit === state.companion && state.player.x === x && state.player.y === y) return 'friend';
-    const foe = enemyAt(state, x, y);
+    const foe = monsterOn(x, y);
     if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
     if (enemy && state.player.x === x && state.player.y === y && state.player.hp) return 'opponent';
     return null;
@@ -101,9 +121,102 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
       for (let step = 1; step < 8; step++) if (!push(unit.x + dx * step, unit.y + dy * step)) break;
     }
   } else {
-    for (const [dx, dy] of unit.piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]) push(unit.x + dx, unit.y + dy);
+    for (const [dx, dy] of unit.piece === 'knight' ? KNIGHT : EIGHT_WAYS) push(unit.x + dx, unit.y + dy);
   }
   return moves;
+}
+
+// movesFor's occupant, standalone: 'friend', 'opponent' or null.
+function occupantFor(state, unit, enemy, x, y) {
+  const { companion, player } = state;
+  if (enemy && companion && companion.x === x && companion.y === y) return 'friend';
+  if (unit === companion && player.x === x && player.y === y) return 'friend';
+  const foe = enemyAt(state, x, y);
+  if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
+  if (enemy && player.x === x && player.y === y && player.hp) return 'opponent';
+  return null;
+}
+
+/**
+ * Would movesFor(state, unit, enemy) list a capture on (x, y), with the unit
+ * moving like `piece`? The same verdict without building the move list: the
+ * monster AI asks it of every square it weighs.
+ */
+function capturesAt(state, unit, enemy, x, y, piece = unit.piece) {
+  // The geometry first: it's the cheapest test and usually decides.
+  const dx = x - unit.x, dy = y - unit.y;
+  const ax = Math.abs(dx), ay = Math.abs(dy);
+  const lines = rays(piece);
+  if (piece === 'pawn' ? !(ax === 1 && dy === (enemy ? 1 : -1))
+    : !lines ? !(piece === 'knight' ? ax + ay === 3 && ax > 0 && ay > 0 : Math.max(ax, ay) === 1)
+    : !(((dx === 0) !== (dy === 0) && lines !== DIAGONAL) || (ax === ay && ax > 0 && lines !== ORTHOGONAL))) return false;
+  if (!walkable(state, x, y) || occupantFor(state, unit, enemy, x, y) !== 'opponent') return false;
+  if (piece === 'pawn' || !lines) return true;
+  // A line piece: every square between must be open.
+  const n = Math.max(ax, ay);
+  if (n > 7) return false;
+  const sx = Math.sign(dx), sy = Math.sign(dy);
+  for (let k = 1; k < n; k++) {
+    const cx = unit.x + sx * k, cy = unit.y + sy * k;
+    if (!walkable(state, cx, cy) || occupantFor(state, unit, enemy, cx, cy) !== null) return false;
+  }
+  return true;
+}
+// Would monster `foe` capture the player from where it stands?
+function strikesPlayer(state, foe) {
+  return capturesAt(state, foe, true, state.player.x, state.player.y);
+}
+
+/**
+ * The squares movesFor(state, unit, true, true) lists for a monster, as a set
+ * (`has`) with their `count`, without building the list: the monster AI asks
+ * it of every step it weighs.
+ */
+class Reach {
+  constructor(low, high, count) { this.low = low; this.high = high; this.count = count; }
+  has(square) {
+    if (!inside(square.x, square.y)) return false;
+    const bit = square.y * 8 + square.x;
+    return Boolean((bit < 32 ? this.low >>> bit : this.high >>> (bit - 32)) & 1);
+  }
+}
+const PAWN_STRIKES = Object.freeze([[-1, 1], [1, 1]]);
+function attackReach(state, unit) {
+  const ux = unit.x, uy = unit.y;
+  // Off the grid (never in play) nothing is inside the board: movesFor lists nothing.
+  if (!Number.isInteger(ux) || !Number.isInteger(uy)) return new Reach(0, 0, 0);
+  const { map, companion, player } = state;
+  // The squares monsters stand on, so an empty square skips enemyAt's scan.
+  let monstersLow = 0, monstersHigh = 0;
+  for (const foe of state.enemies) {
+    if (!inside(foe.x, foe.y)) continue;
+    const bit = foe.y * 8 + foe.x;
+    if (bit < 32) monstersLow |= 1 << bit; else monstersHigh |= 1 << (bit - 32);
+  }
+  const lines = rays(unit.piece);
+  const directions = unit.piece === 'pawn' ? PAWN_STRIKES : lines ?? (unit.piece === 'knight' ? KNIGHT : EIGHT_WAYS);
+  const longest = lines ? 7 : 1;
+  let low = 0, high = 0, count = 0;
+  for (const [dx, dy] of directions) {
+    for (let step = 1; step <= longest; step++) {
+      // movesFor's push with attacksOnly: an unwalkable square or a friend ends the line unlisted.
+      const x = ux + dx * step, y = uy + dy * step;
+      if (x < 0 || y < 0 || x > 7 || y > 7 || map?.[y]?.[x] === '#') break;
+      const bit = y * 8 + x;
+      // movesFor's occupant for a monster.
+      if (companion && companion.x === x && companion.y === y) break;
+      if (unit === companion && player.x === x && player.y === y) break;
+      if ((bit < 32 ? monstersLow >>> bit : monstersHigh >>> (bit - 32)) & 1) {
+        const foe = enemyAt(state, x, y);
+        if (foe && foe !== unit) break;
+      }
+      if (bit < 32) low |= 1 << bit; else high |= 1 << (bit - 32);
+      count++;
+      // The player (with lives) is listed as a capture and ends the line.
+      if (player.x === x && player.y === y && player.hp) break;
+    }
+  }
+  return new Reach(low, high, count);
 }
 
 /**
@@ -185,16 +298,32 @@ function enPassantStriker(state, square) {
  * The first monster that would capture the player at once on `square`: one
  * adjacent to it, or a knight. Distant sliders still give a turn of warning.
  * Pinned and off-balance monsters never capture.
- * Evaluated on a copy with the player on `square` and any monster there taken.
+ * Judged as if the player stood on `square`, with any monster there taken.
  */
 export function closeAttacker(state, square) {
   if (state.powers?.freeze > 0) return null;
-  // A companion sharing the player's square never shields it.
-  const companion = state.companion && !same(state.companion, square) ? state.companion : null;
-  const board = { ...state, companion, player: { ...state.player, x: square.x, y: square.y }, enemies: state.enemies.filter((foe) => !same(foe, square)) };
-  const free = board.enemies.filter((foe) => !pinned(foe) && !offBalance(foe));
-  return free.find((foe) => (foe.piece === 'knight' || Math.max(Math.abs(foe.x - square.x), Math.abs(foe.y - square.y)) === 1)
-    && movesFor(board, foe, true, true).some((move) => move.capture && same(move, square))) ?? null;
+  // Exactly what movesFor would say with the player moved onto `square` (any
+  // monster there taken, a companion sharing it not shielding it): a capture
+  // needs a walkable square and a player with lives, and a monster one step
+  // away (or a knight's jump) can't be blocked, so the step's geometry decides.
+  // The hottest check in the certification search: no board copy, no move lists.
+  if (!state.player.hp || !walkable(state, square.x, square.y)) return null;
+  for (const foe of state.enemies) {
+    if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe)) continue;
+    const dx = square.x - foe.x, dy = square.y - foe.y;
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (foe.piece === 'knight') {
+      if (ax + ay === 3 && ax && ay) return foe;
+      continue;
+    }
+    if (Math.max(ax, ay) !== 1) continue;
+    if (foe.piece === 'rook' ? ax + ay === 1
+      : foe.piece === 'bishop' ? ax === 1 && ay === 1
+      // A monster pawn captures one square diagonally forward, down the board.
+      : foe.piece === 'pawn' ? ax === 1 && dy === 1
+      : true) return foe;
+  }
+  return null;
 }
 
 /**
@@ -367,7 +496,7 @@ function attackPath(state, foe, target) {
 }
 
 function aimAtPlayer(state, foe) {
-  if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return false;
+  if (!strikesPlayer(state, foe)) return false;
   foe.phase = 'aim';
   foe.target = { x: state.player.x, y: state.player.y };
   foe.intent = attackPath(state, foe, state.player);
@@ -404,14 +533,19 @@ function moveMonster(state, foe) {
 
 // The rules.js internals src/monster-ai.js consults for one monster.
 function monsterEngine(state, foe) {
-  return { movesFor, closeAttacker, borrowedPiece, tie: (move) => monsterTie(state, foe, move), steps: () => monsterMoves(state, foe) };
+  // The clock and the monster stay put while it weighs its steps, so the
+  // tie-break's prefix is hashed once per decision (it ends in ':', so the
+  // hash continues exactly as over the whole text).
+  let prefix = null;
+  const tie = (move) => (hashMore(prefix ??= hashMore(2166136261, tiePrefix(state, foe)), `${move.x},${move.y}`) >>> 0) / 4294967296;
+  return { movesFor, capturesAt, strikesPlayer, attackReach, closeAttacker, borrowedPiece, tie, steps: () => monsterMoves(state, foe) };
 }
 
 // Off the king floor, a monster that can strike the player winds up, except
 // that from Tricky on a rook, bishop, queen or decoy king waits for a square
 // where the player can't take it, or a guarded one (src/monster-ai.js).
 function windUp(state, foe) {
-  return movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))
+  return strikesPlayer(state, foe)
     && safeToStrike(state, foe, monsterEngine(state, foe)) && aimAtPlayer(state, foe);
 }
 
@@ -441,8 +575,8 @@ function hypothetically(unit, square, evaluate) {
 }
 // The player's reach counts a held Borrowed move, which can take the king too.
 function kingThreatened(state, king) {
-  const hits = (unit) => movesFor(state, unit).some((move) => move.capture && same(move, king));
-  const borrowed = () => state.powers?.leap > 0 && hits({ ...state.player, piece: borrowedPiece(state) });
+  const hits = (unit, piece) => capturesAt(state, unit, false, king.x, king.y, piece);
+  const borrowed = () => state.powers?.leap > 0 && hits(state.player, borrowedPiece(state));
   return (state.player.hp > 0 && (hits(state.player) || borrowed())) || Boolean(state.companion && hits(state.companion));
 }
 function monsterMoves(state, foe) {
@@ -461,15 +595,18 @@ function relocate(state, foe, move) {
 // monsters pacing between two squares for good while the player waited.)
 // Classic monsters (comparisons only) count the whole run, as all once did.
 function monsterTie(state, foe, move) {
+  return hash(`${tiePrefix(state, foe)}${move.x},${move.y}`) / 4294967296;
+}
+function tiePrefix(state, foe) {
   const clock = state.classicMonsters === true ? state.turns : state.turns - state.floorStart.turns;
-  return hash(`${state.dungeonSeed ?? state.seed}:${state.floor}:${clock}:${foe.id}:${move.x},${move.y}`) / 4294967296;
+  return `${state.dungeonSeed ?? state.seed}:${state.floor}:${clock}:${foe.id}:`;
 }
 function safeKingMoves(state, king) {
   return monsterMoves(state, king).filter((move) => !hypothetically(king, move, () => kingThreatened(state, king)));
 }
 function moveKing(state, king) {
   const best = safeKingMoves(state, king).map((move) => hypothetically(king, move, () => {
-    const strikes = movesFor(state, king, true, true).some((m) => m.capture && same(m, state.player));
+    const strikes = strikesPlayer(state, king);
     const company = state.enemies.filter((o) => o !== king && chebyshev(o, move) <= 1).length;
     return {
       move,
@@ -496,8 +633,9 @@ function royalGuardTurn(state, foe, king) {
   const candidates = monsterMoves(state, foe);
   const keepsKing = (move) => !hypothetically(foe, move, () => kingThreatened(state, king));
   if (threatened) {
-    const block = candidates.filter(keepsKing)
-      .sort((a, b) => distance(a, foe) + monsterTie(state, foe, a) * 0.1 - distance(b, foe) - monsterTie(state, foe, b) * 0.1)[0];
+    // Each step's distance and tie-break once, compared exactly as before.
+    const block = candidates.filter(keepsKing).map((move) => ({ move, near: distance(move, foe), tie: monsterTie(state, foe, move) }))
+      .sort((a, b) => a.near + a.tie * 0.1 - b.near - b.tie * 0.1)[0]?.move;
     if (block) { relocate(state, foe, block); aimAtPlayer(state, foe); return; }
   }
   if (aimAtPlayer(state, foe)) return;
@@ -511,7 +649,7 @@ function royalGuardTurn(state, foe, king) {
   };
   const score = (m) => 0.6 * distance(m, state.player) + 0.4 * distance(m, king) + 0.35 * distance(m, foe)
     + 0.7 * monsterTie(state, foe, m) - (between(m) ? 2 : 0);
-  const pick = pool.sort((a, b) => score(a) - score(b))[0];
+  const pick = pool.map((move) => ({ move, score: score(move) })).sort((a, b) => a.score - b.score)[0]?.move;
   if (!pick) return;
   relocate(state, foe, pick);
   aimAtPlayer(state, foe);
@@ -566,7 +704,7 @@ function capturePlayer(state, foe, close = false, enPassant = false) {
 // From Tricky on it only steps where the player can't take it (src/monster-ai.js).
 function closeIn(state, foe) {
   if (!['rook', 'bishop', 'queen'].includes(foe.piece) || chebyshev(foe, state.player) <= 1) return;
-  if (!movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player))) return;
+  if (!strikesPlayer(state, foe)) return;
   const step = attackPath(state, foe, state.player)[0];
   if (step && preservesPawnLane(state, step) && monsterMoves(state, foe).some((move) => same(move, step))
     && safeCloseIn(state, foe, step, monsterEngine(state, foe))) relocate(state, foe, step);
@@ -588,7 +726,7 @@ function enemyTurn(state, hit = false) {
     if (held.has(foe)) continue;
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
-        && movesFor(state, foe, true, true).some((move) => move.capture && same(move, state.player));
+        && strikesPlayer(state, foe);
       if (capture && hit) continue;
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
@@ -951,7 +1089,23 @@ function trapped(state) {
 }
 
 // Running out of lives or out of moves ends the try: back to floor 1, with one more try on the share card.
+// The certification search (src/fairness.js) throws away every transition
+// that ends the run, so while it runs a run-ending capture only marks the
+// restart instead of building a fresh dungeon (a seventh of its time before).
+let markRestartsOnly = false;
+/** Run `search` with restarts only marked; the search discards them anyway. */
+export function whileSearching(search) {
+  const was = markRestartsOnly;
+  markRestartsOnly = true;
+  try { return search(); } finally { markRestartsOnly = was; }
+}
+
 function restartRun(state, events, message) {
+  if (markRestartsOnly) {
+    state.events = [...events, { type: 'restart', x: state.player.x, y: state.player.y }];
+    state.message = message;
+    return state;
+  }
   const fresh = createGame({ ...state, playerPiece: state.startingPiece, replayUnlocked: true });
   // Count today's attempts; saves from before this counter only know a restart happened.
   const tries = (state.tries ?? (state.replayUnlocked ? 2 : 1)) + 1;
@@ -1312,8 +1466,10 @@ function companionTurn(state, order, joined = false) {
   // king recruit, with its many equal steps, leans on it often.
   const clock = state.classicMonsters === true ? state.turns : state.turns - (state.floorStart?.turns ?? 0);
   const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${clock}:${move.x},${move.y}`);
-  candidates.sort((a,b) => Number(b.capture)-Number(a.capture) || nearest(a)-nearest(b) || distance(b,unit)-distance(a,unit) || tie(a)-tie(b));
-  const destination = candidates[0];
+  // Each candidate's keys once, compared exactly as before.
+  const ranked = candidates.map((move) => ({ move, capture: Number(move.capture), nearest: nearest(move), away: distance(move,unit), tie: tie(move) }));
+  ranked.sort((a,b) => b.capture-a.capture || a.nearest-b.nearest || b.away-a.away || a.tie-b.tie);
+  const destination = ranked[0]?.move;
   if (destination) moveCompanion(state,unit,destination);
   return true;
 }
@@ -1337,9 +1493,6 @@ function grantPower(state, id) {
   state.message = `${power.name} acquired.`;
 }
 
-// Fields act() never changes in place: the floor snapshot (replaced whole by
-// markFloorStart, copied by resetFloor) and the day's theme and species. The
-// next state shares them instead of deep-copying them on every move.
 // structuredClone's result for plain JSON-like data, faster: objects and arrays
 // are copied key by key, shared references stay shared (`seen`), and anything
 // else that is not a primitive falls back to structuredClone.
@@ -1368,15 +1521,23 @@ function replaceCopy(value, seen) {
   seen.set(value, copy);
   return copy;
 }
-const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species']);
+// Fields act() never changes in place: the floor snapshot (replaced whole by
+// markFloorStart, copied by resetFloor), the day's theme and species, and the
+// room's props (replaced whole when a floor is set up). The next state shares
+// them instead of deep-copying them on every move.
+const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species', 'props']);
 function nextState(previous) {
   const seen = new Map();
   // Same key order as a whole-state copy, so saves serialize identically.
   const state = {};
-  for (const key of Object.keys(previous)) state[key] = SHARED_FIELDS.has(key) ? previous[key] : deepCopy(previous[key], seen);
-  delete state.notes;
-  // Saves from when a Borrowed move had to be armed first.
-  delete state.leaping;
+  for (const key of Object.keys(previous)) {
+    // Left out rather than deleted after (a delete slows every later read of
+    // the state): the last action's notes, and `leaping`, from saves made when
+    // a Borrowed move had to be armed first.
+    if (key === 'notes' || key === 'leaping') continue;
+    // Every caller starts its own events, so the last action's are never copied.
+    state[key] = SHARED_FIELDS.has(key) ? previous[key] : key === 'events' ? [] : deepCopy(previous[key], seen);
+  }
   state.companionOrders ??= [];
   // Saves from before special moves were tracked start an empty list.
   state.feats ??= [];
@@ -1385,7 +1546,7 @@ function nextState(previous) {
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
   state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - tacticGold(state.feats);
   // Older saves only recorded exhaustion in the last action's events.
-  if (state.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
+  if (previous.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
 }
 
