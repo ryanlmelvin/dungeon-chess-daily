@@ -301,22 +301,15 @@ works them out again.
 route was, not how hard a route is to find. `humanGap` (`src/difficulty.js`)
 measures that: per floor, the human-like bot's expected moves (the mean of its
 five runs, a failed run counting as the whole 40-move cap) minus the
-<<<<<<< HEAD
 certificate's moves, summed over the floors. This raw gap is for measurement:
 one failed floor costs it about 30, so the tiers use its capped form ([The
 capped human gap](#the-capped-human-gap)). `node scripts/measure-human-par.mjs`
 reports, by tier and piece, how often runs clear each floor, par against the
 certificate per floor, both gaps and the score. Over the 733 stored editions
 (2026-11-05 to 2028-11-06), before the smarter monsters and the per-floor
-search:
-=======
-certificate's moves, summed over the floors. It sits beside the score and does
-not pick tiers. `node scripts/measure-human-par.mjs` reports, by tier and piece,
-how often runs clear each floor, par against the certificate per floor, the gap
-and the score. Over the 733 stored editions (2026-11-05 to 2028-11-06), first
-run, with the bot's recruit on Auto, the pawn kept off its relic, and the
-recruit rules before stage 2 (see below for the steered bot):
->>>>>>> worktree-agent-ad8991c385c39c83e
+search, with the bot's
+recruit on Auto, the pawn kept off its relic, and the recruit rules before
+stage 2 (see below for the steered bot):
 
 | Tier | Runs won F1 / F2 / F3 | Total par / certified (median) | Human gap | Score |
 | --- | --- | --- | --- | --- |
