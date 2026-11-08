@@ -19,12 +19,9 @@ export const GENERATOR_VERSION = RULES_VERSION;
 const cache = new Map();
 // Candidate layouts a date may search before it falls back to the bank. Each
 // has the same fixed budget (SEARCH_BUDGET simulated transitions), so the
-// edition stays a pure function of the date. Generation stops at the first
-// candidate inside the tier's band, so more candidates mostly cost the days
-// that need them: each lands in band about one time in six, so the days in
-// band rose from 17% with one candidate to 51% with four, and eight reach
-// about three in four (docs/generation.md, "The recipe and its dial").
-export const ATTEMPTS = 8;
+// edition stays a pure function of the date. Four instead of two sent far
+// fewer days to the bank (docs/generation.md, "Measuring the monsters").
+export const ATTEMPTS = 4;
 export const SEARCH_BUDGET = 12_000;
 
 /** Layout seed of a date's numbered candidate; the same for every tier. */

@@ -88,7 +88,7 @@ and promote to queen before exploring the remaining squares. Revisiting squares
 is allowed, so this is a reachability problem, not a knight's-tour problem. Enemy movement also keeps an unpromoted player's forward file
 open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 50-move route. These rules reduce the search space; they do not replace combat replay.
 
-There is no mutate-until-it-passes loop. Each edition gets at most eight candidates
+There is no mutate-until-it-passes loop. Each edition gets at most four candidates
 (`ATTEMPTS` in `src/generation.js`) and 12,000 simulated transitions per
 candidate, then one certified fallback.
 Every rejection, next seed, and fallback choice is a pure function of the date,
@@ -119,7 +119,7 @@ searching the entire game tree for every proposed decoration.
    gives the candidate its capped human gap ([The capped human
    gap](#the-capped-human-gap)). If the first candidate fails, or its gap lies
    outside the tier's band, the next layout seed is derived from the date and
-   generator version and searched the same way, up to eight candidates
+   generator version and searched the same way, up to four candidates
    (`ATTEMPTS`, `searchCandidates`). The generator keeps the first candidate in
    the band, or else the certified one closest to it (`chooseCandidate`); the
    difficulty score no longer takes part. From Tricky on, a
@@ -433,15 +433,12 @@ UTC weekday to a tier:
 | Saturday, Sunday | Fiendish |
 
 The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
-each floor's clue and two suspects (the target's species and one of the decoy
-species in the room: every public floor has at least one decoy), nothing else
-about the dungeon.
+each floor's clue and two suspects (the target's species and one other that can
+appear there, so a lone suspect shows a floor with no other species), nothing
+else about the dungeon.
 
-Every tier and piece shares one room recipe, and each piece turns a residents
-dial (decoys and guards) that never goes down through the week ([The recipe
-and its dial](#the-recipe-and-its-dial)). The tier also sets how smart the
-monsters are ([Smarter monsters by tier](#smarter-monsters-by-tier)), the main
-step from one tier to the next, and
+The tier also sets how smart the monsters are ([Smarter monsters by
+tier](#smarter-monsters-by-tier)), the main step from one tier to the next, and
 from Tricky on its `minFloorMoves` (3) rules out freebie floors: every floor of
 the certified route takes at least three moves. The route records them as
 `metrics.floorMoves`. Each floor's rollout first looks two moves ahead from
@@ -494,8 +491,8 @@ numbers the tiers use now.
   days lean on the choice among four candidates (the dry run's best Gentle
   pawn layout, 4 walls and 4 decoys, averaged 7.5 that way over 4 dates).
   Decoys help the bot here, since they are what its pawn captures its way
-  around with: on Fiendish more decoys made a pawn day *easier*, so the old
-  shortlist screen skipped monotone dominance for pawns. A steered recruit removes
+  around with: on Fiendish more decoys made a pawn day *easier*, so
+  calibration skips monotone dominance for pawns. A steered recruit removes
   most of this blind spot (it clears the pawn's way); a bot that takes a relic
   blocking its pawn's file would remove the rest.
 
@@ -544,7 +541,7 @@ best of four candidates lifts that). A band is about two thirds of one
 setting's day-to-day spread (sd 4.4; a date's four candidates differ by 2.9),
 so the candidate choice matters. Under the score's knobs only 25% of days
 fall inside these bands: the knobs must be recalibrated
-([The recipe and its dial](#the-recipe-and-its-dial)) before the bands mean anything.
+([Calibration](#knobs-and-calibration)) before the bands mean anything.
 
 ### With a steered recruit
 
@@ -586,9 +583,9 @@ rise by 1 to 2.5), and pawns may no longer need to skip dominance. The
 recruit rules coming before calibration (a king recruit on every king floor,
 no capture on the turn a recruit joins, pawn recruits only on files open to
 the far rank) will move the gap again, so measure once more after them and
-before calibrating, for example with `node scripts/measure-monsters.mjs`
-(its mean gap per tier and piece) and a small calibration dry run. The
-switch, in order:
+before the shortlist, for example with `node scripts/measure-monsters.mjs`
+(its mean gap per tier and piece) and a small `--fast` dry run like the one
+below. The switch, in order:
 
 1. Make the steering policy `humanPar`'s and `humanRun`'s default in
    `src/human-bot.js` (the result card replays `humanRun` with par's runs, so
@@ -638,12 +635,19 @@ plain pawn layouts sit; Fiendish ends where the hardest layouts reach, and
 the choice among four candidates lifts a pawn's 13 into it. As before, a band
 is about two thirds of one setting's day-to-day spread.
 
-**The first fit** (brute force, 2026-11-08) chose a row per (tier, piece)
-from a grid of 3,660 settings of walls, decoys, scatter, guards and screens:
-146,400 searches in 64 minutes on seven workers. On its own ten dates per
-piece every mean but Tricky pawn's landed in its band, with 40–100% of those
-days inside; on the 734 shipped editions, dates it never saw, 47% did.
-[The recipe and its dial](#the-recipe-and-its-dial) replaced it.
+**The fit.** Brute force on 2026-11-08 (every setting of the full grid under
+every tier's monsters, ten dates per piece, four candidates each: 146,400
+searches in 64 minutes on seven workers, with the 3.3× search speedup) put
+every (tier, piece) mean inside its band but Tricky pawn (7.2), and no
+calibration day fell back:
+
+| Tier | Band | Piece means | Days in band |
+| --- | --- | --- | --- |
+| Gentle | 2.5–5 | 3.5–3.8 | 80–100% |
+| Fair | 5–7.5 | 5.7–6.5 | 40–90% |
+| Tricky | 7.5–10 | 7.2–9.4 | 40–80% |
+| Tough | 10–12.5 | 10.6–11.7 | 70–80% |
+| Fiendish | 12.5–15 | 12.9–14.7 | 60–80% |
 
 **The score** (for reference). Every certified edition also gets one number
 from its certificate's verifier metrics and its piece (`difficultyScore`). It
@@ -664,168 +668,191 @@ divisor a pawn's long, life-spending route always out-scores a queen day that
 ends at the first slip. The score's bands were 9–10.5, 10.5–12, 12–13.5,
 13.5–15 and 15–16.5.
 
-### The recipe and its dial
+### Knobs and calibration
 
-Every edition is built from one room recipe, the same for every tier and
-piece (`RECIPE` in `src/difficulty.js`), plus a residents dial per (tier,
-piece) (`src/calibration.js`). `knobsFor` merges them, so generation, saves
-and the fallback bank still see the same six knobs, and `validateSave` still
-rejects a save whose knobs differ from the edition's.
+**Knobs.** Generation reads a row of knobs per (tier, piece) from the
+generated table `src/calibration.js`:
 
-**The recipe:**
-
-- `obstacleBase` 10: walls on the first floor; each later floor adds one.
-  Walls are not a difficulty dial. With everything else held the same (the
-  same decoys, guards, scatter, tier and candidate), going from 4 to 13 walls
-  *lowered* the capped gap by 0.6–2.2 for rooks and knights at every tier, and
-  made more searches run out of budget (a knight's unsolved searches rose from
-  2–4% to 17–18%).
-- `scatter` 1: non-pawn targets start anywhere in the back four rows that the
-  player's piece does not attack from its start square, instead of the fixed
-  squares a rook or queen can take on its first move. So no floor falls to the
-  first move: a lone target never starts on an opening line, and two targets
-  take two captures. Pawn targets and pawn days keep their formations. In a
-  plain room rook and queen floors often cleared in under three moves, which
-  sent 60% of their Tricky-and-up days to the fallback bank; on easier days it
-  left 1-move floors (the brute-force table's Gentle queen days had one on 20
-  of 21).
-- `screens` 0 and `minThreatenedDecisions` 0 (every brute-force row had chosen
-  0 anyway).
-
-**The dial:** `decoys` (1–4) and `guards` (0 up to the decoys).
-
-- `decoys`: residents beside each floor's targets. Extra decoys reuse the
-  floor's two decoy species without exceeding a chess army's count of any
-  role, and start in the back three rows. Never 0: a floor of targets alone
-  has one suspect in the paper's lineup ("open-and-shut case"), no silver to
-  earn (silver means capturing more than the targets) and, on the king floor,
-  no royal guard.
-- `guards`: that many decoys start beside a target, on a square from which
-  they would strike a player who takes it.
+- `obstacleBase`: walls on the first floor; each later floor adds one. More
+  walls hinder a rook and shelter a knight.
+- `decoys` (0–4, usually 2): optional residents beside each floor's targets.
+  Extra decoys reuse the floor's two decoy species without exceeding a chess
+  army's count of any role, and start in the back three rows.
+- `scatter` (0/1): non-pawn targets start anywhere in the back four rows that
+  the player's piece does not attack from its start square, instead of the
+  fixed squares a rook or queen can take on its first move.
+- `guards` (0 up to `decoys`): that many decoys start beside a target, on a
+  square from which they would strike a player who takes it.
+- `screens` (0–3, rook, bishop and queen days): before the random walls go
+  down, that many of the room's walls are placed on the squares that cut the
+  longest open lines into the floor's targets (`screenReach` in `src/rules.js`),
+  so a long-range piece has to close in, where guards can strike. Screens count
+  toward the room's walls and pass the same connectivity check.
+- `minThreatenedDecisions`: the certificate's minimum threatened decisions.
 
 Decoys, scatter and guards draw from their own seeded streams, so the rest of
-a room's layout doesn't move with them. From Gentle to Fiendish a piece's
-decoys and guards never decrease; the tier's monsters (`src/monster-ai.js`) do
-the rest. The current ladders (decoys + guards):
+a room's layout is unchanged; `0`/`2` reproduces the plain layout. Saves record
+every knob, and `validateSave` rejects a save whose knobs differ from the
+edition's.
 
-| Piece | Gentle | Fair | Tricky | Tough | Fiendish |
-| --- | --- | --- | --- | --- | --- |
-| Pawn | 2+1 | 3+1 | 3+2 | 4+2 | 4+2 |
-| Rook | 1+0 | 1+0 | 1+0 | 3+0 | 3+2 |
-| Knight | 1+1 | 1+1 | 3+1 | 3+2 | 3+2 |
-| Bishop | 1+0 | 1+0 | 3+0 | 4+0 | 4+1 |
-| Queen | 1+0 | 1+0 | 1+0 | 1+0 | 1+0 |
+**Calibration.** `npm run calibrate:difficulty` (`scripts/calibrate-difficulty.mjs`)
+searches every candidate layout generation may try (four) of ten dates per
+piece under a grid of knob settings, with the runtime search budget, in
+parallel workers, and plays the human-like bot on every solved route, exactly
+as generation does before it checks the band. It then replays
+`chooseCandidate` (on the capped human gap) for every tier, setting and threat
+minimum, and keeps the cheapest setting per (tier, piece): distance outside the
+band, days outside the band, and fallbacks (ten times as costly as a missed
+day, since they repeat a layout) all cost. Search time no longer counts by
+default, because editions are certified at build time
+(`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on
+searches over 1.5 times as slow as the piece's plain layout. It writes
+`src/calibration.js` (the table plus `CALIBRATION_REPORT`, the measured gaps
+behind it with the mean score beside them) and
+`scripts/calibration-data.json`: one row per search with its status (`solved`,
+`unknown` when the budget ran out, or `invalid` when replay rejected the route),
+solver expansions, route moves, wall time (search and bot), the metrics and
+the bot's runs per floor (`human`: each run's moves, `null` where it failed),
+plus min/median/p90/max summaries per piece and knob setting (git-ignored: a
+full run's file is about 46 MB, so it stays on the machine that measured it). `--reuse`
+refits from that file without searching again (after editing the measure, its
+cap and weights, or the bands), `--merge` measures only what the file lacks,
+`--pieces`, `--obstacles` and `--grid quick` narrow the grid, and `--dry-run`
+leaves the table alone. A full brute-force run uses every core but one
+(`--jobs N` overrides) and takes about three hours (146,400 searches).
 
-**Why these knobs.** Measured on the brute-force grid for rooks and knights
-(ten dates each) and on every residents setting of every piece:
-
-- The tier's monsters carry most of the ramp, and their smarts work largely
-  through the residents (from Tough, guards screen the targets; on Fiendish
-  they bait). With no decoys a knight's day rose only 0.6 to 3.0 over Gentle
-  as the monsters got smarter; with one decoy and a guard it goes from 3.9 on
-  Gentle to 13.7 on Fiendish. The queen keeps one decoy all week and its
-  monsters alone take it from 3.9 to 13.8.
-- Among residents settings decoys move the gap most and guards next, but one
-  setting's days scatter by about 4, so the dial's curves are noisy and it
-  mostly nudges a piece toward its band.
-- Generation's pick among its candidates (`chooseCandidate`) is what keeps the
-  tiers apart day by day. On the brute-force rook rows without the pick,
-  Tricky, Tough and Fiendish averaged 9.6, 9.3 and 9.1 (day-to-day sd about
-  5), and a harder tier's day played easier than the tier below 43% of the
-  time; with the pick, 8%.
-
-**Candidates, not calibration, set the precision.** Fitting the ladders on 5,
-10 or 15 dates, with the fit's cost or with three smoother variants, left the
-same 44–45% of held-out days in band: past the gross level, which setting wins
-is noise. What moves it is how many candidates a day may try. Each lands in
-its band about one time in six, so on the calibration dates the share of days
-in band grows with the candidates tried: 18% with one, 33% with two, 52% with
-four, 67% with six and 80% with eight (fallbacks fall from 20% to none).
-Generation now tries eight (`ATTEMPTS`); it stops at the first candidate in
-the band, so most days search fewer, and editions are certified at build time
-(`npm run build:editions -- --full` takes about two minutes).
-
-**Calibration** (`npm run calibrate:difficulty`,
-`scripts/calibrate-difficulty.mjs`) fits each piece's ladder. It measures every
-residents setting (14: decoys 1–4, guards 0 up to the decoys) under every
-tier's monsters on 12 dates per piece from 2030-01-06, searching the
-candidates generation would (up to eight, stopping at the first inside the
-band) at the runtime budget and playing the human-like bot on each solved
-route: 4,200 (date, setting) pairs, about 23,000 searches, ten minutes on seven
-workers. It replays `chooseCandidate` for each and scores it with the
-brute-force fit's cost: the mean distance outside the band (in band widths),
-the share of days outside it, fallbacks at ten times a missed day (they repeat
-a layout) and a fifth of the mean's distance from the band's center. Then, per
-piece, it keeps the ladder (decoys and guards each never decreasing) with the
-least summed cost over the five tiers. The dates lie past the shipped window
-(`src/editions.js`), so every shipped edition checks the fit out of sample.
-
-It writes `src/calibration.js` (the dial, plus `CALIBRATION_REPORT`: each
-chosen row's measured gaps, and the whole dial as the mean gap of the day's
-pick and the share of days in band for every setting under every tier's
-monsters) and `scripts/calibration-data.json` (git-ignored, one row per search
-with its status, expansions, wall time, metrics and the bot's runs per floor;
-keep it in the main checkout, not in a worktree that gets cleaned up).
-`--reuse` refits from that file without searching (after editing the bands or
-the measure), `--merge` searches only what it lacks, `--pieces` limits the run
-(other pieces keep their rows), and `--dry-run` leaves the table alone.
+Monsters grow smarter with the tier, so every setting is measured once per
+tier, with that tier's monsters, and competes only for that tier: five times
+the searches of a shared measurement (shortlist screening and dominance work
+per tier too). Setting keys end in `@tier`. Rows keep the route's `floorMoves`,
+so the fit applies the no-freebie-floor rule as generation does, and the
+route's side of the gap.
 
 Data files are stamped (`dataVersion` 2, `rulesVersion`, `humanBotVersion`,
 `attempts` and a behaviour fingerprint; `scripts/calibration-search.mjs`), and
-`--reuse` and `--merge` refuse a file without the bot's runs or one made under
-other rules, another bot or another candidate count. The fingerprint
-(`behaviourFingerprint`) hashes what the search and the bot do on three fixed
-plain-layout candidates (`FINGERPRINT_DAYS`: a knight, a bishop and a pawn
-day), through `searchCandidate`, so with the bot's default recruit policy: any
-rules, monster, search or bot change that touches those days refuses old data
-even without a version bump.
+`--reuse`, `--merge`, `--replay` and `--confirm` refuse a file without the
+bot's runs or one made under other rules, another bot or another candidate
+count. The fingerprint (`behaviourFingerprint`) hashes what the search and the
+bot do on three fixed plain-layout candidates (`FINGERPRINT_DAYS`: a knight,
+a bishop and a pawn day), through `searchCandidate`, so with the bot's
+default recruit policy: switching that policy, or any rules, monster, search
+or bot change that touches those days, refuses old data even without a
+version bump. So the `scripts/calibration-data.json` measured for the score
+bands (two candidates, the whole-run search, no bot runs) can't be reused;
+the next confirm replaces it.
 
-**The fit** (2026-11-08), on its 12 dates per piece, with no fallback and no
-floor in one move on any of them:
+### Shortlist, then confirm (the quick way)
 
-| Tier | Band | Piece means | Days in band (piece range) |
-| --- | --- | --- | --- |
-| Gentle | 2.5–5 | 3.6–3.9 | 92% (83–100%) |
-| Fair | 5–7.5 | 5.7–6.4 | 84% (50–92%) |
-| Tricky | 7.5–10 | 8.5–9.9 | 71% (58–83%) |
-| Tough | 10–12.5 | 11.0–11.7 | 82% (67–100%) |
-| Fiendish | 12.5–15 | 12.9–13.8 | 70% (33–83%) |
+Two commands replace the three-hour run with about half an hour: screening,
+then a targeted full check:
 
-**On the shipped editions,** dates the fit never saw: every edition from
-2026-11-05 to 2028-11-07 (734 days), as built by the brute-force table with
-four candidates and by the recipe with eight:
+```sh
+npm run calibrate:shortlist   # 20-27 min; writes scripts/calibration-shortlist.json only
+npm run calibrate:confirm     # 5-9 min, full-budget check of the shortlist; writes src/calibration.js
+```
 
-| | Brute force, 4 candidates | Recipe, 8 candidates |
-| --- | --- | --- |
-| Days in band | 47% | 68% |
-| Gentle / Fair / Tricky / Tough / Fiendish in band | 74 / 46 / 48 / 46 / 36% | 82 / 77 / 61 / 68 / 60% |
-| Fallback days | 2% | 0.1% (one) |
-| Days with a floor in one move | 3% (19% of Gentle) | 0% |
-| Days with a floor in two moves or fewer | 9% | 6% |
-| Days with a one-suspect floor | 4% | 0% |
-| A harder tier's day plays easier than the tier below | 24% | 14% |
-| A Fiendish day plays easier than a Gentle day | 2% | 0% |
+**Shortlist** (`--fast`) screens the whole grid cheaply and never touches
+`src/calibration.js` or `scripts/calibration-data.json`. Its searches and
+finalists go to `scripts/calibration-shortlist.json` (git-ignored). It measures
+every setting on one date (`--stage1-dates`), keeps the best `--keep1` (6) per
+tier by the fit's own cost, adds `--stage2-dates` (4) more dates and keeps the
+best `--keep2` (3) per tier, then adds the remaining dates two at a time. All of
+its searches run at the runtime budget (`--screen-budget 3000` screens cheaper,
+and then unsolved screens advance). The helpers live in
+`scripts/calibration-search.mjs`:
 
-The weakest rows are now Fair pawn (50% in band, mean 5.5) and Tricky bishop
-and knight (44% and 52%); the old table's were Fair pawn (7%) and Tricky bishop
-(25%, mean 11.0).
+- a per-piece least-squares surrogate (knobs plus pairwise products) fitted to
+  the stage-1 gaps (each date's first solved candidate); its
+  `--surrogate-keep` (3) best predictions per tier also advance, which guards
+  against one unlucky date (`--no-surrogate`);
+- monotone dominance: the gap mostly rises with obstacles, decoys, guards and
+  screens, so a setting at least as hard as one already `--dominance-margin`
+  (two band widths, 5 with the stage 2 bands: one date's gap scatters by about
+  5) above the tier's band, or at most as hard as one that far below it, is
+  dropped (same scatter only; never by its own mean; never for pawns, whose
+  gap can fall as decoys rise; `--no-dominance`). A setting's screened gap is
+  each date's first candidate generation could keep, so on Tricky and up a
+  candidate with a floor under three moves (and a tiny gap) doesn't count;
+- sequential stopping: finalists share dates and layouts, and one stops gaining
+  dates once a paired test shows its per-day cost clearly worse (`--stop-z` 2.5
+  standard errors, four dates at least) than the leader's for every tier
+  (`--no-stopping`).
 
-**Why not brute force.** The table used to be chosen by brute force: every
-setting of a grid of walls, decoys, scatter, guards and screens (up to 184 per
-piece and tier, 3,660 in all) under every tier's monsters, ten dates per piece,
-146,400 searches in 64 minutes on seven workers, and before that a
-shortlist-then-confirm screen that one noisy date per setting misled.
-Measured on the rook and knight grid:
+**Confirm** (`--confirm scripts/calibration-shortlist.json`) is brute force on a
+short list. It uses the shortlist's start date and sample count, then measures
+three groups of settings on every date at the full budget, exactly as a
+brute-force run would:
 
-- Its pick was mostly noise. Resampling the ten dates, the chosen row won only
-  12–66% of the time (11–43 different winners per row), and 12–121 settings
-  were statistically tied with it. Picked on five dates, a row put 94% of those
-  days in band and 46–50% of the other five.
-- Half to two thirds of its CPU went to settings that could not win their
-  tier.
-- Its rows wandered: 3 grid steps (median) between recalibrations, with walls
-  falling as tiers rose (a rook's 13, 13, 10, 10, 10) and screens coming and
-  going, and it chose 0 decoys for Gentle knight and Fair queen.
+- the shortlist's finalists;
+- every setting in the live `src/calibration.js`;
+- the plain layout.
+
+Then it fits and writes the table and `scripts/calibration-data.json` as usual
+(`--dry-run` to only look). Because the live settings are always in the running,
+a confirm can never choose a setting that does worse than the current table on
+the same dates.
+
+**Under the stage 2 rules the shortlist screens poorly; calibrate by brute
+force.** One date's four candidates for one setting can measure anywhere from
+0 to 24 (Tricky rook on 2026-11-13: 18.4, 19.4, 8.8 and 12.6 for 7 walls, 4
+decoys, scattered, 2 guards), so a single screening date can show an easy
+setting far above the band and a hard one far below it. Dominance then
+dropped 177 of the 184 Tricky rook settings, and the shortlist left Tricky,
+Tough and Fiendish rook, knight and queen days only the plain layout, which
+falls back on most of them.
+
+Why not trust the shortlist on its own: on 2026-11-07, with the score bands, a
+full `--fast` refit (3.5 minutes) scored worse than the brute-force table on
+the same ten dates.
+
+| | Shortlist alone | Brute force |
+|---|---|---|
+| (tier, piece) means outside their band | 8 | 1 |
+| Summed distance outside the bands | 4.5 | 0.6 |
+
+Its worst misses were fiendish queen (14.1 against 16.2) and gentle knight
+(11.0 against 9.5). Early stopping on a few dates sometimes settles on a worse
+setting. Its screening is still good at finding the candidates, which is the
+part confirm keeps.
+
+To compare search strategies without searching, `--replay data.json` serves
+searches from an earlier full-budget data file (search is deterministic, so a
+smaller budget is that search cut short), and `--choices-out file` saves the
+chosen table and its report. Every run prints its searches, expansions and
+wall time.
+
+### Recalibrating for the capped gap: dry run and runtime
+
+The table in `src/calibration.js` was fitted to the score bands, with two
+candidates and the whole-run search, so it needs the commands below once
+(they are the same as after any rules change). Dry run on 2026-11-07, all
+five pieces, `--grid quick --obstacles 4,13` (41 settings per tier, 21 for
+pawns), 4 dates per piece, data to a scratch file and `--dry-run`:
+
+```sh
+node scripts/calibrate-difficulty.mjs --fast --samples 4 --stage2-dates 2 --grid quick --obstacles 4,13 --data /tmp/shortlist.json
+node scripts/calibrate-difficulty.mjs --confirm /tmp/shortlist.json --dry-run --data /tmp/data.json
+```
+
+The shortlist screened 925 settings (stage 1: 3,700 searches), kept 152 for
+stage 2 and 90 for the finals, 5,276 searches in 18 minutes on six workers;
+the confirm measured 115 settings on every date, 1,840 searches in 3 minutes.
+Both ran beside other jobs (load average 10 to 40), which about doubled the
+time per search. Its fit put every (tier, piece) mean inside its band but
+Tricky pawn (14.2) and Tricky knight (9.9); tier by tier the pieces' means
+spanned 6.1–8, 9.2–10.5, 9.9–14.2, 15.4–16.5 and 17.2–19.5. Four dates per
+piece flatter a fit, so expect wider spreads from the real run.
+
+Single-threaded, a search with its bot runs costs about 1.04 CPU seconds for a
+pawn, 0.62 for a queen, 0.29 for a bishop, 0.21 for a rook and 0.15 for a
+knight, sampled over the full grid. The full shortlist searches at most
+20,640 candidates (stage 1: every one of the 3,660 settings on one date,
+14,640 searches; stage 2: at most 10 settings per tier and piece on 4 dates;
+finals: at most 4 per tier and piece on the last 5) and the confirm at most
+6,000 (about 30 settings per piece on 10 dates): about 10,000 to 11,000 CPU
+seconds, or 25 to 35 minutes on seven workers of an idle 8-core M2
+(shortlist 20 to 27, confirm 5 to 9). Brute force (146,400 searches) is about
+57,000 CPU seconds, three hours.
 
 ### After a rules, monster, modifier, search or bot change
 
@@ -833,28 +860,29 @@ Monster AI, room modifiers, rules, search and human-like bot changes all shift
 difficulty. After any of them:
 
 ```sh
-npm run calibrate:difficulty         # each piece's residents dial: about ten minutes on seven workers
-node scripts/build-fallbacks.mjs     # rebuild the bank for the new dial
+npm run calibrate:difficulty         # brute force: about an hour on seven workers
+node scripts/build-fallbacks.mjs     # rebuild the bank for the new knobs
 npm run verify:fallbacks
-npm run build:editions -- --full     # recertify every stored day: a route that still replays may no longer be the one picked
+npm run build:editions -- --full     # re-certify every stored day under the new knobs
 npm test
 ```
 
+The shortlist and confirm pair (`npm run calibrate:shortlist`, then
+`npm run calibrate:confirm`) is quicker, but under the stage 2 rules its
+one-date screen is too noisy to trust ([Shortlist, then
+confirm](#shortlist-then-confirm-the-quick-way)).
 `verify:fallbacks` fails if a fallback was built for knobs the table no longer
-holds. After a calibration-only change, `node scripts/build-fallbacks.mjs
---only-stale` searches just the bank keys whose knobs changed and keeps the
-rest. The calibration warns when a (tier, piece) mean misses its band; then
-the dial can't reach it under those rules, and the fix is a rule, a new
-knob, or new bands. Afterwards `node scripts/measure-monsters.mjs` and
-`node scripts/measure-human-par.mjs` show the fallback share and the gaps
-generation actually produces.
+holds. The script warns when a (tier, piece) mean gap misses its band; then
+widen the grid, add a knob, or move the bands. Afterwards
+`node scripts/measure-monsters.mjs` and `node scripts/measure-human-par.mjs`
+show the fallback share and the gaps generation actually produces.
 
 ## Measuring the monsters
 
 `node scripts/measure-monsters.mjs` prices the no-freebie-floor rule, rule by
 rule. For 16 real dates per (tier, piece) (`--samples`), half plain and a
 quarter each ice and collapse, it searches every candidate generation may try
-(`ATTEMPTS`, eight; `--attempts`) with the current knobs, the tier's monsters and the
+(four; `--attempts`) with the current knobs, the tier's monsters and the
 production search, then replays `chooseCandidate` under each rule: every floor
 at least 3 moves (adopted), every floor at least 4, floor 1 at least 4, and
 none (Gentle and Fair have no rule under any of them). It prints the fallback

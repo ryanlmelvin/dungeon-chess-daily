@@ -9,7 +9,7 @@ import { verifyWinningRoute } from '../src/fairness.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import {
   MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
-  modifierFor, iceSlide, modifierStatus, collapseTick, arrivalSquare, reinforcement,
+  modifierFor, iceSlide, modifierStatus, collapseTick, arrivalSquare,
 } from '../src/modifiers.js';
 import { hash } from '../src/random.js';
 
@@ -330,12 +330,7 @@ test('on a board with no empty square left the arrival is called off and still c
 });
 
 test('saves stay valid when an arrival drops in beside a blocked door', () => {
-  // The first Collapse day whose first arrival has a role free: a floor's decoys may already fill them.
-  let date = null;
-  for (let offset = 0; offset < 400 && !date; offset++) {
-    const candidate = day(offset, '2026-11-07');
-    if (getRawDaily(candidate).modifier === 'collapse' && reinforcement(createGame(getDaily(candidate)), 0)) date = candidate;
-  }
+  const date = firstDate('collapse');
   const daily = getDaily(date);
   for (const blocker of ['player', 'monster']) {
     let state = createGame(daily);

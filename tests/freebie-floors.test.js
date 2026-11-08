@@ -39,7 +39,7 @@ test('a freebie candidate is skipped for the next one, then the fallback bank', 
   const found = (floorMoves) => ({ gap: low, metrics: { threatenedDecisions: 9, floorMoves } });
   assert.equal(chooseCandidate([found([2, 8, 8]), found([5, 8, 8])], 'tough', 0), 1);
   assert.equal(chooseCandidate([found([2, 8, 8]), found([8, 2, 8])], 'tough', 0), -1);
-  // Generation searches up to ATTEMPTS (eight) candidates before the bank.
+  // Generation searches up to four candidates before the bank.
   assert.equal(chooseCandidate([found([2, 8, 8]), null, found([8, 8, 1]), found([3, 3, 3])], 'tough', 0), 3);
   assert.equal(chooseCandidate([found([3, 8, 8])], 'tough', 0), 0, 'three moves is no freebie');
   assert.equal(chooseCandidate([found([2, 8, 8])], 'fair', 0), 0, 'Fair keeps quick floors');

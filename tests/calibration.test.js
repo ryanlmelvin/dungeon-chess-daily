@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TIERS, RECIPE, MIN_DECOYS, MAX_DECOYS, tierForDate, tierLabel, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
+import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TIERS, DEFAULT_KNOBS, tierForDate, tierLabel, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
 import { CALIBRATION, CALIBRATION_REPORT } from '../src/calibration.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
 import { getRawDaily } from '../src/edition.js';
 import { candidateFor, chooseCandidate, generateDaily, getDaily } from '../src/generation.js';
-import { createGame as createCandidate, paperSuspects } from '../src/rules.js';
+import { createGame as createCandidate } from '../src/rules.js';
 import { createGame, validateSave, act } from '../src/game.js';
 
 // 2026-11-09 is a Monday.
@@ -55,37 +55,25 @@ test('the difficulty score grows with every kind of pressure', () => {
   assert.ok(difficultyScore(unharmed, 'rook') > difficultyScore(unharmed, 'pawn'));
 });
 
-test('every tier and piece shares the room recipe and turns only the residents dial, never down', () => {
-  for (const piece of PLAYABLE_PIECES) {
-    let previous = null;
-    for (const tier of TIER_IDS) {
-      const row = CALIBRATION[tier]?.[piece];
-      assert.ok(row, `${tier}/${piece} is calibrated`);
-      assert.deepEqual(Object.keys(row).sort(), ['decoys', 'guards'], `${tier}/${piece} holds only the residents dial`);
-      const knobs = knobsFor(tier, piece);
-      for (const [knob, value] of Object.entries(RECIPE)) assert.equal(knobs[knob], value, `${tier}/${piece} takes ${knob} from the recipe`);
-      // At least one decoy: a floor of targets alone has one suspect in the paper, no silver and no royal guard.
-      assert.ok(Number.isInteger(knobs.decoys) && knobs.decoys >= MIN_DECOYS && knobs.decoys <= MAX_DECOYS, `${tier}/${piece} keeps at least one decoy`);
-      assert.ok(Number.isInteger(knobs.guards) && knobs.guards >= 0 && knobs.guards <= knobs.decoys);
-      if (previous) assert.ok(knobs.decoys >= previous.decoys && knobs.guards >= previous.guards, `${piece}: the dial never turns down into ${tier}`);
-      previous = knobs;
-      assert.ok(CALIBRATION_REPORT.tiers?.[tier]?.[piece], `${tier}/${piece} has measurements`);
-      const entry = FALLBACKS[`${tier}:${piece}:white`];
-      assert.ok(entry, `${tier}/${piece} has a fallback`);
-      assert.deepEqual(entry.knobs, { obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards, screens: knobs.screens });
-    }
+test('the calibration table covers every tier and piece with valid knobs, and the fallback bank matches it', () => {
+  for (const tier of TIER_IDS) for (const piece of PLAYABLE_PIECES) {
+    const row = CALIBRATION[tier]?.[piece];
+    assert.ok(row, `${tier}/${piece} is calibrated`);
+    // screens appears only where calibration chose some.
+    assert.deepEqual(Object.keys(row).filter((knob) => knob !== 'screens').sort(), Object.keys(DEFAULT_KNOBS).filter((knob) => knob !== 'screens').sort(), `${tier}/${piece} names every knob`);
+    assert.ok([0, 1, 3].includes(knobsFor(tier, piece).screens));
+    const knobs = knobsFor(tier, piece);
+    assert.ok(Number.isInteger(knobs.obstacleBase) && knobs.obstacleBase >= 0 && knobs.obstacleBase <= 16);
+    assert.ok(Number.isInteger(knobs.decoys) && knobs.decoys >= 0 && knobs.decoys <= 4);
+    assert.ok([0, 1].includes(knobs.scatter));
+    assert.ok(Number.isInteger(knobs.guards) && knobs.guards >= 0 && knobs.guards <= knobs.decoys);
+    assert.ok(Number.isInteger(knobs.minThreatenedDecisions) && knobs.minThreatenedDecisions >= 0);
+    assert.ok(CALIBRATION_REPORT.tiers?.[tier]?.[piece], `${tier}/${piece} has measurements`);
+    const entry = FALLBACKS[`${tier}:${piece}:white`];
+    assert.ok(entry, `${tier}/${piece} has a fallback`);
+    assert.deepEqual(entry.knobs, { obstacleBase: knobs.obstacleBase, decoys: knobs.decoys, scatter: knobs.scatter, guards: knobs.guards, screens: knobs.screens });
   }
   assert.throws(() => knobsFor('standard', 'rook'), RangeError);
-});
-
-test('a public week: two suspects on every floor, and no floor falls to the first move', () => {
-  for (const date of WEEK) {
-    const daily = getDaily(date);
-    for (const floor of [0, 1, 2]) assert.equal(paperSuspects(daily, floor).length, 2, `${date} floor ${floor + 1} has a decoy to suspect`);
-    // Scattered targets start off the piece's opening lines (src/difficulty.js RECIPE).
-    const { floorMoves } = daily.generation.certificate.metrics;
-    assert.ok(floorMoves.every((moves) => moves >= 2), `${date}: floors took ${floorMoves.join('/')} moves`);
-  }
 });
 
 test('generateDaily keeps the first candidate whose capped human gap is in the band, else the closest', () => {

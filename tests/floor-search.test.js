@@ -134,11 +134,11 @@ test('the search ranks positions by wall-aware move distances, not coordinates',
   assert.ok(targetDistance(state, target) > 4);
 });
 
-test('generation tries up to eight candidate layouts, each on the same fixed budget, before the fallback bank', () => {
-  assert.equal(ATTEMPTS, 8);
+test('generation tries up to four candidate layouts, each on the same fixed budget, before the fallback bank', () => {
+  assert.equal(ATTEMPTS, 4);
   const date = '2031-03-01', base = getRawDaily(date), tier = tierForDate(date);
   assert.equal(new Set(Array.from({ length: ATTEMPTS }, (_, attempt) => candidateSeed(base, attempt))).size, ATTEMPTS);
-  // No candidate can meet an impossible threat minimum, so all eight are searched.
+  // No candidate can meet an impossible threat minimum, so all four are searched.
   const settings = { ...knobsFor(tier, base.playerPiece), minThreatenedDecisions: 999 };
   const found = searchCandidates(base, tier, settings);
   assert.equal(found.length, ATTEMPTS);
