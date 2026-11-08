@@ -17,7 +17,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
-import { pinUsable, captureGoal, shareDate } from './rules.js';
+import { pinUsable, captureGoal, shareDate, whileSearching } from './rules.js';
 import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
@@ -89,6 +89,13 @@ const pendingOrder = () => (ordering && ordering.from === state ? ordering : nul
 // After an ordered turn the board animates only what followed its preview.
 let shownEvents = null;
 const boardEvents = () => (shownEvents?.state === state ? shownEvents.events : state.events);
+// A capture that ends the run rebuilds floor one at once (rules.js restartRun).
+// Until the Captured page opens, the board stays on the room you fell in and
+// plays that last turn, the attacker's strike and the hit, to the end.
+let fallenBoard = null;
+const fallenView = () => (fallenBoard?.state === state ? fallenBoard.board : null);
+// The strike lands within about half a second; the rest is a beat to take it in.
+const FALL_TO_RESULT_MS = 1500;
 function syncMusic() {
   music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? editionTracks(daily.date)[state.floor] : null);
 }
@@ -404,7 +411,8 @@ function announcePar(record, par) {
   notice.classList.remove('par-toast'); void notice.offsetWidth; notice.classList.add('par-toast');
 }
 function renderLives() {
-  const { hp, maxHp } = state.player;
+  // While the fatal turn plays, the lost last life is already gone.
+  const { hp, maxHp } = (fallenView() ?? state).player;
   const markers = $('lives');
   markers.setAttribute('aria-label', `${hp} of ${maxHp} ${state.playerColor} ${state.startingPiece} ${hp === 1 ? 'life' : 'lives'} remaining`);
   markers.replaceChildren(...Array.from({ length: hp }, () => {
@@ -636,6 +644,8 @@ function paintBoard(){
   // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
   const pending=pendingOrder();
   if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false,...hintMarks(pending.board)});return;}
+  const fallen=fallenView();
+  if(fallen){renderer?.render({...fallen,danger:dangerTiles(fallen),legalMoves:[],showMoves:false,cursor:null,pinning:false});return;}
   renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
 }
 // Paid hints stay on the board for the rest of the floor: rings around the
@@ -678,6 +688,8 @@ function enterGame() {
   refreshEdition();
   refreshFromOtherWindow();
   if (state?.status && state.status !== 'playing') return showResult();
+  // Back on the board before the Captured page opened: the fresh run, as saved.
+  fallenBoard = null;
   switchScreen('game');
   if (!ensureRenderer()) return;
   if (!state) { state = createGame(daily); save(); }
@@ -946,6 +958,10 @@ function takeAction(action) {
   // The preview already played this turn up to the recruit's phase; the board animates the rest.
   const continues = pending && JSON.stringify(next.events.slice(0, pending.phase)) === JSON.stringify(pending.shown);
   shownEvents = continues ? { state: next, events: next.events.slice(pending.phase) } : null;
+  // The same turn with the restart only marked: the board as you were captured on it.
+  const fell = next.events.some(event => event.type === 'restart') && next.events.some(event => event.type === 'player-captured');
+  const fallen = fell ? whileSearching(() => act(state, action)) : null;
+  fallenBoard = fallen ? { state: next, board: { ...fallen, events: fallen.events.slice(continues ? pending.phase : 0).filter(event => event.type !== 'restart') } } : null;
   const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
   // No floor-clear toast once the run ends: the results paper lists every floor.
   const par = cleared && next.status === 'playing' ? runPars(next, daily)?.[cleared.floor] : null;
@@ -957,7 +973,7 @@ function takeAction(action) {
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
-  const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  const animationTime = fallenBoard ? FALL_TO_RESULT_MS : special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
   // Congratulate the player's own en passant or castle once the move has settled,
   // unless another action, a death, a result or the bot replay has taken over since.
@@ -1132,6 +1148,7 @@ function showResultActions(finished) {
 }
 // A death ends the try, so the only way forward is another one.
 function showDeath() {
+  fallenBoard = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
   showResultActions(false);
