@@ -36,7 +36,7 @@ test('tooling can compare other freebie rules: every floor, or floor by floor', 
 
 test('a freebie candidate is skipped for the next one, then the fallback bank', () => {
   const [low] = DIFFICULTY_TIERS.tough.band;
-  const found = (floorMoves) => ({ score: low, metrics: { threatenedDecisions: 9, floorMoves } });
+  const found = (floorMoves) => ({ gap: low, metrics: { threatenedDecisions: 9, floorMoves } });
   assert.equal(chooseCandidate([found([2, 8, 8]), found([5, 8, 8])], 'tough', 0), 1);
   assert.equal(chooseCandidate([found([2, 8, 8]), found([8, 2, 8])], 'tough', 0), -1);
   // Generation searches up to four candidates before the bank.
