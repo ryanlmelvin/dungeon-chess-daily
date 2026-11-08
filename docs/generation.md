@@ -631,6 +631,116 @@ monsters), old → new:
   layouts, which should certify more often; rerun this script after it.
   Searches take about 45% longer (389 → 566 ms).
 
+## Measuring the recruits
+
+Every certificate plays its recruit on Auto, which never takes a target, and
+uses only the king floor's recruit. Manual recruit control, the default, can
+do more: every floor's recruit may join, and an ordered recruit may take any
+monster, the king included. Tooling can search that way:
+`findWinningRoute(state, { recruit: 'steer' })` (also `searchCandidate`, and
+`findFloorRoute` for one floor alone) lets every floor's recruit join and
+tries, with each move or wait, Auto's own recruit move plus at most three
+orders (`RECRUIT_ORDERS`): every capture of a target, a step into a wound-up
+lane between its monster and the player, the step that brings the recruit
+nearest a target over the walls, and holding still where it already blocks
+such a lane; on the bishop pair's hop, the hop squares nearest a target. The
+squares come from `recruitChoice`, so the move that clears floor 1 or 2, after
+which the recruit hunts on its own, takes no order. Each order tried spends one
+transition of the same fixed budget. `verifyWinningRoute(state, actions,
+{ recruit: 'steer' })` accepts the orders and adds `metrics.recruit`;
+`everyRecruit: true` lets floors 1 and 2's recruits join on Auto. Generation
+passes neither, so shipped certificates are unchanged, and route codes carry
+no orders.
+
+`node scripts/measure-recruits.mjs` measures what that changes
+(`--parts cert,floors,placement,static`):
+
+- `cert`: every candidate of 24 dates per (tier, piece), modifiers represented,
+  searched on Auto and steered, with `chooseCandidate` replayed for each; every
+  floor also searched alone, steered (3,000 transitions), for a clear in under
+  three moves: a freebie floor for a Manual player that the Auto certificate
+  never sees.
+- `floors`: 12 of those dates per (tier, piece), first candidate, every floor
+  from its start with full lives, its recruit swapped for each piece in turn
+  (same square) and once removed; the floor searched alone (6,000 transitions)
+  on Auto and steered, and the human-like bot's five runs on Auto and with a
+  steering policy (`scripts/recruit-policy.mjs`: keep blocking a red lane, take
+  a target, take a decoy, else close in on the nearest target).
+- `placement`: two placement rules priced on the same floors, by moving the
+  recruit to the first square generation could have drawn that keeps them.
+- `static`: on every candidate, which recruits would take a target on the turn
+  they join (the waiting recruit already attacks one), and which pawn recruits
+  face a walled file.
+
+First run, 2026-11-07, stage-2 rules before recalibration: the defaults (600
+dates, 2,400 candidates; 20 minutes on seven workers of a shared machine), then
+`--parts placement,static` (under a minute):
+
+| Tier | Fallback, Auto / steered | Without the freebie rule | Auto days with a steered freebie floor (king floor) | Auto, also rejecting those | Steered days with no Auto route |
+| --- | --- | --- | --- | --- | --- |
+| Gentle | 3% / 0% | 3% / 0% | 62% (22%) | 3% | 17% |
+| Fair | 1% / 0% | 1% / 0% | 34% (17%) | 1% | 10% |
+| Tricky | 17% / 18% | 3% / 2% | 21% (15%) | 20% | 24% |
+| Tough | 12% / 9% | 2% / 0% | 16% (10%) | 13% | 17% |
+| Fiendish | 8% / 13% | 0% / 0% | 15% (5%) | 15% | 14% |
+| Tricky to Fiendish | 12% / 13% | 2% / 1% | 17% (10%) | 16% | 18% |
+
+- Steering certifies almost everything (98.5% of candidates against 83.8% on
+  Auto), but it clears floors faster (5.3/5.4/4.7 moves per floor against
+  6.9/7.1/8.0), so the freebie rule rejects as many candidates as it rescues:
+  the fallback share stays where it is. Without the rule, Auto already leaves
+  only 2% of Tricky-and-up days to the bank. The bank's share is the freebie
+  rule's, not the smarter monsters'.
+- A steered certificate leans on its recruit: 99% of them take a target with it,
+  and 0.2% still win with their orders left out. On 16% of days (pawns 31%)
+  the layout it picks has no Auto route within the budget.
+- On today's Auto days a Manual player can steer a recruit to clear a floor in
+  under three moves on 17% of Tricky-and-up days: the king floor on 10% (in a
+  single move on 3%: a queen or rook recruit takes the king the turn it joins,
+  since monsters never avoid a waiting recruit's lines), floors 1 and 2 on
+  3–4%. Rejecting those layouts too costs 4 points of fallbacks on Tricky and
+  up (12% → 16%), 1 point for the king floor alone.
+- The waiting recruit attacks a target as the floor starts on 14% of floors 1
+  and 2 and 7% of king floors (a queen recruit on 31% and 13%). Of the king
+  floors a steered recruit clears in under three moves, 95% take the king as
+  the recruit joins, but only a third had that line at the start. Moving the
+  recruit off such lines cuts those floors' quick clears from 75% to 25%.
+
+The recruit matching, with the bot's runs won (none / Auto / steered):
+
+| Player | Floors 1–2, no recruit | Floors 1–2, best and worst recruit, steered | King floor: rook / queen / king, Auto | Steered | King floor, steered clear in <3: rook / queen / king | Bishop recruit on the king floor, Auto / steered |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pawn | 54% | king 89%, bishop 67% | 24 / 39 / 45% | 77 / 74 / 88% | 0 / 43 / 0% | 21 / 29% |
+| Rook | 74% | queen 89%, pawn 81% | 55 / 67 / 85% | 98 / 98 / 99% | 22 / 40 / 0% | 2 / 63% |
+| Knight | 85% | queen 95%, pawn 91% | 95 / 95 / 95% | 95 / 95 / 95% | 8 / 18 / 2% | 92 / 92% |
+| Bishop | 75% | queen 95%, bishop 84% | 16 / 31 / 42% | 91 / 96 / 96% | 15 / 27 / 0% | 6 / 67% |
+| Queen | 80% | queen 92%, pawn 86% | 79 / 95 / 99% | 88 / 94 / 99% | 25 / 47 / 0% | 47 / 57% |
+
+- On floors 1 and 2 a recruit on Auto adds little (at most 4 moves of the
+  bot's expected 15–26); steered, every recruit helps, the queen and king most. A
+  pawn player's pawn recruit, which waits on its own file, is the one harmful
+  pairing, on Auto (runs won 54% → 47%). A bishop recruit joining a bishop hops
+  (on every steered run that recruits it) and still adds the least of the
+  non-pawn recruits (2.9 moves steered, against 5.5 to 8).
+- The king floor needs its recruit except on knight days (no recruit: the
+  solver certifies 2% of rook and bishop king floors, the bot wins none). The
+  king recruit is the strongest on Auto for every piece, certifies 99% of
+  king floors on Auto, and all but never (0.3%) makes a quick steered clear;
+  the queen makes the most (35% of king floors). A rook recruit certifies 72%
+  of bishop days' king floors on Auto. A bishop recruit there would certify 33%
+  (the bot: 6%).
+- Steering is worth most on the king floor: the bot's runs won rise from 65%
+  to 92% and its expected moves fall from 22 to 12. Par, measured with the
+  recruit on Auto, would fall from 10/9/11 to 7/8/8 (median per floor) with
+  the steering policy.
+- A pawn recruit finds its file walled before the far rank on 48% of floor 1
+  and 2 recruit squares (0% for a pawn player, whose recruit waits on its own
+  open file; 53–64% for every other piece), though 1% only can't reach it even
+  taking diagonally. Walled, it promotes in 10% of steered runs and saves 1.6
+  moves; open, 52% and 6 moves. Moving a walled one to an open-file square
+  generation could have drawn (possible for 76% of them) takes the bot from 85%
+  to 91% of runs won.
+
 ## Difficulty and chess learning
 
 Certificates record route length, positioning moves, capture opportunities,
