@@ -757,10 +757,7 @@ and then unsolved screens advance). The helpers live in
   dropped (same scatter only; never by its own mean; never for pawns, whose
   gap can fall as decoys rise; `--no-dominance`). A setting's screened gap is
   each date's first candidate generation could keep, so on Tricky and up a
-  candidate with a floor under three moves doesn't count: counted, its tiny
-  gap made harder settings look far below the band, and on the first stage 2
-  shortlist dominance dropped 755 of 920 rook settings, leaving Tricky-and-up
-  rook, knight and queen days only the plain layout, which falls back;
+  candidate with a floor under three moves (and a tiny gap) doesn't count;
 - sequential stopping: finalists share dates and layouts, and one stops gaining
   dates once a paired test shows its per-day cost clearly worse (`--stop-z` 2.5
   standard errors, four dates at least) than the leader's for every tier
@@ -779,6 +776,15 @@ Then it fits and writes the table and `scripts/calibration-data.json` as usual
 (`--dry-run` to only look). Because the live settings are always in the running,
 a confirm can never choose a setting that does worse than the current table on
 the same dates.
+
+**Under the stage 2 rules the shortlist screens poorly; calibrate by brute
+force.** One date's four candidates for one setting can measure anywhere from
+0 to 24 (Tricky rook on 2026-11-13: 18.4, 19.4, 8.8 and 12.6 for 7 walls, 4
+decoys, scattered, 2 guards), so a single screening date can show an easy
+setting far above the band and a hard one far below it. Dominance then
+dropped 177 of the 184 Tricky rook settings, and the shortlist left Tricky,
+Tough and Fiendish rook, knight and queen days only the plain layout, which
+falls back on most of them.
 
 Why not trust the shortlist on its own: on 2026-11-07, with the score bands, a
 full `--fast` refit (3.5 minutes) scored worse than the brute-force table on

@@ -361,7 +361,7 @@ export const TACTIC_COPY = Object.freeze({
   // Opened from the "What?" button on a missed lunge's message.
   'off-balance': {
     title: 'Off-balance!',
-    text: 'You stepped off a monster’s red path, so its lunge missed and it landed on the square you left. Now it’s off-balance until your next move ends: stars circle its head, and it can’t capture you at all, even up close. Bait a lunge, sidestep, then strike!',
+    text: 'You stepped off a monster’s red path, so its lunge missed. Now it’s off-balance until your next move ends: stars circle its head, and it can’t capture you at all, even up close. Bait a lunge, sidestep, then strike!',
     art: 'Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it.',
     draw: drawOffBalanceDemo, still: OFF_BALANCE_STILL,
   },
