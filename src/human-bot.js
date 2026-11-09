@@ -75,7 +75,8 @@ export function observe(state, known = new Map()) {
     player: { x: state.player.x, y: state.player.y, piece: state.player.piece, hp: state.player.hp },
     companion: state.companion ? { x: state.companion.x, y: state.companion.y, piece: state.companion.piece } : null,
     recruit: recruit ? { x: recruit.x, y: recruit.y, piece: recruit.piece } : null,
-    powerups: state.items.filter((item) => item.type === 'powerup' && !pawnPath(state.player, item)).map(({ x, y }) => ({ x, y })),
+    // A composed floor's hint (src/composer.js) lies on the trick's square, so the bot may step on it.
+    powerups: state.items.filter((item) => item.type === 'powerup' && !item.hint && !pawnPath(state.player, item)).map(({ x, y }) => ({ x, y })),
     monsters: state.enemies.map((foe) => ({
       id: foe.id, species: foe.species, x: foe.x, y: foe.y, target: foe.species === targetSpecies,
       piece: foe.promoted ? 'queen' : foe.species === targetSpecies ? state.objective.piece : known.get(foe.species) ?? null,

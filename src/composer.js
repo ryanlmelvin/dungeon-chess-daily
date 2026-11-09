@@ -25,7 +25,7 @@
 // coins, the powerup and the recruit lie off the line. Failures reroll the
 // instance (and the dressing) from their own seeded streams, then try the
 // next motif, then a plain walk to walled-in targets, which always composes.
-import { createGame, act, legalMoves, closeAttacker, paperSuspects, PIECES, PIECE_COUNTS } from './rules.js';
+import { createGame, act, legalMoves, closeAttacker, paperSuspects, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
 import { getRawDaily } from './edition.js';
 import { tierForDate } from './difficulty.js';
 import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from './fairness.js';
@@ -372,13 +372,16 @@ export function motifsFor(piece, target, floor) {
 // the same here as in its day.
 const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4) };
 const standIn = (piece) => ({ map: Array(8).fill('........'), enemies: [{ ...FIRST_TAKE[piece], cast: 0 }], items: [] });
-function floorStart(base, floor, room) {
+// `carried`: powers the earlier floors' hints hand on (a bone ward lasts the
+// whole run), for the checks that play as a person would.
+function floorStart(base, floor, room, carried = null) {
   let state = createGame({ ...base, composed: [0, 1, 2].map((f) => (f === floor ? room : standIn(base.playerPiece))) });
   for (let f = 0; f < floor; f++) {
     state = act(state, { type: 'move', ...FIRST_TAKE[base.playerPiece] });
     state = act(state, { type: 'descend' });
   }
   if (state.floor !== floor || state.status !== 'playing') throw new Error('Stand-in floors did not clear.');
+  for (const [power, count] of Object.entries(carried ?? {})) state.powers[power] = Math.min(POWERUPS.find((entry) => entry.id === power).max, state.powers[power] + count);
   return state;
 }
 
@@ -388,7 +391,7 @@ function actionsFrom(state) {
   const actions = [{ type: 'wait' }];
   for (const move of legalMoves(state)) {
     const item = state.items.find((entry) => entry.x === move.x && entry.y === move.y);
-    if (item && (item.type === 'powerup' || (item.type === 'companion' && state.floor !== 2))) continue;
+    if (item && ((item.type === 'powerup' && !item.hint) || (item.type === 'companion' && state.floor !== 2))) continue;
     actions.push({ type: 'move', x: move.x, y: move.y });
   }
   return actions;
@@ -449,6 +452,50 @@ export function hastyScore(start, depth, lives = start.player.hp) {
     else best = Math.min(best, 1 + hastyScore(next, depth - 1, lives));
   }
   return best;
+}
+
+// The planted idea's key square: the sidestep a lunge punishes (bait), the
+// square covering the landing squares (squeeze) or the mating square (net).
+function ideaSquare(built, states, line) {
+  if (built.motif === 'squeeze' || built.motif === 'net') return built.key;
+  if (built.motif !== 'bait') return null;
+  const n = line.findIndex((action, at) => action.type === 'move' && at + 1 < line.length
+    && states[at + 1].events.some((event) => event.type === 'miss' && same(event, states[at].player)));
+  return n >= 0 ? { x: line[n].x, y: line[n].y } : null;
+}
+// Does `line` win from `start`, as played (pickups included), losing no life?
+function winsAsPlayed(start, line) {
+  let state = start;
+  for (const action of line) {
+    const next = act(state, action);
+    if (next === state || next.player.hp < state.player.hp || next.events.some((event) => event.type === 'restart')) return false;
+    state = next;
+  }
+  return state.exit.open;
+}
+/**
+ * Items hint at the trick: one lies on the key square, a coin on floors 1
+ * and 2 (a coin never changes play) and a bone ward on the king floor, which
+ * has no gold and no floor after it to carry the ward into. The ward is kept
+ * only if the line still wins and the hasty check and bot guard pass with
+ * it; otherwise the king floor has no hint.
+ */
+function hinted(built, best, line, base, floor, rng, carried) {
+  const square = ideaSquare(built, best.states, line);
+  if (!square) return best.room;
+  for (const kind of floor === 2 ? ['shield'] : ['coin']) {
+    const room = structuredClone(best.room);
+    if (kind === 'coin') {
+      const coin = room.items.find((item) => item.type === 'coin');
+      if (coin) Object.assign(coin, { x: square.x, y: square.y, hint: true });
+      else room.items.push({ x: square.x, y: square.y, type: 'coin', hint: true });
+      return room;
+    }
+    room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
+    const start = floorStart(base, floor, room, carried);
+    if (winsAsPlayed(start, line) && hastyScore(start, BOT_GUARD.short) > BOT_GUARD.short && botGuard(start, base, floor, line.length + 1).ok) return room;
+  }
+  return best.room;
 }
 
 /**
@@ -562,8 +609,6 @@ function dress(plan, context, line, base, floor, rng) {
   const coinless = floor === 2;
   const coins = coinless ? [] : open.filter((tile) => far(tile, 1)).slice(0, 3);
   for (const tile of coins) plan.items.push({ x: tile.x, y: tile.y, type: 'coin' });
-  const power = open.find((tile) => plan.free(tile) && far(tile, 2) && chebyshev(tile, START) > 1);
-  if (power) plan.items.push({ x: power.x, y: power.y, type: 'powerup', power: (coinless ? ['shield', 'freeze'] : ['shield', 'freeze', 'magnet'])[Math.floor(rng() * (coinless ? 2 : 3))] });
   if (floor === 2) {
     // The king floor's recruit, a king, waits one move from the start, as always,
     // too far from the royal king to step beside it within the line.
@@ -602,7 +647,7 @@ function castFor(base, floor) {
  * kept, ms }: `tried` and `kept` count motif instances built and accepted per
  * motif (`replayed` those whose planted idea won within the line's length).
  */
-export function composeFloor(base, floor, { trace } = {}) {
+export function composeFloor(base, floor, { trace, carried = null } = {}) {
   const began = performance.now();
   const piece = base.playerPiece;
   const cast = castFor(base, floor);
@@ -634,18 +679,21 @@ export function composeFloor(base, floor, { trace } = {}) {
         const room = plan.room();
         const dressed = floorStart(base, floor, room);
         const states = playLine(dressed, planted.line);
-        const hasty = !states?.at(-1).exit.open || motif === 'walk' ? Infinity : hastyScore(dressed, BOT_GUARD.short);
+        // The search runs unpowered; the hasty check and bot guard start with what earlier hints carried in.
+        const real = carried ? floorStart(base, floor, room, carried) : dressed;
+        const hasty = !states?.at(-1).exit.open || motif === 'walk' ? Infinity : hastyScore(real, BOT_GUARD.short);
         const why = !states?.at(-1).exit.open ? 'line' : motif === 'walk' ? null : shortestWins(dressed, found.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line: planted.line }); continue; }
-        const guard = botGuard(dressed, base, floor, planted.line.length + 1);
+        const guard = botGuard(real, base, floor, planted.line.length + 1);
         if (!guard.ok && motif !== 'walk') { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); continue; }
         const felt = pressure(states);
         if (!best || felt > best.pressure) best = { room, states, hasty, pressure: felt };
       }
       if (best) {
         tally.kept++;
+        const room = hinted(built, best, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
         return {
-          room: best.room, line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
+          room, hint: room.items.find((item) => item.hint)?.power ?? (room.items.some((item) => item.hint) ? 'coin' : null), line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
           lines: found.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < planted.line.length, stats, ms: performance.now() - began,
         };
       }
@@ -666,11 +714,28 @@ export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:$
 export function composeDay(date, { tier, daily: raw = getRawDaily(date) } = {}) {
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
-  const floors = [0, 1, 2].map((floor) => composeFloor(base, floor));
+  // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
+  const floors = [], carried = {};
+  for (const floor of [0, 1, 2]) {
+    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null }));
+    const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
+    if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
+  }
   const actions = floors.flatMap((floor) => [...floor.line, { type: 'descend' }]);
   const daily = { ...base, composed: floors.map((floor) => floor.room) };
-  const proof = verifyWinningRoute(createGame(daily), actions);
+  // The proof runs on the day's twin without its hint powerups (a certified
+  // route collects none); picking one up changes no monster's move, so the
+  // real day is then replayed as played, hints collected, losing no life.
+  const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
+  const proof = verifyWinningRoute(createGame(twin), actions);
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
+  let played = createGame(daily);
+  for (const action of actions) {
+    const next = act(played, action);
+    if (next === played || next.player.hp < played.player.hp) throw new Error(`Composed day ${raw.date} failed as played.`);
+    played = next;
+  }
+  if (played.status !== 'won') throw new Error(`Composed day ${raw.date} failed as played.`);
   daily.generation = { version: COMPOSER_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
   // Par on a composed day: the planted line plus one (src/par.js floorPars).
   daily.composedPar = floors.map((floor) => floor.line.length + 1);

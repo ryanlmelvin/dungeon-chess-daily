@@ -55,7 +55,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const botPar = medianRun(outcomes, floor.line.length).par;
     rows.push({
       date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
-      firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
+      firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
     });
   });
 }
@@ -115,6 +115,9 @@ for (const tier of Object.keys(DIFFICULTY_TIERS)) {
   const group = floorsOf.filter((row) => row.tier === tier);
   if (group.length) console.log(line(DIFFICULTY_TIERS[tier].name, group));
 }
+const hints = {};
+for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }
+console.log(`\nHint on the key square: ${Object.entries(hints).sort().map(([key, n]) => `${key} ${n}`).join(', ')}.`);
 console.log(`\nCount rule (the paper's other suspect has the target's copies): met on ${percent(floorsOf.filter((row) => row.matched).length, floorsOf.length)} of floors.`);
 const failed = rows.filter((row) => row.failed);
 if (failed.length) console.log(`Failed: ${failed.map((row) => `${row.date} (${row.failed})`).join('; ')}`);
