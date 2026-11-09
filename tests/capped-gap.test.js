@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The capped human gap: the measure the tiers' bands use (src/difficulty.js).
+// The capped human gap: the measure each day's target uses (src/difficulty.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFFICULTY_TIERS, TIER_IDS, GAP_RUN_CAP, GAP_FLOOR_WEIGHTS, HUMAN_MOVE_CAP, cappedGap, humanGap, knobsFor, tierForDate, bandDistance } from '../src/difficulty.js';
+import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TARGETS, GAP_RUN_CAP, GAP_FLOOR_WEIGHTS, HUMAN_MOVE_CAP, cappedGap, floorGapPoints, humanGap, knobsFor, tierForDate, targetForDate } from '../src/difficulty.js';
 import { getRawDaily } from '../src/edition.js';
-import { ATTEMPTS, candidateFor, chooseCandidate, generateDaily, searchCandidates } from '../src/generation.js';
+import { ATTEMPTS, candidateFor, rankFloors, generateDaily, searchCandidates } from '../src/generation.js';
 import { humanPar } from '../src/human-bot.js';
 import { humanSummary } from '../src/par.js';
 
@@ -40,22 +40,29 @@ test('one hopeless floor can\'t swamp the capped gap the way it swamps the raw g
   assert.equal(cappedGap(failedEarly), cappedGap(slowEarly));
 });
 
-test('the tier bands rise in equal steps inside the range the capped gap can take', () => {
+test('the day targets and the tier bands lie inside the range the capped gap can take', () => {
   const most = GAP_RUN_CAP * GAP_FLOOR_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
-  const width = DIFFICULTY_TIERS[TIER_IDS[0]].band[1] - DIFFICULTY_TIERS[TIER_IDS[0]].band[0];
+  assert.ok(WEEKDAY_TARGETS.every((target) => target > 0 && target < most));
   let previous = -Infinity;
   for (const tier of TIER_IDS) {
     const [low, high] = DIFFICULTY_TIERS[tier].band;
-    assert.ok(low >= 0 && high <= most && low > previous, tier);
-    assert.equal(high - low, width, `${tier}: every band is as wide`);
+    assert.ok(low >= 0 && high <= most && low > previous && high > low, tier);
     previous = low;
   }
 });
 
-test('generation measures every solved candidate with the human-like bot, as par does, and keeps the first in the band', () => {
-  // Past the stored editions, so generation searches. A Tough pawn day whose
-  // first candidate's gap lies above the band and whose second lies in it.
-  const date = '2031-03-06', base = getRawDaily(date), tier = tierForDate(date), settings = knobsFor(tier, base.playerPiece);
+test('floor points add up to the capped gap', () => {
+  const certified = [5, 6, 8];
+  const human = { results: [[won(7), won(9)], [won(4), won(30)], [won(8), lost()]], certified };
+  assert.deepEqual(floorGapPoints(human), [2 + 4, 0 + 10, 0 + 10]);
+  assert.equal(cappedGap(human), (2 + 4) / 2 + 10 / 2 + 10 / 2);
+});
+
+test('generation measures every solved candidate with the human-like bot, as par does, and assembles the day nearest its target', () => {
+  // Past the stored editions, so generation searches: a Thursday (Tough) knight day.
+  const date = '2031-03-13', base = getRawDaily(date), tier = tierForDate(date), settings = knobsFor(tier, base.playerPiece);
+  const target = targetForDate(date);
+  assert.equal(target, 9.75);
   const found = searchCandidates(base, tier, settings);
   assert.ok(found.some((entry) => entry.status === 'solved'), 'a solved candidate to measure');
   for (const [attempt, entry] of found.entries()) {
@@ -64,18 +71,26 @@ test('generation measures every solved candidate with the human-like bot, as par
     assert.deepEqual(entry.human, human, `candidate ${attempt}: the bot's runs on its route`);
     assert.deepEqual(human.certified, entry.metrics.floorMoves);
     assert.equal(entry.gap, cappedGap(human));
+    assert.deepEqual(entry.points, floorGapPoints(human));
   }
-  const chosen = chooseCandidate(found, tier, settings.minThreatenedDecisions);
-  // Search stops at the first candidate kept inside the band, else tries them all.
-  const inBand = chosen >= 0 && bandDistance(found[chosen].gap, tier) === 0;
-  assert.equal(found.length, inBand ? chosen + 1 : ATTEMPTS);
-  assert.ok(chosen >= 0, 'a candidate is kept');
+  // Search stops at the first candidate that lets an assembly land on the target, else tries them all.
+  const stop = found.findIndex((_, count) => rankFloors(found.slice(0, count + 1), target, tier)[0]?.within);
+  assert.equal(found.length, stop >= 0 ? stop + 1 : ATTEMPTS);
+  const [best] = rankFloors(found, target, tier);
   const daily = generateDaily(date, { fallback: false });
-  assert.equal(daily.generation.attempt, chosen);
+  assert.deepEqual(daily.generation.attempt, best.floors);
+  // Each floor plays as it did in its own candidate: the day's runs, par and gap are its floors'.
+  const human = humanPar(daily);
+  best.floors.forEach((attempt, floor) => {
+    assert.deepEqual(human.results[floor], found[attempt].human.results[floor], `floor ${floor + 1}`);
+    assert.equal(human.par[floor], found[attempt].human.par[floor]);
+  });
+  const points = floorGapPoints(human).reduce((sum, value) => sum + value, 0);
+  assert.equal(points, best.floors.reduce((sum, attempt, floor) => sum + found[attempt].points[floor], 0), 'the gap the day was aimed with');
   // The edition's par, as the game works it out (src/par.js, past the stored
-  // window), comes from the very runs its band was judged on: the gap uses
+  // window), comes from the very runs its floors were judged on: the gap uses
   // whatever recruit policy par plays with, never a hard-coded one.
   const shown = humanSummary(daily);
-  assert.deepEqual(shown.par, found[chosen].human.par);
-  assert.deepEqual(shown.runs, found[chosen].human.runs);
+  assert.deepEqual(shown.par, human.par);
+  assert.deepEqual(shown.runs, human.runs);
 });

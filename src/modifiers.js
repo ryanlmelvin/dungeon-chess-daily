@@ -18,6 +18,9 @@
 import { hash, random } from './random.js';
 import { PIECE_COUNTS } from './pieces.js';
 
+// The floor's own seed (src/rules.js floorSeed, which this module can't import).
+const roomSeed = (state) => state.floorSeeds?.[state.floor] ?? state.dungeonSeed ?? state.seed;
+
 export const MODIFIERS = Object.freeze({
   none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),
   ice: Object.freeze({
@@ -61,7 +64,7 @@ function occupied(state, tile) {
 export function setupFloorModifier(state) {
   if (state.modifier === 'collapse') { state.reinforcements = 0; state.reinforcementsSkipped = 0; }
   if (state.modifier !== 'ice') return;
-  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:ice:${state.floor}`));
+  const rng = random(hash(`${roomSeed(state)}:ice:${state.floor}`));
   const candidates = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     const tile = { x, y };
@@ -140,7 +143,7 @@ export function arrivalSquare(state, n) {
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if (!open(state, x, y) || occupied(state, { x, y })) continue;
     const steps = Math.max(Math.abs(x - door.x), Math.abs(y - door.y));
-    const tie = hash(`${state.dungeonSeed ?? state.seed}:arrival:${state.floor}:${n}:${x},${y}`);
+    const tie = hash(`${roomSeed(state)}:arrival:${state.floor}:${n}:${x},${y}`);
     if (!best || steps < best.steps || (steps === best.steps && tie < best.tie)) best = { x, y, steps, tie };
   }
   return best && { x: best.x, y: best.y };

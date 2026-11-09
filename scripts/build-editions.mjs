@@ -13,7 +13,7 @@ import { writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { FIRST_EDITION_DATE, getRawDaily } from '../src/edition.js';
-import { generateDaily, candidateFor } from '../src/generation.js';
+import { generateDaily, candidateFor, validAttempt } from '../src/generation.js';
 import { createGame } from '../src/rules.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { knobsFor, tierForDate, freebieFloor } from '../src/difficulty.js';
@@ -48,6 +48,8 @@ function staleReason(date, entry) {
   if (!entry) return 'missing';
   const base = getRawDaily(date);
   if (entry.tier !== tierForDate(date)) return 'stale tier';
+  // One candidate per floor (an assembled day), or a whole-day number from before floors were assembled.
+  if (!validAttempt(entry.attempt)) return 'stale candidate list';
   if (entry.attempt === 'fallback') return null;
   const knobs = knobsFor(entry.tier, base.playerPiece);
   const proof = verifyWinningRoute(createGame(candidateFor(base, entry.tier, knobs, entry.attempt)), decodeRoute(entry.route));

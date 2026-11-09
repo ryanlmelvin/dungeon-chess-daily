@@ -78,6 +78,8 @@ test('the shop rejects every companion on both visits while powerups still sell'
   const second=certifiedRoom(act(first,{type:'descend'}));
   assert.equal(second.floor,1);assert.equal(second.exit.open,true);
   const rich=structuredClone(second);rich.paidCaptures=rich.captures;rich.gold=rich.treasure+rich.captures;
+  // The legacy ledger predates fork and combo bonuses on this floor too.
+  rich.feats=rich.feats.filter((feat)=>!['fork','combo'].includes(feat.kind));
   assert.equal(validateSave(rich,rich.date),true);assert.ok(rich.gold>=8);
   for(const offer of COMPANIONS) assert.equal(act(rich,{type:'buy',id:offer.id}),rich);
   const powered=act(first,{type:'buy',id:'shield'});

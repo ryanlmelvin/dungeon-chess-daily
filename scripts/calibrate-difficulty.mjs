@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Offline authoring: measure how hard each piece's editions are under a grid of
 // generation knobs, then write src/calibration.js, mapping every (tier, piece)
-// to the knobs whose certified editions land closest to that tier's band of
+// to the knobs whose assembled editions land closest to that tier's band of
 // the capped human gap (src/difficulty.js cappedGap: the human-like bot's
 // extra moves over the certified route). Re-run after any change to rules,
 // monster AI, room modifiers, search, the human-like bot or the measure; then
@@ -30,10 +30,10 @@
 //   means a confirm can never pick worse than the live table on its own data.
 //
 // Phase 1 (slow) searches every candidate layout generation may try (ATTEMPTS,
-// four) of `samples` dates per piece
+// sixteen) of `samples` dates per piece
 // under every grid setting, in parallel workers, at the runtime search budget,
 // and plays the human-like bot (src/human-bot.js humanPar) on every solved
-// candidate's route, exactly as generation does before it checks the band.
+// candidate's route, exactly as generation does before it assembles the day.
 // Monsters grow smarter with the tier (src/monster-ai.js), so every setting is
 // measured once per tier, with that tier's monsters, and competes only for
 // that tier: five times the searches of one shared measurement.
@@ -62,11 +62,12 @@
 // the measure or the bands; it refuses a file some class of which plays
 // differently now. A file of another data version
 // (scripts/calibration-search.mjs DATA_VERSION) is never reused.
-// Phase 2 (fast) replays generateDaily's own candidate choice
-// (chooseCandidate on the capped human gap, including the tier's minimum floor
-// moves) for every tier, its settings and threat minimum, and keeps the
-// cheapest: off-band distance, fallbacks and slow searches all cost. The
-// difficulty score is reported beside the gap but chooses nothing.
+// Phase 2 (fast) replays generateDaily's own choice (rankFloors: the day
+// assembled from the candidates' floors whose capped human gaps add up to the
+// tier's mean target, with the tier's minimum floor moves) for every tier, its
+// settings and threat minimum, and keeps the cheapest: off-band distance,
+// fallbacks and slow searches all cost. The difficulty score is reported
+// beside the gap but chooses nothing.
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
@@ -136,8 +137,8 @@ if (!isMainThread) {
     throw new Error('Usage: node scripts/calibrate-difficulty.mjs [--samples N] [--start YYYY-MM-DD] [--jobs N] [--pieces a,b] [--grid full|quick] [--data file] [--full] [--sample share] [--reuse] [--dry-run]');
   }
   const { getRawDaily } = await load('src/edition.js');
-  const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, difficultyScore, bandDistance, freebieFloor } = await load('src/difficulty.js');
-  const { chooseCandidate, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
+  const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, MIN_DECOYS, difficultyScore, bandDistance, freebieFloor, floorGapPoints } = await load('src/difficulty.js');
+  const { rankFloors, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
   const { RULES_VERSION } = await load('src/rules.js');
   const { HUMAN_BOT_VERSION } = await load('src/human-bot.js');
   const { dataStamp, dataProblem, storedGap, rowKey, classKey, pickProbes } = await import('./calibration-search.mjs');
@@ -155,6 +156,18 @@ if (!isMainThread) {
   // gap from the bot's stored runs (the tiers' measure) and the score beside it.
   const scored = (found, piece) => found.map((entry) => (entry.metrics
     ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece), gap: storedGap(entry) } : null));
+  // The same searches as generation's floor assembly sees them (rankFloors):
+  // each floor's capped-gap points from the bot's stored runs. Rows keep no
+  // per-floor move or life counts, so each floor counts its scored moves
+  // toward the route's cap and no lives (generation's own certification still
+  // holds a pawn day to its allowance), and a candidate below the threat
+  // minimum gives no floors (generation checks the minimum on the whole day).
+  const assembly = (found, minThreatenedDecisions) => found.map((entry) => {
+    if (!entry?.metrics || !Array.isArray(entry.human) || entry.metrics.threatenedDecisions < minThreatenedDecisions) return null;
+    const { floorMoves } = entry.metrics;
+    const results = entry.human.map((runs) => runs.map((moves) => ({ won: moves !== null, moves: moves ?? 0 })));
+    return { metrics: entry.metrics, points: floorGapPoints({ results, certified: floorMoves }), runs: entry.human[0].length, floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })) };
+  });
   const quantiles = (values) => {
     if (!values.length) return null;
     const sorted = [...values].sort((a, b) => a - b);
@@ -179,7 +192,8 @@ if (!isMainThread) {
   const grid = (piece) => {
     const settings = [];
     const obstacles = obstacleOption ?? (gridName === 'quick' ? [7] : [4, 7, 10, 13]);
-    const decoyCounts = gridName === 'quick' ? [1, 2, 4] : [0, 1, 2, 3, 4];
+    // Never fewer than MIN_DECOYS: a floor of targets alone is open and shut.
+    const decoyCounts = (gridName === 'quick' ? [1, 2, 4] : [1, 2, 3, 4]).filter((count) => count >= MIN_DECOYS);
     for (const obstacleBase of obstacles) for (const decoys of decoyCounts) for (const scatter of piece === 'pawn' ? [0] : [0, 1]) {
       for (let guards = 0; guards <= Math.min(decoys, 4); guards++) settings.push({ obstacleBase, decoys, scatter, guards });
     }
@@ -533,12 +547,11 @@ if (!isMainThread) {
     const minimums = [0, 1, 2, 3, 4, 6];
     // Per-date cost: the fit's cost terms for one day (a fallback costs 11).
     const dayCost = (found, piece, tier, minThreatenedDecisions) => {
-      const [low, high] = DIFFICULTY_TIERS[tier].band, width = high - low;
-      const candidates = scored(found, piece);
-      const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
-      if (index < 0) return 11;
-      const gap = candidates[index].gap, off = bandDistance(gap, tier);
-      return off / width + (off > 0 ? 1 : 0) + 0.2 * Math.abs(gap - (low + high) / 2) / width;
+      const [low, high] = DIFFICULTY_TIERS[tier].band, width = high - low, { target } = DIFFICULTY_TIERS[tier];
+      const best = rankFloors(assembly(found, minThreatenedDecisions), target, tier)[0];
+      if (!best) return 11;
+      const off = bandDistance(best.gap, tier);
+      return off / width + (off > 0 ? 1 : 0) + 0.2 * Math.abs(best.gap - target) / width;
     };
     const costsFor = (piece, id, tier, dates, source = finals) => {
       const byDate = source[piece][id.split('|')[1]];
@@ -782,23 +795,25 @@ if (!isMainThread) {
   };
   const average = (values) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10 : null);
   // What generateDaily would do with these measurements for one tier: the
-  // chosen candidates' capped human gaps (and their scores, for reference).
+  // assembled days' capped human gaps (and their scores, for reference),
+  // aimed at the tier's mean target (Tough's lies between Thursday's and
+  // Friday's), with the tier's no-freebie rule.
   const simulate = (byDate, tier, minThreatenedDecisions, piece) => {
     const gaps = [], scores = [], ms = [];
     let fallbacks = 0, inBand = 0, distance = 0;
+    const { target } = DIFFICULTY_TIERS[tier];
     for (const found of Object.values(byDate)) {
-      const candidates = scored(found, piece);
-      // generateDaily (searchCandidates) stops at the first candidate it keeps inside the band.
-      let searched = Math.min(ATTEMPTS, candidates.length);
+      const entries = assembly(found, minThreatenedDecisions), candidates = scored(found, piece);
+      // generateDaily (searchCandidates) stops at the first candidate that lets an assembly land on the target.
+      let searched = Math.min(ATTEMPTS, entries.length);
       for (let count = 1; count < searched; count++) {
-        const pick = chooseCandidate(candidates.slice(0, count), tier, minThreatenedDecisions);
-        if (pick === count - 1 && bandDistance(candidates[pick].gap, tier) === 0) { searched = count; break; }
+        if (entries[count - 1] && rankFloors(entries.slice(0, count), target, tier)[0]?.within) { searched = count; break; }
       }
       ms.push(found.slice(0, searched).reduce((sum, entry) => sum + entry.ms, 0));
-      const index = chooseCandidate(candidates, tier, minThreatenedDecisions);
-      if (index < 0) { fallbacks++; continue; }
-      const { gap, score } = candidates[index];
-      gaps.push(gap); scores.push(score);
+      const best = rankFloors(entries, target, tier)[0];
+      if (!best) { fallbacks++; continue; }
+      const { gap } = best;
+      gaps.push(gap); scores.push(best.floors.reduce((sum, attempt) => sum + candidates[attempt].score, 0) / 3);
       const off = bandDistance(gap, tier);
       if (off === 0) inBand++;
       distance += off;

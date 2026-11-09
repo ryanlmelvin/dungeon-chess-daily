@@ -3,7 +3,8 @@
 // has a checked alternative when its bounded search returns unknown.
 // One fallback per (difficulty tier, piece, color, rules-changing modifier),
 // built with that tier's calibrated knobs (src/calibration.js), so re-run this
-// after recalibrating or changing rules.
+// after recalibrating or changing rules. --only-stale keeps every certificate
+// that still verifies for its knobs and builds only the others.
 import { writeFile } from 'node:fs/promises';
 import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
@@ -23,6 +24,18 @@ const bankModifier = (modifier) => (MODIFIERS[modifier]?.changesRules ? modifier
 const LAYOUT_KNOBS = ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens'];
 const layoutOf = (knobs) => Object.fromEntries(LAYOUT_KNOBS.map((name) => [name, knobs[name]]));
 const stateFor = (entry, tier, knobs) => createGame({ ...candidateFor(getRawDaily(entry.date), tier, knobs), dungeonSeed: entry.dungeonSeed });
+// Why a bank entry no longer serves its key, or null (the --verify checks, without the runtime replay).
+function staleReason({ tier, piece, color, modifier }, entry) {
+  if (!entry) return 'missing';
+  const knobs = knobsFor(tier, piece);
+  if (JSON.stringify(entry.knobs) !== JSON.stringify(layoutOf(knobs))) return `built for ${JSON.stringify(entry.knobs)}, calibrated ${JSON.stringify(layoutOf(knobs))}`;
+  if (bankModifier(getRawDaily(entry.date).modifier) !== modifier) return 'template date has the wrong modifier';
+  const state = stateFor(entry, tier, knobs);
+  const proof = verifyWinningRoute(state, entry.actions);
+  if (state.startingPiece !== piece || state.playerColor !== color || !proof.valid) return proof.reason ?? 'profile mismatch';
+  if (proof.metrics.threatenedDecisions < knobs.minThreatenedDecisions) return 'too few threatened decisions';
+  return freebieFloor(proof.metrics, tier) ? 'a floor cleared under the tier’s minimum moves' : null;
+}
 const wanted = TIER_IDS.flatMap((tier) => PIECES.flatMap((piece) => colors.flatMap((color) => modifiers.map((modifier) => ({ tier, piece, color, modifier, key: fallbackKey(tier, piece, color, modifier) })))));
 
 if (process.argv.includes('--verify')) {
@@ -51,6 +64,14 @@ if (process.argv.includes('--verify')) {
 } else {
   const budget = Number(process.env.FALLBACK_BUDGET ?? 100_000);
   const bank = {}, best = {}, tries = {};
+  if (process.argv.includes('--only-stale')) {
+    const { FALLBACKS } = await import('../src/fallbacks.js');
+    for (const want of wanted) {
+      const reason = staleReason(want, FALLBACKS[want.key]);
+      if (reason) console.log(`${want.key}: rebuilding (${reason})`);
+      else bank[want.key] = FALLBACKS[want.key];
+    }
+  }
   // Prefer a certificate whose capped human gap (the human-like bot on its
   // route, src/difficulty.js cappedGap) lies in the tier's band; settle for
   // the closest after 12 certified tries. A day that falls back plays the

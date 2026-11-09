@@ -33,10 +33,15 @@ import { HUMAN_MOVE_CAP } from './difficulty.js';
 import { hash, random } from './random.js';
 import { steerRecruit } from './recruit-policy.js';
 
-/** Bump when the bot's play changes, so remembered pars are recomputed. */
-export const HUMAN_BOT_VERSION = 2;
-/** Seeded runs per floor; par is the median of the ones that succeed. */
-export const HUMAN_RUNS = 5;
+/** Bump when the bot's play or its runs change, so remembered pars are recomputed. */
+export const HUMAN_BOT_VERSION = 3;
+/**
+ * Seeded runs per floor; par is the median of the ones that succeed. Forty,
+ * not five: a five-run reading of the capped human gap a day is aimed with
+ * (src/generation.js) scattered by 1.2 to 2.2 on the same edition, nearly a
+ * whole day's step; forty runs cut that to about a third (docs/generation.md).
+ */
+export const HUMAN_RUNS = 40;
 // A run that hasn't completed its floor in HUMAN_MOVE_CAP moves gives up. It
 // lives in difficulty.js, beside humanGap, so that difficulty.js imports no
 // game module: the monsters (src/monster-ai.js) read its tiers as they load.
@@ -453,8 +458,12 @@ export function certifiedFloors(daily) {
   return { starts, frames, floors: state.records.map(scoredMoves) };
 }
 
-/** The seed of a run: the date, floor and run number, never the move count. */
-export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.dungeonSeed ?? daily.seed}:${floor}:${run}`);
+/**
+ * The seed of a run: the date, the floor's own seed (src/rules.js floorSeed),
+ * the floor and the run number, never the move count. So a floor's runs are the
+ * same in any day assembled with it.
+ */
+export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.floorSeeds?.[floor] ?? daily.dungeonSeed ?? daily.seed}:${floor}:${run}`);
 
 /**
  * Par for a certified edition from `runs` seeded runs per floor, each from the

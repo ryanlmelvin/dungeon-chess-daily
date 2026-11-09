@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // The certificate search (src/fairness.js): it certifies floor by floor, takes
 // the stairs right after each clear, keys positions on the floor's own clock,
-// ranks them by wall-aware move distances, and generation tries up to four
-// candidate layouts (src/generation.js).
+// ranks them by wall-aware move distances, and generation tries up to sixteen
+// candidate layouts and assembles each day from their floors (src/generation.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame } from '../src/rules.js';
 import { findWinningRoute, positionKey, targetDistance, verifyWinningRoute, MAX_ROUTE_MOVES } from '../src/fairness.js';
-import { ATTEMPTS, GENERATOR_VERSION, candidateFor, candidateSeed, generateDaily, searchCandidate, searchCandidates } from '../src/generation.js';
+import { ATTEMPTS, GENERATOR_VERSION, candidateFor, candidateSeed, generateDaily, routeFloors, searchCandidate, searchCandidates } from '../src/generation.js';
 import { knobsFor, tierForDate, freebieFloor } from '../src/difficulty.js';
 import { distanceTable } from '../src/move-tables.js';
 import { encodeRoute } from '../src/route-code.js';
@@ -134,19 +134,51 @@ test('the search ranks positions by wall-aware move distances, not coordinates',
   assert.ok(targetDistance(state, target) > 4);
 });
 
-test('generation tries up to four candidate layouts, each on the same fixed budget, before the fallback bank', () => {
-  assert.equal(ATTEMPTS, 4);
-  const date = '2031-03-01', base = getRawDaily(date), tier = tierForDate(date);
+test('generation tries up to sixteen candidate layouts, each on the same fixed budget, before the fallback bank', () => {
+  assert.equal(ATTEMPTS, 16);
+  const date = '2031-03-03', base = getRawDaily(date), tier = tierForDate(date);
   assert.equal(new Set(Array.from({ length: ATTEMPTS }, (_, attempt) => candidateSeed(base, attempt))).size, ATTEMPTS);
-  // No candidate can meet an impossible threat minimum, so all four are searched.
-  const settings = { ...knobsFor(tier, base.playerPiece), minThreatenedDecisions: 999 };
-  const found = searchCandidates(base, tier, settings);
+  // No assembly can reach an impossible target, so all sixteen are searched.
+  const found = searchCandidates(base, tier, knobsFor(tier, base.playerPiece), ATTEMPTS, 99);
   assert.equal(found.length, ATTEMPTS);
   assert.ok(found.every((entry) => entry.explored <= 12_000));
   assert.throws(() => generateDaily(date, { maxAttempts: ATTEMPTS + 1 }), RangeError);
 });
 
-test('a device-remembered fourth candidate replays without searching', () => {
+test('a floor plays the same whichever floors come before it: days assemble from their candidates’ floors', () => {
+  // Two whole candidates of one date past the stored editions, then a day with floor 1 of the second and floors 2 and 3 of the first.
+  const date = '2031-03-12', raw = getRawDaily(date), tier = tierForDate(date), knobs = knobsFor(tier, raw.playerPiece);
+  const solved = [];
+  for (let attempt = 0; solved.length < 2 && attempt < ATTEMPTS; attempt++) {
+    const result = searchCandidate(candidateFor(raw, tier, knobs, attempt));
+    if (result.status === 'solved') solved.push({ attempt, result });
+  }
+  assert.equal(solved.length, 2, 'two solved candidates');
+  const [first, second] = solved;
+  const floors = [second.attempt, first.attempt, first.attempt];
+  const daily = candidateFor(raw, tier, knobs, floors);
+  assert.deepEqual(daily.floorSeeds, floors.map((attempt) => candidateSeed(raw, attempt)));
+  const actions = [...second.result.floors[0].actions, ...first.result.floors[1].actions, ...first.result.floors[2].actions];
+  const proof = verifyWinningRoute(createGame(daily), actions);
+  assert.equal(proof.valid, true, proof.reason);
+  // Each floor's room is the one its own candidate built there.
+  const rooms = (state) => { const { frames, starts } = replay(state, actions); return [0, ...starts].map((index) => frames[index]); };
+  const assembled = rooms(daily);
+  assert.deepEqual(assembled[0].map, createGame(candidateFor(raw, tier, knobs, second.attempt)).map);
+  assert.deepEqual(assembled[0].enemies, createGame(candidateFor(raw, tier, knobs, second.attempt)).enemies);
+  const firstStarts = (() => { const { frames, starts } = replay(candidateFor(raw, tier, knobs, first.attempt), first.result.actions); return starts.map((index) => frames[index]); })();
+  for (const floor of [1, 2]) {
+    assert.deepEqual(assembled[floor].map, firstStarts[floor - 1].map, `floor ${floor + 1}`);
+    assert.deepEqual(assembled[floor].enemies, firstStarts[floor - 1].enemies, `floor ${floor + 1}`);
+    assert.deepEqual(assembled[floor].items, firstStarts[floor - 1].items, `floor ${floor + 1}`);
+  }
+  // Its floors' moves, as the route spent them, add up to the whole run's.
+  assert.equal(routeFloors(daily, actions).reduce((sum, part) => sum + part.turns, 0), proof.metrics.turns);
+  // Without floorSeeds every floor shares the dungeon's seed, as before.
+  assert.equal(candidateFor(raw, tier, knobs, first.attempt).floorSeeds, undefined);
+});
+
+test('a device-remembered day of the last candidate replays without searching', () => {
   let remembered = null;
   for (let day = 0; !remembered && day < 30; day++) {
     const date = dayAfter('2031-04-01', day), tier = tierForDate(date), knobs = knobsFor(tier, getRawDaily(date).playerPiece);
@@ -154,13 +186,16 @@ test('a device-remembered fourth candidate replays without searching', () => {
     // Certification applies the tier's rules to a remembered route too.
     if (result.status === 'solved' && result.metrics.threatenedDecisions >= knobs.minThreatenedDecisions && !freebieFloor(result.metrics, tier)) remembered = { date, tier, result };
   }
-  assert.ok(remembered, 'a certifiable fourth candidate');
+  assert.ok(remembered, 'a certifiable last candidate');
   const { date, tier, result } = remembered;
-  const store = new Map([[`dchess-edition:v${GENERATOR_VERSION}:${date}`, JSON.stringify({ tier, attempt: ATTEMPTS - 1, route: encodeRoute(result.actions) })]]);
+  const last = [ATTEMPTS - 1, ATTEMPTS - 1, ATTEMPTS - 1];
+  const store = new Map([[`dchess-edition:v${GENERATOR_VERSION}:${date}`, JSON.stringify({ tier, attempt: last, route: encodeRoute(result.actions) })]]);
   globalThis.localStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) };
   try {
+    const began = performance.now();
     const daily = generateDaily(date, { fallback: false });
-    assert.deepEqual([daily.generation.source, daily.generation.attempt], ['generated', ATTEMPTS - 1]);
+    assert.ok(performance.now() - began < 1000, 'replayed, not searched');
+    assert.deepEqual([daily.generation.source, daily.generation.attempt], ['generated', last]);
     assert.deepEqual(daily.generation.certificate.actions, result.actions);
   } finally { delete globalThis.localStorage; }
 });

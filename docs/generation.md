@@ -3,9 +3,10 @@
 `src/game.js` is the public game API. `getDaily()` normalizes the date to UTC and
 returns a certified edition. `createGame()` uses that canonical edition; callers
 cannot replace its seed, piece, color, targets, or layout by editing its metadata.
-Everyone gets the same edition: its difficulty tier comes from the UTC weekday
-(see [Weekly difficulty](#weekly-difficulty)). There is no personalized
-difficulty, device-dependent seed, or server dependency.
+Everyone gets the same edition: its difficulty tier and its target difficulty
+come from the UTC weekday (see [Weekly difficulty](#weekly-difficulty)), and
+which candidate floors make the day is a pure function of the date. There is no
+personalized difficulty, device-dependent seed, or server dependency.
 
 ## What is guaranteed
 
@@ -88,11 +89,12 @@ and promote to queen before exploring the remaining squares. Revisiting squares
 is allowed, so this is a reachability problem, not a knight's-tour problem. Enemy movement also keeps an unpromoted player's forward file
 open. The pickup check concerns terrain accessibility; it does not claim that collecting every pickup and winning can be combined into one 50-move route. These rules reduce the search space; they do not replace combat replay.
 
-There is no mutate-until-it-passes loop. Each edition gets at most four candidates
+There is no mutate-until-it-passes loop. Each edition gets at most sixteen candidates
 (`ATTEMPTS` in `src/generation.js`) and 12,000 simulated transitions per
-candidate, then one certified fallback.
-Every rejection, next seed, and fallback choice is a pure function of the date,
-tier, calibration table, and rules version. The fallback builder is an offline authoring tool
+candidate, then a finite choice among the days their floors make (at most
+4,096; the best 32 are tried for certification), then one certified fallback.
+Every rejection, next seed, assembly and fallback choice is a pure function of
+the date, tier, calibration table, and rules version. The fallback builder is an offline authoring tool
 with its own finite scan; it is not an unbounded runtime repair operation.
 
 For future tactical templates, start with a certified route, make a bounded
@@ -116,18 +118,21 @@ searching the entire game tree for every proposed decoration.
    a different game.
 4. The human-like bot ([Par and the human gap](#par-and-the-human-gap)) plays
    each solved candidate's route from every floor's standard start, which
-   gives the candidate its capped human gap ([The capped human
-   gap](#the-capped-human-gap)). If the first candidate fails, or its gap lies
-   outside the tier's band, the next layout seed is derived from the date and
-   generator version and searched the same way, up to four candidates
-   (`ATTEMPTS`, `searchCandidates`). The generator keeps the first candidate in
-   the band, or else the certified one closest to it (`chooseCandidate`); the
-   difficulty score no longer takes part. From Tricky on, a
-   candidate whose route clears any floor in fewer than `minFloorMoves` (3)
-   moves is rejected like an unsolved one (no freebie floors); `certify`
-   rejects such a stored or remembered route too, and the fallback bank is
-   built and verified to the same rule.
-5. If no candidate is accepted, the generator selects a previously certified
+   gives each of its floors a capped human gap ([The capped human
+   gap](#the-capped-human-gap)). The day is then assembled from the floors of
+   the candidates searched so far ([Floor assembly](#floor-assembly),
+   `rankFloors`): floor 1 from any candidate, floor 2 from any, floor 3 from
+   any, so that the three floors' gaps add up to the day's target. Once some
+   assembly lands within 0.1 of it (`TARGET_TOLERANCE`), the search stops;
+   otherwise the next layout seed is derived from the date and searched the
+   same way, up to sixteen candidates (`ATTEMPTS`, `searchCandidates`), and
+   the closest assembly is kept. The stitched route (each floor's part of its
+   candidate's route, in turn) is certified as one whole run. The difficulty
+   score takes no part. From Tricky on, a floor its route cleared in fewer
+   than `minFloorMoves` (3) moves is never assembled (no freebie floors);
+   `certify` rejects such a stored or remembered route too, and the fallback
+   bank is built and verified to the same rule.
+5. If no assembly certifies, the generator selects a previously certified
    full-dungeon template for the same tier, piece, and color. Date-specific
    appearances remain varied; target roles and gameplay RNG use the template's
    seed. That exact remapped edition is replayed again before it is returned.
@@ -276,8 +281,12 @@ from a bot that plays like a person, `src/human-bot.js`:
   leaves it on Auto, for measurement.
 - **Each floor is played from its standard start**, the position the
   certificate reaches there, so a floor's par never depends on how another
-  floor went. Five seeded runs per floor (`HUMAN_RUNS`; each seed is the date,
-  floor and run number, never a move count). A run succeeds when it completes
+  floor went. Forty seeded runs per floor (`HUMAN_RUNS`; each seed is the
+  date, the floor's own seed, the floor and the run number, never a move
+  count, so a floor's runs are the same in any day assembled with it). Five
+  runs were too few to aim a day with: a five-run reading of the same edition
+  scattered by 1.2 (Gentle) to 2.2 (Tough) standard deviations' worth of gap,
+  nearly a whole day's step ([Floor assembly](#floor-assembly)). A run succeeds when it completes
   the challenge within 40 moves (`HUMAN_MOVE_CAP`) without losing its last
   life; it may lose others, as players do.
 - **Par** is the lower median of the successful runs' scored moves. When every
@@ -294,8 +303,8 @@ cleared every floor without losing as many lives as the piece has (its floors
 are then the day's pars), else the certificate. Its replay plays the stored
 runs again from their seeds with the same deterministic policy (`humanRun`), so
 its recruit orders come out the same and only the run numbers are stored.
-`HUMAN_BOT_VERSION` (now 2) keys the pars a device remembers, so a changed bot
-works them out again.
+`HUMAN_BOT_VERSION` (now 3, for the forty runs) keys the pars a device
+remembers, so a changed bot works them out again.
 
 **The human gap.** `difficultyScore` measures how dangerous the certificate's
 route was, not how hard a route is to find. `humanGap` (`src/difficulty.js`)
@@ -420,22 +429,38 @@ new monsters cost generation (see [Measuring the monsters](#measuring-the-monste
 
 ## Weekly difficulty
 
-Difficulty rises through the week. `src/difficulty.js` defines five tiers, each
-a band of the capped human gap ([below](#the-capped-human-gap)), and maps the
-UTC weekday to a tier:
+Difficulty rises through the week, and like the New York Times crossword
+every day from Monday to Saturday is meant to play harder than the day before.
+`src/difficulty.js` maps the UTC weekday to one of five tiers (its monsters and
+rules) and to a target for the capped human gap ([below](#the-capped-human-gap)):
+Monday 3.75, then 2 harder every day (`TARGET_STEP`) to Saturday's 13.75, the
+hardest; Sunday matches Saturday (`WEEKDAY_TARGETS`). Generation assembles each
+day from the floors of its candidate layouts so that their gaps add up to the
+target ([Floor assembly](#floor-assembly)).
 
-| Day | Tier |
-| --- | --- |
-| Monday | Gentle |
-| Tuesday | Fair |
-| Wednesday | Tricky |
-| Thursday, Friday | Tough |
-| Saturday, Sunday | Fiendish |
+| Day | Tier | Target |
+| --- | --- | --- |
+| Monday | Gentle | 3.75 |
+| Tuesday | Fair | 5.75 |
+| Wednesday | Tricky | 7.75 |
+| Thursday | Tough | 9.75 |
+| Friday | Tough | 11.75 |
+| Saturday | Fiendish | 13.75 |
+| Sunday | Fiendish | 13.75 |
+
+Monday and Saturday sit where the centres of the old Gentle and Fiendish bands
+were (2.5–5 and 12.5–15), so the week as a whole plays about as hard as before:
+Wednesday and Thursday a little easier than they averaged, Friday a little
+harder. Each tier keeps a band, half a step either side of its targets
+(Gentle 2.75–4.75, Fair 4.75–6.75, Tricky 6.75–8.75, Tough 8.75–12.75,
+Fiendish 12.75–14.75), which calibration fits the knobs to.
 
 The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
 each floor's clue and two suspects (the target's species and one other that can
-appear there, so a lone suspect shows a floor with no other species), nothing
-else about the dungeon.
+appear there), nothing else about the dungeon. Every floor keeps at least one
+decoy (`MIN_DECOYS`), so there are always two suspects: no floor is an
+open-and-shut case of its targets alone, every floor has a decoy to take for
+gold, and the king floor always has a royal guard.
 
 The tier also sets how smart the monsters are ([Smarter monsters by
 tier](#smarter-monsters-by-tier)), the main step from one tier to the next, and
@@ -449,19 +474,116 @@ to the fallback bank, and three moves was the owner's choice (see [Measuring
 the monsters](#measuring-the-monsters)). `minFloorMoves` may also list each
 floor's own minimum (`floorMinimums`), which tooling uses to price other rules.
 
+### Floor assembly
+
+A day is made of three floors, and each floor plays the same whatever floors
+come before it: its room, residents, pickups, recruit, ice, Collapse arrivals
+and monster tie-breaks all draw from `<seed>:<kind>:<floor>` streams, the
+player starts every floor on the same square, and only lives carry over. So
+generation no longer keeps one whole candidate. It assembles the day from the
+floors of the candidates it has searched (`rankFloors` in `src/generation.js`):
+
+- **Seeds.** Each candidate keeps its layout seed (`candidateSeed`). An
+  assembled edition lists one candidate per floor (`attempt: [a1, a2, a3]` in
+  `src/editions.js`) and carries their seeds as `floorSeeds`; `floorSeed`
+  (`src/rules.js`) gives every per-floor stream its floor's seed, falling back
+  to the dungeon's seed (fallback templates, practice rooms of them). The
+  bot's runs are seeded by the floor's seed too (`runSeed`), so a floor's runs,
+  par and gap are the same in its own candidate and in any day assembled with
+  it, and the day's gap is the sum of its floors'. Saves record `floorSeeds`
+  and `validateSave` checks them.
+- **The choice.** Floor f may come from any solved candidate whose route took
+  at least the tier's `minFloorMoves` there. Assemblies whose route would run
+  past `MAX_ROUTE_MOVES`, or lose more than a pawn's 4 spare lives, are
+  ruled out. An assembly within 0.1 of the target (`TARGET_TOLERANCE`) beats
+  any other, and among those the one whose hardest floor is lightest (the most
+  even day) wins; otherwise the closest does. Ties keep the earlier candidates.
+  Gaps are added in whole-number points (`floorGapPoints`: each floor's run
+  values summed), so no choice depends on rounding.
+- **Search.** Candidates are searched in order, and the search stops as soon as
+  some assembly lands within the tolerance (about six candidates on average,
+  sixteen at most). The stitched route, each floor's part of its candidate's
+  route in turn, is certified as one whole run by the independent replay; if
+  it fails (it never has outside a pawn's lives), the next assembly is tried.
+
+**Why.** Two measurements, taken before the change, on the 738 editions from
+2026-11-01 and on 52 weeks from 2026-11-09 with up to sixteen candidates a day
+and forty bot runs a floor each (every pick then re-scored on 80 fresh bot runs
+per floor, a seed space neither generation nor par uses, so no rule could grade
+itself):
+
+- **Five bot runs were too few to aim with.** A five-run reading of the same
+  edition scattered by a standard deviation of 1.2 (Gentle) to 2.2 (Tough)
+  against fresh runs: within Gentle, most of the measured spread was the
+  bot's own luck, and even a perfectly placed Gentle day read outside its
+  band about 30% of the time. Forty runs cut the scatter to about 0.4 to 0.8.
+- **Floors are independent, so assembly multiplies the choice.** Sixteen
+  candidates give up to 4,096 days for the search cost of sixteen. Of 60 days
+  stitched from floors of three different candidates, 58 certified as one
+  whole run (the other two were pawn days over the 4-life allowance, which the
+  choice now rules out), and the bot's runs on every stitched floor matched
+  that floor's runs in its own candidate exactly.
+- Ruled out: the certified route as a noisy baseline. The bot beat the route
+  on 37% of floors, by a median of 3 moves, but measuring against the best
+  known clear instead moved every gap up by about 0.8 and reordered almost
+  nothing (correlation 0.96 to 0.98 within each tier).
+
+Pick rules compared on those 52 weeks, aimed at the day targets above:
+
+| Rule | Average miss | Spread within a weekday (sd) | Weeks rising every day Mon→Sat | Fallback days | Candidates searched |
+| --- | --- | --- | --- | --- | --- |
+| Before: first of 4 whole candidates in the band, 5 runs | 2.4 | 1.6–3.6 | 7% | 11 | up to 4 |
+| 16 whole candidates, the closest, 40 runs | 0.90 | 0.7–2.2 | 52% | 0 | 16 |
+| Floors of up to 8, stop within 0.25, 40 runs | 0.68 | 0.5–1.4 | 73% | 4 | 4.5 |
+| Floors of up to 16, stop within 0.1, 40 runs | 0.60 | 0.6–1.0 | 81% | 0 | 6.5 |
+
+Preferring the most even assembly among those on target cost no precision
+(0.63 against 0.64 at twelve candidates). The adopted rule is the last row
+with that preference.
+
+**The shipped editions.** All 739 editions from 2026-11-01 were regenerated
+under this rule (no fallback day among them; a date searches 3.3 s at the
+median, 26 s at most, on the build machine) and, with the old editions,
+scored once more on 80 fresh bot runs per floor. Over the 52 weeks from
+2026-11-09:
+
+| | Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Target | 3.75 | 5.75 | 7.75 | 9.75 | 11.75 | 13.75 | 13.75 |
+| Before: mean (sd) | 3.8 (1.6) | 5.7 (2.3) | 9.0 (2.2) | 10.5 (3.3) | 10.2 (3.7) | 14.0 (3.6) | 12.1 (3.4) |
+| After: mean (sd) | 3.8 (0.7) | 5.9 (0.7) | 8.1 (0.9) | 9.7 (0.9) | 11.6 (0.8) | 13.8 (0.8) | 13.5 (0.8) |
+
+| | Before | After |
+| --- | --- | --- |
+| Average miss from the day's target | 2.4 | 0.6 |
+| Same week, a harder tier's day plays easier (neighbouring tiers) | 16% (30%) | 1% (2%) |
+| Weeks rising every day from Monday to Saturday | 8% | 77% |
+| Later day plays easier: Mon>Tue, Tue>Wed, Wed>Thu, Thu>Fri, Fri>Sat | 31%, 17%, 35%, 50%, 21% | 2%, 0%, 12%, 6%, 4% |
+| Fallback days | 11 | 0 |
+| Days whose hardest floor carries over 70% of the gap | 42% | 32% |
+
+Over all 105 weeks the same rows read 2.5 → 0.65, 18% (31%) → 2% (4%), 8% →
+72%, and 20 → 0 fallback days. The weakest step is Wednesday to Thursday:
+Tricky layouts sit above Wednesday's target (its raw candidates averaged about
+10), so Wednesday lands a little high (8.1 for 7.75). An easier Tricky setting
+in the next calibration would widen that step. A day still misses its target
+by about 1.5 now and then, when the forty runs it was chosen with were lucky;
+those misses stay between the neighbouring days' targets.
+
 ### The capped human gap
 
-The tiers are bands of the *capped human gap* (`cappedGap`): how much harder a
+Each day's target is a *capped human gap* (`cappedGap`): how much harder a
 day is for the human-like bot than for the certifying search. Generation plays
 the bot on every solved candidate's route (`searchCandidate`, with the seeds
 and the default recruit policy of the edition's par, `humanPar`'s own
-default), so a generated edition's par comes from the very runs its band was
-judged on. The measurements in this section were taken with that default on
-Auto, before par steered its recruit; [Stage 2 bands](#stage-2-bands) has the
-numbers the tiers use now.
+default), so a generated edition's par comes from the very runs its floors
+were judged on. The measurements in this section were taken with that default
+on Auto, before par steered its recruit, and with five runs a floor; [Stage 2
+bands](#stage-2-bands) has the numbers the bands were set from, and [Floor
+assembly](#floor-assembly) the ones the targets use now.
 
     per run   = won ? clamp(bot's moves − route's moves, 0, 10) : 10
-    per floor = mean of the floor's five runs
+    per floor = mean of the floor's forty runs (five before floor assembly)
     gap       = floor 1 + floor 2 + floor 3     (0 to 30, rounded to tenths)
 
 - **A run counts 0 to 10 extra moves** (`GAP_RUN_CAP`), and a failed run
@@ -602,6 +724,10 @@ in [Stage 2 bands](#stage-2-bands).
 
 ### Stage 2 bands
 
+Day targets and floor assembly ([Floor assembly](#floor-assembly)) replaced
+these bands as what generation aims at; the measurements are kept as the
+record of where the range of the targets comes from.
+
 Measured 2026-11-07 under the stage 2 rules: par's steered recruit (the bot
 steps onto a relic that blocks its pawn's file), a king recruit on every king
 floor, no capture on the turn a recruit joins, pawn recruits only on open
@@ -675,7 +801,11 @@ generated table `src/calibration.js`:
 
 - `obstacleBase`: walls on the first floor; each later floor adds one. More
   walls hinder a rook and shelter a knight.
-- `decoys` (0–4, usually 2): optional residents beside each floor's targets.
+- `decoys` (1–4, usually 2): residents beside each floor's targets, never
+  fewer than `MIN_DECOYS`. The calibration grid no longer measures none, and
+  `knobsFor` raises a table row that has none: the last fit gave Gentle knight
+  and Fair queen days no decoys (36 of the 739 editions from 2026-11-01),
+  which now get one.
   Extra decoys reuse the floor's two decoy species without exceeding a chess
   army's count of any role, and start in the back three rows.
 - `scatter` (0/1): non-pawn targets start anywhere in the back four rows that
@@ -696,14 +826,20 @@ every knob, and `validateSave` rejects a save whose knobs differ from the
 edition's.
 
 **Calibration.** `npm run calibrate:difficulty` (`scripts/calibrate-difficulty.mjs`)
-searches every candidate layout generation may try (four) of ten dates per
+searches every candidate layout generation may try (sixteen) of ten dates per
 piece under a grid of knob settings, with the runtime search budget, in
 parallel workers, and plays the human-like bot on every solved route, exactly
-as generation does before it checks the band. It then replays
-`chooseCandidate` (on the capped human gap) for every tier, setting and threat
-minimum, and keeps the cheapest setting per (tier, piece): distance outside the
-band, days outside the band, and fallbacks (ten times as costly as a missed
-day, since they repeat a layout) all cost. Search time no longer counts by
+as generation does before it assembles the day. It then replays the floor
+assembly (`rankFloors`, aimed at the tier's mean target: Tough's lies between
+Thursday's and Friday's) for every tier, setting and threat minimum, and keeps
+the cheapest setting per (tier, piece): distance outside the tier's band,
+days outside it, and fallbacks (ten times as costly as a missed day, since
+they repeat a layout) all cost. Its rows keep no per-floor move or life
+counts, so the replay counts each floor's scored moves toward the route's cap
+and leaves a pawn's allowance of lives to generation's own certification.
+With sixteen candidates a date and forty bot runs a floor, measuring from
+scratch costs roughly eight times what it did with four candidates and five
+runs; the incremental run (below) measures again only what a change touches. Search time no longer counts by
 default, because editions are certified at build time
 (`scripts/build-editions.mjs`); `--time-weight 1` restores the old penalty on
 searches over 1.5 times as slow as the piece's plain layout. It writes
@@ -986,14 +1122,15 @@ show the fallback share and the gaps generation actually produces.
 `node scripts/measure-monsters.mjs` prices the no-freebie-floor rule, rule by
 rule. For 16 real dates per (tier, piece) (`--samples`), half plain and a
 quarter each ice and collapse, it searches every candidate generation may try
-(four; `--attempts`) with the current knobs, the tier's monsters and the
-production search, then replays `chooseCandidate` under each rule: every floor
+(sixteen; `--attempts`) with the current knobs, the tier's monsters and the
+production search, then replays the floor assembly (`rankFloors`, aimed at
+each date's target) under each rule: every floor
 at least 3 moves (adopted), every floor at least 4, floor 1 at least 4, and
 none (Gentle and Fair have no rule under any of them). It prints the fallback
 share per rule by tier, the adopted rule first, plus the adopted rule with only
 the first two candidates; then per tier and per tier and piece how often each
 candidate certifies, the route's moves per floor, the capped human gap
-(which the band check now uses), the score and search time.
+of the assembled day, the score and search time.
 `--classic` also searches the classic monsters and adds their fallback share
 with no rule, which prices the smarts themselves. 16 dates take under two
 minutes on seven workers.
@@ -1096,7 +1233,8 @@ no orders.
 (`--parts cert,floors,placement,static`):
 
 - `cert`: every candidate of 24 dates per (tier, piece), modifiers represented,
-  searched on Auto and steered, with `chooseCandidate` replayed for each; every
+  searched on Auto and steered, with the choice replayed for each (whole days
+  only, since the study measures each candidate as a whole); every
   floor also searched alone, steered (3,000 transitions), for a clear in under
   three moves: a freebie floor for a Manual player that the Auto certificate
   never sees.
@@ -1258,8 +1396,8 @@ selected dungeon. To author a new fallback bank after a deliberate rules change,
 run `node scripts/build-fallbacks.mjs`, inspect the results, and verify it again.
 
 Any change to gameplay, generation, search budgets/order, calibration, the
-human-like bot (whose gap now picks candidates), or fallback selection can
-change an edition. Bump the generator/rules version and save-key version
+human-like bot (whose gap now picks each day's floors), the day targets, or
+fallback selection can change an edition. Bump the generator/rules version and save-key version
 together for such a release; `HUMAN_BOT_VERSION` alone only recomputes
 remembered pars. Candidate layouts after the first are seeded by
 `LAYOUT_SEED_VERSION` (src/generation.js), not the rules version, so a bump

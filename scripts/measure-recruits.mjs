@@ -10,8 +10,9 @@
 // monsters and the production budget, twice: on Auto, exactly as generation
 // certifies today, and steered (src/fairness.js RECRUIT_MODES 'steer': every
 // floor's recruit may join and each action may carry an order, so it may take
-// targets and the king). It replays generateDaily's choice (chooseCandidate,
-// the adopted no-freebie rule from Tricky on) for each and reports the
+// targets and the king). It replays generateDaily's choice (rankFloors, aimed
+// at the date's target, the adopted no-freebie rule from Tricky on, but whole
+// days only, since it measures each candidate as a whole) and reports the
 // fallback share, and how often the first candidate certifies. It also
 // searches each floor alone from its start with a steered recruit
 // (findFloorRoute, QUICK_BUDGET transitions) to see whether a Manual player
@@ -47,7 +48,7 @@ import { availableParallelism } from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { getRawDaily } from '../src/edition.js';
-import { ATTEMPTS, SEARCH_BUDGET, candidateFor, chooseCandidate, searchCandidate } from '../src/generation.js';
+import { ATTEMPTS, SEARCH_BUDGET, candidateFor, rankFloors, searchCandidate, targetForDate } from '../src/generation.js';
 import { DIFFICULTY_TIERS, TIER_IDS, knobsFor, tierForDate, HUMAN_MOVE_CAP } from '../src/difficulty.js';
 import { PIECES, PLAYABLE_PIECES } from '../src/pieces.js';
 import { createGame, act, scoredMoves, recruitChoice, legalMoves } from '../src/rules.js';
@@ -153,8 +154,9 @@ function certTask({ date, tier, attempt }) {
       const { threatenedDecisions, floorMoves, turns, livesLost } = result.metrics;
       entry.metrics = { threatenedDecisions, floorMoves, turns, livesLost };
       entry.score = result.score;
-      // The capped human gap the tiers' bands judge (chooseCandidate treats a candidate without one as unmeasured).
-      entry.gap = result.gap;
+      // The capped human gap the day's target judges, and its parts per floor (rankFloors treats a candidate without them as unmeasured).
+      entry.gap = result.gap; entry.points = result.points; entry.runs = result.runs;
+      entry.floors = result.floors.map(({ turns, lives }) => ({ turns, lives }));
       if (recruit === 'steer') {
         entry.recruit = result.metrics.recruit;
         // Would the same moves still win with the recruit left to Auto (every floor's recruit may join)?
@@ -398,12 +400,17 @@ if (!isMainThread) {
     for (const day of days.values()) {
       const { minThreatenedDecisions } = knobsFor(day.tier, day.piece);
       const auto = day.rows.map((row) => row.auto), steer = day.rows.map((row) => row.steer);
-      day.autoChosen = chooseCandidate(auto, day.tier, minThreatenedDecisions);
-      day.steerChosen = chooseCandidate(steer, day.tier, minThreatenedDecisions);
-      day.steerNoRule = chooseCandidate(steer, day.tier, minThreatenedDecisions, 0);
-      day.autoNoRule = chooseCandidate(auto, day.tier, minThreatenedDecisions, 0);
+      // The candidate generation would keep, whole days only (-1: the fallback bank).
+      const choose = (found, rule) => {
+        const best = rankFloors(found.map((entry) => (entry?.metrics?.threatenedDecisions >= minThreatenedDecisions ? entry : null)), targetForDate(day.date, day.tier), day.tier, rule, { wholeDays: true })[0];
+        return best ? best.floors[0] : -1;
+      };
+      day.autoChosen = choose(auto);
+      day.steerChosen = choose(steer);
+      day.steerNoRule = choose(steer, 0);
+      day.autoNoRule = choose(auto, 0);
       // Auto certification that also rejects a layout a steered recruit clears in under three moves (Tricky and up).
-      day.closedChosen = ruled(day.tier) ? chooseCandidate(auto.map((entry, index) => (day.rows[index].quick.some(freebie) ? null : entry)), day.tier, minThreatenedDecisions) : day.autoChosen;
+      day.closedChosen = ruled(day.tier) ? choose(auto.map((entry, index) => (day.rows[index].quick.some(freebie) ? null : entry))) : day.autoChosen;
       const chosen = day.autoChosen >= 0 ? day.rows[day.autoChosen] : null;
       day.manualFreebie = chosen ? chosen.quick.map(freebie) : null;
       const steered = day.steerChosen >= 0 ? day.rows[day.steerChosen] : null;

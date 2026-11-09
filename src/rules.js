@@ -8,7 +8,7 @@ import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TAC
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-export const RULES_VERSION = 8;
+export const RULES_VERSION = 9;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -599,7 +599,7 @@ function monsterTie(state, foe, move) {
 }
 function tiePrefix(state, foe) {
   const clock = state.classicMonsters === true ? state.turns : state.turns - state.floorStart.turns;
-  return `${state.dungeonSeed ?? state.seed}:${state.floor}:${clock}:${foe.id}:`;
+  return `${floorSeed(state)}:${state.floor}:${clock}:${foe.id}:`;
 }
 function safeKingMoves(state, king) {
   return monsterMoves(state, king).filter((move) => !hypothetically(king, move, () => kingThreatened(state, king)));
@@ -826,7 +826,7 @@ function fitPracticeRoom(state, layoutPiece) {
     reach = reachableFrom(state, piece, state.player);
   }
   const reached = (tile) => reach[tile.y * 8 + tile.x] === 1;
-  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:practice-pickups:${state.floor}`));
+  const rng = random(hash(`${floorSeed(state)}:practice-pickups:${state.floor}`));
   const recruit = state.items.find((item) => item.type === 'companion');
   if (recruit) {
     const fits = (tile) => !same(tile, state.exit) && !enemyAt(state, tile.x, tile.y) && !state.items.some((other) => other !== recruit && same(other, tile))
@@ -873,8 +873,23 @@ const LEGACY_LAYOUT_SEEDS = new Set([1830689584]);
 // their saved runs still validate; 2026-11-06's seed is also the white-pawn
 // fallback, which keeps its certificate.
 const FIXED_PAWN_FORMATION_SEEDS = new Set([1830689584, 1881022441]);
+
+/**
+ * The seed behind one floor: its room, residents, pickups, recruit, room
+ * modifier and the monsters' tie-breaks all draw from it, on streams of their
+ * own. A day assembled from the floors of several candidate layouts
+ * (src/generation.js) gives each floor its own (`floorSeeds`); otherwise every
+ * floor shares the dungeon's seed. Nothing else about a floor depends on the
+ * floors before it except lives, so a floor plays the same with any seeds
+ * before it.
+ */
+export function floorSeed(state, floor = state.floor) {
+  return state.floorSeeds?.[floor] ?? state.dungeonSeed ?? state.seed;
+}
+const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 && seeds.every((seed) => Number.isInteger(seed) && seed >= 0);
+
 function pawnFormation(state) {
-  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:pawns:${state.floor}`));
+  const rng = random(hash(`${floorSeed(state)}:pawns:${state.floor}`));
   const squares = [];
   for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) {
     // (1, 0) too: a mirrored room moves the (7, 0) decoy there.
@@ -939,7 +954,7 @@ function distantPowerTile(state, layoutPiece, rng) {
 // holds no coins and no coin magnet: nothing would remain to spend them on.
 // The launch edition keeps its published layout (see LEGACY_LAYOUT_SEEDS).
 export function coinlessFloor(state, floor = state.floor) {
-  return floor === state.targets.length - 1 && !LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed);
+  return floor === state.targets.length - 1 && !LEGACY_LAYOUT_SEEDS.has(floorSeed(state, floor));
 }
 
 // One draw either way, so the rest of the room's random layout is unchanged.
@@ -969,7 +984,7 @@ export function floorDecoys(state, floor = state.floor) {
 // decoys beside a target, where they would strike a player who takes it.
 // Both draw from their own streams, so the room's other draws stay in sequence.
 function applyLayoutPressure(state, layoutPiece, targetPiece) {
-  const seed = state.dungeonSeed ?? state.seed;
+  const seed = floorSeed(state);
   const count = PIECE_COUNTS[targetPiece];
   const targets = state.enemies.slice(0, count), decoys = state.enemies.slice(count);
   const taken = (x, y, unit) => state.enemies.some((foe) => foe !== unit && foe.x === x && foe.y === y) || (x === 4 && y === 0);
@@ -1034,7 +1049,7 @@ function screenReach(state) {
 
 function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
-  const rng = random(hash(`${state.dungeonSeed ?? state.seed}:room:${state.floor}`));
+  const rng = random(hash(`${floorSeed(state)}:room:${state.floor}`));
   state.awaitingPlayer = false; state.companion = null; state.enPassant = null;
   breakTactics(state);
   // A new floor's ceiling holds; the stairs banked any gold at risk (src/cave-in.js).
@@ -1052,7 +1067,7 @@ function setFloor(state, kingRecruit = false) {
   const target = state.species[state.floor];
   const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), ...floorDecoys(state)];
   const mirror = rng() < 0.5;
-  const formation = target.piece === 'pawn' && !FIXED_PAWN_FORMATION_SEEDS.has(state.dungeonSeed ?? state.seed)
+  const formation = target.piece === 'pawn' && !FIXED_PAWN_FORMATION_SEEDS.has(floorSeed(state))
     ? pawnFormation(state) : null;
   const targetTiles = formation ?? (target.piece === 'pawn'
     ? [[3, 3], [5, 3], [2, 2], [6, 2], [1, 1], [7, 1], [0, 2], [6, 0]]
@@ -1068,7 +1083,7 @@ function setFloor(state, kingRecruit = false) {
       piece: creature.piece, role: creature.piece, x, y, moved: false, phase: 'ready', intent: [], target: null };
   });
   applyLayoutPressure(state, layoutPiece, target.piece);
-  const powerTile = LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed)
+  const powerTile = LEGACY_LAYOUT_SEEDS.has(floorSeed(state))
     ? (layoutPiece === 'bishop' ? [3, 5] : layoutPiece === 'knight' ? [3, 4] : [4, 5])
     : distantPowerTile(state, layoutPiece, rng);
   state.items = [
@@ -1077,7 +1092,7 @@ function setFloor(state, kingRecruit = false) {
   ];
   state.props = [];
   const reserved = [...state.enemies, ...state.items, state.player, state.exit];
-  if (!LEGACY_LAYOUT_SEEDS.has(state.dungeonSeed ?? state.seed)) reserved.push(...state.enemies.flatMap(openingSquares));
+  if (!LEGACY_LAYOUT_SEEDS.has(floorSeed(state))) reserved.push(...state.enemies.flatMap(openingSquares));
   const candidates = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if ((layoutPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (layoutPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;
@@ -1101,7 +1116,7 @@ function setFloor(state, kingRecruit = false) {
   if (!state.legacyTurnOrder) {
     // Add the recruit after the layout is fixed; older editions keep their map.
     // Its own random stream leaves walls, monsters and coins untouched.
-    const recruitRng = random(hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}`));
+    const recruitRng = random(hash(`${floorSeed(state)}:companion:${state.floor}`));
     // Under royal rules the recruit is a king (KING_FLOOR_RECRUITS): a second
     // attacker that helps corner a dodging king beside any piece.
     // Floors 1 and 2 recruit any piece. Runs saved while they always recruited
@@ -1199,6 +1214,8 @@ export function createGame(daily = getRawDaily()) {
     message: `${captureGoal(daily.targets[0])}. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
+  // An assembled day's floors each come from their own candidate layout (floorSeed).
+  if (validFloorSeeds(daily.floorSeeds)) state.floorSeeds = [...daily.floorSeeds];
   // Plain days carry no modifier field, so their saves keep their shape.
   if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
@@ -1475,7 +1492,7 @@ function pairHop(state, unit) {
 // by the day's seed.
 function autoHop(state, unit, { squares, blocked }) {
   const rank = blocked ? (tile) => chebyshev(tile, unit) : (tile) => -hypothetically(unit, tile, () => movesFor(state, unit).length);
-  const tie = (tile) => hash(`${state.dungeonSeed ?? state.seed}:bishop-pair:${state.floor}:${tile.x},${tile.y}`);
+  const tie = (tile) => hash(`${floorSeed(state)}:bishop-pair:${state.floor}:${tile.x},${tile.y}`);
   return squares.map((tile) => ({ tile, rank: rank(tile), tie: tie(tile) })).sort((a, b) => a.rank - b.rank || a.tie - b.tie)[0].tile;
 }
 function hopToOtherColour(state, unit, square) {
@@ -1530,7 +1547,7 @@ function companionTurn(state, order, joined = false) {
   // the run's, so a floor plays the same however long the earlier ones took. A
   // king recruit, with its many equal steps, leans on it often.
   const clock = state.classicMonsters === true ? state.turns : state.turns - (state.floorStart?.turns ?? 0);
-  const tie = (move) => hash(`${state.dungeonSeed ?? state.seed}:companion:${state.floor}:${clock}:${move.x},${move.y}`);
+  const tie = (move) => hash(`${floorSeed(state)}:companion:${state.floor}:${clock}:${move.x},${move.y}`);
   // Each candidate's keys once, compared exactly as before.
   const ranked = candidates.map((move) => ({ move, capture: Number(move.capture), nearest: nearest(move), away: distance(move,unit), tie: tie(move) }));
   ranked.sort((a,b) => b.capture-a.capture || a.nearest-b.nearest || b.away-a.away || a.tie-b.tie);
@@ -1937,6 +1954,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (value.awaitingPlayer && (value.playerColor !== 'black' || value.status !== 'playing')) return false;
     if ((value.modifier ?? 'none') !== (daily.modifier ?? 'none')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
+    if (!equal(value.floorSeeds ?? null, validFloorSeeds(daily.floorSeeds) ? daily.floorSeeds : null)) return false;
     if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0) || (value.screens ?? 0) !== (daily.screens ?? 0)) return false;
     // Not `edition`: the number moved when the archive began at 2026-11-01, and seed and date pin the day.
     if (value.seed !== daily.seed || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;

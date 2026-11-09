@@ -75,7 +75,8 @@ test('each floor\'s full cast is exactly the species that can stand there, order
     }
   }
   assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
-  assert.ok(sizes.has(1) && sizes.has(3), 'one-species floors and full casts both occur');
+  // Every floor keeps at least one decoy (src/difficulty.js MIN_DECOYS): no floor holds its targets alone.
+  assert.ok(!sizes.has(1) && sizes.has(2) && sizes.has(3), 'no one-species floors; two- and three-species casts both occur');
 });
 
 test('the paper shows two suspects: the target and one other species from the floor, stable per date, by name', () => {
@@ -110,7 +111,9 @@ test('the paper shows two suspects: the target and one other species from the fl
   }
   assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
   assert.ok(firstDecoy > 0 && secondDecoy > 0, 'either decoy species can be the one shown');
-  assert.ok(alone > 0 && arrivalsOnly > 0, 'open-and-shut floors and arrival-only floors both occur');
+  // With a decoy on every floor, the paper never runs an open-and-shut case, and the other suspect is always in the room.
+  assert.equal(alone, 0, 'no open-and-shut floors');
+  assert.equal(arrivalsOnly, 0, 'no floor whose only other species arrives by Collapse');
 });
 
 test('capturing a species the paper did not show still unmasks it and saves', () => {

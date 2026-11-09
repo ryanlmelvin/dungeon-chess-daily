@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor, retryLostRun } from '../src/game.js';
 import { botRun, playerRun } from '../src/bot.js';
 import { floorPars, parFor, runPars, humanSummary, validSummary } from '../src/par.js';
-import { humanPar, failedFloorPar } from '../src/human-bot.js';
+import { humanPar, failedFloorPar, HUMAN_RUNS } from '../src/human-bot.js';
 import { EDITIONS } from '../src/editions.js';
 import { generateDaily } from '../src/generation.js';
 
@@ -52,8 +52,8 @@ test('the editions table stores a par and a shown run for every date, exactly as
     const { par, runs } = humanPar(generateDaily(date));
     assert.deepEqual({ par, runs }, { par: EDITIONS[date].par, runs: EDITIONS[date].runs }, date);
   }
-  assert.equal(validSummary({ par: [3, 4, 5], runs: [0, null, 4] }), true);
-  for (const bad of [{ par: [3, 4], runs: [0, 0] }, { par: [3, 0, 5], runs: [0, 0, 0] }, { par: [3, 4, 5], runs: [0, 5, 0] }, { par: [3, 4, 5.5], runs: [0, 0, 0] }, { par: [3, 4, 5] }]) {
+  assert.equal(validSummary({ par: [3, 4, 5], runs: [0, null, HUMAN_RUNS - 1] }), true);
+  for (const bad of [{ par: [3, 4], runs: [0, 0] }, { par: [3, 0, 5], runs: [0, 0, 0] }, { par: [3, 4, 5], runs: [0, HUMAN_RUNS, 0] }, { par: [3, 4, 5.5], runs: [0, 0, 0] }, { par: [3, 4, 5] }]) {
     assert.equal(validSummary(bad), false, JSON.stringify(bad));
   }
 });

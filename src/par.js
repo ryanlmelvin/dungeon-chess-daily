@@ -27,7 +27,7 @@ function storedSummary(daily) {
   const entry = EDITIONS[daily.date], generation = daily.generation;
   if (!entry || entry.tier !== daily.difficulty || !validSummary(entry)) return null;
   const same = entry.attempt === 'fallback' ? generation.source === 'fallback'
-    : generation.source === 'generated' && entry.attempt === generation.attempt && entry.route === routeOf(daily);
+    : generation.source === 'generated' && JSON.stringify(entry.attempt) === JSON.stringify(generation.attempt) && entry.route === routeOf(daily);
   return same ? { par: entry.par, runs: entry.runs } : null;
 }
 

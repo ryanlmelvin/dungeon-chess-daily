@@ -7,14 +7,16 @@
 // (half plain, a quarter each ice and collapse), it searches every candidate
 // layout generation may try (ATTEMPTS, or --attempts N) under the current
 // calibrated knobs, with the tier's monsters and the production search
-// (src/fairness.js). It then replays generateDaily's choice (chooseCandidate)
+// (src/fairness.js). It then replays generateDaily's choice (rankFloors: the
+// day assembled from the candidates' floors, aimed at the date's target)
 // under each freebie rule below and reports, per rule, the share of days that
 // fall back to the bank, by tier and by tier and piece; the adopted rule is
 // the headline. Tricky and up take the rule; Gentle and Fair have none under
 // every rule. It also reports how often each candidate certifies, par per
 // floor (the certified route's moves until each floor's challenge was
 // complete), the capped human gap and the difficulty score under the adopted
-// rule, the fallback share with only the first two candidates, and search
+// rule (the assembled floors' own), the fallback share with only the first two
+// candidates, and search
 // time (with the human-like bot's runs). Fallback days
 // have no par here: the bank holds one fixed template per tier, piece and
 // modifier. The knobs are calibrated for an earlier search and rules;
@@ -25,13 +27,13 @@
 // their fallback share with no freebie rule, to price the smarts themselves.
 //
 //   node scripts/measure-monsters.mjs [--samples 16] [--start 2026-11-05]
-//     [--jobs N] [--tiers gentle,fair] [--pieces rook,queen] [--attempts 4] [--classic] [--json file]
+//     [--jobs N] [--tiers gentle,fair] [--pieces rook,queen] [--attempts 16] [--classic] [--json file]
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { getRawDaily } from '../src/edition.js';
-import { ATTEMPTS, candidateFor, chooseCandidate, searchCandidate } from '../src/generation.js';
+import { ATTEMPTS, candidateFor, rankFloors, searchCandidate, targetForDate } from '../src/generation.js';
 import { DIFFICULTY_TIERS, TIER_IDS, knobsFor, tierForDate, bandDistance, floorMinimums } from '../src/difficulty.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
 
@@ -57,8 +59,11 @@ if (!isMainThread) {
     const began = performance.now();
     const result = searchCandidate(candidate);
     const metrics = result.metrics ? Object.fromEntries(KEPT_METRICS.map((name) => [name, result.metrics[name]])) : null;
-    // chooseCandidate picks by the capped human gap (searchCandidate runs the bot).
-    parentPort.postMessage({ id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null, gap: result.gap ?? null });
+    // rankFloors adds up the floors' capped human gaps (searchCandidate runs the bot).
+    parentPort.postMessage({
+      id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null, gap: result.gap ?? null,
+      points: result.points ?? null, runs: result.runs ?? 0, floors: result.floors?.map(({ turns, lives }) => ({ turns, lives })) ?? null,
+    });
   });
 } else {
   const args = process.argv.slice(2);
@@ -72,8 +77,8 @@ if (!isMainThread) {
   const classic = args.includes('--classic');
   if (!Number.isInteger(samples) || samples < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isInteger(jobs) || jobs < 1
     || tiers.some((tier) => !TIER_IDS.includes(tier)) || pieces.some((piece) => !PLAYABLE_PIECES.includes(piece))
-    || !Number.isInteger(attempts) || attempts < 1 || attempts > 8) {
-    throw new Error('Usage: node scripts/measure-monsters.mjs [--samples N] [--start YYYY-MM-DD] [--jobs N] [--tiers a,b] [--pieces a,b] [--attempts 1..8] [--classic] [--json file]');
+    || !Number.isInteger(attempts) || attempts < 1 || attempts > ATTEMPTS) {
+    throw new Error(`Usage: node scripts/measure-monsters.mjs [--samples N] [--start YYYY-MM-DD] [--jobs N] [--tiers a,b] [--pieces a,b] [--attempts 1..${ATTEMPTS}] [--classic] [--json file]`);
   }
 
   // Dates per (tier, piece): the weekday sets the tier, so walk forward from
@@ -115,10 +120,10 @@ if (!isMainThread) {
     feed();
   })));
 
-  // generateDaily's choice for one date under a rule: the first candidate in
-  // the band, else the closest acceptable one, else the fallback bank (-1).
-  // Searching every candidate and choosing among all of them is the same
-  // choice generateDaily makes when it stops at the first in-band one.
+  // generateDaily's choice for one date under a rule: the best assembly of the
+  // candidates' floors (rankFloors), else the fallback bank (null). Searching
+  // every candidate and choosing among all of them can only land closer than
+  // generateDaily, which stops at the first one that lands on the target.
   const found = {};
   for (const task of tasks) ((found[`${task.date}:${task.ai}`] ??= [])[task.attempt] = results[task.id]);
   const median = (values) => {
@@ -130,21 +135,23 @@ if (!isMainThread) {
   const summarize = (entries) => {
     const row = { days: 0, certified: Array(attempts).fill(0), fallbacks: RULES.map(() => 0), fallbacksTwo: 0, classic: 0, inBand: 0, floors: [[], [], []], totals: [], scores: [], gaps: [], ms: 0, searches: 0 };
     for (const { tier, piece, date } of entries) {
-      const knobs = knobsFor(tier, piece);
+      const knobs = knobsFor(tier, piece), target = targetForDate(date, tier);
+      // Candidates under the threat minimum give no floors (generation checks it on the whole day).
+      const pick = (list, rule) => rankFloors(list.map((entry) => (entry?.metrics?.threatenedDecisions >= knobs.minThreatenedDecisions ? entry : null)), target, tier, ruleFor(tier, rule))[0] ?? null;
       const searched = found[`${date}:tier`];
       row.days++;
       row.ms += searched.reduce((sum, entry) => sum + entry.ms, 0); row.searches += searched.length;
-      for (const [attempt, entry] of searched.entries()) if (chooseCandidate([entry], tier, knobs.minThreatenedDecisions, ruleFor(tier, RULES[0].rule)) === 0) row.certified[attempt]++;
-      RULES.forEach(({ rule }, index) => { if (chooseCandidate(searched, tier, knobs.minThreatenedDecisions, ruleFor(tier, rule)) < 0) row.fallbacks[index]++; });
-      if (chooseCandidate(searched.slice(0, 2), tier, knobs.minThreatenedDecisions, ruleFor(tier, RULES[0].rule)) < 0) row.fallbacksTwo++;
-      if (classic && chooseCandidate(found[`${date}:classic`], tier, knobs.minThreatenedDecisions, 0) < 0) row.classic++;
-      const chosen = chooseCandidate(searched, tier, knobs.minThreatenedDecisions, ruleFor(tier, RULES[0].rule));
-      if (chosen < 0) continue;
-      const { metrics, score, gap } = searched[chosen];
-      if (bandDistance(gap, tier) === 0) row.inBand++;
-      metrics.floorMoves.forEach((moves, floor) => row.floors[floor].push(moves));
-      row.totals.push(metrics.floorMoves.reduce((sum, moves) => sum + moves, 0));
-      row.scores.push(score); row.gaps.push(gap);
+      for (const [attempt, entry] of searched.entries()) if (pick([entry], RULES[0].rule)) row.certified[attempt]++;
+      RULES.forEach(({ rule }, index) => { if (!pick(searched, rule)) row.fallbacks[index]++; });
+      if (!pick(searched.slice(0, 2), RULES[0].rule)) row.fallbacksTwo++;
+      if (classic && !pick(found[`${date}:classic`], 0)) row.classic++;
+      const chosen = pick(searched, RULES[0].rule);
+      if (!chosen) continue;
+      const floorMoves = chosen.floors.map((attempt, floor) => searched[attempt].metrics.floorMoves[floor]);
+      if (bandDistance(chosen.gap, tier) === 0) row.inBand++;
+      floorMoves.forEach((moves, floor) => row.floors[floor].push(moves));
+      row.totals.push(floorMoves.reduce((sum, moves) => sum + moves, 0));
+      row.scores.push(mean(chosen.floors.map((attempt) => searched[attempt].score))); row.gaps.push(chosen.gap);
     }
     return row;
   };
