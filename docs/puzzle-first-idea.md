@@ -151,6 +151,13 @@ single winning first move, against 14% for the composer's own phase-0
 squeezes.
 
 **What these floors would need.**
+- **Roaming decoys.** The measurement turned every man the line doesn't use
+  into a wall. That is the static room the user rejected in the phase-0
+  preview: walled-in decoys "lost the pressure of a dungeon crawler". A lichess
+  floor would supply only its puzzle core (your piece, the recruit, the target,
+  its guards and the trap's walls). Decoys would roam and press around it, the
+  way the composer now dresses its own floors, and the exact search would
+  re-check each floor after dressing.
 - **A recruit already at your side** on combo floors. Today a recruit waits one
   move away.
 - **The puzzle's start square.** You start where the puzzle puts you, not on
