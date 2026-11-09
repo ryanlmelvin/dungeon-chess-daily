@@ -478,15 +478,16 @@ function winsAsPlayed(start, line) {
  * every hint being a coin. Floor 1: a coin, or a held decoy standing there,
  * which the key move takes while it sleeps. Floor 2: a coin or a coin magnet
  * (a magnet carried out of floor 1 would sweep up floor 2's hint coin; out of
- * floor 2 it meets only the coinless king floor). The king floor: a bone
- * ward, with no floor after it to carry the ward into. A coin never changes
+ * floor 2 it meets only the coinless king floor). The king floor has no hint:
+ * its net is found unaided. A coin never changes
  * play; any other hint is kept only if the line still wins with nothing
  * shorter, and the hasty check and bot guard pass. Returns { room, kind }.
  */
 function hinted(built, best, line, base, floor, rng, carried) {
-  const square = ideaSquare(built, best.states, line);
+  // The king floor's net goes unhinted.
+  const square = floor === 2 ? null : ideaSquare(built, best.states, line);
   if (!square) return { room: best.room, kind: null };
-  const kinds = floor === 2 ? ['shield'] : shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng);
+  const kinds = shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng);
   for (const kind of kinds) {
     const room = structuredClone(best.room);
     if (kind === 'coin') {
@@ -618,10 +619,7 @@ function dress(plan, context, line, base, floor, rng) {
   const coinless = floor === 2;
   const coins = coinless ? [] : open.filter((tile) => far(tile, 1)).slice(0, 3);
   for (const tile of coins) plan.items.push({ x: tile.x, y: tile.y, type: 'coin' });
-  // Every floor keeps a red herring: floors 1 and 2 have coins off the line; the
-  // coinless king floor gets a decoy bone ward away from it.
-  const herring = coinless && open.find((tile) => plan.free(tile) && far(tile, 2) && chebyshev(tile, START) > 1);
-  if (herring) plan.items.push({ x: herring.x, y: herring.y, type: 'powerup', power: 'shield' });
+  // Floors 1 and 2 keep coins off the line as red herrings; the king floor has no hint and no items but its recruit.
   if (floor === 2) {
     // The king floor's recruit, a king, waits one move from the start, as always,
     // too far from the royal king to step beside it within the line.
