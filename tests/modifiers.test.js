@@ -193,7 +193,7 @@ test('collapse sends a decoy in at the door every ten moves on a floor, up to th
   assert.deepEqual([first.x, first.y], [state.exit.x, state.exit.y]);
   const second = state.enemies.find((entry) => entry.id === 'f0-r1');
   assert.equal(kingSteps(second, state.exit), Math.min(...emptySquares(state).map((tile) => kingSteps(tile, state.exit)), kingSteps(second, state.exit)));
-  assert.match(said(state), /The ceiling groans: the door is blocked, so .+ drops in nearby\./);
+  assert.match(said(state), /The door is blocked, so .+ squeezes in nearby\./);
   for (let turn = 0; turn < COLLAPSE_EVERY * 6; turn++) {
     state.enemies = state.enemies.filter((entry) => !entry.id.includes('-r'));
     state = act(state, { type: 'wait' });
@@ -237,11 +237,11 @@ test('an arrival never waits at the door: whoever stands there, it enters on the
     assert.deepEqual(next.events.find((event) => event.type === 'reinforcement'), { type: 'reinforcement', id: 'f0-r0', x: expected.x, y: expected.y }, who);
     if (who === 'nobody') {
       assert.deepEqual([arrival.x, arrival.y], [4, 0]);
-      assert.match(said(next), /The ceiling groans: .+ stumbles in through the door\./);
+      assert.match(said(next), /.+ stumbles in through the door\./);
     } else {
       // The door square's five neighbours are all empty, so it lands on one of them.
       assert.equal(kingSteps(arrival, next.exit), 1, who);
-      assert.match(said(next), /The ceiling groans: the door is blocked, so .+ drops in nearby\./, who);
+      assert.match(said(next), /The door is blocked, so .+ squeezes in nearby\./, who);
     }
     // Nobody is pushed aside.
     if (who === 'the player') assert.deepEqual([next.player.x, next.player.y], [4, 0]);
@@ -326,7 +326,7 @@ test('on a board with no empty square left the arrival is called off and still c
   assert.equal(state.reinforcements, 0);
   assert.equal(state.reinforcementsSkipped, 1);
   assert.equal(state.enemies.length, 1);
-  assert.match(state.message, /nothing comes through the door/);
+  assert.match(state.message, /The door rattles, but nothing comes through\./);
 });
 
 test('saves stay valid when an arrival drops in beside a blocked door', () => {

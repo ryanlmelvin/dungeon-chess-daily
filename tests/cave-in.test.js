@@ -263,7 +263,7 @@ test('black, Pin and Collapse days: one tick per completed move, none for free a
   let state = act(collapse, move(3, 4));
   for (let n = 0; n < 4; n++) state = act(state, shuffle(state, n));
   assert.equal(state.reinforcements, 0); assert.ok(!state.enemies.length);
-  assert.equal(modifierStatus(state), '🧱 Collapse'); assert.equal(caveInLabel(state), 'Take the stairs! Caving in 1');
+  assert.equal(modifierStatus(state), '🧱 Breach'); assert.equal(caveInLabel(state), 'Take the stairs! Caving in 1');
 });
 
 test('the shop at the stairs spends banked gold first', () => {

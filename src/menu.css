@@ -209,6 +209,9 @@ dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shad
 .game-status { font-size: 24px; }
 .game-status button { font-size: 22px; padding: 7px 10px; }
 #freeze-status, #pin-status { font-size: 20px; }
+/* Frozen, Pinned and Combo sit left of the exit door, above the first row (main.js placeBoardChips). */
+.board-chips { position: absolute; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; pointer-events: none; font-size: 24px; line-height: 1.1; text-shadow: 2px 2px #100f14, -2px -2px #100f14, 2px -2px #100f14, -2px 2px #100f14; }
+.board-chips[hidden], body.replaying .board-chips { display: none !important; }
 .game-menu-button { padding: 6px; font-size: 26px; }
 .game-objective, .descend-button { font-size: 22px; line-height: 1.1; width: max-content; max-width: calc(100% - 28px); white-space: normal; }
 /* The objective stays click-through except for its hint button. */

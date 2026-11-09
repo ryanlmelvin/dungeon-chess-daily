@@ -28,10 +28,11 @@ export const MODIFIERS = Object.freeze({
     headline: 'Cold snap glazes the dungeon: long moves that end on ice skid one square further',
     explain: 'Ice: a rook, bishop or queen, or a pawn moving straight, that ends a move on ice skids one more square if it’s open. Captures stop you. Monsters never slide.',
   }),
+  // Shown as Breach: the cracking ceiling belongs to the cave-in (src/cave-in.js).
   collapse: Object.freeze({
-    id: 'collapse', emoji: '🧱', name: 'Collapse', changesRules: true,
-    headline: 'Ceiling cracks above the crypt: fresh monsters stumble through the door every ten moves',
-    explain: 'Collapse: every 10 moves on a floor, a new monster walks in at the door. If someone is standing there, it drops in on the nearest empty square instead. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
+    id: 'collapse', emoji: '🧱', name: 'Breach', changesRules: true,
+    headline: 'A crypt wall gives way: fresh monsters stumble through the door every ten moves',
+    explain: 'Breach: every 10 moves on a floor, a new monster walks in at the door. If someone is standing there, it squeezes in on the nearest empty square instead. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
 });
 // Uniform over these, so about half the days stay plain. The second slot was
@@ -165,7 +166,7 @@ export function collapseTick(state) {
   const square = foe && arrivalSquare(state, spawned);
   if (!square) {
     state.reinforcementsSkipped = skipped + 1;
-    state.message = `${state.message ? `${state.message} ` : ''}The ceiling groans, but nothing comes through the door.`;
+    state.message = `${state.message ? `${state.message} ` : ''}The door rattles, but nothing comes through.`;
     return;
   }
   const blocked = !same(square, state.exit);
@@ -173,7 +174,7 @@ export function collapseTick(state) {
   state.enemies.push(foe);
   state.reinforcements = spawned + 1;
   state.events.push({ type: 'reinforcement', id: foe.id, x: foe.x, y: foe.y });
-  state.message = `${state.message ? `${state.message} ` : ''}${blocked ? `The ceiling groans: the door is blocked, so ${foe.name} drops in nearby.` : `The ceiling groans: ${foe.name} stumbles in through the door.`}`;
+  state.message = `${state.message ? `${state.message} ` : ''}${blocked ? `The door is blocked, so ${foe.name} squeezes in nearby.` : `${foe.name} stumbles in through the door.`}`;
 }
 
 /** Extra monsters a floor may hold under this modifier (for save bounds). */

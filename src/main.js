@@ -50,8 +50,6 @@ let cursor = null;
 let turnLocked = false;
 let lastSaved = null;
 let noticeTimer;
-// The last floor-clear toast's text (announcePar).
-let parToast = null;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
@@ -176,8 +174,6 @@ function switchScreen(next) {
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
-  // A floor-clear toast still up would only cover the results paper.
-  if (next === 'result' && $('notice').textContent === parToast) $('notice').hidden = true;
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (next === 'game') requestAnimationFrame(() => renderer?.resize());
   syncMusic();
@@ -259,10 +255,10 @@ renderPaper();
 function ensureRenderer() {
   if (renderer) return true;
   try {
-    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
+    renderer = createDungeonRenderer($('dungeon'), { onLayout: () => { reserveObjectiveRoom(); placeWaitButton(); placeBoardChips(); placeDescendButton(); fitMessageLog(); }, onTile: ({x,y}) => {
       if (!state || replay || screen !== 'game' || state.status !== 'playing' || turnLocked) return;
       if (pendingOrder()) { orderAt({ x, y }); return; }
-      if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
+      if (pinning) { const foe = state.enemies.find((entry) => entry.x === x && entry.y === y); pinning = false; clearPinTip(); if (foe) takeAction({ type: 'pin', id: foe.id }); updateGame(); return; }
       // A caved-in room takes no moves: the rubble carried you to the stairs, so any tap reopens the shop.
       if(cavedIn(state)){takeStairs();return;}
       if(x===state.exit.x&&y===state.exit.y-1){if(state.exit.open)takeStairs();return;}
@@ -380,14 +376,13 @@ function renderPar() {
   $('par-status').textContent = `Par ${par}`;
   $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${floorScoredMoves(state)} so far`);
 }
-// "Floor 1 cleared in 12 moves · 2 over par" when a floor with a par is cleared.
-function announcePar(record, par) {
-  const moves = scoredMoves(record);
-  const diff = moves - par;
-  parToast = `Floor ${record.floor + 1} cleared in ${moves} ${moves === 1 ? 'move' : 'moves'} · ${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}`;
-  notify(parToast);
-  const notice = $('notice');
-  notice.classList.remove('par-toast'); void notice.offsetWidth; notice.classList.add('par-toast');
+// "2 over par" (or "even par") for a cleared floor that has a par, else ''.
+// The shop's gold line carries it, so no toast covers the next floor's log.
+function parResult(game) {
+  const par = runPars(game, daily)?.[game.floor];
+  if (!Number.isInteger(par)) return '';
+  const diff = floorScoredMoves(game) - par;
+  return diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`;
 }
 function renderLives() {
   // While the fatal turn plays, the lost last life is already gone.
@@ -472,6 +467,7 @@ function updateGame() {
   $('wait-button').setAttribute('aria-label', hopping ? 'Hold is off: your bishop recruit must hop to the other colour' : holding ? 'Hold: keep your recruit where it is' : 'Wait: skip your move and let the monsters act');
   reserveObjectiveRoom();
   placeWaitButton();
+  placeBoardChips();
   $('descend-button').hidden = !state.exit.open;
   $('descend-button').disabled = holding;
   // During the cave-in countdown the stairs button carries the count (src/cave-in.js).
@@ -537,6 +533,23 @@ function placeMessageLog() {
 // while the panel shows, so the board doesn't jump when the stairs open.
 let waitSize = null;
 let stackedTop = null;
+// The board stays put for the whole floor: the room above it is measured with
+// the Hint button's widest label and only grows until the floor or the screen
+// changes, so fewer targets or a tool used up leave their room in place.
+let heldRoom = null;
+function holdRoom(measured) {
+  const key = `${daily?.date}|${practice}|${state?.floor}|${innerWidth}x${innerHeight}`;
+  if (heldRoom?.key !== key) heldRoom = { key };
+  for (const [name, value] of Object.entries(measured)) heldRoom[name] = Math.max(heldRoom[name] ?? -Infinity, value);
+  return heldRoom;
+}
+function widestPanelHeight(panel) {
+  const hint = $('hint-button'), label = hint.textContent;
+  hint.textContent = '? Hint · +1';
+  const height = panel.offsetHeight;
+  hint.textContent = label;
+  return height;
+}
 // Stacked on top, the objective carries Wait at the end of its Targets and Hint
 // row, so Wait needs no row of its own above the board. Beside, Wait stands alone.
 function dockWait(inline) {
@@ -566,10 +579,15 @@ function reserveObjectiveRoom() {
   // Stacked, the panel sits just under the status corner and the menu button,
   // not at a fixed offset, so no dead band opens above the board.
   const menuBottom = menu.height ? menu.bottom - area.top : 0;
-  const stackTop = statusBottom || menuBottom ? Math.max(statusBottom, menuBottom) + 8 : cssTop;
+  const held = holdRoom({
+    statusBottom, statusRight: status.right - area.left,
+    stackTop: statusBottom || menuBottom ? Math.max(statusBottom, menuBottom) + 8 : cssTop,
+    panelHeight: panel.hidden ? 0 : widestPanelHeight(panel),
+  });
+  const stackTop = held.stackTop;
   renderer.setPanels({
-    stackBottom: panel.hidden ? 0 : Math.ceil(stackTop + panel.offsetHeight),
-    status: { right: Math.ceil(status.right - area.left), bottom: Math.ceil(statusBottom) },
+    stackBottom: panel.hidden ? 0 : Math.ceil(stackTop + held.panelHeight),
+    status: { right: Math.ceil(held.statusRight), bottom: Math.ceil(held.statusBottom) },
     menu: menu.height ? { left: Math.floor(menu.left - area.left), bottom: Math.ceil(menu.bottom - area.top) } : null,
     wait: waitSize || { width: 80, height: 44 },
     waitInline: !panel.hidden,
@@ -587,7 +605,7 @@ function reserveObjectiveRoom() {
   panel.style.width = `${Math.round(width)}px`;
   panel.style.left = `${Math.round(board.left - 12 - width)}px`;
   // Below the gold, moves and lives in the top-left corner.
-  panel.style.top = `${Math.round(Math.max(board.rowTop, statusBottom + 10))}px`;
+  panel.style.top = `${Math.round(Math.max(board.rowTop, held.statusBottom + 10))}px`;
 }
 // Wait is the one action button off the board. Stacked, it rides in the
 // objective's row (dockWait); beside, it sits just above the board's top-right
@@ -606,6 +624,19 @@ function placeWaitButton() {
   }
   button.style.top = `${Math.round(board.waitTop)}px`;
   button.style.left = `${Math.round(board.wait === 'beside' ? board.waitLeft : board.right - button.offsetWidth)}px`;
+}
+// Frozen, Pinned and Combo come and go within a floor, so they sit left of the
+// exit door, in the strip above the first row that the board keeps for the door
+// anyway: one showing up never moves the board.
+function placeBoardChips() {
+  const strip = $('board-chips');
+  const board = renderer?.layout?.(), door = renderer?.exitAnchor?.();
+  strip.hidden = ![...strip.children].some((chip) => !chip.hidden) || !board || !door;
+  if (strip.hidden) return;
+  const square = (board.right - board.left) / 8;
+  strip.style.left = `${Math.round(board.left + 4)}px`;
+  strip.style.maxWidth = `${Math.max(64, Math.round(door.x - square * 0.6 - board.left - 12))}px`;
+  strip.style.top = `${Math.round(Math.max(board.doorTop, board.rowTop - strip.offsetHeight - 4))}px`;
 }
 // The stairs button sits just above the exit door, or over the door itself when
 // the board fills the screen, so it never covers a square a piece may need.
@@ -655,20 +686,28 @@ function renderTools() {
   const leap = state.status === 'playing' && state.powers.leap > 0 && !cavedIn(state);
   // The move that ended a run is taken back from the Captured page, not the fresh floor one.
   const back = Boolean(takebackTarget(state)) && !restarted(state);
+  // A held Take back shows from the floor's start, greyed until there is a move
+  // to undo, so the tray (and the board below it) never shifts when it wakes.
+  const held = state.status === 'playing' && state.powers.takeback > 0 && !restarted(state);
   if (!pin) pinning = false;
-  $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !back;
-  $('tool-tray').hidden = !(pin || leap || back);
+  $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !(back || held);
+  $('tool-tray').hidden = !(pin || leap || back || held);
   // Tools wait until the recruit has its order; the tray stays put so the board doesn't move.
   for (const id of ['pin-button', 'leap-button', 'takeback-button']) $(id).disabled = Boolean(pendingOrder());
+  if (!back) $('takeback-button').disabled = true;
+  // Pressed, Pin keeps its label (a longer one could wrap the tray): the notice says what to tap.
   $('pin-button').setAttribute('aria-pressed', String(pinning));
-  $('pin-button').textContent = pinning ? 'Pick a monster' : 'Pin';
+  $('pin-button').setAttribute('aria-label', pinning ? 'Pin: now tap a monster' : 'Pin a monster for three moves');
   $('leap-button').textContent = `Borrow ${BORROW_GLYPH[borrowedPiece(state)]}`;
   $('leap-button').setAttribute('aria-label', `Show your borrowed move: move once like a ${borrowedPiece(state)}`);
 }
+const PIN_TIP = 'Tap any monster to pin it for three moves.';
+// The pin tip goes once the pin is placed or called off.
+function clearPinTip() { if ($('notice').textContent === PIN_TIP) notify(''); }
 $('pin-button').addEventListener('click', () => {
   if (!state || turnLocked || replay) return;
   pinning = !pinning; showMoves = false;
-  if (pinning) notify('Tap any monster to pin it for three moves.');
+  if (pinning) notify(PIN_TIP); else clearPinTip();
   updateGame();
 });
 // Borrowed squares are always on offer; the button just points them out.
@@ -960,10 +999,7 @@ function takeAction(action) {
   const fell = next.events.some(event => event.type === 'restart') && next.events.some(event => event.type === 'player-captured');
   const fallen = fell ? whileSearching(() => act(state, action)) : null;
   fallenBoard = fallen ? { state: next, board: { ...fallen, events: fallen.events.slice(continues ? pending.phase : 0).filter(event => event.type !== 'restart') } } : null;
-  const cleared = next.records.length > state.records.length ? next.records.at(-1) : null;
-  // No floor-clear toast once the run ends: the results paper lists every floor.
-  const par = cleared && next.status === 'playing' ? runPars(next, daily)?.[cleared.floor] : null;
-  state = next;showMoves=state.awaitingPlayer;cursor=null;save();if(Number.isInteger(par))announcePar(cleared,par);updateGame();playSound(boardEvents());
+  state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(boardEvents());
   const caveIn = state.events.find(event => event.type === 'cave-in');
   if (caveIn) {
     announceCaveIn(caveIn);
@@ -1048,7 +1084,7 @@ window.addEventListener('keydown',event=>{
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
   else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else{takeAction({type:'move',...cursor});cursorOnRecruit();}}
   else if(name===' '||name==='.'){event.preventDefault();takeAction({type:'wait'});cursorOnRecruit();}
-  else if(name==='Escape'){showMoves=false;pinning=false;cursor=null;updateGame();}
+  else if(name==='Escape'){showMoves=false;pinning=false;clearPinTip();cursor=null;updateGame();}
 });
 function renderShop() {
   // After a cave-in the shop opens with what it cost (src/cave-in.js caveInLoss).
@@ -1059,7 +1095,8 @@ function renderShop() {
     const loss = event ? caveInLoss(event) : '';
     news.replaceChildren(Object.assign(document.createElement('b'), { textContent: 'The ceiling caved in!' }), ...(loss ? [` ${loss}`] : []));
   }
-  $('shop-gold').textContent = shopNote ? `${shopNote} · ${state.gold} gold left` : `Floor ${state.floor + 1} cleared · ${state.gold} gold`;
+  const result = parResult(state);
+  $('shop-gold').textContent = shopNote ? `${shopNote} · ${state.gold} gold left` : `Floor ${state.floor + 1} cleared · ${result ? `${result} · ` : ''}${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
   for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);
@@ -1527,7 +1564,7 @@ function renderBotComparison() {
   const columns = [
     ...bot.floors.map((moves, index) => [`F${index + 1}`, `Floor ${index + 1} moves`, you.floors[index] ?? '–', moves]),
     ['Total', 'Total moves', you.moves, bot.moves, 'bot-total'],
-    ['Lives', 'Lives lost', you.livesLost, bot.livesLost],
+    ['Lives lost', 'Lives lost', you.livesLost, bot.livesLost],
     ...(you.tries > 1 ? [['Tries', 'Tries', you.tries, 1]] : []),
   ];
   const cell = (tag, text, className) => { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; };

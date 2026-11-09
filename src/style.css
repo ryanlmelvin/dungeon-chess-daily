@@ -138,7 +138,7 @@ dialog{color:#e6e1d7;background:#1b1821;border:1px solid #766b7b;border-radius:0
 #move-status.paused{color:#f2ce80;border:2px solid #d5b16e;background:#100f14ba;padding:2px 6px;margin:-4px 0;box-shadow:2px 2px #030208;white-space:nowrap}#move-status.paused::before{content:'\2713\00a0'}
 /* Par (src/par.js) */
 #par-status{color:#f2ce80}
-.notice.par-toast{animation:par-toast .5s cubic-bezier(.3,1.6,.5,1)}@keyframes par-toast{from{transform:translateX(-50%) scale(.6);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}@media(prefers-reduced-motion:reduce){.notice.par-toast{animation:none}}
+
 .replay-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);display:flex;flex-direction:column;align-items:center;gap:8px;width:min(440px,calc(100% - 32px));padding:10px 12px;background:#100f14d9;border:2px solid #d5b16e70;box-shadow:3px 3px #030208}.replay-label{margin:0;font:400 22px/1.1 'VT323',monospace;color:var(--paper);text-align:center}.replay-controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.replay-controls button{min-width:48px;min-height:44px;padding:6px 10px;font:400 22px/1 'VT323',monospace;color:var(--gold);background:#100f14;border:2px solid #d5b16e70}.replay-controls button:disabled{opacity:.4}#replay-exit{color:var(--paper)}
 body.replaying .game-status,body.replaying .game-objective,body.replaying .descend-button,body.replaying .wait-button,body.replaying .game-menu-button{display:none!important}
 body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px);white-space:normal;max-width:calc(100% - 32px)}

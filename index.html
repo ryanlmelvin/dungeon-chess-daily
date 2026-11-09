@@ -36,11 +36,12 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><span id="freeze-status" hidden></span><span id="pin-status" hidden></span><span id="combo-status" class="combo-status" hidden></span><button id="modifier-status" type="button" hidden></button><span class="life-row"><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><button id="modifier-status" type="button" hidden></button><span class="life-row"><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><span id="targets" class="target-row"><span class="target-label" aria-hidden="true">Targets left</span><span id="target-markers" class="target-markers" role="img" aria-label="Targets left"></span></span></p>
       <button id="wait-button" class="wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space" hidden>Wait</button>
       <button id="descend-button" class="descend-button" hidden>Take stairs ↘</button>
+      <div id="board-chips" class="board-chips" hidden><span id="freeze-status" hidden></span><span id="pin-status" hidden></span><span id="combo-status" class="combo-status" hidden></span></div>
       <div id="game-message" class="game-message" role="log" aria-label="Messages" aria-live="polite" tabindex="-1" hidden></div>
       <p id="tactic-callout" class="tactic-callout" aria-live="polite" hidden></p>
       <div id="replay-bar" class="replay-bar" role="region" aria-label="Bot replay controls" hidden>
@@ -226,7 +227,7 @@
         <p>Some days add one modifier to every floor. Tap its name above the board for a reminder.</p>
         <h3>🧊 Ice</h3>
         <p>End a move on ice and your piece skids one more square the same way, if it’s open. Knights and kings don’t skid, and captures stop you. Monsters never skid.</p>
-        <h3>🧱 Collapse</h3>
+        <h3>🧱 Breach</h3>
         <p>Every 10 moves, a new monster walks in at the door. At most 3 per floor, and none once the stairs open.</p>
       </article>
       <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
