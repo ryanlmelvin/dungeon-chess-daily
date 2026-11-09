@@ -6,7 +6,9 @@
 // start (src/human-bot.js playFloor, 40 seeded runs, steering its recruit as
 // par assumes). Par is the planted line plus one. A run misses when it fails
 // or takes more than par + 4 moves; a stalled move neither takes a target nor
-// brings the nearest one closer (wall-aware move tables). Read-only.
+// brings the nearest one closer (wall-aware move tables). A king floor's shape
+// is the royal king's square and the square the planted line mates from.
+// Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--json path]
 import { writeFileSync } from 'node:fs';
 import { composeDay, MOTIF_LEVELS } from '../src/composer.js';
@@ -53,9 +55,13 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     });
     // Par two ways (an open question): the planted line plus one, or the bot's median (src/human-bot.js medianRun, as production).
     const botPar = medianRun(outcomes, floor.line.length).par;
+    const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
+    const king = f === 2 ? floor.room.enemies.find((foe) => foe.cast === 0) : null;
+    const mate = floor.line.findLast((action) => action.type === 'move');
     rows.push({
       date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
+      walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null,
     });
   });
 }
@@ -71,6 +77,7 @@ function summarize(group) {
     floors: group.length,
     planted: `${percent(group.filter((row) => row.planted === 3).length, group.length)} / ${percent(group.filter((row) => row.planted === 4).length, group.length)}`,
     unique: percent(group.filter((row) => row.firstMoves === 1).length, group.length),
+    walls: mean(group.map((row) => row.walls)).toFixed(1),
     miss: `${percent(all.filter((run) => !run.won || run.moves > run.par + 4).length, all.length)} / ${percent(all.filter((run) => !run.won || run.moves > run.botPar + 4).length, all.length)}`,
     pars: `${mean(group.map((row) => row.par)).toFixed(1)} / ${mean(group.map((row) => row.botPar)).toFixed(1)}`,
     pressure: `${mean(group.map((row) => row.pressure)).toFixed(1)} (${percent(group.filter((row) => row.pressure > 0).length, group.length)})`,
@@ -91,11 +98,13 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
   entry.built += tally.built; entry.replayed += tally.replayed; entry.kept += tally.kept;
 }
 const days = new Set(rows.map((row) => row.date));
-console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}); ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.\n`);
+const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
+console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}); ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
-const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|';
-const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.ms} |`; };
+const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Walls | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|';
+const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.walls} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.ms} |`; };
 console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
@@ -114,6 +123,15 @@ console.log(`\nBy tier:\n\n${header}`);
 for (const tier of Object.keys(DIFFICULTY_TIERS)) {
   const group = floorsOf.filter((row) => row.tier === tier);
   if (group.length) console.log(line(DIFFICULTY_TIERS[tier].name, group));
+}
+for (const piece of ['knight', 'bishop']) {
+  const kings = floorsOf.filter((row) => row.floor === 2 && row.piece === piece && row.shape);
+  if (!kings.length) continue;
+  const shapes = {};
+  for (const row of kings) shapes[row.shape] = (shapes[row.shape] ?? 0) + 1;
+  const ranked = Object.entries(shapes).sort((a, b) => b[1] - a[1]);
+  const squares = new Set(kings.map((row) => row.shape.split(',')[0]));
+  console.log(`\n${piece[0].toUpperCase()}${piece.slice(1)} king floors: ${ranked.length} shapes over ${squares.size} king squares; the commonest takes ${percent(ranked[0][1], kings.length)}. ${ranked.map(([shape, n]) => `${shape}: ${n}`).join('; ')}.`);
 }
 const hints = {};
 for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }

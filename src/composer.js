@@ -141,8 +141,8 @@ function covers(role, from, to) {
   return true;
 }
 // Squares `piece` reaches from `from` over the plan's walls; a line stops at
-// the first monster (its square included).
-function reach(plan, piece, from) {
+// the first monster (its square included), unless `units` is false.
+function reach(plan, piece, from, units = true) {
   const out = [];
   if (!RAYS[piece]) {
     for (const [dx, dy] of piece === 'knight' ? KNIGHT : AROUND) {
@@ -156,10 +156,25 @@ function reach(plan, piece, from) {
       const tile = at(from.x + dx * k, from.y + dy * k);
       if (plan.isWall(tile)) break;
       out.push(tile);
-      if (plan.unitAt(tile)) break;
+      if (units && plan.unitAt(tile)) break;
     }
   }
   return out;
+}
+// Fewest moves for `piece` between any of `sources` and every square, over the
+// plan's walls with monsters ignored (as src/move-tables.js). A bishop's moves
+// run both ways, so it is also each square's distance to `sources`.
+function routeDistances(plan, piece, sources) {
+  const dist = new Array(64).fill(UNREACHABLE), queue = [];
+  for (const tile of sources) if (!plan.isWall(tile) && dist[index(tile)] === UNREACHABLE) { dist[index(tile)] = 0; queue.push(tile); }
+  for (let head = 0; head < queue.length; head++) {
+    for (const tile of reach(plan, piece, queue[head], false)) {
+      if (dist[index(tile)] !== UNREACHABLE) continue;
+      dist[index(tile)] = dist[index(queue[head])] + 1;
+      queue.push(tile);
+    }
+  }
+  return dist;
 }
 // The squares strictly between two squares on one line (none for a jump).
 function between(a, b) {
@@ -170,6 +185,45 @@ function between(a, b) {
 }
 const empty = new Plan();
 const reachable = (piece, from, plan = empty) => reach(plan, piece, from);
+const SQUARES = Object.freeze(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)));
+
+/** Attempts a bishop's king floor gives the day's pocket before trying the next. */
+export const NET_TRIES = 20;
+/** Walls a bishop net's funnel may add, at most. */
+export const FUNNEL_WALLS = 6;
+/**
+ * A bishop net's funnel: walls that make the squares the bishop mates from
+ * (`mates`) a trip of three moves or more, and `most` at most, so no mate
+ * comes sooner than a planted line. A bishop reaches most of its colour in
+ * two moves, so each wall is the one that lengthens the trip most, or else
+ * cuts the most short routes (counted by the first-move squares they start
+ * from), ties broken by `rng`; none stands beside the start or on a square
+ * the plan keeps open. The distances ignore monsters: the exact search has
+ * the last word.
+ */
+function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
+  const measure = () => {
+    const dist = routeDistances(plan, piece, mates), near = dist[index(START)];
+    return { near, routes: reach(plan, piece, START, false).filter((tile) => dist[index(tile)] === near - 1).length };
+  };
+  const score = ({ near, routes }) => (near > most ? -1000 : 10 * Math.min(near, LINE_MOVES.min) - (near < LINE_MOVES.min ? routes : 0));
+  let now = measure();
+  for (let walls = 0; ; walls++) {
+    if (now.near >= LINE_MOVES.min && now.near <= most) return true;
+    if (walls === FUNNEL_WALLS) return false;
+    let best = null;
+    for (const tile of shuffle(SQUARES, rng)) {
+      if (chebyshev(tile, START) < 2 || !plan.free(tile)) continue;
+      plan.walls.add(index(tile));
+      const after = measure();
+      plan.walls.delete(index(tile));
+      if (!best || score(after) > score(best.after)) best = { tile, after };
+    }
+    if (!best || score(best.after) <= score(now)) return false;
+    plan.walls.add(index(best.tile));
+    now = best.after;
+  }
+}
 
 // The motifs. Each builds a plan for one floor from its context (the player's
 // piece, the target role and its copies, the guards it may use) or returns
@@ -306,37 +360,55 @@ const MOTIFS = {
               && chebyshev(check, home) > 1 && chebyshev(check, other) > 1) options.push({ home, other, check, line: [] });
           }
         } else if ((x + y) % 2 === (START.x + START.y) % 2) {
-          // A check along the pocket's diagonal covers both squares; the square
-          // beyond `other` must be the board's edge.
-          const beyond = at(other.x + dx, other.y + dy);
-          if (inside(beyond)) continue;
-          for (let k = 2; k < 8; k++) {
+          // A check along the pocket's diagonal covers both squares. The far
+          // end (`other`) meets the board's edge or a wall. The check comes
+          // from any square of the diagonal on the open side, down to the
+          // mouth next to `home`, which mates once the king has paced back to
+          // `other` (beside the king, the bishop would be taken). A wall just
+          // past the check square ends the diagonal there.
+          for (let k = 1; k < 8; k++) {
             const check = at(x - dx * k, y - dy * k);
-            if (!inside(check)) break;
-            // A wall just past the check square ends the diagonal there.
+            if (!inside(check) || same(check, START) || same(check, EXIT)) break;
             options.push({ home, other, check, line: between(check, home), cap: at(check.x - dx, check.y - dy) });
           }
         }
       }
     }
-    for (const pick of shuffle(options, rng).slice(0, 48)) {
+    for (const pick of piece === 'bishop' ? pocketOrder(options, context) : shuffle(options, rng).slice(0, 48)) {
       const plan = new Plan();
       plan.keep(START, pick.check, ...pick.line);
       // A bishop's king starts deep in its pocket: two turns from the exit along the line.
       plan.place(0, 'king', piece === 'bishop' ? pick.other : pick.home);
       plan.keep(pick.home, pick.other);
-      if (!box(plan, 'king', pick.home, [pick.other, ...pick.line])) continue;
+      // The pocket's mouth (next to `home`, toward the check) stays open.
+      const mouth = piece === 'bishop' && chebyshev(pick.check, pick.home) === 1 ? [pick.check] : [];
+      if (!box(plan, 'king', pick.home, [pick.other, ...pick.line, ...mouth])) continue;
       if (!box(plan, 'king', pick.other, [pick.home])) continue;
       if (pick.cap && inside(pick.cap) && !plan.wall(pick.cap)) continue;
       // Checkmate wins at once on composed king floors (src/rules.js), so every
       // check square must be three or more moves from the start (the king
       // floor's fallback lets that go).
-      const checks = piece === 'knight' ? [pick.check] : [...pick.line.filter((tile) => chebyshev(tile, pick.home) >= 2), pick.check];
-      const far = () => { const table = distanceTable(plan.map(), piece); return checks.every((square) => table[index(START) * 64 + index(square)] >= LINE_MOVES.min); };
-      // A bishop reaches most of its colour in two moves: walls two squares out
-      // on the start's diagonals cut its long lines.
-      if (!context.relaxed && !far() && piece === 'bishop') for (const choke of shuffle([at(2, 4), at(6, 4), at(1, 3), at(7, 3)], rng)) { plan.wall(choke); if (far()) break; }
-      if (!context.relaxed && !far()) continue;
+      if (piece === 'bishop' && !context.relaxed) {
+        // The bishop's way in is planted: a three-move route to a mating
+        // square, picked at random, stays open while the funnel walls every
+        // faster one, so a pocket needs a different path from day to day. A
+        // mate from the mouth alone lands while the pacing king is back at
+        // the far end, after an even number of its moves: on the third move.
+        const mates = [pick.check, ...pick.line];
+        for (const route of shuffle(bishopRoutes(plan, mates), rng)) {
+          const trial = plan.clone();
+          trial.keep(...route.passed);
+          if (funnel(trial, piece, mates, rng, mouth.length ? LINE_MOVES.min : LINE_MOVES.max) && recruitSquares(trial, piece, trial.units[0]).length) {
+            return { plan: trial, motif: 'net', key: pick.check, route: route.moves };
+          }
+        }
+        continue;
+      }
+      if (piece !== 'bishop') {
+        const far = () => { const table = distanceTable(plan.map(), piece); return table[index(START) * 64 + index(pick.check)] >= LINE_MOVES.min; };
+        if (!context.relaxed && !far()) continue;
+      }
+      // (A pocket that leaves the recruit no square fails its dressing; see dress.)
       return { plan, motif: 'net', key: pick.check };
     }
     return null;
@@ -359,6 +431,44 @@ const MOTIFS = {
     return plan.units.length === count ? { plan, motif: 'walk' } : null;
   },
 };
+
+// A bishop's three-move routes from the start to any of `mates` over the
+// plan's walls (monsters ignored), landing on no mate before the last move:
+// { moves, passed }, `passed` every square the route lands on or crosses.
+function bishopRoutes(plan, mates) {
+  const routes = [], mate = (tile) => mates.some((square) => same(square, tile));
+  for (const first of reach(plan, 'bishop', START, false)) {
+    if (mate(first)) continue;
+    for (const second of reach(plan, 'bishop', first, false)) {
+      if (same(second, START) || mate(second)) continue;
+      for (const last of reach(plan, 'bishop', second, false).filter(mate)) {
+        routes.push({ moves: [first, second, last], passed: [first, second, last, ...between(START, first), ...between(first, second), ...between(second, last)] });
+      }
+    }
+  }
+  return routes;
+}
+
+// Where the king floor's recruit may wait: one move from the start, too far
+// from the royal king `king` to step beside it within the line.
+const recruitSquares = (plan, piece, king) => reach(plan, piece, START).filter((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
+
+// The order a bishop's net tries its options in. Each day ranks the pockets
+// from its own seed: an attempt takes the first one it can build (some never
+// can, beside the exit), its checks shuffled, and the day keeps that pocket
+// for NET_TRIES attempts before the next in its ranking. So every pocket
+// that can be built gets an even share of days, rather than the one that is
+// easiest to dress crowding out the rest.
+function pocketOrder(options, { seed, attempt, rng }) {
+  const pockets = new Map();
+  for (const pick of options) {
+    const name = `${index(pick.home)}:${index(pick.other)}`;
+    pockets.set(name, [...(pockets.get(name) ?? []), pick]);
+  }
+  const names = shuffle([...pockets.keys()].sort(), random(hash(`${seed}:net-pockets`)));
+  const turn = Math.floor(attempt / NET_TRIES) % names.length;
+  return [...names.slice(turn), ...names.slice(0, turn)].flatMap((name) => shuffle(pockets.get(name), rng));
+}
 
 /** Which motifs fit a player piece and a floor's target role (the king floor always nets). */
 export function motifsFor(piece, target, floor) {
@@ -621,10 +731,12 @@ function dress(plan, context, line, base, floor, rng) {
   // Floors 1 and 2 keep coins off the line as red herrings; the king floor has no hint and no items but its recruit.
   if (floor === 2) {
     // The king floor's recruit, a king, waits one move from the start, as always,
-    // too far from the royal king to step beside it within the line.
+    // too far from the royal king to step beside it within the line. Every king
+    // floor has one: a dressing whose decoys took its squares is tried again.
     const king = plan.units.find((unit) => unit.role === 'king' && unit.cast === 0);
-    const tile = shuffle(reach(plan, context.piece, START), rng).find((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
-    if (tile) plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
+    const tile = shuffle(reach(plan, context.piece, START), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)));
+    if (!tile) return null;
+    plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
   } else {
     // Floors 1 and 2 recruit any piece, three or more moves away, so it can't
     // take part within the line.
@@ -669,7 +781,7 @@ export function composeFloor(base, floor, { trace, carried = null } = {}) {
     const attempts = motif === 'walk' ? MOTIF_ATTEMPTS * 4 : MOTIF_ATTEMPTS;
     for (let attempt = 0; attempt < attempts; attempt++) {
       const rng = random(hash(`${seed}:${motif}:${attempt}`));
-      const context = { piece, target: cast.target, count: cast.count, rng, guards: [...cast.suspects, cast.other] };
+      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, guards: [...cast.suspects, cast.other] };
       const built = motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[motif](context);
       if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
       tally.built++;
@@ -679,7 +791,10 @@ export function composeFloor(base, floor, { trace, carried = null } = {}) {
       const found = motif === 'walk' ? (floor === 2 ? shortestWins(start, 6) : walkRoute(start)) : shortestWins(start, LINE_MOVES.max);
       const shortest = motif === 'walk' ? 2 : LINE_MOVES.min;
       if (!found || found.depth < shortest) { trace?.({ motif, attempt, stage: 'search', depth: found?.depth ?? null, room: built.plan.room() }); continue; }
-      const planted = found.lines.map((line) => ({ line, states: playLine(start, line) })).find(({ line, states }) => states && usesIdea(built, states, line));
+      // A net's planted route is its line whenever the search finds it among the shortest.
+      const follows = (line) => Boolean(built.route) && line.length === built.route.length && line.every((action, n) => action.type === 'move' && same(action, built.route[n]));
+      const candidates = found.lines.map((line) => ({ line, states: playLine(start, line) })).filter(({ line, states }) => states && usesIdea(built, states, line));
+      const planted = candidates.find(({ line }) => follows(line)) ?? candidates[0];
       if (!planted) { trace?.({ motif, attempt, stage: 'idea', depth: found.depth, lines: found.lines, room: built.plan.room() }); continue; }
       tally.replayed++;
       let best = null;
