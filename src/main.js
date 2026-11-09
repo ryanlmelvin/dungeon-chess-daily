@@ -443,9 +443,12 @@ function updateGame() {
   $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so later moves don’t count' : ''}`);
   renderPar();
   renderTools();
-  const pinnedFoe = state.enemies.find((foe) => foe.pinned);
-  $('pin-status').hidden = !pinnedFoe;
+  const pinnedFoe = state.enemies.find((foe) => foe.pinned && !foe.held);
+  // Composed floors (dev preview): held decoys wake on a timer.
+  const heldFoes = state.enemies.filter((foe) => foe.held && foe.pinned);
+  $('pin-status').hidden = !pinnedFoe && !heldFoes.length;
   if (pinnedFoe) { $('pin-status').textContent = `Pinned ${pinnedFoe.pinned}`; $('pin-status').setAttribute('aria-label', `${pinnedFoe.name} pinned for ${pinnedFoe.pinned} more ${pinnedFoe.pinned === 1 ? 'move' : 'moves'}`); }
+  else if (heldFoes.length) { const wake = heldFoes[0].pinned; $('pin-status').textContent = `Wake in ${wake}`; $('pin-status').setAttribute('aria-label', `${heldFoes.length} held ${heldFoes.length === 1 ? 'monster wakes' : 'monsters wake'} in ${wake} ${wake === 1 ? 'move' : 'moves'}`); }
   $('freeze-status').hidden = !state.powers.freeze;
   $('freeze-status').textContent = `Frozen ${state.powers.freeze}`;
   $('freeze-status').setAttribute('aria-label', `Enemies frozen for ${state.powers.freeze} moves`);

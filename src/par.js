@@ -71,6 +71,8 @@ export function humanSummary(daily) {
 
 /** Par per floor, or null when the edition has no replayable certificate. */
 export function floorPars(daily) {
+  // A composed day (src/composer.js, dev preview) carries its own par: the planted line plus one.
+  if (Array.isArray(daily?.composedPar)) return [...daily.composedPar];
   return humanSummary(daily)?.par ?? null;
 }
 

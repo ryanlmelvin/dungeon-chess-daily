@@ -59,6 +59,14 @@ export const FLOOR_MOTIFS = Object.freeze([['bait'], ['squeeze', 'bait'], ['net'
  * short; squeeze, fork and net floors play alike on every tier.
  */
 export const COMPOSED_TIER = 'fair';
+/**
+ * How each floor's spare decoys (those not in the planted trick) behave:
+ * 'held' stand still and harmless for as many moves as the planted line
+ * (par − 1, par being the line plus one), then wake and hunt, like
+ * reinforcements on a timer; 'roam' hunt from the first move. Floor 1 is a
+ * clean puzzle on a clock, then the day turns up the pressure.
+ */
+export const FLOOR_DECOYS = Object.freeze(['held', 'roam', 'roam']);
 
 const START = Object.freeze({ x: 4, y: 6 });
 const EXIT = Object.freeze({ x: 4, y: 0 });
@@ -103,7 +111,7 @@ class Plan {
     return Array.from({ length: 8 }, (_, y) => Array.from({ length: 8 }, (_, x) => (this.walls.has(y * 8 + x) ? '#' : '.')).join(''));
   }
   room() {
-    return { map: this.map(), enemies: this.units.map(({ x, y, cast }) => ({ x, y, cast })), items: this.items.map((item) => ({ ...item })) };
+    return { map: this.map(), enemies: this.units.map(({ x, y, cast, held }) => ({ x, y, cast, ...(held && { held }) })), items: this.items.map((item) => ({ ...item })) };
   }
 }
 
@@ -534,14 +542,18 @@ function dress(plan, context, line, base, floor, rng) {
   plan.keep(...lineSquares);
   const far = (tile, gap) => lineSquares.every((square) => chebyshev(square, tile) >= gap) && plan.units.every((unit) => chebyshev(unit, tile) >= 2);
   const squares = Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3));
+  // Held decoys may wait closer (one to three moves out): they wake right on top of a slow solver.
+  const held = FLOOR_DECOYS[floor] === 'held';
+  const [near, away] = held ? [1, 3] : [2, 4];
   for (const decoy of context.quiet) {
     const moves = distanceTable(plan.map(), decoy.role === 'pawn' ? 'king' : decoy.role);
     const reach = (tile) => Math.min(...lineSquares.map((square) => moves[index(tile) * 64 + index(square)]));
     const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, START) >= 2 && !covers(decoy.role, tile, START)
       && plan.units.every((unit) => chebyshev(unit, tile) >= 2));
-    const spot = spots.find((tile) => reach(tile) >= 2 && reach(tile) <= 4) ?? spots[0];
+    const spot = spots.find((tile) => reach(tile) >= near && reach(tile) <= away) ?? spots[0];
     if (!spot) return null;
     plan.place(decoy.cast, decoy.role, spot);
+    if (held) plan.units.at(-1).held = line.length;
   }
   const table = distanceTable(plan.map(), context.piece);
   const moves = (tile) => table[index(START) * 64 + index(tile)];
@@ -660,5 +672,7 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date) } = {}) 
   const proof = verifyWinningRoute(createGame(daily), actions);
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
   daily.generation = { version: COMPOSER_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
+  // Par on a composed day: the planted line plus one (src/par.js floorPars).
+  daily.composedPar = floors.map((floor) => floor.line.length + 1);
   return { daily, floors };
 }

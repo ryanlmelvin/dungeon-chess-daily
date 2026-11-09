@@ -740,7 +740,7 @@ function enemyTurn(state, hit = false) {
   state.events.push({ type: 'enemy-phase', x: state.player.x, y: state.player.y });
   // A pinned monster sits out this turn; the pin wears off after PIN_MOVES of them.
   const held = new Set(state.enemies.filter(pinned));
-  for (const foe of held) if (!--foe.pinned) { delete foe.pinned; state.events.push({ type: 'unpin', id: foe.id, x: foe.x, y: foe.y }); }
+  for (const foe of held) if (!--foe.pinned) { delete foe.pinned; delete foe.held; state.events.push({ type: 'unpin', id: foe.id, x: foe.x, y: foe.y }); }
   if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
   const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
@@ -1123,8 +1123,10 @@ function composedRoom(state) {
   if (room.start) { state.player.x = room.start.x; state.player.y = room.start.y; }
   state.enemies = room.enemies.map((entry, index) => {
     const creature = entry.species ?? cast[entry.cast];
+    // A held decoy (`held` moves) stands still and harmless, as if pinned, then wakes and joins the hunt.
     return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
-      piece: creature.piece, role: creature.piece, x: entry.x, y: entry.y, moved: false, phase: 'ready', intent: [], target: null };
+      piece: creature.piece, role: creature.piece, x: entry.x, y: entry.y, moved: false, phase: 'ready', intent: [], target: null,
+      ...(Number.isInteger(entry.held) && entry.held > 0 && { pinned: entry.held, held: true }) };
   });
   state.items = room.items.map((item) => ({ ...item }));
   state.props = [];
