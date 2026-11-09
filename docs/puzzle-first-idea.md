@@ -59,7 +59,8 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A clock on every floor (the ceiling holds par + 4 moves) | Maybe |
 | The weekly difficulty ramp | Dropped while we build the composer: each day climbs from floor 1 to the king floor instead |
 | Recruits traded away when they capture on a guarded square | Dropped: recruits are never lost |
-| Floors taken from lichess puzzles (CC0) | King floors at scale, with three chess king rules (trying them in the phase-0 preview); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
+| Floors taken from lichess puzzles (CC0) | King floors at scale, with chess king rules (trying them in the phase-0 preview); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
+| Kings never stand side by side (king rule 3) | Dropped after play (2026-11-09): it kept the recruit king from cornering a king that slipped its net, so the chase never ended |
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
 
 ## Lichess puzzles
@@ -185,7 +186,7 @@ rest of the gap, and none of them changes who moves:
 2. **The king can't take a protected piece.** It never captures a piece the
    recruit king guards. Today it does, in 381 of 2,000 mates.
 3. **Kings never stand side by side.** The recruit king can't step next to the
-   king, so it never checks or takes it.
+   king, so it never checks or takes it. (Dropped after play: see Decisions.)
 
 | King and one piece, mate in… | Today's rules | With the three king rules |
 | --- | --- | --- |
@@ -386,9 +387,9 @@ Each phase ends with a preview you play before anything long runs or ships.
 2. One monster ruleset for every day, or keep the five tiers? With no weekly
    ramp, the tiers have little left to do.
 3. The floor clock: try it after phase 2?
-4. The three king-floor rules (checkmate wins, the king can't take a protected
-   piece, kings never stand side by side)? They let lichess mates seed king
-   floors and keep every monster moving.
+4. The king-floor rules (checkmate wins, the king can't take a protected
+   piece)? They let lichess mates seed king floors and keep every monster
+   moving. The third, kings never standing side by side, is dropped.
 5. King floors from lichess mates are 1 to 3 moves long. Is a mate in 1 too
    short for the day's last floor, and how does the player learn the guards'
    roles in time?

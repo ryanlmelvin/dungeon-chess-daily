@@ -496,9 +496,11 @@ function attackPath(state, foe, target) {
   return path;
 }
 
-// Three king-floor rules on trial in composed days only (src/composer.js, the
+// Two king-floor rules on trial in composed days only (src/composer.js, the
 // phase-0 preview); published editions never have `composed`, so they play as
-// before. K2: the royal king never takes a piece the recruit king guards.
+// before. (A third, kings never standing side by side, kept the recruit king
+// from cornering a king that slipped its net; dropped after play.) K2: the
+// royal king never takes a piece the recruit king guards.
 function guardedFromKing(state, foe, square) {
   if (!(state.composed && state.floor === 2 && foe.role === 'king' && state.companion?.piece === 'king')) return false;
   return chebyshev(state.companion, square) === 1;
@@ -1625,10 +1627,7 @@ function companionTurn(state, order, joined = false) {
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
   const hop = pairHop(state, unit);
-  // Composed king floors (on trial): kings never stand side by side, so a
-  // recruit king can't check or take the royal king.
-  const royalKing = state.composed && state.floor === 2 && unit.piece === 'king' ? state.enemies.find((foe) => foe.role === 'king') : null;
-  const legal = () => movesFor(state,unit).filter((move) => (!joined || !move.capture) && !(royalKing && chebyshev(move, royalKing) <= 1));
+  const legal = () => movesFor(state,unit).filter((move) => !joined || !move.capture);
   if (order === RECRUIT_PROBE) {
     const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : legal().map(({x,y,capture}) => ({x,y,capture}));
     throw new RecruitPhase(state, phase, moves, Boolean(hop));
