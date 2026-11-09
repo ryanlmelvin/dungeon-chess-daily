@@ -311,6 +311,7 @@ export function closeAttacker(state, square) {
   if (!state.player.hp || !walkable(state, square.x, square.y)) return null;
   for (const foe of state.enemies) {
     if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe)) continue;
+    if (state.composed && guardedFromKing(state, foe, square)) continue;
     const dx = square.x - foe.x, dy = square.y - foe.y;
     const ax = Math.abs(dx), ay = Math.abs(dy);
     if (foe.piece === 'knight') {
@@ -496,8 +497,28 @@ function attackPath(state, foe, target) {
   return path;
 }
 
+// Three king-floor rules on trial in composed days only (src/composer.js, the
+// phase-0 preview); published editions never have `composed`, so they play as
+// before. K2: the royal king never takes a piece the recruit king guards.
+function guardedFromKing(state, foe, square) {
+  if (!(state.composed && state.floor === 2 && foe.role === 'king' && state.companion?.piece === 'king')) return false;
+  return chebyshev(state.companion, square) === 1;
+}
+// K1: checkmate wins at once. The royal king is threatened, has no safe step,
+// and no guard can step to shield it: it is taken before the monsters move.
+function checkmate(state) {
+  if (!(state.composed && state.floor === 2) || state.objective.complete) return false;
+  const king = state.enemies.find((foe) => foe.role === 'king');
+  if (!king || !kingThreatened(state, king) || safeKingMoves(state, king).length) return false;
+  const blocks = state.enemies.some((guard) => guard !== king && !pinned(guard)
+    && monsterMoves(state, guard).some((move) => hypothetically(guard, move, () => !kingThreatened(state, king))));
+  if (blocks) return false;
+  state.events.push({ type: 'checkmate', x: king.x, y: king.y });
+  captureEnemy(state, king);
+  return true;
+}
 function aimAtPlayer(state, foe) {
-  if (!strikesPlayer(state, foe)) return false;
+  if (!strikesPlayer(state, foe) || guardedFromKing(state, foe, state.player)) return false;
   foe.phase = 'aim';
   foe.target = { x: state.player.x, y: state.player.y };
   foe.intent = attackPath(state, foe, state.player);
@@ -727,7 +748,7 @@ function enemyTurn(state, hit = false) {
     if (held.has(foe)) continue;
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
-        && strikesPlayer(state, foe);
+        && strikesPlayer(state, foe) && !guardedFromKing(state, foe, state.player);
       if (capture && hit) continue;
       // A shield keeps the phase going; a lost life ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
@@ -888,6 +909,19 @@ export function floorSeed(state, floor = state.floor) {
   return state.floorSeeds?.[floor] ?? state.dungeonSeed ?? state.seed;
 }
 const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 && seeds.every((seed) => Number.isInteger(seed) && seed >= 0);
+/**
+ * Composed rooms, a prototype (src/composer.js builds each floor around a
+ * planted solution). A composed day carries one room per floor: `map` (eight
+ * rows of '.' and '#'), `enemies` ({ x, y, cast }, where cast 0 is the floor's
+ * target species and 1 and 2 its decoy species; tooling may pass a `species`
+ * instead), `items` (coins, a powerup, the recruit) and, for tooling, the
+ * player's `start`. No published edition has them.
+ */
+const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && room.map.length === 8
+  && room.map.every((row) => typeof row === 'string' && /^[.#]{8}$/.test(row))
+  && Array.isArray(room.enemies) && Array.isArray(room.items)
+  && [...room.enemies, ...room.items, ...(room.start ? [room.start] : [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
+const validComposed = (rooms) => Array.isArray(rooms) && rooms.length === 3 && rooms.every(validComposedRoom);
 
 /**
  * Barricades on a floor where monster pawns live (its targets or a decoy
@@ -1079,6 +1113,27 @@ function screenReach(state) {
   };
 }
 
+// A composed floor's room (validComposed) as composed, with no seeded draw.
+// The day's modifier and the opening wind-ups still apply, as on any floor.
+function composedRoom(state) {
+  const room = state.composed[state.floor];
+  const cast = [state.species[state.floor], state.species[3 + state.floor * 2], state.species[4 + state.floor * 2]];
+  state.map = [...room.map];
+  if (room.start) { state.player.x = room.start.x; state.player.y = room.start.y; }
+  state.enemies = room.enemies.map((entry, index) => {
+    const creature = entry.species ?? cast[entry.cast];
+    return { id: `f${state.floor}-${index}`, species: creature.id, palette: creature.palette, name: creature.name,
+      piece: creature.piece, role: creature.piece, x: entry.x, y: entry.y, moved: false, phase: 'ready', intent: [], target: null };
+  });
+  state.items = room.items.map((item) => ({ ...item }));
+  state.props = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
+  }
+  setupFloorModifier(state);
+  if (state.playerColor === 'white') for (const foe of state.enemies) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
+}
+
 function setFloor(state, kingRecruit = false) {
   const layoutPiece = state.layoutPiece ?? state.startingPiece;
   const rng = random(hash(`${floorSeed(state)}:room:${state.floor}`));
@@ -1096,6 +1151,7 @@ function setFloor(state, kingRecruit = false) {
   delete state.restartedMoves;
   // Hints and unmaskings belong to one floor: its species never live on another.
   delete state.hints; delete state.unmasked;
+  if (state.composed) { composedRoom(state); return; }
   const target = state.species[state.floor];
   const residents = [...Array(PIECE_COUNTS[target.piece]).fill(target), ...floorDecoys(state)];
   const mirror = rng() < 0.5;
@@ -1258,6 +1314,8 @@ export function createGame(daily = getRawDaily()) {
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
   // An assembled day's floors each come from their own candidate layout (floorSeed).
   if (validFloorSeeds(daily.floorSeeds)) state.floorSeeds = [...daily.floorSeeds];
+  // A composed day's rooms (validComposed); published editions have none.
+  if (validComposed(daily.composed)) state.composed = structuredClone(daily.composed);
   // Barricades leave the edition's open promotion squares; a fallback keeps its template's.
   state.openFiles = Number.isInteger(daily.openFiles) ? daily.openFiles : openPromotionFiles(daily.date);
   // Plain days carry no modifier field, so their saves keep their shape.
@@ -1565,7 +1623,10 @@ function companionTurn(state, order, joined = false) {
     state.events.push({type:'companion-promotion',x:unit.x,y:unit.y});
   }
   const hop = pairHop(state, unit);
-  const legal = () => movesFor(state,unit).filter((move) => !joined || !move.capture);
+  // Composed king floors (on trial): kings never stand side by side, so a
+  // recruit king can't check or take the royal king.
+  const royalKing = state.composed && state.floor === 2 && unit.piece === 'king' ? state.enemies.find((foe) => foe.role === 'king') : null;
+  const legal = () => movesFor(state,unit).filter((move) => (!joined || !move.capture) && !(royalKing && chebyshev(move, royalKing) <= 1));
   if (order === RECRUIT_PROBE) {
     const moves = hop ? hop.squares.map(({x,y}) => ({x,y,capture:false})) : legal().map(({x,y,capture}) => ({x,y,capture}));
     throw new RecruitPhase(state, phase, moves, Boolean(hop));
@@ -1651,7 +1712,7 @@ function replaceCopy(value, seen) {
 // markFloorStart, copied by resetFloor), the day's theme and species, and the
 // room's props (replaced whole when a floor is set up). The next state shares
 // them instead of deep-copying them on every move.
-const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species', 'props']);
+const SHARED_FIELDS = new Set(['floorSnapshot', 'theme', 'species', 'props', 'composed']);
 function nextState(previous) {
   const seen = new Map();
   // Same key order as a whole-state copy, so saves serialize identically.
@@ -1788,7 +1849,7 @@ function play(previous, action) {
     state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state); regainBalance(state);
     if (!companionTurn(state, huntsAlone(state) ? undefined : action.recruit)) return previous;
     settle(state);
-    if (state.playerColor === 'white') { enemyTurn(state); settle(state); }
+    if (state.playerColor === 'white' && !checkmate(state)) { enemyTurn(state); settle(state); }
     collapseTick(state); settle(state);
     caveInTick(state, previous); settle(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
@@ -1924,7 +1985,7 @@ function play(previous, action) {
   const order = huntsAlone(state) ? undefined : action.recruit;
   if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
   if (!castle) settle(state);
-  if (state.playerColor === 'white') { enemyTurn(state, Boolean(close)); settle(state); }
+  if (state.playerColor === 'white' && (close || !checkmate(state))) { enemyTurn(state, Boolean(close)); settle(state); }
   collapseTick(state); settle(state);
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
