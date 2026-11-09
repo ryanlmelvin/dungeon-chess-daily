@@ -58,7 +58,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A clock on every floor (the ceiling holds par + 4 moves) | Maybe |
 | The weekly difficulty ramp | Dropped while we build the composer: each day climbs from floor 1 to the king floor instead |
 | Recruits traded away when they capture on a guarded square | Dropped: recruits are never lost |
-| Floors taken from lichess puzzles (CC0) | King floors only: mates carry over with three chess king rules; floor 1 and 2 lines don't (see [Lichess puzzles](#lichess-puzzles)) |
+| Floors taken from lichess puzzles (CC0) | King floors at scale, with three chess king rules (trying them in the phase-0 preview); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
 
 ## Lichess puzzles
@@ -66,7 +66,10 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 Measured on 2026-11-09 against today's rules (v10) and scratch variants of
 `src/rules.js`. The scripts and data are not in the repo.
 
-**Verdict.** Lichess can supply king floors, but not floors 1 and 2.
+**Verdict.** Lichess can supply king floors at scale. It can also supply some
+floor 1 and 2 puzzles: trapped pieces, zugzwangs and quiet moves played by
+one piece, and two-piece combos such as capture the defender. Forks, pins,
+skewers and discovered attacks don't carry over.
 
 **The database.** Lichess publishes its puzzles under CC0 at
 database.lichess.org: 6.19 million positions. Each comes with a forced line
@@ -78,35 +81,93 @@ where the solver has only a king and one piece (no pawns); most are rook
 endgames.
 
 **How a puzzle becomes a floor.**
-- The solver's moving piece is the player, starting on its own square.
+- The solver's moving piece is the player, starting on its own square. A line
+  played by the solver's king gives the king to the recruit, or is skipped,
+  since the daily piece is never a king.
 - On the king floor, the solver's king is the recruit, already at your side.
-- The solver's other men become walls.
-- The opponent's men become monsters with their real roles.
+  On floors 1 and 2, a second moving piece is the recruit.
+- The solver's other men become walls. On floors 1 and 2, the squares they
+  guarded around each piece the line wins become walls too, so a trap still
+  holds without its guards.
+- Opponent men that the line moves or captures become monsters with their real
+  roles. On floors 1 and 2, the rest become walls.
 - A puzzle that black solves is flipped, so the solver plays up the board.
 
 The solver's moves are then replayed through `act()`, and our monsters answer.
-Off the king floor, a line survives if it wins the same material as in chess
-without losing a life. On the king floor it survives if it ends with the king
-taken.
+Your move and the recruit's next move may be played as one turn, as the
+dungeon allows. Off the king floor, a line survives if it wins the same
+material as in chess without losing a life. On the king floor it survives if
+it ends with the king taken.
 
-**Floors 1 and 2: the lines don't survive.** Only 6–14% of popular knight,
-bishop, rook, queen and pawn lines win their material, and the composer
-session's stricter test (every target captured, in a cast that fits the day)
-found 1–2%. Chess tactics get their force from the opponent answering with a
-single move and from a king in check having to be answered first. A fork wins
-because only one of the two pieces can step away. Here every monster moves
-every turn and nothing off the king floor is royal, so a threat just makes the
-targets step away. A variant with one monster reply per turn lifted the
-knight, bishop, rook and queen lines to 40–57%, but every piece on both sides
-keeps moving every turn (decided 2026-11-09), so floors 1 and 2 come from
-native motifs (the composer). Lichess themes still make a motif checklist:
+**Floors 1 and 2: some themes carry over.** An exact search, with every
+monster moving, sorts each surviving floor by what it is in the dungeon:
+- **Puzzle:** a setup move, then the capture. The line is the fastest win, and
+  only its first move wins that fast.
+- **Combo:** one turn, your move plus the recruit's, and it is the only
+  winning turn.
+- **Free take:** the line wins on its first move; the rest of the chess line
+  was consolidation.
 
-| Lichess theme | Dungeon motif |
-| --- | --- |
-| trappedPiece | Squeeze |
-| hangingPiece | Punish the wind-up |
-| capturingDefender | Take the guard first |
-| quietMove, zugzwang | Waiting move |
+| Theme | Puzzles | Combos | Free takes |
+| --- | --- | --- | --- |
+| Zugzwang (one piece; small sample) | 25% | — | 16% |
+| Trapped piece (one piece) | 16% | — | 0% |
+| Quiet move (one piece) | 9% | — | 11% |
+| Hanging piece | 7% | 11% (two pieces) | 51% |
+| Capture the defender (two pieces) | 0% | 10% | — |
+| Intermezzo (two pieces) | 0% | 15% | — |
+| Advanced pawn, promotion (you play the pawn) | 2–3% | about 1% | 37–41% |
+| Fork, pin, skewer, discovered attack, deflection | 0–2% | 0–3% | rare |
+
+The split follows how each tactic wins:
+- **Forks, pins, skewers and discovered attacks** need the opponent to answer
+  with one move, or to answer a check first. Here every monster moves every
+  turn, so both attacked pieces step away.
+- **Traps, zugzwangs and quiet moves** win because the target has no safe
+  square left, which holds however many monsters move.
+- **Capture the defender** works as a combo because the recruit acts right
+  after you, before any monster answers.
+
+A first pass that kept whole positions and pooled every theme found only 6–14%
+of lines surviving. The difference is the three translation changes above:
+king lines, guard walls and one-turn combos. A variant with one monster reply
+per turn would have saved more, but every piece on both sides keeps moving
+every turn (decided 2026-11-09).
+
+**Floor 1 and 2 supply.** Counts are lines with at least 50 plays and at most
+nine opponent men, after the filters above; themes overlap:
+- Squeezes: about 950 (trapped piece 150, zugzwang 130, quiet move 670).
+- Hanging-piece setups: about 900.
+- One-turn combos: a few thousand (capture the defender 530, intermezzo 1,800,
+  hanging piece 3,300).
+- Free takes are plentiful but are only "take what's free".
+
+A sample of 29,508 puzzles gave 512 good floors whose lichess line is the
+solution: 208 puzzles of 2 to 4 moves and 304 one-turn combos. By daily piece
+they split rook 140, pawn 135, knight 85, queen 82 and bishop 70, with a
+median lichess rating of 1515. Knight and bishop days are the thinnest. The
+trapped-piece squeezes are unusually clean: 82% of the ones checked have a
+single winning first move, against 14% for the composer's own phase-0
+squeezes.
+
+**What these floors would need.**
+- **A recruit already at your side** on combo floors. Today a recruit waits one
+  move away.
+- **The puzzle's start square.** You start where the puzzle puts you, not on
+  e2.
+- **A target that is what the line wins,** often one queen or rook, rather than
+  a full army count.
+- **Knowable roles.** A capture-the-defender combo only works if you can tell
+  which monster guards the target.
+- **New difficulty measures.** Lichess ratings won't carry over directly,
+  because the dungeon version changes the line.
+
+| Lichess theme | Dungeon motif | Carries over |
+| --- | --- | --- |
+| trappedPiece, zugzwang, quietMove | Squeeze, waiting move | As puzzles |
+| capturingDefender, intermezzo | Recruit combo | As one-turn combos |
+| hangingPiece | Punish the wind-up | Mostly free takes |
+| fork, pin, skewer, discoveredAttack | — | No |
 
 **King floor: the mates carry over.** The royal king already steps off
 threatened squares the way a chess king does. Three chess rules close the
