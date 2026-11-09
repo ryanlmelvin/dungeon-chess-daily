@@ -827,13 +827,13 @@ and report as a `--full` run of the same code. Seven workers on a busy machine
 | Bot only: floors 1 and 2's recruit taken a little more often (`styleFor`, 0.8 → 0.9) | the bot on floors 1 and 2 of 105 classes; one class's bot fingerprint missed the change, its spot checks caught it (8 runs), and that floor was searched again | 312 s |
 | Pawn days only: the lunge rule of 8beebf0 reverted | all 45 pawn classes; the 150 others reused whole | 543 s |
 | The lunge rule re-applied, from the reverted run's data (against the base run) | the 45 pawn classes again | 331 s |
+| Floor 3 only: the royal king's step weights (`moveKing`, 0.8 → 0.7) | floor 3 of all 65 floor-3 classes, from the stored routes' starts with what floors 1 and 2 left; a few pawn rows' earlier floors when the new floor 3 sent the search back for more lives | 472 s |
 
 Undoing the bot change from the bot run's data (302 s) matched the base run as
-well. On a small run (pawn and knight, quick grid, two dates) the same changes
-matched too, and so did a floor-3-only change (the royal king's step weights,
-`moveKing`, 0.8 → 0.7), which searched floor 3 again and served floors 1 and 2.
-Before every probe walked, that change slipped past three pawn classes there
-and left 5 of 1,200 rows as the old rules had measured them.
+well, and on a small run (pawn and knight, quick grid, two dates) so did every
+change above. There, before every probe walked, the floor-3 change slipped
+past three pawn classes and left 5 of 1,200 rows as the old rules had measured
+them.
 
 Probes can miss a change that none of them meets; the checks are there for
 that. A change that alters a row's own route shows in its verification, a
