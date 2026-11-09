@@ -711,15 +711,22 @@ searches over 1.5 times as slow as the piece's plain layout. It writes
 behind it with the mean score beside them) and
 `scripts/calibration-data.json`: one row per search with its status (`solved`,
 `unknown` when the budget ran out, or `invalid` when replay rejected the route),
-solver expansions, route moves, wall time (search and bot), the metrics and
-the bot's runs per floor (`human`: each run's moves, `null` where it failed),
-plus min/median/p90/max summaries per piece and knob setting (git-ignored: a
-full run's file is about 46 MB, so it stays on the machine that measured it). `--reuse`
-refits from that file without searching again (after editing the measure, its
-cap and weights, or the bands), `--merge` measures only what the file lacks,
-`--pieces`, `--obstacles` and `--grid quick` narrow the grid, and `--dry-run`
-leaves the table alone. A full brute-force run uses every core but one
-(`--jobs N` overrides) and takes about three hours (146,400 searches).
+solver expansions, route moves, wall time (search and bot), the metrics, the
+bot's runs per floor (`human`: each run's moves, `null` where it failed), the
+route (`route`, `src/route-code.js`) and every floor's search (`searches`, below),
+plus min/median/p90/max summaries per piece and knob setting and a fingerprint
+per class (git-ignored: a full run's file is about 70 MB, so it stays on
+the machine that measured it). The next run reuses that file and measures
+again only what a change touches ([Incremental
+calibration](#incremental-calibration)); `--full` measures everything.
+`--reuse` refits from that file without searching at all (after editing the
+measure, its cap and weights, or the bands), `--merge` also keeps the file's
+settings and dates outside this run's grid, `--pieces`, `--obstacles` and
+`--grid quick` narrow the grid (rows of pieces a run leaves out stay in the
+file as they were), and `--dry-run` leaves the table alone. A brute-force run
+uses every core but one (`--jobs N` overrides); from scratch it takes about
+75 minutes on seven workers (146,400 searches, about 30,000 CPU
+seconds).
 
 Monsters grow smarter with the tier, so every setting is measured once per
 tier, with that tier's monsters, and competes only for that tier: five times
@@ -728,18 +735,115 @@ per tier too). Setting keys end in `@tier`. Rows keep the route's `floorMoves`,
 so the fit applies the no-freebie-floor rule as generation does, and the
 route's side of the gap.
 
-Data files are stamped (`dataVersion` 2, `rulesVersion`, `humanBotVersion`,
-`attempts` and a behaviour fingerprint; `scripts/calibration-search.mjs`), and
-`--reuse`, `--merge`, `--replay` and `--confirm` refuse a file without the
-bot's runs or one made under other rules, another bot or another candidate
-count. The fingerprint (`behaviourFingerprint`) hashes what the search and the
-bot do on three fixed plain-layout candidates (`FINGERPRINT_DAYS`: a knight,
-a bishop and a pawn day), through `searchCandidate`, so with the bot's
-default recruit policy: switching that policy, or any rules, monster, search
-or bot change that touches those days, refuses old data even without a
-version bump. So the `scripts/calibration-data.json` measured for the score
-bands (two candidates, the whole-run search, no bot runs) can't be reused;
-the next confirm replaces it.
+Data files are stamped (`dataVersion` 3, `attempts`, `searchBudget`, plus
+`rulesVersion` and `humanBotVersion` for the record;
+`scripts/calibration-search.mjs`). A file of another data version, candidate
+count or budget is never reused: the next brute-force run measures everything,
+and `--reuse`, `--replay` and `--confirm` refuse it. Within a file, the class
+fingerprints decide what still holds (next section): `--reuse`, `--replay` and
+`--confirm` refuse a file any class of which plays differently now, whatever
+the version numbers say, and a brute-force run measures those classes again.
+
+### Incremental calibration
+
+A brute-force run reuses the last run's `scripts/calibration-data.json` and
+measures again only the days and floors a change touches. Search is
+deterministic and every floor's search starts from a position the floors before
+it fix, so what a row needs is known exactly:
+
+- **What a row keeps.** Its route, and every floor's search in the order the
+  search ran them (`searches`: the floor, the lives it had to keep, the
+  expansions it used, a digest of its start position and its route segment, or
+  `null` when it failed). A pawn day may search a floor again keeping more
+  lives, so a row can hold more than three. The digest covers the whole
+  position but its words, events and version stamps, so a version bump alone
+  changes nothing.
+- **Classes.** One per player piece × room modifier × floor × tier (5 × 3 × 3 ×
+  5 = 225): the tier sets how smart the monsters are. Each class has two
+  fingerprints, made from up to 24 probe rows picked among its rows in a fixed
+  pseudo-random order, each played from its start of the floor (rebuilt from
+  its stored segments under the rules of the day). The **search** fingerprint
+  hashes each probe's start and seeded random walks from it, 2,000 transitions
+  in walks of up to 40 steps, hashing every action the search could take at
+  each step (what each monster does in reply), plus, for the first four
+  probes, the floor's own search (`findFloorRoute`, 3,000 expansions): it
+  changes with the rules, the monsters, the modifier and the search on that
+  floor. The walks carry it: a search usually finds the same route after a
+  small monster change (tuning the royal king's step weights changed the
+  search result of 0 to 1 of 24 pawn floor-3 probes, but walks of about 1,200
+  transitions caught it in 7 to 11 of them). The **bot** fingerprint hashes
+  every probe's start and the bot's five seeded runs there, with par's seeds
+  and recruit policy: it changes with the bot and with the rules it plays. A
+  changed start (the layout, or what the floors before it do) changes both.
+  The run fingerprints every stored class again with today's code (about a
+  minute and a half on seven workers) and compares. Each class also keeps a
+  hash of the bot's own code (`src/human-bot.js`, `src/recruit-policy.js`):
+  when that is unchanged and the class's bot fingerprint changed anyway, the
+  rules changed there, so the floor is searched again too.
+- **Searches.** Every row is searched again through `findWinningRoute`'s
+  `floorSearch` hook, which stands in for a stored floor search wherever the
+  same floor is searched from the same start digest, keeping the same lives,
+  after the same expansions, and the floor's search fingerprint held: it
+  replays the stored segment through the route rules instead (and searches if
+  that no longer replays). Every other floor search runs. So a change to floor
+  3 alone searches floor 3 alone, from the start the stored route reaches, with
+  the budget floors 1 and 2 left, which is exactly what the full search does
+  there; if that search fails on a pawn day, the full search's own logic goes
+  back to floor 2 keeping more lives, and those searches run too. A floor whose
+  search result changed changes the next floor's start, so that floor is
+  searched too.
+- **Bot runs.** A floor's five runs are kept when its class's search and bot
+  fingerprints both held and the route reaches the floor in the same position;
+  otherwise they are played again from the route's start of that floor, as
+  `humanPar` plays them. A bot-only change re-runs the bot on the floors whose
+  bot fingerprint changed and searches nothing.
+- **Checks.** Every reused route must verify to its stored metrics (the same
+  verification generation runs). On every kept floor one of the five runs is
+  played again and must match. A random sample of the rows that reuse anything
+  (`--sample`, 1% by default, at least one per piece, modifier and tier;
+  `--sample-seed` repeats one) is also measured from scratch and must match
+  field for field. A failed route or sample check measures that row's whole
+  group (piece, modifier, tier) from scratch; a failed bot run searches and
+  plays that class's floor again for every row (the bot or the rules changed
+  there unseen).
+- **Report.** The run prints, by class, the floor searches served and searched
+  again and the bot floors kept and played again, with the reason (rules or
+  search changed, bot runs changed with the bot's code unchanged, bot changed,
+  a check failed, new rows, or another floor of the row changed), then the
+  checks' counts. A
+  row whose every search was served keeps its stored wall time; any other
+  row's `ms` is this run's work on it.
+
+**Checked against full runs.** On 2026-11-08, with all five pieces, the full
+grid and three dates per piece from 2027-08-22 (43,920 searches; pawn, rook,
+bishop and queen days there meet all three room modifiers), every incremental
+run below gave the same rows (every field but `ms`), class fingerprints, table
+and report as a `--full` run of the same code. Seven workers on a busy machine
+(load 10 to 70); the full runs took 1,392 to 2,249 s.
+
+| Change | Measured again | Incremental |
+|---|---|---|
+| None | nothing: 195 classes reused whole | 229 s |
+| Bot only: floors 1 and 2's recruit taken a little more often (`styleFor`, 0.8 → 0.9) | the bot on floors 1 and 2 of 105 classes; one class's bot fingerprint missed the change, its spot checks caught it (8 runs), and that floor was searched again | 312 s |
+| Pawn days only: the lunge rule of 8beebf0 reverted | all 45 pawn classes; the 150 others reused whole | 543 s |
+| The lunge rule re-applied, from the reverted run's data (against the base run) | the 45 pawn classes again | 331 s |
+
+Undoing the bot change from the bot run's data (302 s) matched the base run as
+well. On a small run (pawn and knight, quick grid, two dates) the same changes
+matched too, and so did a floor-3-only change (the royal king's step weights,
+`moveKing`, 0.8 → 0.7), which searched floor 3 again and served floors 1 and 2.
+Before every probe walked, that change slipped past three pawn classes there
+and left 5 of 1,200 rows as the old rules had measured them.
+
+Probes can miss a change that none of them meets; the checks are there for
+that. A change that alters a row's own route shows in its verification, a
+change to the bot or to the rules it plays shows in the spot checks, and the
+sample bounds what is left. A change rare enough to slip past all of them can
+still leave a few rows as the old code measured them, so after a change whose
+reach you doubt, or before a table you mean to keep for long, `--full` is the
+reference. After a change that touches every class (a search heuristic, a
+state field every position carries), the run is about as slow as `--full`,
+plus the fingerprints.
 
 ### Shortlist, then confirm (the quick way)
 
@@ -860,7 +964,7 @@ Monster AI, room modifiers, rules, search and human-like bot changes all shift
 difficulty. After any of them:
 
 ```sh
-npm run calibrate:difficulty         # brute force: about an hour on seven workers
+npm run calibrate:difficulty         # brute force, measuring again only what changed
 node scripts/build-fallbacks.mjs     # rebuild the bank for the new knobs
 npm run verify:fallbacks
 npm run build:editions -- --full     # re-certify every stored day under the new knobs

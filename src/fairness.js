@@ -476,12 +476,22 @@ function searchFloor(start, budget, minHp, mode = AUTO) {
  * be certified with the lives left, a floor that spent some is searched again
  * keeping one more. The floors share one budget, in order, so a quick floor
  * leaves more for the next.
+ *
+ * `floorSearch` (tooling only: scripts/calibrate-difficulty.mjs keeps each
+ * floor's search so a later calibration can reuse it) sees every floor's
+ * search in turn. It is called with { start, minHp, explored, search }:
+ * `explored` counts the candidate's expansions before this floor, and
+ * `search()` runs the floor's search, returning { floor, explored }, the
+ * floor's { actions, state } (its stairs last, the state after them) or null,
+ * and the expansions it used. floorSearch returns the same, so it can record
+ * each floor's search or stand in for one it has already seen. Without it,
+ * nothing changes.
  */
 export function findWinningRoute(initial, budget = {}) {
   // Every run-ending transition here is rejected, so restarts are only marked.
   return whileSearching(() => searchRoute(initial, budget));
 }
-function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit } = {}) {
+function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit, floorSearch } = {}) {
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
     throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
   }
@@ -489,11 +499,20 @@ function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit 
   const mode = recruitMode({ recruit, everyRecruit });
   if (!initial || initial.status !== 'playing' || hasPowers(initial, mode) || unreachablePickups(initial).length) return { status: 'unknown', explored: 0 };
   const budget = { explored: 0, maxExpansions, beamWidth };
+  // One floor's search, through floorSearch when tooling watches.
+  const searchOne = (state, minHp) => {
+    const before = budget.explored;
+    const search = () => ({ floor: searchFloor(state, budget, minHp, mode), explored: budget.explored - before });
+    if (!floorSearch) return search().floor;
+    const { floor, explored } = floorSearch({ start: state, minHp, explored: before, search });
+    budget.explored = before + explored;
+    return floor;
+  };
   let blocked = false;
   // The route from `state` to the end of the run, or null.
   const finish = (state) => {
     for (let minHp = PIECE_LIVES[state.startingPiece] - livesSpendable(state); ;) {
-      const floor = searchFloor(state, budget, minHp, mode);
+      const floor = searchOne(state, minHp);
       if (!floor) return null;
       if (floor.state.status === 'won') return floor.actions;
       // A later floor with an unreachable pickup can't be certified by any route.

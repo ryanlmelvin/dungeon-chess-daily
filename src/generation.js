@@ -54,11 +54,12 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
  * here. Never pass a policy here that par doesn't use.
  * `recruit` and `everyRecruit` pick the recruit mode (src/fairness.js
  * RECRUIT_MODES): generation always certifies on Auto; tooling may measure a
- * steered recruit.
+ * steered recruit. `floorSearch` (tooling) watches each floor's search
+ * (findWinningRoute).
  */
-export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = 'auto', everyRecruit } = {}) {
+export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = 'auto', everyRecruit, floorSearch } = {}) {
   const options = { recruit, everyRecruit };
-  const result = findWinningRoute(createGame(candidate), { maxExpansions: budget, ...options });
+  const result = findWinningRoute(createGame(candidate), { maxExpansions: budget, ...options, floorSearch });
   if (result.status !== 'solved') return { status: 'unknown', explored: result.explored };
   const proof = verifyWinningRoute(createGame(candidate), result.actions, options);
   if (!proof.valid) return { status: 'invalid', explored: result.explored };
