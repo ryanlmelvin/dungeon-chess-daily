@@ -54,7 +54,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Tighter rooms: no open boards a target can flee across | Agreed |
 | Generation fast enough that calibration is no longer a step | Agreed (goal) |
 | A clock on every floor (the ceiling holds par + 4 moves) | Maybe |
-| The weekly difficulty ramp | Maybe dropped (see Open questions) |
+| The weekly difficulty ramp | Dropped while we build the composer: each day climbs from floor 1 to the king floor instead |
 | Recruits traded away when they capture on a guarded square | Dropped: recruits are never lost |
 
 ## The composer: floors built around their solution
@@ -127,13 +127,15 @@ with knight and bishop players and grow from there.
 
 ### Difficulty without calibration
 
-- **If the weekly ramp is dropped:** each day ramps within itself, for example
-  floor 1 at level 2, floor 2 at level 3, and the king floor's net at level 3
-  or 4. Every day then plays alike, and nothing needs tuning. One monster
-  ruleset for every day keeps the monsters learnable, which a puzzle needs.
-- **If it stays:** the weekday picks motif levels (Monday 1–2 up to Saturday
-  4–5). Levels are designed, not fitted. The bot's miss rate per motif family
-  is measured once, in minutes, to check the ordering.
+The weekly ramp is dropped while we build the composer (decided 2026-11-09).
+Each day climbs within itself instead: for example floor 1 at level 2, floor 2
+at level 3, and the king floor's net at level 3 or 4. Every day plays alike,
+and nothing needs tuning. One monster ruleset for every day would keep the
+monsters learnable, which a puzzle needs; that question is still open.
+
+If a weekly ramp ever returns, the weekday would pick motif levels (Monday 1–2
+up to Saturday 4–5). Levels are designed, not fitted, and the bot's miss rate
+per motif family is measured once, in minutes, to check their order.
 
 ### Build time
 
@@ -192,20 +194,19 @@ Each phase ends with a preview you play before anything long runs or ships.
 1. **Scoring rules.** A lost life is a stroke; the king ignores frost. Small
    changes: recompute par, preview, ship.
 2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
-   Breach days, recruits and powerup placement. Settle par and the ramp
-   question here.
+   Breach days, recruits and powerup placement. Settle par here.
 3. **Switch.** Generate every edition with the composer, regenerate the
    archive (minutes), retire calibration, and update the README, the manual
    and `docs/generation.md`.
-4. **Maybe.** The floor clock, and a weekly ramp by motif level if wanted.
+4. **Maybe.** The floor clock, and a weekly ramp by motif level if one is ever
+   wanted back.
 
 ## Open questions
 
-1. Drop the weekly ramp (my suggestion while we build), or keep it by motif
-   level?
-2. Par: the planted line + 1, or the bot's median?
-3. One monster ruleset for every day, or keep the five tiers?
-4. The floor clock: try it after phase 2?
+1. Par: the planted line + 1, or the bot's median?
+2. One monster ruleset for every day, or keep the five tiers? With no weekly
+   ramp, the tiers have little left to do.
+3. The floor clock: try it after phase 2?
 
 ## Risks
 
