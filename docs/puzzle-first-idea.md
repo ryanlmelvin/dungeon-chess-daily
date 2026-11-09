@@ -1,12 +1,14 @@
-# Puzzle-first plan
+# Puzzle-first idea
 
 Every floor should be a short puzzle: a few moves, one clever idea, and a
 solution that is certain to exist. No floor should turn into a chase, a siege
-or a trade of lives. This plan also aims to end hours-long calibration, by
+or a trade of lives. This idea also aims to end hours-long calibration, by
 building floors around their solutions instead of searching random rooms and
-tuning knobs until the numbers land.
+tuning knobs until the numbers land. Floors could be composed (the composer,
+below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 
-Status: proposal, written 2026-11-09. Nothing here is built yet.
+Status: idea, written 2026-11-09, with lichess measurements added the same
+day. Nothing here is built yet.
 
 ## What we measured
 
@@ -56,6 +58,113 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A clock on every floor (the ceiling holds par + 4 moves) | Maybe |
 | The weekly difficulty ramp | Dropped while we build the composer: each day climbs from floor 1 to the king floor instead |
 | Recruits traded away when they capture on a guarded square | Dropped: recruits are never lost |
+| Floors taken from lichess puzzles (CC0) | King floors only: mates carry over with three chess king rules; floor 1 and 2 lines don't (see [Lichess puzzles](#lichess-puzzles)) |
+| One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
+
+## Lichess puzzles
+
+Measured on 2026-11-09 against today's rules (v10) and scratch variants of
+`src/rules.js`. The scripts and data are not in the repo.
+
+**Verdict.** Lichess can supply king floors, but not floors 1 and 2.
+
+**The database.** Lichess publishes its puzzles under CC0 at
+database.lichess.org: 6.19 million positions. Each comes with a forced line
+(the first move is the opponent's), a rating from players' attempts, a
+popularity score, a play count and themes (fork, mateIn2, rookEndgame…). In
+about 2.35 million of them, one piece makes every solver move, which is the
+shape our one-piece player could take over. Another 10,757 are mates in 1 to 3
+where the solver has only a king and one piece (no pawns); most are rook
+endgames.
+
+**How a puzzle becomes a floor.**
+- The solver's moving piece is the player, starting on its own square.
+- On the king floor, the solver's king is the recruit, already at your side.
+- The solver's other men become walls.
+- The opponent's men become monsters with their real roles.
+- A puzzle that black solves is flipped, so the solver plays up the board.
+
+The solver's moves are then replayed through `act()`, and our monsters answer.
+Off the king floor, a line survives if it wins the same material as in chess
+without losing a life. On the king floor it survives if it ends with the king
+taken.
+
+**Floors 1 and 2: the lines don't survive.** Only 6–14% of popular knight,
+bishop, rook, queen and pawn lines win their material, and the composer
+session's stricter test (every target captured, in a cast that fits the day)
+found 1–2%. Chess tactics get their force from the opponent answering with a
+single move and from a king in check having to be answered first. A fork wins
+because only one of the two pieces can step away. Here every monster moves
+every turn and nothing off the king floor is royal, so a threat just makes the
+targets step away. A variant with one monster reply per turn lifted the
+knight, bishop, rook and queen lines to 40–57%, but every piece on both sides
+keeps moving every turn (decided 2026-11-09), so floors 1 and 2 come from
+native motifs (the composer). Lichess themes still make a motif checklist:
+
+| Lichess theme | Dungeon motif |
+| --- | --- |
+| trappedPiece | Squeeze |
+| hangingPiece | Punish the wind-up |
+| capturingDefender | Take the guard first |
+| quietMove, zugzwang | Waiting move |
+
+**King floor: the mates carry over.** The royal king already steps off
+threatened squares the way a chess king does. Three chess rules close the
+rest of the gap, and none of them changes who moves:
+1. **Checkmate wins.** A king that is attacked, with no safe square and no
+   guard that can block, is taken at once.
+2. **The king can't take a protected piece.** It never captures a piece the
+   recruit king guards. Today it does, in 381 of 2,000 mates.
+3. **Kings never stand side by side.** The recruit king can't step next to the
+   king, so it never checks or takes it.
+
+| King and one piece, mate in… | Today's rules | With the three king rules |
+| --- | --- | --- |
+| 1 (6,494) | 41% | 99.9% |
+| 2 (3,913) | 51% | 60% |
+| 3 (350) | 3% | 28% |
+| All (10,757) | 43% | 83% |
+
+Today's failures are mostly a capture that the chess rules forbid, or a guard
+covering the king's square, so taking the king costs a life. With the three
+rules, mates in 2 and 3 still fail when the other monsters' moves open an
+escape.
+
+**Exact par and uniqueness, without the bot.** Monster moves are already
+deterministic (seeded ties), so a short floor is a one-player puzzle even with
+every monster moving. Searching every sequence of player moves and recruit
+orders, up to the line's length, finds the true shortest win and counts the
+first moves that win. With the three king rules, on 300 surviving king floors:
+- The lichess line is the shortest win on 99.7% of them.
+- Only one first move wins on 86%.
+- The search took 1.6 s in all.
+
+The composer can use the same search to prove "no shortcut" in place of the
+bot's guard check.
+
+**Supply.** Two years of editions need about 150 king floors per daily piece.
+These counts are after keeping only floors with one winning first move and no
+shortcut:
+
+| Daily piece | King floors available |
+| --- | --- |
+| Rook | about 5,900 |
+| Queen | about 1,600 |
+| Knight | about 500 (mostly mates whose solver pawns become walls) |
+| Bishop | about 140 |
+| Pawn | none |
+
+About three quarters are mates in 1 (par 1); nearly all the rest are mates
+in 2.
+
+**Before it could ship.**
+- **The three king rules** need agreeing (Open questions).
+- **The cast has to fit.** The puzzle's guards must map onto the day's two
+  decoy species. The composer's probe found 4,168 rook mates that fit.
+- **The player has to be able to know the guards' roles.** A mate in 1 often
+  depends on what the guards are, and it gives no time to watch them move.
+- **The start square changes.** You start on the puzzle's square rather than
+  e2, with the recruit king already beside you.
 
 ## The composer: floors built around their solution
 
@@ -207,6 +316,12 @@ Each phase ends with a preview you play before anything long runs or ships.
 2. One monster ruleset for every day, or keep the five tiers? With no weekly
    ramp, the tiers have little left to do.
 3. The floor clock: try it after phase 2?
+4. The three king-floor rules (checkmate wins, the king can't take a protected
+   piece, kings never stand side by side)? They let lichess mates seed king
+   floors and keep every monster moving.
+5. King floors from lichess mates are 1 to 3 moves long. Is a mate in 1 too
+   short for the day's last floor, and how does the player learn the guards'
+   roles in time?
 
 ## Risks
 
