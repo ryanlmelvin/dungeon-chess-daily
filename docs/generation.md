@@ -834,7 +834,9 @@ assembly (`rankFloors`, aimed at the tier's mean target: Tough's lies between
 Thursday's and Friday's) for every tier, setting and threat minimum, and keeps
 the cheapest setting per (tier, piece): distance outside the tier's band,
 days outside it, and fallbacks (ten times as costly as a missed day, since
-they repeat a layout) all cost. Its rows keep no per-floor move or life
+they repeat a layout) all cost. An exact tie goes to the plainer setting
+(fewest screens, walls, decoys, then scatter and guards), never to whichever
+was measured first, so two runs with the same rows pick the same table. Its rows keep no per-floor move or life
 counts, so the replay counts each floor's scored moves toward the route's cap
 and leaves a pawn's allowance of lives to generation's own certification.
 With sixteen candidates a date and forty bot runs a floor, measuring from
@@ -864,6 +866,21 @@ uses every core but one (`--jobs N` overrides). From scratch, with sixteen
 candidates and 40 bot runs per floor, it is 556,800 searches at about 0.15
 CPU seconds each (sampled on an idle machine: 0.14 for a non-pawn day, 0.24
 for a pawn day), so roughly three to four hours on seven workers.
+
+**Size and memory.** The data file is written and read a row at a time
+(`writeDataFile`, `readDataFile` in `scripts/calibration-search.mjs`), so it
+can grow past the longest string Node allows (about 512 MB); a write goes to
+a temporary file and replaces the old one only once complete. It is still
+one JSON object, a line per class and per row. Every row stays in memory for
+the fit, about 2 KB each, and a run that reuses the last data lets each old
+row go once its task is measured again, so the old and new rows are never
+all in memory together. A synthetic file the size of 20 dates per piece
+(1.1 million rows, 828 MB) wrote in 3 s and read back in 4 s, byte for byte;
+holding its rows the way an incremental run does peaked at 2.9 GB of Node's
+default 4 GB heap, and `--reuse` refitted from it in that heap too (3.5 GB
+resident). The npm scripts give Node 8 GB anyway, and the script warns
+before a run whose rows would crowd the heap, with the
+`--max-old-space-size` to use.
 
 Monsters grow smarter with the tier, so every setting is measured once per
 tier, with that tier's monsters, and competes only for that tier: five times

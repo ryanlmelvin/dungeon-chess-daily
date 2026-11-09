@@ -11,9 +11,9 @@
     "test": "node --test tests/*.test.js",
     "verify:fallbacks": "node scripts/build-fallbacks.mjs --verify",
     "audit:dungeons": "node scripts/audit-dungeons.mjs",
-    "calibrate:difficulty": "node scripts/calibrate-difficulty.mjs",
-    "calibrate:shortlist": "node scripts/calibrate-difficulty.mjs --fast",
-    "calibrate:confirm": "node scripts/calibrate-difficulty.mjs --confirm scripts/calibration-shortlist.json",
+    "calibrate:difficulty": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs",
+    "calibrate:shortlist": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs --fast",
+    "calibrate:confirm": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs --confirm scripts/calibration-shortlist.json",
     "build:editions": "node scripts/build-editions.mjs",
     "verify:editions": "node scripts/build-editions.mjs --verify"
   },

@@ -72,6 +72,7 @@ import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { getHeapStatistics } from 'node:v8';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
@@ -125,7 +126,10 @@ if (!isMainThread) {
   if (fast && confirmPath) throw new Error('--fast makes a shortlist and --confirm checks one: run them one after the other.');
   // A shortlist run keeps its searches apart from the data behind the live table.
   const dataPath = new URL(option('data', fast ? 'scripts/calibration-shortlist.json' : 'scripts/calibration-data.json'), new URL(`file://${process.cwd()}/`));
-  const shortlist = confirmPath ? JSON.parse(await readFile(new URL(confirmPath, new URL(`file://${process.cwd()}/`)), 'utf8')) : null;
+  const { readDataFile, writeDataFile } = await import('./calibration-search.mjs');
+  // The shortlist is a data file too, read a row at a time.
+  const shortlistRows = [];
+  const shortlist = confirmPath ? { ...await readDataFile(new URL(confirmPath, new URL(`file://${process.cwd()}/`)), { onRow: (row) => shortlistRows.push(row) }), rows: shortlistRows } : null;
   if (shortlist && !option('start')) start = shortlist.start;
   if (shortlist && !option('samples')) samples = shortlist.samples;
   // The share of reused rows measured from scratch as well, to check the reuse.
@@ -240,19 +244,21 @@ if (!isMainThread) {
   const groupOf = (piece, date, tier) => `${piece}/${modifierOf(date)}/${tier}`;
   const classesOf = (piece, date, tier) => [0, 1, 2].map((floor) => classKey(piece, modifierOf(date), floor, tier));
 
-  // Run tasks on the worker pool: onResult(result, message) as each returns.
-  const runPool = async (messages, onResult, onProgress) => {
+  // Run `count` tasks on the worker pool. messageFor(id) builds each task's
+  // message as it goes out, so no list of messages holds on to stored rows;
+  // onResult(result, id) sees each result as it returns.
+  const runPool = async (count, messageFor, onResult, onProgress) => {
     let next = 0, done = 0;
-    await Promise.all(Array.from({ length: Math.min(jobs, messages.length) }, () => new Promise((resolve, reject) => {
+    await Promise.all(Array.from({ length: Math.min(jobs, count) }, () => new Promise((resolve, reject) => {
       const worker = new Worker(fileURLToPath(import.meta.url));
       const feed = () => {
-        if (next >= messages.length) { worker.terminate(); resolve(); return; }
+        if (next >= count) { worker.terminate(); resolve(); return; }
         const id = next++;
-        worker.postMessage({ ...messages[id], id });
+        worker.postMessage({ ...messageFor(id), id });
       };
       worker.on('message', (result) => {
-        onResult(result, messages[result.id]);
-        onProgress?.(++done, messages.length);
+        onResult(result, result.id);
+        onProgress?.(++done, count);
         feed();
       });
       worker.on('error', reject);
@@ -266,44 +272,55 @@ if (!isMainThread) {
     const out = {};
     if (!list.length) return out;
     const began = Date.now();
-    await runPool(list.map(({ key, probes }) => ({
-      kind: 'fingerprint', floor: Number(key.split('/')[2]) - 1,
-      probes: probes.map(({ date, setting, attempt, searches }) => ({ date, setting: parseKey(setting), attempt, searches })),
-    })), (result) => { out[list[result.id].key] = { search: result.search, bot: result.bot }; });
+    await runPool(list.length, (id) => ({
+      kind: 'fingerprint', floor: Number(list[id].key.split('/')[2]) - 1,
+      probes: list[id].probes.map(({ date, setting, attempt, searches }) => ({ date, setting: parseKey(setting), attempt, searches })),
+    }), (result, id) => { out[list[id].key] = { search: result.search, bot: result.bot }; });
     console.log(`Fingerprinted ${list.length} classes in ${Math.round((Date.now() - began) / 1000)} s.`);
     return out;
   };
 
-  // For a data file's classes of this run's pieces: did the search (rules,
-  // monsters, modifier, search) or the bot play differently from its probes
-  // with these rules? { key: { search, bot, sameBot, probes: [rows], now } },
-  // `sameBot` when the bot's code is the one that measured the class; a class
-  // whose probes are missing counts as changed both ways. A class the file
-  // has no entry for (a row's class that isn't listed) is missing from the result.
-  const changedClasses = async (file, scope) => {
-    const byKey = new Map(file.rows.map((row) => [rowKey(row), row]));
-    const entries = Object.entries(file.classes ?? {}).filter(([key]) => scope.includes(key.split('/')[0]));
-    const ready = entries.filter(([, entry]) => entry.probes.every((probe) => byKey.has(probe)))
-      .map(([key, entry]) => ({ key, probes: entry.probes.map((probe) => byKey.get(probe)) }));
+  // For a data file's classes (`classes`; its rows by key in `rowsByKey`) of
+  // this run's pieces: did the search (rules, monsters, modifier, search) or
+  // the bot play differently from its probes with these rules?
+  // { key: { search, bot, sameBot, probes: [rows], now } }, `sameBot` when
+  // the bot's code is the one that measured the class; a class whose probes
+  // are missing counts as changed both ways. A class the file has no entry
+  // for (a row's class that isn't listed) is missing from the result.
+  const changedClasses = async (classes, rowsByKey, scope) => {
+    const entries = Object.entries(classes ?? {}).filter(([key]) => scope.includes(key.split('/')[0]));
+    const ready = entries.filter(([, entry]) => entry.probes.every((probe) => rowsByKey.has(probe)))
+      .map(([key, entry]) => ({ key, probes: entry.probes.map((probe) => rowsByKey.get(probe)) }));
     const now = await fingerprints(ready);
+    const probesOf = new Map(ready.map(({ key, probes }) => [key, probes]));
     const changed = {};
     for (const [key, entry] of entries) {
       const current = now[key];
       const sameBot = entry.botSource === botSource;
       changed[key] = current
-        ? { search: current.search !== entry.search, bot: current.bot !== entry.bot, sameBot, probes: ready.find((item) => item.key === key).probes, now: current }
+        ? { search: current.search !== entry.search, bot: current.bot !== entry.bot, sameBot, probes: probesOf.get(key), now: current }
         : { search: true, bot: true, sameBot, probes: null, now: null };
     }
     return changed;
   };
 
-  // Refuse a data file whose rows can't all be used as they are: another data
-  // version, candidate count or budget, or a class of this run's pieces that
-  // plays differently now (or that the file has no fingerprints for).
+  // A data file read a row at a time (scripts/calibration-search.mjs
+  // readDataFile), keeping only the rows of this run's pieces: its header
+  // fields and classes, and `rows`.
+  const loadData = async (path) => {
+    const rows = [];
+    const header = await readDataFile(path, { onRow: (row) => { if (pieces.includes(row.piece)) rows.push(row); } });
+    return { ...header, rows };
+  };
+
+  // Refuse a data file (loadData) whose rows can't all be used as they are:
+  // another data version, candidate count or budget, or a class of this
+  // run's pieces that plays differently now (or that the file has no
+  // fingerprints for).
   const refuseStale = async (file, path, remedy) => {
     const problem = dataProblem(file, stamp);
     if (problem) throw new Error(`${path} can't be reused: ${problem}. ${remedy}`);
-    const changed = await changedClasses(file, pieces);
+    const changed = await changedClasses(file.classes, new Map(file.rows.filter((row) => pieces.includes(row.piece)).map((row) => [rowKey(row), row])), pieces);
     const stale = new Set(Object.entries(changed).filter(([, state]) => state.search || state.bot).map(([key]) => key));
     for (const row of file.rows) {
       if (!pieces.includes(row.piece)) continue;
@@ -316,6 +333,13 @@ if (!isMainThread) {
     }
   };
 
+  // A data row: its key, then what was measured, in the file's field order.
+  const asRow = (piece, setting, date, attempt, entry) => ({
+    piece, setting, date, attempt, status: entry.status, explored: entry.explored, turns: entry.metrics?.turns ?? null, ms: entry.ms,
+    metrics: entry.metrics ?? null, human: entry.human ?? null, route: entry.route ?? null, searches: entry.searches ?? null,
+  });
+  const keysOf = (task) => Array.from({ length: ATTEMPTS }, (_, attempt) => rowKey({ piece: task.piece, setting: settingKey(task.setting), date: task.date, attempt }));
+
   // Run tasks on the worker pool, storing results in `into`.
   let searchCount = 0, expansionCount = 0;
   const runBegan = Date.now();
@@ -325,45 +349,47 @@ if (!isMainThread) {
   let replay = null, replayMs = 0;
   if (option('replay')) {
     replay = {};
-    const file = JSON.parse(await readFile(option('replay'), 'utf8'));
+    const file = await loadData(option('replay'));
     await refuseStale(file, option('replay'), 'Replay only a data file measured under these rules.');
-    for (const row of file.rows) {
-      (((replay[row.piece] ??= {})[row.setting] ??= {})[row.date] ??= [])[row.attempt] = {
-        status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics, human: row.human, route: row.route, searches: row.searches,
-      };
-    }
+    for (const row of file.rows) (((replay[row.piece] ??= {})[row.setting] ??= {})[row.date] ??= [])[row.attempt] = row;
   }
   const elapsedSeconds = () => (replay ? replayMs / 1000 / jobs : (Date.now() - runBegan) / 1000);
-  // Measure tasks ({ piece, date, setting }, and when reusing a stored row
-  // per candidate: `stored`, `stale`, `keys`, `sample`, `spotCheck`; see the
-  // worker) into into[piece][settingKey][date]; onFound(task, found) sees
-  // each result with its notes.
+  // Measure tasks ({ piece, date, setting }, and when reusing stored rows:
+  // `stored` (a row or null per candidate), `stale`, `sample`, `spotCheck`;
+  // see the worker) into into[piece][settingKey][date], as data rows.
+  // onFound(task, found) sees each result with its notes. A task lets go of
+  // its stored rows once its result is in.
   const measure = async (tasks, budget, into, onFound) => {
-    tasks = tasks.map((task, id) => ({ ...task, id }));
     if (replay) {
       // Serve searches from a full-budget data file (search is deterministic,
       // so a smaller budget is the same search cut short).
       for (const task of tasks) {
-        const found = replay[task.piece][settingKey(task.setting)][task.date].map((entry) => (entry.explored <= budget
-          ? entry : { status: 'unknown', explored: budget, ms: Math.round(entry.ms * budget / entry.explored), metrics: null, human: null, route: null, searches: null }));
-        ((into[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = found;
-        searchCount += found.length; expansionCount += found.reduce((sum, entry) => sum + entry.explored, 0);
-        replayMs += found.reduce((sum, entry) => sum + entry.ms, 0);
+        const key = settingKey(task.setting);
+        const found = replay[task.piece][key][task.date].map((row) => (row.explored <= budget
+          ? row : asRow(task.piece, key, task.date, row.attempt, { status: 'unknown', explored: budget, ms: Math.round(row.ms * budget / row.explored) })));
+        ((into[task.piece] ??= {})[key] ??= {})[task.date] = found;
+        searchCount += found.length; expansionCount += found.reduce((sum, row) => sum + row.explored, 0);
+        replayMs += found.reduce((sum, row) => sum + row.ms, 0);
       }
       return;
     }
     if (!tasks.length) return;
     console.log(`Measuring ${tasks.length} dates × ${ATTEMPTS} candidates on ${jobs} workers at ${budget} expansions…`);
     const began = Date.now();
-    await runPool(tasks.map(({ date, setting, stored, stale, keys, sample, spotCheck }) => ({ date, setting, budget, stored, stale, keys, sample, spotCheck })), (result) => {
-      const task = tasks[result.id];
-      ((into[task.piece] ??= {})[settingKey(task.setting)] ??= {})[task.date] = result.found.map(({ row }) => row);
-      for (const { row, notes } of result.found) {
+    await runPool(tasks.length, (id) => {
+      const { date, setting, stored, stale, sample, spotCheck } = tasks[id];
+      return { date, setting, budget, stored, stale, sample, spotCheck, keys: stored ? keysOf(tasks[id]) : null };
+    }, (result, id) => {
+      const task = tasks[id], key = settingKey(task.setting);
+      const found = result.found.map(({ row, notes, check }, attempt) => ({ row: asRow(task.piece, key, task.date, attempt, row), notes, check }));
+      ((into[task.piece] ??= {})[key] ??= {})[task.date] = found.map(({ row }) => row);
+      for (const { row, notes } of found) {
         // Count only what was searched: a row reused whole searched nothing.
         if (!notes || notes.searched.some(Boolean)) searchCount++;
         expansionCount += notes ? notes.expansions : row.explored;
       }
-      onFound?.(task, result.found);
+      task.stored = null;
+      onFound?.(task, found);
     }, (done, total) => {
       if (done % 100 === 0 || done === total) {
         const elapsed = (Date.now() - began) / 1000;
@@ -375,107 +401,108 @@ if (!isMainThread) {
   // Brute force from the last run's data (docs/generation.md, "Incremental
   // calibration"): fingerprint its classes with these rules, then measure
   // every task again reusing what still holds (scripts/calibration-search.mjs
-  // remeasureCandidate), check the reuse, and measure from scratch every
-  // group a check fails in. Returns the classes' fingerprints now, with the
-  // probes they came from, so unchanged ones need not be computed again.
+  // remeasureCandidate), check the reuse, and measure again every group or
+  // class a check fails in. `previous` is previousData()'s: its rows of this
+  // run's pieces (`byKey`) let go as their tasks finish, so the old rows and
+  // the new are never all in memory at once. Returns the classes'
+  // fingerprints now, with the probes they came from, so unchanged ones need
+  // not be computed again.
   const measureIncrementally = async (tasks, previous) => {
-    const stored = new Map(previous.rows.map((row) => [rowKey(row), row]));
-    const changed = await changedClasses(previous, pieces);
+    const { byKey } = previous;
+    const changed = await changedClasses(previous.classes, byKey, pieces);
     // Per floor: search again when its class's search fingerprint changed (or
     // isn't known), or its bot fingerprint did while the bot's code didn't
-    // (the rules it plays changed); play the bot again when either changed,
-    // and on floors a failed spot check sends back (`spotted`).
+    // (the rules it plays changed); play the bot again when either changed.
     const rulesChanged = (state) => !state || state.search || (state.bot && state.sameBot);
-    const staleFor = (piece, date, tier, spotted = new Set()) => {
-      const keys = classesOf(piece, date, tier), states = keys.map((key) => changed[key]);
-      return {
-        search: states.map((state, floor) => rulesChanged(state) || spotted.has(keys[floor])),
-        bot: states.map((state, floor) => rulesChanged(state) || state.bot || spotted.has(keys[floor])),
-      };
+    const staleFor = (piece, date, tier) => {
+      const states = classesOf(piece, date, tier).map((key) => changed[key]);
+      return { search: states.map(rulesChanged), bot: states.map((state) => rulesChanged(state) || state.bot) };
     };
-    const keysOf = (task) => Array.from({ length: ATTEMPTS }, (_, attempt) => rowKey({ piece: task.piece, setting: settingKey(task.setting), date: task.date, attempt }));
-    const first = tasks.map((task) => {
-      const keys = keysOf(task), stale = staleFor(task.piece, task.date, task.setting.tier);
-      const rows = keys.map((key) => stored.get(key) ?? null);
-      return { ...task, keys, stale, stored: rows, sample: rows.map(() => false) };
-    });
-    // The sample: about `sampleShare` of the rows that reuse anything, at least
-    // one per group, in an order seeded by --sample-seed (random by default).
+    const first = tasks.map((task) => ({ ...task, stale: staleFor(task.piece, task.date, task.setting.tier), stored: keysOf(task).map((key) => byKey.get(key) ?? null), sample: null }));
+    const kept = byKey.size;
+    // The file's rows outside this run's grid go now; the others with their task.
+    byKey.clear();
+    // The sample: each row that reuses anything with chance `sampleShare`
+    // (seeded by --sample-seed, random by default), and each group's
+    // first in that order when none of its rows was drawn.
     const seed = option('sample-seed', randomUUID().slice(0, 8));
-    const order = (key) => createHash('sha1').update(`${seed}:${key}`).digest('hex');
-    const pools = new Map();
+    const draw = (key) => parseInt(createHash('sha1').update(`${seed}:${key}`).digest('hex').slice(0, 8), 16) / 2 ** 32;
+    const lowest = new Map(), drawn = new Set();
+    const pick = (task, attempt) => { (task.sample ??= task.stored.map(() => false))[attempt] = true; };
     for (const task of first) {
-      if (task.stale.search.every(Boolean)) continue;
+      if (sampleShare === 0 || task.stale.search.every(Boolean)) continue;
       const group = groupOf(task.piece, task.date, task.setting.tier);
-      task.stored.forEach((row, attempt) => { if (row?.searches) (pools.get(group) ?? pools.set(group, []).get(group)).push({ task, attempt, order: order(task.keys[attempt]) }); });
-    }
-    if (sampleShare > 0) {
-      for (const pool of pools.values()) {
-        pool.sort((a, b) => (a.order < b.order ? -1 : 1));
-        for (const { task, attempt } of pool.slice(0, Math.max(1, Math.round(sampleShare * pool.length)))) task.sample[attempt] = true;
-      }
-    }
-    // Every row's latest result and notes, by key (null notes: measured from scratch).
-    const outcomes = new Map();
-    const record = (task, found) => found.forEach(({ row, notes, check }, attempt) => {
-      outcomes.set(task.keys[attempt], { task, attempt, row, notes, check, group: groupOf(task.piece, task.date, task.setting.tier), classes: classesOf(task.piece, task.date, task.setting.tier) });
-    });
-    console.log(`Reusing ${fileURLToPath(dataPath)} (${previous.rows.length} rows) where it still holds; sample seed ${seed}.`);
-    await measure(first, SEARCH_BUDGET, measurements, record);
-
-    // The checks. A reused route that no longer verifies to its stored
-    // metrics, or a sampled row whose reuse differs from measuring it from
-    // scratch, sends its whole group to be measured from scratch; a kept bot
-    // run that comes out differently sends its class's floor to be searched
-    // and played again (the bot or the rules changed there unseen).
-    const same = (a, b) => ['status', 'explored', 'metrics', 'human', 'route', 'searches'].every((field) => JSON.stringify(a[field]) === JSON.stringify(b[field]));
-    const escalated = new Map(), spotted = new Set();
-    const checks = { verified: 0, guard: 0, spot: 0, spotDiffered: 0, sampled: 0, sampleDiffered: 0 };
-    for (const { row, notes, check, group, classes } of outcomes.values()) {
-      if (!notes) continue;
-      if (notes.searched.every((count) => count === 0) && row.route !== null) checks.verified++;
-      if (notes.guard) { checks.guard++; escalated.set(group, 'a reused route no longer verifies to its stored metrics'); }
-      checks.spot += notes.bot.filter((state) => state === 'kept').length;
-      for (const floor of notes.spot) { checks.spotDiffered++; spotted.add(classes[floor]); }
-      if (check) {
-        checks.sampled++;
-        if (!same(row, check)) { checks.sampleDiffered++; escalated.set(group, 'a sampled row measured from scratch came out differently'); }
-      }
-    }
-    const second = [];
-    for (const task of first) {
-      const group = groupOf(task.piece, task.date, task.setting.tier);
-      if (escalated.has(group)) { second.push({ piece: task.piece, date: task.date, setting: task.setting, keys: task.keys }); continue; }
-      if (!classesOf(task.piece, task.date, task.setting.tier).some((key) => spotted.has(key))) continue;
-      // Those floors searched and played again from the stored rows.
-      second.push({ ...task, stale: staleFor(task.piece, task.date, task.setting.tier, spotted), sample: null, spotCheck: false });
-    }
-    if (escalated.size) for (const [group, reason] of escalated) console.log(`  ${group}: ${reason}; measuring the group from scratch.`);
-    if (spotted.size) console.log(`  A kept bot run came out differently in ${[...spotted].sort().join(', ')}; searching and playing those floors again.`);
-    if (second.length) await measure(second, SEARCH_BUDGET, measurements, (task, found) => {
-      found.forEach(({ row, notes }, attempt) => {
-        outcomes.set(task.keys[attempt], { ...outcomes.get(task.keys[attempt]), row, notes, check: null });
+      task.stored.forEach((row, attempt) => {
+        if (!row?.searches) return;
+        const value = draw(rowKey(row));
+        if (value < sampleShare) { pick(task, attempt); drawn.add(group); }
+        if (!(lowest.get(group)?.value <= value)) lowest.set(group, { task, attempt, value });
       });
-    });
+    }
+    for (const [group, { task, attempt }] of lowest) if (!drawn.has(group)) pick(task, attempt);
+    console.log(`Reusing ${fileURLToPath(dataPath)} (${kept} rows of these pieces) where it still holds; sample seed ${seed}.`);
 
-    // What was reused and measured again, by class.
-    const report = new Map();
-    const entry = (key) => report.get(key) ?? report.set(key, { rows: 0, fresh: 0, served: 0, searched: 0, kept: 0, played: 0 }).get(key);
-    for (const { row, notes, classes } of outcomes.values()) {
-      for (const [floor, key] of classes.entries()) {
-        const item = entry(key);
-        item.rows++;
-        if (notes) {
+    // Pass one, counted by class as each result comes in, with its checks. A
+    // reused route that no longer verifies to its stored metrics, or a
+    // sampled row whose reuse differs from measuring it from scratch, sends
+    // its whole group to be measured from scratch; a kept bot run that comes
+    // out differently sends its class's floor to be searched and played
+    // again (the bot or the rules changed there unseen).
+    const report = new Map(), escalated = new Map(), spotted = new Set();
+    const checks = { verified: 0, guard: 0, spot: 0, spotDiffered: 0, sampled: 0, sampleDiffered: 0 };
+    const same = (a, b) => ['status', 'explored', 'metrics', 'human', 'route', 'searches'].every((field) => JSON.stringify(a[field]) === JSON.stringify(b[field]));
+    const tally = (key) => report.get(key) ?? report.set(key, { rows: 0, fresh: 0, served: 0, searched: 0, kept: 0, played: 0 }).get(key);
+    await measure(first, SEARCH_BUDGET, measurements, (task, found) => {
+      const group = groupOf(task.piece, task.date, task.setting.tier), classes = classesOf(task.piece, task.date, task.setting.tier);
+      for (const { row, notes, check } of found) {
+        for (const [floor, key] of classes.entries()) {
+          const item = tally(key);
+          item.rows++;
+          if (!notes) {
+            item.fresh++;
+            item.searched += row.searches.filter(([searched]) => searched === floor).length;
+            if (row.status === 'solved' && row.human) item.played++;
+            continue;
+          }
           item.served += notes.served[floor]; item.searched += notes.searched[floor];
           if (notes.bot[floor] === 'kept') item.kept++;
           if (notes.bot[floor] === 'played') item.played++;
-        } else {
-          item.fresh++;
-          item.searched += row.searches.filter(([searched]) => searched === floor).length;
-          if (row.status === 'solved' && row.human) item.played++;
+        }
+        if (!notes) continue;
+        if (notes.searched.every((count) => count === 0) && row.route !== null) checks.verified++;
+        if (notes.guard) { checks.guard++; escalated.set(group, 'a reused route no longer verifies to its stored metrics'); }
+        checks.spot += notes.bot.filter((state) => state === 'kept').length;
+        for (const floor of notes.spot) { checks.spotDiffered++; spotted.add(classes[floor]); }
+        if (check) {
+          checks.sampled++;
+          if (!same(row, check)) { checks.sampleDiffered++; escalated.set(group, 'a sampled row measured from scratch came out differently'); }
         }
       }
+    });
+
+    // Pass two: escalated groups from scratch; a spotted class's floor
+    // searched and played again from pass one's rows, which hold every other
+    // floor as these rules have it.
+    const second = [];
+    for (const task of first) {
+      const { piece, date, setting } = task;
+      if (escalated.has(groupOf(piece, date, setting.tier))) { second.push({ piece, date, setting }); continue; }
+      const floors = classesOf(piece, date, setting.tier).map((key) => spotted.has(key));
+      if (!floors.some(Boolean)) continue;
+      second.push({ piece, date, setting, stored: measurements[piece][settingKey(setting)][date], stale: { search: floors, bot: floors }, spotCheck: false });
     }
+    if (escalated.size) for (const [group, reason] of escalated) console.log(`  ${group}: ${reason}; measuring the group from scratch.`);
+    if (spotted.size) console.log(`  A kept bot run came out differently in ${[...spotted].sort().join(', ')}; searching and playing those floors again.`);
+    const again = { rows: 0, searched: 0, played: 0 };
+    if (second.length) await measure(second, SEARCH_BUDGET, measurements, (task, found) => {
+      for (const { row, notes } of found) {
+        again.rows++;
+        again.searched += notes ? notes.searched.reduce((sum, count) => sum + count, 0) : row.searches.length;
+        again.played += notes ? notes.bot.filter((state) => state === 'played').length : row.status === 'solved' && row.human ? 3 : 0;
+      }
+    });
+
+    // What was reused and measured again, by class.
     const number = (value) => value.toLocaleString('en-US');
     const why = (key, item) => {
       const state = changed[key], [piece, modifier, , tier] = key.split('/');
@@ -500,6 +527,7 @@ if (!isMainThread) {
     console.log(`  ${idle.length} classes reused whole: ${number(idle.reduce((sum, item) => sum + item.served, 0))} floor searches served, ${number(idle.reduce((sum, item) => sum + item.kept, 0))} bot floors kept.`);
     console.log(`Checks: ${number(checks.verified)} reused routes verified (${checks.guard} differed); ${number(checks.spot)} kept bot floors spot-checked (${checks.spotDiffered} differed);`
       + ` ${number(checks.sampled)} sampled rows measured from scratch (${checks.sampleDiffered} differed).`);
+    if (again.rows) console.log(`After the checks: ${number(again.rows)} rows measured again, ${number(again.searched)} floor searches run, ${number(again.played)} bot floors played.`);
     return changed;
   };
 
@@ -662,15 +690,26 @@ if (!isMainThread) {
     return finals;
   };
 
-  // The last run's data file, when this run can reuse it: brute force and
-  // confirm only, never with --full.
+  // The last run's data file, when this run can reuse it (brute force and
+  // confirm only, never with --full), read a row at a time: its header, its
+  // rows of this run's pieces by key (`byKey`), and the other pieces' rows
+  // (`carried`), which go back into the file as they were.
   const previousData = async () => {
     if (args.includes('--full')) return null;
-    let file;
-    try { file = JSON.parse(await readFile(dataPath, 'utf8')); } catch { return null; }
-    const problem = dataProblem(file, stamp);
-    if (problem) { console.log(`Not reusing ${fileURLToPath(dataPath)}: ${problem}. Measuring everything.`); return null; }
-    return file;
+    const byKey = new Map(), carried = [];
+    let problem = null;
+    try {
+      const header = await readDataFile(dataPath, {
+        onHeader: (head) => { problem = dataProblem(head, stamp); return !problem; },
+        onRow: (row) => { if (pieces.includes(row.piece)) byKey.set(rowKey(row), row); else carried.push(row); },
+      });
+      if (header) return { ...header, byKey, carried };
+    } catch (error) {
+      if (error.code === 'ENOENT') return null;
+      problem = error.message;
+    }
+    console.log(`Not reusing ${fileURLToPath(dataPath)}: ${problem}. Measuring everything.`);
+    return null;
   };
 
   // Each class's fingerprints for the rows it writes, from probes picked
@@ -698,18 +737,20 @@ if (!isMainThread) {
     return Object.fromEntries(Object.entries(classes).sort(([a], [b]) => (a < b ? -1 : 1)));
   };
 
-  // Phase 1: measurements[piece][settingKey][date] = [{ ms, metrics|null }, ...]
+  // Phase 1: measurements[piece][settingKey][date] = [data row per candidate]
   let measurements = {};
   let rows = [];
   let previous = null, startClasses = {};
+  // A row read from a file joins the measurements as it is (older rows lack a route and searches).
   const put = (row) => {
+    row.route ??= null; row.searches ??= null;
     const byDate = ((measurements[row.piece] ??= {})[row.setting] ??= {});
-    (byDate[row.date] ??= [])[row.attempt] = { status: row.status, explored: row.explored, ms: row.ms, metrics: row.metrics, human: row.human, route: row.route ?? null, searches: row.searches ?? null };
+    (byDate[row.date] ??= [])[row.attempt] = row;
   };
   if (args.includes('--reuse')) {
-    const file = JSON.parse(await readFile(dataPath, 'utf8'));
+    const file = await loadData(dataPath);
     await refuseStale(file, fileURLToPath(dataPath), 'Measure again without --reuse.');
-    for (const row of file.rows) if (pieces.includes(row.piece)) put(row);
+    for (const row of file.rows) put(row);
     ({ start, samples } = file);
   } else {
     if (shortlist) await refuseStale(shortlist, confirmPath, 'Make a new one with npm run calibrate:shortlist.');
@@ -739,47 +780,53 @@ if (!isMainThread) {
     // pieces, measured again where they no longer hold.
     if (args.includes('--merge')) {
       if (!previous) console.log('Nothing to merge: no data file this run can reuse.');
-      for (const row of previous?.rows ?? []) if (pieces.includes(row.piece)) add(row.piece, row.date, parseKey(row.setting));
+      for (const row of previous?.byKey.values() ?? []) add(row.piece, row.date, parseKey(row.setting));
+    }
+    // Every row stays in memory for the fit, about 2 KB each with 40 bot runs
+    // a floor (a run that reuses the last data holds each old row only until
+    // its task is done). Say so before a run that won't fit in the heap.
+    const projected = (tasks.length * ATTEMPTS + (previous?.carried.length ?? 0)) * 2048, heap = getHeapStatistics().heap_size_limit;
+    if (projected > 0.6 * heap) {
+      console.warn(`Warning: about ${(projected / 2 ** 30).toFixed(1)} GB of rows for a ${(heap / 2 ** 30).toFixed(1)} GB heap.`
+        + ` Run node with --max-old-space-size=${Math.ceil(projected / 0.6 / 2 ** 20 / 1024) * 1024} (the npm scripts give it 8192).`);
     }
     if (fast) measurements = await fastMeasure(tasks);
     else if (previous) startClasses = await measureIncrementally(tasks, previous);
     else await measure(tasks, SEARCH_BUDGET, measurements);
     // Rows of pieces this run doesn't measure stay as they were, with their classes.
-    for (const row of previous?.rows ?? []) if (!pieces.includes(row.piece)) put(row);
+    for (const row of previous?.carried ?? []) put(row);
+    if (previous) previous.carried = null;
   }
   if (searchCount) console.log(`Searched ${searchCount} candidate layouts, ${expansionCount} expansions in all, ${Math.round(elapsedSeconds())} s wall time${replay ? " (replayed)" : ""} on ${jobs} workers.`);
-  for (const [piece, bySetting] of Object.entries(measurements)) for (const [setting, byDate] of Object.entries(bySetting)) {
-    for (const [date, found] of Object.entries(byDate)) for (const [attempt, entry] of found.entries()) {
-      rows.push({
-        piece, setting, date, attempt, status: entry.status, explored: entry.explored, turns: entry.metrics?.turns ?? null, ms: entry.ms,
-        metrics: entry.metrics, human: entry.human ?? null, route: entry.route ?? null, searches: entry.searches ?? null,
-      });
-    }
+  for (const bySetting of Object.values(measurements)) for (const byDate of Object.values(bySetting)) {
+    for (const found of Object.values(byDate)) for (const row of found) if (row) rows.push(row);
   }
   if (!args.includes('--reuse')) {
     const summary = { byPiece: {}, bySetting: {} };
+    const bySetting = new Map();
+    for (const row of rows) {
+      const key = `${row.piece}|${row.setting}`;
+      (bySetting.get(key) ?? bySetting.set(key, []).get(key)).push(row);
+    }
     for (const piece of Object.keys(measurements)) {
       summary.byPiece[piece] = searchSummary(rows.filter((row) => row.piece === piece));
       summary.bySetting[piece] = {};
-      for (const setting of Object.keys(measurements[piece])) {
-        summary.bySetting[piece][setting] = searchSummary(rows.filter((row) => row.piece === piece && row.setting === setting));
-      }
+      for (const setting of Object.keys(measurements[piece])) summary.bySetting[piece][setting] = searchSummary(bySetting.get(`${piece}|${setting}`) ?? []);
     }
     // Fingerprints for the classes measured here; other pieces' classes stay as they were.
     const classes = await classFingerprints(rows.filter((row) => pieces.includes(row.piece)), startClasses);
     for (const [key, entry] of Object.entries(previous?.classes ?? {})) if (!pieces.includes(key.split('/')[0])) classes[key] = entry;
-    // One row per search, compact: the raw numbers behind the table and the budgets.
-    // The stamp (data version, candidates, budget) and the class fingerprints
-    // let a later run reuse what still holds and refuse the rest.
-    const header = JSON.stringify({ ...stamp, measure: 'cappedGap' }).slice(1, -1);
-    const source = `{"generated":${JSON.stringify(new Date().toISOString())},${header},"start":${JSON.stringify(start)},"samples":${samples},"grid":${JSON.stringify(gridName)},`
-      + `"settingKey":"obstacleBase/decoys/scatter/guards[/screens]@tier","humanRuns":"row.human: per floor, each bot run's moves when it won, else null",`
-      + `"searches":"row.searches: each floor search in order, [floor 0-2, lives kept (minHp), expansions, start digest, route segment or null]; row.route: the route",`
-      + `"classKey":"piece/modifier/floor/tier: probe rows, fingerprints of its search (rules, monsters, modifier, search) and bot, and the bot's code hash",`
-      + `"summary":${JSON.stringify(summary)},\n"classes":{\n`
-      + Object.entries(classes).map(([key, entry]) => `${JSON.stringify(key)}:${JSON.stringify(entry)}`).join(',\n') + '\n},\n"rows":[\n'
-      + rows.map((row) => JSON.stringify(row)).join(',\n') + '\n]}\n';
-    await writeFile(dataPath, source);
+    // One row per search, compact: the raw numbers behind the table and the
+    // budgets, written a row at a time. The stamp (data version, candidates,
+    // budget) and the class fingerprints let a later run reuse what still
+    // holds and refuse the rest.
+    await writeDataFile(dataPath, {
+      generated: new Date().toISOString(), ...stamp, measure: 'cappedGap', start, samples, grid: gridName,
+      settingKey: 'obstacleBase/decoys/scatter/guards[/screens]@tier', humanRuns: "row.human: per floor, each bot run's moves when it won, else null",
+      searches: 'row.searches: each floor search in order, [floor 0-2, lives kept (minHp), expansions, start digest, route segment or null]; row.route: the route',
+      classKey: "piece/modifier/floor/tier: probe rows, fingerprints of its search (rules, monsters, modifier, search) and bot, and the bot's code hash",
+      summary,
+    }, classes, rows);
     console.log(`Wrote ${rows.length} searches to ${fileURLToPath(dataPath)}.`);
   }
 
@@ -835,6 +882,11 @@ if (!isMainThread) {
       + timeWeight * Math.max(0, result.ms.mean / plainMs - 1.5) + 0.2 * Math.abs(mean - (low + high) / 2) / width;
   };
   const minimums = [0, 1, 2, 3, 4, 6];
+  const gridOrder = (a, b) => {
+    const x = parseKey(a), y = parseKey(b);
+    for (const knob of ['screens', 'obstacleBase', 'decoys', 'scatter', 'guards']) if ((x[knob] ?? 0) !== (y[knob] ?? 0)) return (x[knob] ?? 0) - (y[knob] ?? 0);
+    return a < b ? -1 : a > b ? 1 : 0;
+  };
   const calibration = {}, report = { generated: new Date().toISOString().slice(0, 10), start, samples, grid: gridName, measure: 'cappedGap', uncalibrated: {}, tiers: {} };
   for (const piece of pieces) {
     const bySetting = measurements[piece];
@@ -853,8 +905,11 @@ if (!isMainThread) {
       const plainRuns = Object.values(plainOf(tier) ?? {}).map((found) => found[0].ms);
       const plainMs = Math.max(1, plainRuns.reduce((sum, ms) => sum + ms, 0) / Math.max(1, plainRuns.length));
       let best = null;
-      // Only settings measured with this tier's monsters compete for it.
-      for (const [key, byDate] of Object.entries(bySetting).filter(([key]) => tierOf(key) === tier)) for (const minThreatenedDecisions of minimums) {
+      // Only settings measured with this tier's monsters compete for it, in
+      // the grid's own order (fewest screens, walls, decoys, then scatter and
+      // guards), never the order the measurements came in: an exact tie goes
+      // to the plainer setting, the same in every run.
+      for (const [key, byDate] of Object.entries(bySetting).filter(([key]) => tierOf(key) === tier).sort(([a], [b]) => gridOrder(a, b))) for (const minThreatenedDecisions of minimums) {
         const result = simulate(byDate, tier, minThreatenedDecisions, piece);
         const value = cost(result, tier, plainMs);
         if (!best || value < best.value - 1e-9) best = { value, key, minThreatenedDecisions, result };

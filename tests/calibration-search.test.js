@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   fitSurrogate, dominates, dominatedOut, clearlyWorse, compactRuns, storedGap, dataStamp, dataProblem, DATA_VERSION,
   stateDigest, measureCandidate, remeasureCandidate, finalRoute, floorStart, classFingerprint, pickProbes, rowKey, classKey,
+  writeDataFile, readDataFile,
 } from '../scripts/calibration-search.mjs';
 import { cappedGap } from '../src/difficulty.js';
 import { RULES_VERSION, createGame, act } from '../src/rules.js';
@@ -145,6 +150,45 @@ test('class probes and fingerprints are a pure function of the stored searches a
   assert.notDeepEqual(classFingerprint(probes, 0), classFingerprint(probes, 2));
   // No probe reached the floor: a constant, not an error.
   assert.deepEqual(classFingerprint([], 1), classFingerprint([], 1));
+});
+
+test('a data file is written and read a row at a time, and stays one JSON object', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'calibration-data-'));
+  try {
+    const path = join(dir, 'data.json');
+    const header = { generated: '2026-11-09', dataVersion: DATA_VERSION, attempts: 16, summary: { byPiece: {} } };
+    const classes = { 'knight/none/1/tough': { probes: ['a'], search: 's', bot: 'b' }, 'knight/none/2/tough': { probes: [], search: 't', bot: 'c' } };
+    const rows = Array.from({ length: 3000 }, (_, index) => ({ piece: 'knight', setting: '7/2/0/0@tough', date: '2026-11-30', attempt: index, status: 'solved', human: [[index, null]], route: 'Ue.!' }));
+    await writeDataFile(path, header, classes, rows);
+    const text = await readFile(path, 'utf8');
+    assert.deepEqual(JSON.parse(text), { ...header, classes, rows }, 'one JSON object, as before');
+    assert.equal(text.split('\n').length, 1 + 1 + 2 + 2 + rows.length + 2, 'a line per class and per row');
+    assert.deepEqual(await readdir(dir), ['data.json'], 'no temporary file left behind');
+    // The script names its --data file by URL.
+    await writeDataFile(pathToFileURL(path), header, classes, rows);
+    assert.equal(await readFile(path, 'utf8'), text);
+    assert.deepEqual(await readdir(dir), ['data.json']);
+    const seen = [];
+    assert.deepEqual(await readDataFile(path, { onRow: (row) => seen.push(row) }), { ...header, classes });
+    assert.deepEqual(seen, rows);
+    // onHeader can stop before any row is read.
+    let read = 0;
+    assert.equal(await readDataFile(path, { onHeader: (head) => head.attempts === 4, onRow: () => read++ }), null);
+    assert.equal(read, 0);
+    // No rows, and a file in another layout (parsed whole, as older tools wrote it).
+    await writeDataFile(path, header, {}, []);
+    assert.deepEqual(await readDataFile(path), { ...header, classes: {} });
+    await writeFile(path, JSON.stringify({ ...header, rows: rows.slice(0, 2) }, null, 2));
+    const old = [];
+    assert.deepEqual(await readDataFile(path, { onRow: (row) => old.push(row) }), header);
+    assert.deepEqual(old, rows.slice(0, 2));
+    // A file cut short is an error, not a silently shorter run.
+    await writeDataFile(path, header, classes, rows);
+    await writeFile(path, text.slice(0, text.length - 10));
+    await assert.rejects(readDataFile(path), /ends before its rows do|JSON/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 const grid = [];

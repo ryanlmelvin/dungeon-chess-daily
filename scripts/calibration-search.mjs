@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Helpers for scripts/calibrate-difficulty.mjs. For the data file: what each
-// row keeps (the bot's runs, the route, every floor's search), measuring a
-// candidate again while reusing what still holds, the per-class fingerprints
-// that say what still holds, and the check that refuses an incompatible
-// file. For --fast: a least-squares surrogate of the gap on the knobs,
-// monotone-dominance pruning, and a paired test for sequential stopping. None
-// of the --fast helpers touches generation or the fit: they only decide which
-// settings get full-budget searches.
+// row keeps (the bot's runs, the route, every floor's search), writing and
+// reading it a row at a time, measuring a candidate again while reusing what
+// still holds, the per-class fingerprints that say what still holds, and the
+// check that refuses an incompatible file. For --fast: a least-squares
+// surrogate of the gap on the knobs, monotone-dominance pruning, and a paired
+// test for sequential stopping. None of the --fast helpers touches generation
+// or the fit: they only decide which settings get full-budget searches.
 import { createHash } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { rename, unlink } from 'node:fs/promises';
+import { once } from 'node:events';
+import { finished } from 'node:stream/promises';
+import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { cappedGap } from '../src/difficulty.js';
 import { searchCandidate, SEARCH_BUDGET } from '../src/generation.js';
 import { createGame, act, legalMoves, whileSearching } from '../src/rules.js';
@@ -43,6 +49,100 @@ export function dataProblem(file, { attempts, searchBudget }) {
   if (file.attempts !== attempts) return `it was measured with attempts ${file.attempts}, not ${attempts}`;
   if (file.searchBudget !== searchBudget) return `it was measured with searchBudget ${file.searchBudget}, not ${searchBudget}`;
   return null;
+}
+
+// A path given as a string or a file: URL (the script's --data).
+const filePath = (path) => (path instanceof URL || String(path).startsWith('file:') ? fileURLToPath(path) : String(path));
+
+/**
+ * Write a data file without ever holding it as one string: a full run's is
+ * hundreds of megabytes, and Node's longest string is about 512 MB. The
+ * first line holds `header`'s fields, then each of `classes` (key → entry)
+ * and each of `rows` gets a line of its own; the whole file is still one
+ * JSON object, `{ ...header, classes, rows }`. It goes to a temporary file
+ * beside `path` and replaces `path` only once complete, so a failed write
+ * never costs the last run's data.
+ */
+export async function writeDataFile(path, header, classes, rows) {
+  path = filePath(path);
+  const temp = `${path}.${process.pid}.tmp`;
+  const out = createWriteStream(temp, { encoding: 'utf8' });
+  let failure = null;
+  out.on('error', (error) => { failure ??= error; });
+  const entries = Object.entries(classes);
+  function* lines() {
+    yield `${JSON.stringify(header).slice(0, -1)},\n"classes":{\n`;
+    for (const [index, [key, entry]] of entries.entries()) yield `${JSON.stringify(key)}:${JSON.stringify(entry)}${index < entries.length - 1 ? ',' : ''}\n`;
+    yield '},\n"rows":[\n';
+    for (let index = 0; index < rows.length; index++) yield `${JSON.stringify(rows[index])}${index < rows.length - 1 ? ',' : ''}\n`;
+    yield ']}\n';
+  }
+  try {
+    // Lines go out in chunks of about a megabyte, waiting whenever the stream is full.
+    let chunk = '';
+    for (const line of lines()) {
+      chunk += line;
+      if (chunk.length < 1 << 20) continue;
+      if (failure) throw failure;
+      const text = chunk;
+      chunk = '';
+      if (!out.write(text)) await once(out, 'drain');
+    }
+    out.end(chunk);
+    await finished(out);
+    if (failure) throw failure;
+  } catch (error) {
+    out.destroy();
+    await unlink(temp).catch(() => {});
+    throw error;
+  }
+  await rename(temp, path);
+}
+
+/**
+ * Read a data file a line at a time (writeDataFile's layout, which older
+ * files share), never holding it as one string. `onHeader(header)` sees the
+ * header (its fields and `classes`) before any row and may return false to
+ * stop there; `onRow(row)` sees each row in turn. Returns the header, or
+ * null when onHeader stopped. A file in any other layout is parsed whole, so
+ * it has to fit in one string.
+ */
+export async function readDataFile(path, { onHeader = () => true, onRow = () => {} } = {}) {
+  path = filePath(path);
+  const input = createReadStream(path, { encoding: 'utf8' });
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  const head = [];
+  let header = null, done = false;
+  try {
+    for await (const line of lines) {
+      if (!header) {
+        if (line !== '"rows":[') { head.push(line); continue; }
+        header = JSON.parse(`${head.join('\n')}"rows":[]}`);
+        delete header.rows;
+        head.length = 0;
+        if (onHeader(header) === false) return null;
+        continue;
+      }
+      if (done || !line) {
+        if (line.trim()) throw new Error(`${path}: text after the rows`);
+        continue;
+      }
+      if (line === ']}') { done = true; continue; }
+      onRow(JSON.parse(line.endsWith(',') ? line.slice(0, -1) : line));
+    }
+  } finally {
+    lines.close();
+    input.destroy();
+  }
+  if (header && !done) throw new Error(`${path} ends before its rows do`);
+  if (header) return header;
+  // Another layout: the lines read are the whole file.
+  const file = JSON.parse(head.join('\n'));
+  const rows = file.rows ?? [];
+  delete file.rows;
+  if (onHeader(file) === false) return null;
+  for (const row of rows) onRow(row);
+  return file;
 }
 
 /** A search's bot runs, compact for the data file: per floor, each run's moves when it won, else null. */
