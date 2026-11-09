@@ -653,7 +653,8 @@ function renderTools() {
   // A caved-in room takes no more moves or pins: only Take back is left there.
   const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state) && !cavedIn(state);
   const leap = state.status === 'playing' && state.powers.leap > 0 && !cavedIn(state);
-  const back = Boolean(takebackTarget(state));
+  // The move that ended a run is taken back from the Captured page, not the fresh floor one.
+  const back = Boolean(takebackTarget(state)) && !restarted(state);
   if (!pin) pinning = false;
   $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !back;
   $('tool-tray').hidden = !(pin || leap || back);
@@ -677,10 +678,14 @@ $('leap-button').addEventListener('click', () => {
   notify(`Squares with a ghosted ${borrowedPiece(state)} move like one. Only taking one spends the borrowed move.`);
 });
 $('takeback-button').addEventListener('click', () => { pinning = false; takeAction({ type: 'takeback' }); });
+const restarted = (game) => game?.events.some(event => event.type === 'restart');
+// A run ended with a Take-back still held: the Captured page offers it until it's used or declined.
+const deathTakeback = () => state?.status === 'playing' && restarted(state) && Boolean(takebackTarget(state));
 function enterGame() {
   refreshEdition();
   refreshFromOtherWindow();
   if (state?.status && state.status !== 'playing') return showResult();
+  if (deathTakeback()) return showDeath();
   // Back on the board before the Captured page opened: the fresh run, as saved.
   fallenBoard = null;
   switchScreen('game');
@@ -1144,6 +1149,8 @@ function showResult() {
 function showResultActions(finished) {
   if (!finished) $('bot-compare').hidden = true;
   $('retry-button').hidden = finished;
+  $('death-takeback-button').hidden = finished || !deathTakeback();
+  $('retry-button').classList.toggle('primary', $('death-takeback-button').hidden);
   $('result-actions').hidden = !finished;
   if (!finished) { $('share-preview').hidden = true; $('share-button').hidden = true; }
 }
@@ -1162,13 +1169,21 @@ function showDeath() {
   const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn advanced past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you moved to and captured you' : 'captured you along its red path'}. `;
   $('result-en-passant').hidden = trapped || !fatal?.enPassant;
   $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
-  $('next-edition').textContent='Out of lives: try again from floor one.';
-  $('retry-button').focus({preventScroll:true});
+  $('next-edition').textContent=deathTakeback()?'Out of lives: take back that move, or try again from floor one.':'Out of lives: try again from floor one.';
+  $(deathTakeback() ? 'death-takeback-button' : 'retry-button').focus({preventScroll:true});
 }
+$('death-takeback-button').addEventListener('click',()=>{
+  if (!deathTakeback()) return;
+  state = act(state, { type: 'takeback' }); save();
+  showMoves = false; cursor = null; turnLocked = false;
+  enterGame();
+});
 $('retry-button').addEventListener('click',()=>{
   if (!state) return;
   if (state.status === 'lost') { state = retryLostRun(state); save(); }
   if (state.status !== 'playing') return;
+  // Trying again declines the Take-back: the fresh run doesn't carry it.
+  if (deathTakeback()) { state = structuredClone(state); delete state.undo; save(); }
   showMoves = false; cursor = null; turnLocked = false;
   enterGame();
 });
