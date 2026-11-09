@@ -9,15 +9,17 @@
 // brings the nearest one closer (wall-aware move tables). Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--json path]
 import { writeFileSync } from 'node:fs';
-import { composeDay } from '../src/composer.js';
+import { composeDay, MOTIF_LEVELS } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { tierForDate, DIFFICULTY_TIERS } from '../src/difficulty.js';
-import { certifiedFloors, playFloor, runSeed, HUMAN_RUNS } from '../src/human-bot.js';
+import { certifiedFloors, playFloor, runSeed, medianRun, HUMAN_RUNS } from '../src/human-bot.js';
 import { targetDistance } from '../src/fairness.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); return at > 0 ? process.argv[at + 1] : fallback; };
 const start = arg('start', '2026-11-01'), end = arg('end', '2028-11-08'), runs = Number(arg('runs', HUMAN_RUNS));
+// One monster ruleset for every day (--tier gentle … fiendish); omitted, the composer's own choice.
+const tier = arg('tier', undefined);
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -40,7 +42,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
   if (!['knight', 'bishop'].includes(raw.playerPiece) || raw.targets.slice(0, 2).some((role) => role === 'pawn')) continue;
   let composed;
-  try { composed = composeDay(date); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+  try { composed = composeDay(date, { tier }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
   const certified = certifiedFloors(daily);
   floors.forEach((floor, f) => {
@@ -49,8 +51,10 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
       const result = playFloor(certified.starts[f], { seed: runSeed(daily, f, run), frames: true });
       return { won: result.won, moves: result.moves, lives: result.livesLost, stalled: stalled(result.frames) };
     });
+    // Par two ways (an open question): the planted line plus one, or the bot's median (src/human-bot.js medianRun, as production).
+    const botPar = medianRun(outcomes, floor.line.length).par;
     rows.push({
-      date, tier: tierForDate(date), piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, planted: floor.line.length,
+      date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
     });
   });
@@ -67,7 +71,8 @@ function summarize(group) {
     floors: group.length,
     planted: `${percent(group.filter((row) => row.planted === 3).length, group.length)} / ${percent(group.filter((row) => row.planted === 4).length, group.length)}`,
     unique: percent(group.filter((row) => row.firstMoves === 1).length, group.length),
-    miss: percent(all.filter((run) => !run.won || run.moves > run.par + 4).length, all.length),
+    miss: `${percent(all.filter((run) => !run.won || run.moves > run.par + 4).length, all.length)} / ${percent(all.filter((run) => !run.won || run.moves > run.botPar + 4).length, all.length)}`,
+    pars: `${mean(group.map((row) => row.par)).toFixed(1)} / ${mean(group.map((row) => row.botPar)).toFixed(1)}`,
     short: `${percent(won.filter((run) => run.moves <= 2).length, all.length)} / ${percent(won.filter((run) => run.moves + run.lives <= 2).length, all.length)}`,
     stalled: mean(all.map((run) => run.stalled)).toFixed(2),
     lives: mean(all.map((run) => run.lives)).toFixed(2),
@@ -75,7 +80,7 @@ function summarize(group) {
     ms: `${mean(group.map((row) => row.ms)).toFixed(1)} / ${median(group.map((row) => row.ms)).toFixed(1)}`,
   };
 }
-for (const row of floorsOf) for (const run of row.outcomes) run.par = row.par;
+for (const row of floorsOf) for (const run of row.outcomes) { run.par = row.par; run.botPar = row.botPar; }
 
 const motifs = [...new Set(floorsOf.map((row) => row.motif))];
 const tries = {};
@@ -87,8 +92,8 @@ const days = new Set(rows.map((row) => row.date));
 console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}); ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
-const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Runs missing par+4 | Runs won in ≤2 (moves / moves + lives) | Stalled moves / run | Lives lost / run | Bot median moves | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|';
-const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.lives} | ${s.botMedian} | ${s.ms} |`; };
+const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + lives) | Stalled moves / run | Lives lost / run | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|';
+const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.lives} | ${s.ms} |`; };
 console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
@@ -96,6 +101,12 @@ console.log(`\nBy motif and piece:\n\n${header}`);
 for (const motif of motifs) for (const piece of ['knight', 'bishop']) {
   const group = floorsOf.filter((row) => row.motif === motif && row.piece === piece);
   if (group.length) console.log(line(`${motif} · ${piece}`, group));
+}
+console.log(`\nBy floor (level: floor 1 at 2, floor 2 at 3, the net at 3–4):\n\n${header}`);
+for (const f of [0, 1, 2]) {
+  const group = floorsOf.filter((row) => row.floor === f);
+  const levels = [...new Set(group.map((row) => row.level))].sort().map((level) => `L${level} ${percent(group.filter((row) => row.level === level).length, group.length)}`).join(', ');
+  console.log(line(`floor ${f + 1} (${levels})`, group));
 }
 console.log(`\nBy tier:\n\n${header}`);
 for (const tier of Object.keys(DIFFICULTY_TIERS)) {

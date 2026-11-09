@@ -39,8 +39,26 @@ export const LINE_MOVES = Object.freeze({ min: 3, max: 4 });
 /** Motif instances tried per motif, and dressings per instance, before moving on. */
 export const MOTIF_ATTEMPTS = 40;
 export const DRESS_ATTEMPTS = 6;
-/** Each floor's motifs in order of preference; the walk always composes. */
-export const FLOOR_MOTIFS = Object.freeze([['bait', 'fork', 'squeeze'], ['squeeze', 'fork', 'bait'], ['net']]);
+/**
+ * Motif levels (docs/puzzle-first-idea.md, "Motif library"): how quiet the
+ * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
+ * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
+ */
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3 });
+/**
+ * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
+ * motif only where no level-3 one fits the matchup (a knight against knights,
+ * a bishop against bishops or a queen); the walk always composes.
+ */
+export const FLOOR_MOTIFS = Object.freeze([['bait', 'fork'], ['squeeze', 'bait', 'fork'], ['net']]);
+/**
+ * One monster ruleset for every composed day, a placeholder while the plan's
+ * open question (one ruleset or five tiers) is settled: Fair, where every
+ * monster just avoids squares you could take it on. Measured as the single
+ * ruleset, Fair kept the most bait instances and the walk fallback stayed
+ * short; squeeze, fork and net floors play alike on every tier.
+ */
+export const COMPOSED_TIER = 'fair';
 
 const START = Object.freeze({ x: 4, y: 6 });
 const EXIT = Object.freeze({ x: 4, y: 0 });
@@ -615,7 +633,7 @@ export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:$
  * `daily` overrides the raw daily (tooling: synthetic casts).
  */
 export function composeDay(date, { tier, daily: raw = getRawDaily(date) } = {}) {
-  const base = { ...raw, difficulty: tier ?? tierForDate(raw.date), modifier: 'none', floorSeeds: composedSeeds(raw.date) };
+  const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   const floors = [0, 1, 2].map((floor) => composeFloor(base, floor));
   const actions = floors.flatMap((floor) => [...floor.line, { type: 'descend' }]);
