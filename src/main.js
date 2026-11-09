@@ -17,7 +17,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
-import { pinUsable, captureGoal, shareDate, whileSearching } from './rules.js';
+import { pinUsable, captureGoal, shareDate, whileSearching, createGame as createComposedGame } from './rules.js';
 import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
@@ -33,11 +33,18 @@ const prefix = `dchess:${scope}:`;
 // and is never swapped for today's edition until the player chooses to return.
 const archiveSessionKey = `${prefix}archive:open`;
 let archiveMode = false;
-let daily = getDaily();
+// Dev only, stripped from builds: ?composed=YYYY-MM-DD plays that date's
+// composed day (src/composed-preview.js), saved apart from every real run.
+const preview = import.meta.env.DEV && new URLSearchParams(location.search).has('composed') ? await import('./composed-preview.js') : null;
+const composedDay = preview?.composedDayFor(location.search) ?? null;
+let daily = composedDay ?? getDaily();
 try {
-  const opened = sessionStorage.getItem(archiveSessionKey);
+  const opened = composedDay ? null : sessionStorage.getItem(archiveSessionKey);
   if (isArchiveDate(opened, daily.date, FIRST_EDITION_DATE)) { daily = getDaily(opened); archiveMode = true; }
 } catch {}
+const newGame = () => (composedDay ? createComposedGame(composedDay) : createGame(daily));
+// Practice replays the official room, so the composed preview has none.
+if (composedDay) $('practice-button').hidden = true;
 let state = null;
 // Set while watching the bot's certified route; the saved run is untouched.
 let replay = null;
@@ -53,7 +60,7 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${practice ? 'practice:' : 'daily:'}v10:${daily.date}`;
+const key = () => `${prefix}${composedDay ? 'composed:' : practice ? 'practice:' : 'daily:'}v10:${daily.date}`;
 const practiceModeKey = () => `${prefix}practice:active:v10:${daily.date}`;
 function setPracticeMode(enabled) {
   practice = enabled;
@@ -62,8 +69,8 @@ function setPracticeMode(enabled) {
     else localStorage.removeItem(practiceModeKey());
   } catch {}
 }
-function validateCurrentSave(value) { return validateSave(value, daily.date, { practice }); }
-try { practice = localStorage.getItem(practiceModeKey()) === 'true'; } catch {}
+function validateCurrentSave(value) { return composedDay ? preview.composedSaveFits(value, composedDay) : validateSave(value, daily.date, { practice }); }
+try { practice = !composedDay && localStorage.getItem(practiceModeKey()) === 'true'; } catch {}
 try { sound = localStorage.getItem(`${prefix}sound`) !== 'off'; } catch {}
 $('sound-toggle').checked = sound;
 // Background music is opt-in: it stays off unless the player turned it on here.
@@ -182,7 +189,7 @@ function renderPaper() {
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = paperDate(daily.date);
   // The weekday's difficulty tier, e.g. "DIFFICULTY: TOUGH": no clue about the dungeon itself.
-  $('paper-tier').textContent = Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION';
+  $('paper-tier').textContent = `${composedDay ? 'COMPOSED PREVIEW · ' : ''}${Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION'}`;
   // Each story says how one floor's target moves, never who it is, and lines up that floor's suspects.
   $('headline').textContent = headlineFor(daily.species[0], daily.date, 0);
   $('deck').replaceChildren(createPrintLines(0));
@@ -203,7 +210,7 @@ function renderPaper() {
   }));
   $('paper-screen').setAttribute('aria-label', archiveMode ? `Archive newspaper, ${shareDate(daily.date)}` : "Today's newspaper");
   $('archive-banner').hidden = !archiveMode;
-  $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode ? 'Enter this dungeon ' : "Enter today's dungeon "));
+  $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode || composedDay ? 'Enter this dungeon ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
 }
 // A police lineup of two suspects (src/rules.js paperSuspects): the floor's
@@ -729,7 +736,7 @@ function enterGame() {
   fallenBoard = null;
   switchScreen('game');
   if (!ensureRenderer()) return;
-  if (!state) { state = createGame(daily); save(); }
+  if (!state) { state = newGame(); save(); }
   updateGame();
   openFirstVisitGuide();
   // Back in a caved-in room (a reload, or the app reopened): the rubble already carried you to the shop.
@@ -990,6 +997,8 @@ function takeAction(action) {
   const pending = pendingOrder();
   const next = act(state, action);
   if (next === state) return false;
+  // Composed king floors (dev preview): checkmate gets its moment.
+  if (preview && next.events.some((event) => event.type === 'checkmate')) { setTimeout(() => preview.celebrateCheckmate(), 380); playSound([{ type: 'win' }]); }
   turnLocked=!shopping;
   ordering = null;
   // The preview already played this turn up to the recruit's phase; the board animates the rest.
@@ -1155,7 +1164,7 @@ function playSound(events=[]) {
   } catch {}
 }
 // Archive and practice runs are labeled so a shared line never passes as today's.
-const runLabel = () => [archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
+const runLabel = () => [composedDay && 'COMPOSED', archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
 function shareText(){if (!isOfficialPiece(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
@@ -1180,7 +1189,7 @@ function showResult() {
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
   $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
-  $(shareable ? 'share-button' : 'practice-button').focus({preventScroll:true});
+  $(shareable || composedDay ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
 function showResultActions(finished) {
@@ -1252,7 +1261,7 @@ for (const piece of PIECES) {
 }
 $('practice-piece').addEventListener('change', updatePieceWarning);
 $('practice-color').addEventListener('change', updatePieceWarning);
-$('practice-button').addEventListener('click', openPieceChooser);
+$('practice-button').addEventListener('click', () => { if (!composedDay) openPieceChooser(); });
 $('change-piece-button').addEventListener('click', openPieceChooser);
 $('piece-form').addEventListener('submit', event => {
   event.preventDefault();
@@ -1331,7 +1340,7 @@ $('reset-day-button').addEventListener('click', async () => {
   if (!state) return;
   // A run begun before the UTC rollover still holds yesterday's edition; "today's"
   // must not quietly mean that one, so let the player pick which to start.
-  if (!archiveMode) {
+  if (!archiveMode && !composedDay) {
     const current = getDaily();
     if (current.date !== daily.date) {
       const day = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -1346,7 +1355,7 @@ $('reset-day-button').addEventListener('click', async () => {
   }
   if (!await askConfirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon?`, 'You start again from floor 1, and this run is discarded.', 'Restart from floor 1')) return;
   if (!state) return;
-  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : newGame();
   startOver(next, `${archiveMode ? 'This' : 'Today’s'} dungeon restarted from floor 1.`);
 });
 let rolloverDates = null;
@@ -1357,11 +1366,11 @@ $('rollover-new').addEventListener('click', () => {
 $('rollover-current').addEventListener('click', () => {
   $('rollover-dialog').close();
   if (!state || rolloverDates?.current !== daily.date) return;
-  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : createGame(daily);
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : newGame();
   startOver(next, `The ${shareDate(daily.date)} dungeon restarted from floor 1.`);
 });
 $('result-paper-button').addEventListener('click',()=>{
-  if(!archiveMode){
+  if(!archiveMode&&!composedDay){
     const current=getDaily();
     if(current.date!==daily.date){daily=current;setPracticeMode(false);state=load();}
   }
@@ -1370,6 +1379,8 @@ $('result-paper-button').addEventListener('click',()=>{
 // Switch the whole app to another edition: its paper, official run or practice.
 function openEdition(date) {
   if (turnLocked) return;
+  // The composed preview plays one day; any other edition opens the real game.
+  if (composedDay) { save(); location.href = location.pathname; return; }
   save();
   const current = getDaily();
   archiveMode = date !== current.date;
@@ -1445,7 +1456,7 @@ function progressStatus(message) {
 const persistentStorage = initPersistentStorage({ button: $('persist-button'), onStatus: progressStatus });
 function openMenu() {
   progressStatus('');
-  $('change-piece-button').hidden = !(practice || canChoosePiece(state));
+  $('change-piece-button').hidden = Boolean(composedDay) || !(practice || canChoosePiece(state));
   $('daily-button').hidden = !practice;
   $('reset-floor-button').hidden = !(state?.status === 'playing' && state.floorSnapshot);
   $('reset-day-button').hidden = !state;
@@ -1519,8 +1530,8 @@ $('import-file').addEventListener('change',async(event)=>{
 window.addEventListener('storage',event=>{if(event.key===key())refreshFromOtherWindow();});
 let rolloverNotice = '';
 function refreshEdition() {
-  // A past edition stays open until the player returns to today themselves.
-  if (archiveMode) return;
+  // A past edition (or the composed preview) stays open until the player returns to today themselves.
+  if (archiveMode || composedDay) return;
   const current = getDaily();
   if (current.date === daily.date) return;
   if (state?.status === 'playing') {

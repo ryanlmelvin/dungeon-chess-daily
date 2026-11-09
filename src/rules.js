@@ -515,6 +515,7 @@ function checkmate(state) {
   if (blocks) return false;
   state.events.push({ type: 'checkmate', x: king.x, y: king.y });
   captureEnemy(state, king);
+  state.message = `Checkmate! ${state.message}`;
   return true;
 }
 function aimAtPlayer(state, foe) {
