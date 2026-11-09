@@ -24,18 +24,30 @@ export const HUMAN_MOVE_CAP = 40;
 export const WEEKDAY_TIERS = Object.freeze(['fiendish', 'gentle', 'fair', 'tricky', 'tough', 'tough', 'fiendish']);
 
 /** How much harder each day from Monday to Saturday is than the day before, in capped human gap. */
-export const TARGET_STEP = 2;
+export const TARGET_STEP = 1.5;
 /**
  * UTC weekday (0 = Sunday) → the capped human gap the public edition aims at:
- * Monday 3.75, then TARGET_STEP harder every day to Saturday's 13.75, the
- * hardest; Sunday matches Saturday. Like the New York Times crossword, every
- * day from Monday to Saturday is meant to play harder than the one before.
- * Thursday and Friday share the Tough monsters, and Friday is the harder of
- * the two. Monday and Saturday sit where the centres of the old Gentle and
- * Fiendish bands were, so the week as a whole plays about as hard as before
- * (docs/generation.md, "Weekly difficulty").
+ * Monday 2.5, then TARGET_STEP harder every day to Saturday's 10, the hardest;
+ * Sunday matches Saturday. Like the New York Times crossword, the week climbs
+ * from Monday to Saturday. Thursday and Friday share the Tough monsters and
+ * may play alike. The range is what short floors reach (MAX_FLOOR_PAR): with
+ * every floor's par at 10 or less, Tough days top out around 8 to 9 and
+ * Fiendish ones around 10 (docs/generation.md, "Weekly difficulty").
  */
-export const WEEKDAY_TARGETS = Object.freeze([13.75, 3.75, 5.75, 7.75, 9.75, 11.75, 13.75]);
+export const WEEKDAY_TARGETS = Object.freeze([10, 2.5, 4, 5.5, 7, 8.5, 10]);
+
+/**
+ * UTC weekday (0 = Sunday) → how many squares of the monster pawns'
+ * promotion rank (the player's side) stay open on a floor where they live;
+ * the rest are barricades (src/rules.js promotionBarricades). Two from Monday
+ * to Thursday, so a pawn rarely crowns; every other square from Friday to
+ * Sunday, so crowning stays a threat on the hardest days. In the bot's runs on
+ * such floors a pawn crowned in 39% of runs with no barricades, 20% with every
+ * other square walled and 10% with six of the eight (docs/generation.md).
+ */
+export const WEEKDAY_OPEN_PROMOTION_FILES = Object.freeze([4, 2, 2, 2, 2, 4, 4]);
+/** The open promotion squares for a canonical YYYY-MM-DD date (two for anything else). */
+export const openPromotionFiles = (date) => WEEKDAY_OPEN_PROMOTION_FILES[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? 2;
 
 const targetsOf = (id) => [...new Set(WEEKDAY_TARGETS.filter((_, day) => WEEKDAY_TIERS[day] === id))].sort((a, b) => a - b);
 const defineTier = (rank, name, minFloorMoves, id) => {
@@ -54,16 +66,19 @@ const defineTier = (rank, name, minFloorMoves, id) => {
  * tooling) and `band` the range within half a step of them; neighbors share a
  * boundary. Calibration fits each (tier, piece) to its band.
  * `minFloorMoves`: a certified route must spend at least that many moves on
- * every floor (no freebie floors); generation never takes a floor cleared
- * faster. A list of three numbers sets each floor's own minimum instead
+ * every floor; generation never takes a floor cleared faster. Every tier now
+ * has none: the no-freebie rule (3 from Tricky on) went with short floors,
+ * since a floor the route clears in two moves that a person needs several to
+ * find is exactly the clever short floor the week climbs with (MAX_FLOOR_PAR).
+ * A list of three numbers sets each floor's own minimum instead
  * (floorMinimums; tooling uses that to compare rules).
  */
 export const DIFFICULTY_TIERS = Object.freeze({
   gentle: defineTier(1, 'Gentle', 0, 'gentle'),
   fair: defineTier(2, 'Fair', 0, 'fair'),
-  tricky: defineTier(3, 'Tricky', 3, 'tricky'),
-  tough: defineTier(4, 'Tough', 3, 'tough'),
-  fiendish: defineTier(5, 'Fiendish', 3, 'fiendish'),
+  tricky: defineTier(3, 'Tricky', 0, 'tricky'),
+  tough: defineTier(4, 'Tough', 0, 'tough'),
+  fiendish: defineTier(5, 'Fiendish', 0, 'fiendish'),
 });
 export const TIER_IDS = Object.freeze(Object.keys(DIFFICULTY_TIERS));
 
@@ -86,6 +101,22 @@ export function targetForDate(date, tierId = tierForDate(date)) {
 export function tierLabel(date, tier = tierForDate(date)) {
   return `Difficulty: ${DIFFICULTY_TIERS[tier].name}`;
 }
+
+/**
+ * No floor's par (src/par.js, the human-like bot's usual moves there) should
+ * pass this: floors stay a few moves long, and the week climbs by how much
+ * cleverness those moves take, not by how many there are. Generation prefers
+ * any assembly whose floors all keep to it over one that is closer to the
+ * day's target (src/generation.js rankFloors); only a day none of whose
+ * candidates can keep a floor to it takes the shortest it has.
+ */
+export const MAX_FLOOR_PAR = 10;
+/**
+ * The longest a floor may run when no candidate keeps it to MAX_FLOOR_PAR,
+ * mostly a floor of eight pawn targets: past it, generation searches more
+ * layouts (src/generation.js EXTRA_ATTEMPTS) until no floor is.
+ */
+export const LONG_FLOOR_PAR = 14;
 
 /** Knobs used when a (tier, piece) pair has no calibrated row. */
 export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter: 0, guards: 0, screens: 0, minThreatenedDecisions: 2 });

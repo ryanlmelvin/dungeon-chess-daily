@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { EDITIONS, EDITIONS_RANGE } from '../src/editions.js';
 import { encodeRoute, decodeRoute } from '../src/route-code.js';
 import { generateDaily } from '../src/generation.js';
+import { MAX_FLOOR_PAR, LONG_FLOOR_PAR } from '../src/difficulty.js';
 
 test('routes survive the one-character-per-action encoding', () => {
   const actions = [{ type: 'move', x: 0, y: 0 }, { type: 'move', x: 7, y: 7 }, { type: 'wait' }, { type: 'move', x: 3, y: 5 }, { type: 'descend' }];
@@ -45,4 +46,13 @@ test('a date past the window is searched once, then replayed from device storage
       assert.deepEqual(generateDaily(date), searched);
     }
   } finally { delete globalThis.localStorage; }
+});
+
+test('stored floors stay short: a floor runs past par 10 on few days, never past 14', () => {
+  const editions = Object.values(EDITIONS);
+  const pars = editions.flatMap((entry) => entry.par);
+  assert.ok(pars.every((par) => par <= LONG_FLOOR_PAR), `longest ${Math.max(...pars)}`);
+  const long = editions.filter((entry) => entry.par.some((par) => par > MAX_FLOOR_PAR));
+  assert.ok(long.length <= editions.length / 10, `${long.length} days with a floor over par ${MAX_FLOOR_PAR}`);
+  assert.ok(long.every((entry) => entry.par.filter((par) => par > MAX_FLOOR_PAR).length === 1), 'never two long floors in a day');
 });

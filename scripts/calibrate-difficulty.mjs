@@ -144,7 +144,7 @@ if (!isMainThread) {
   const { DIFFICULTY_TIERS, TIER_IDS, DEFAULT_KNOBS, MIN_DECOYS, difficultyScore, bandDistance, freebieFloor, floorGapPoints } = await load('src/difficulty.js');
   const { rankFloors, ATTEMPTS, SEARCH_BUDGET } = await load('src/generation.js');
   const { RULES_VERSION } = await load('src/rules.js');
-  const { HUMAN_BOT_VERSION } = await load('src/human-bot.js');
+  const { HUMAN_BOT_VERSION, medianRun } = await load('src/human-bot.js');
   const { dataStamp, dataProblem, storedGap, rowKey, classKey, pickProbes } = await import('./calibration-search.mjs');
   // What a data file must match before any of its rows is reused: the data
   // version, the candidate count and the search budget. The rules and bot
@@ -163,14 +163,18 @@ if (!isMainThread) {
   // The same searches as generation's floor assembly sees them (rankFloors):
   // each floor's capped-gap points from the bot's stored runs. Rows keep no
   // per-floor move or life counts, so each floor counts its scored moves
-  // toward the route's cap and no lives (generation's own certification still
+  // toward the route's cap (its par, from the stored runs, toward MAX_FLOOR_PAR)
+  // and no lives (generation's own certification still
   // holds a pawn day to its allowance), and a candidate below the threat
   // minimum gives no floors (generation checks the minimum on the whole day).
   const assembly = (found, minThreatenedDecisions) => found.map((entry) => {
     if (!entry?.metrics || !Array.isArray(entry.human) || entry.metrics.threatenedDecisions < minThreatenedDecisions) return null;
     const { floorMoves } = entry.metrics;
     const results = entry.human.map((runs) => runs.map((moves) => ({ won: moves !== null, moves: moves ?? 0 })));
-    return { metrics: entry.metrics, points: floorGapPoints({ results, certified: floorMoves }), runs: entry.human[0].length, floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })) };
+    return {
+      metrics: entry.metrics, points: floorGapPoints({ results, certified: floorMoves }), runs: entry.human[0].length,
+      pars: results.map((outcomes, floor) => medianRun(outcomes, floorMoves[floor]).par), floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })),
+    };
   });
   const quantiles = (values) => {
     if (!values.length) return null;

@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame } from '../src/rules.js';
 import { findWinningRoute, positionKey, targetDistance, verifyWinningRoute, MAX_ROUTE_MOVES } from '../src/fairness.js';
-import { ATTEMPTS, GENERATOR_VERSION, candidateFor, candidateSeed, generateDaily, routeFloors, searchCandidate, searchCandidates } from '../src/generation.js';
-import { knobsFor, tierForDate, freebieFloor } from '../src/difficulty.js';
+import { ATTEMPTS, EXTRA_ATTEMPTS, GENERATOR_VERSION, candidateFor, candidateSeed, generateDaily, rankFloors, routeFloors, searchCandidate, searchCandidates, targetForDate } from '../src/generation.js';
+import { knobsFor, tierForDate, freebieFloor, LONG_FLOOR_PAR } from '../src/difficulty.js';
 import { distanceTable } from '../src/move-tables.js';
 import { encodeRoute } from '../src/route-code.js';
 import { PIECE_LIVES } from '../src/pieces.js';
@@ -143,6 +143,18 @@ test('generation tries up to sixteen candidate layouts, each on the same fixed b
   assert.equal(found.length, ATTEMPTS);
   assert.ok(found.every((entry) => entry.explored <= 12_000));
   assert.throws(() => generateDaily(date, { maxAttempts: ATTEMPTS + 1 }), RangeError);
+});
+
+test('a day whose best still has a floor over par 14 searches more layouts until it has none', () => {
+  assert.equal(EXTRA_ATTEMPTS, 16);
+  // A knight day whose first sixteen layouts all hold eight pawn targets at par 21 or more on floor 1.
+  const date = '2027-08-07', base = getRawDaily(date), tier = tierForDate(date);
+  const found = searchCandidates(base, tier, knobsFor(tier, base.playerPiece));
+  const best = rankFloors(found, targetForDate(date), tier)[0];
+  assert.ok(found.length > ATTEMPTS && found.length <= ATTEMPTS + EXTRA_ATTEMPTS, `${found.length} layouts searched`);
+  assert.ok(best.longest <= LONG_FLOOR_PAR, `longest floor par ${best.longest}`);
+  // With a smaller budget (tooling) it never goes past it.
+  assert.equal(searchCandidates(base, tier, knobsFor(tier, base.playerPiece), 4).length <= 4, true);
 });
 
 test('a floor plays the same whichever floors come before it: days assemble from their candidates’ floors', () => {

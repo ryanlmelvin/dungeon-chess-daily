@@ -55,7 +55,7 @@ test('a position\'s digest ignores its words, events and version stamps, not the
 // Cheap candidates: a solved knight day and a pawn day whose search fails
 // after keeping more lives on floor 1 (it searches floor 1 again).
 const knight = candidateFor(getRawDaily('2026-11-30'), 'tough', { obstacleBase: 7, decoys: 2, scatter: 0, guards: 0 }, 0);
-const pawn = candidateFor(getRawDaily('2026-11-19'), 'tough', { obstacleBase: 7, decoys: 2, scatter: 0, guards: 0 }, 0);
+const pawn = candidateFor(getRawDaily('2026-12-31'), 'tough', { obstacleBase: 7, decoys: 2, scatter: 0, guards: 0 }, 0);
 const knightRow = measureCandidate(knight), pawnRow = measureCandidate(pawn);
 const strip = ({ ms, ...rest }) => rest;
 const none = [false, false, false];

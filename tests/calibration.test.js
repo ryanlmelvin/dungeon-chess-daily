@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TIERS, WEEKDAY_TARGETS, TARGET_STEP, DEFAULT_KNOBS, MIN_DECOYS, tierForDate, targetForDate, tierLabel, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
+import { DIFFICULTY_TIERS, TIER_IDS, WEEKDAY_TIERS, WEEKDAY_TARGETS, TARGET_STEP, DEFAULT_KNOBS, MIN_DECOYS, MAX_FLOOR_PAR, tierForDate, targetForDate, tierLabel, knobsFor, difficultyScore, bandDistance } from '../src/difficulty.js';
 import { CALIBRATION, CALIBRATION_REPORT } from '../src/calibration.js';
 import { FALLBACKS } from '../src/fallbacks.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
@@ -28,21 +28,21 @@ test('the tier rises from Monday to the weekend, by UTC weekday', () => {
 
 test('every day from Monday to Saturday aims a step harder than the day before; Sunday matches Saturday', () => {
   const targets = WEEK.map((date) => targetForDate(date));
-  assert.deepEqual(targets, [3.75, 5.75, 7.75, 9.75, 11.75, 13.75, 13.75]);
+  assert.deepEqual(targets, [2.5, 4, 5.5, 7, 8.5, 10, 10]);
   for (let index = 1; index < 6; index++) assert.equal(targets[index] - targets[index - 1], TARGET_STEP, WEEK[index]);
   assert.equal(targets[6], targets[5], 'Sunday is as hard as Saturday');
   assert.deepEqual(WEEK.map((date) => WEEKDAY_TARGETS[new Date(`${date}T12:00:00Z`).getUTCDay()]), targets);
   // Each tier's targets are its weekdays' (Tough has Thursday's and Friday's), and its band holds them at half a step.
-  assert.deepEqual([...DIFFICULTY_TIERS.tough.targets], [9.75, 11.75]);
-  assert.equal(DIFFICULTY_TIERS.tough.target, 10.75);
+  assert.deepEqual([...DIFFICULTY_TIERS.tough.targets], [7, 8.5]);
+  assert.equal(DIFFICULTY_TIERS.tough.target, 7.75);
   for (const tier of TIER_IDS) {
     const { targets: own, band } = DIFFICULTY_TIERS[tier];
     assert.deepEqual(band, [own[0] - TARGET_STEP / 2, own.at(-1) + TARGET_STEP / 2], tier);
   }
   // Played under another tier (tooling), a date aims at that tier's mean target.
-  assert.equal(targetForDate('2026-11-09', 'fiendish'), 13.75);
-  assert.equal(targetForDate('2026-11-12', 'tough'), 9.75);
-  assert.equal(targetForDate('2026-11-09', 'tough'), 10.75);
+  assert.equal(targetForDate('2026-11-09', 'fiendish'), 10);
+  assert.equal(targetForDate('2026-11-12', 'tough'), 7);
+  assert.equal(targetForDate('2026-11-09', 'tough'), 7.75);
 });
 
 test('tier bands are contiguous and increasing', () => {
@@ -107,9 +107,9 @@ test('a day is assembled from the floors of its candidates so that their gaps ad
   // Gaps of 1 a floor and 4 a floor: two of the first and one of the second make 6.
   const easy = candidateOf([10, 10, 10]), hard = candidateOf([40, 40, 40]);
   const [best] = rankFloors([easy, hard], 6, 'tricky');
-  assert.deepEqual(best, { floors: [0, 0, 1], gap: 6, distance: 0, within: true }, 'ties keep the earlier candidates, floor by floor');
+  assert.deepEqual(best, { floors: [0, 0, 1], gap: 6, distance: 0, within: true, longest: 0 }, 'ties keep the earlier candidates, floor by floor');
   // Nothing reaches the target: the closest, outside the tolerance.
-  assert.deepEqual(rankFloors([easy, hard], 20, 'tricky')[0], { floors: [1, 1, 1], gap: 12, distance: 8, within: false });
+  assert.deepEqual(rankFloors([easy, hard], 20, 'tricky')[0], { floors: [1, 1, 1], gap: 12, distance: 8, within: false, longest: 0 });
   // Every combination is ranked; unsolved or unmeasured candidates give no floors.
   assert.equal(rankFloors([easy, null, hard, { status: 'unknown' }, { ...easy, points: null }], 6, 'tricky').length, 8);
   assert.deepEqual(rankFloors([], 6, 'tricky'), []);
@@ -128,6 +128,22 @@ test('among days on target the most even wins, and the tolerance is exact', () =
   assert.equal(rankFloors([candidateOf([80, 80, 85], { runs: 40 })], 6, 'fair')[0].within, false);
   // Candidates measured with another number of runs can't be added to the first one's.
   assert.equal(rankFloors([candidateOf([10, 10, 10]), candidateOf([40, 40, 40], { runs: 20 })], 6, 'fair').length, 1);
+});
+
+test('short floors come first: no floor over par 10 when any assembly avoids one', () => {
+  assert.equal(MAX_FLOOR_PAR, 10);
+  // The first candidate's floors make 12 exactly, but its floor 1 is par 12; the second's are short and easier.
+  const long = { ...candidateOf([40, 40, 40]), pars: [12, 6, 6] }, short = { ...candidateOf([20, 20, 20]), pars: [6, 6, 6] };
+  const [best] = rankFloors([long, short], 12, 'fair');
+  assert.deepEqual([best.floors, best.longest, best.within], [[1, 0, 0], 6, false], 'short floors beat the target');
+  // No short floor 1 anywhere: the shortest longest floor, never "within", so the search goes on.
+  const [stuck] = rankFloors([long, { ...candidateOf([20, 20, 20]), pars: [12, 6, 6] }], 12, 'fair');
+  assert.deepEqual([stuck.floors, stuck.longest, stuck.within], [[0, 0, 0], 12, false]);
+  const [shorter] = rankFloors([long, { ...candidateOf([20, 20, 20]), pars: [11, 6, 6] }], 12, 'fair');
+  assert.deepEqual(shorter.floors[0], 1, 'par 11 beats par 12');
+  // A floor that must run long excuses no other: floor 2 comes from where it is short.
+  const [one] = rankFloors([{ ...candidateOf([40, 40, 40]), pars: [14, 14, 6] }, { ...candidateOf([20, 20, 20]), pars: [14, 6, 6] }], 12, 'fair');
+  assert.deepEqual([one.floors[1], one.longest], [1, 14]);
 });
 
 test('an assembled route stays within the move cap and a pawn’s allowance of lives', () => {

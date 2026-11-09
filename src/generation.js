@@ -5,7 +5,7 @@ import { createGame, act, RULES_VERSION } from './rules.js';
 import { hash } from './random.js';
 import { findWinningRoute, verifyWinningRoute, MAX_ROUTE_MOVES } from './fairness.js';
 import { FALLBACKS } from './fallbacks.js';
-import { DIFFICULTY_TIERS, tierForDate, targetForDate, knobsFor, difficultyScore, cappedGap, floorGapPoints, floorMinimums, freebieFloor, GAP_FLOOR_WEIGHTS } from './difficulty.js';
+import { DIFFICULTY_TIERS, tierForDate, targetForDate, knobsFor, difficultyScore, cappedGap, floorGapPoints, floorMinimums, freebieFloor, openPromotionFiles, GAP_FLOOR_WEIGHTS, MAX_FLOOR_PAR, LONG_FLOOR_PAR } from './difficulty.js';
 import { humanPar } from './human-bot.js';
 export { DIFFICULTY_TIERS, tierForDate, targetForDate } from './difficulty.js';
 import { MODIFIERS } from './modifiers.js';
@@ -24,6 +24,12 @@ const cache = new Map();
 // stops at the first candidate that lets one land on the day's target
 // (TARGET_TOLERANCE), after about six on average (docs/generation.md).
 export const ATTEMPTS = 16;
+/**
+ * More layouts a date may search after ATTEMPTS, only while its best day still
+ * has a floor over LONG_FLOOR_PAR (two of 739 days at the time: an eight-pawn
+ * floor and a pawn's king floor, at par 21 and 25, both found shorter versions).
+ */
+export const EXTRA_ATTEMPTS = 16;
 export const SEARCH_BUDGET = 12_000;
 /** A date stops searching once some assembly of its floors lands within this of its target. */
 export const TARGET_TOLERANCE = 0.1;
@@ -80,8 +86,8 @@ export function routeFloors(candidate, actions) {
  * Bounded search plus independent replay, then the human-like bot on the
  * route. `status` is 'solved' (with actions, metrics, the score, the bot's
  * `human` result, src/human-bot.js humanPar, the capped human gap `gap`, its
- * whole-number parts per floor `points` over `runs` runs a floor, and the
- * route's `floors`, routeFloors), 'unknown' (the budget ran out) or 'invalid'
+ * whole-number parts per floor `points` over `runs` runs a floor, each floor's
+ * par `pars` and the route's `floors`, routeFloors), 'unknown' (the budget ran out) or 'invalid'
  * (a route the replay rejected); `explored` counts the search's simulated
  * transitions. The bot plays each floor from the route's own standard start
  * with the same seeds and the same default recruit policy as the edition's
@@ -102,7 +108,7 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = '
   return {
     status: 'solved', explored: result.explored, actions: result.actions, metrics: proof.metrics,
     score: difficultyScore(proof.metrics, candidate.playerPiece), human, gap: human ? cappedGap(human) : null,
-    points: human ? floorGapPoints(human) : null, runs: human ? human.results[0].length : 0,
+    points: human ? floorGapPoints(human) : null, runs: human ? human.results[0].length : 0, pars: human ? human.par : null,
     floors: routeFloors(candidate, result.actions),
   };
 }
@@ -118,12 +124,15 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = '
  * within MAX_ROUTE_MOVES and lose at most `lives` lives (a pawn's allowance;
  * the verifier still checks the whole run).
  *
- * Order: an assembly within TARGET_TOLERANCE of `target` beats any other, and
- * among those the most even wins (the lightest hardest floor), then the
- * closest; otherwise the closest, then the most even. Ties keep the earlier
- * candidates (floor by floor). Each entry: { floors: [three attempt numbers],
- * gap, distance, within }. Gaps are added in whole-number points, so the order
- * never depends on rounding. Empty: no floor has a candidate (fallback).
+ * Order: floors short enough come first: an assembly whose every floor's par
+ * keeps to MAX_FLOOR_PAR beats any other (else the one whose floors run past
+ * it by the fewest moves in all). Then an assembly within TARGET_TOLERANCE of `target` beats any
+ * other, and among those the most even wins (the lightest hardest floor),
+ * then the closest; otherwise the closest, then the most even. Ties keep the
+ * earlier candidates (floor by floor). Each entry: { floors: [three attempt
+ * numbers], gap, distance, within (on target with every floor short enough),
+ * longest (par) }. Gaps are added in whole-number points, so the order never
+ * depends on rounding. Empty: no floor has a candidate (fallback).
  * Calibration (scripts/calibrate-difficulty.mjs) replays this same choice.
  * `wholeDays` (tooling that measures each candidate as a whole) keeps only
  * days whose three floors come from one candidate.
@@ -135,37 +144,50 @@ export function rankFloors(found, target, tier, minFloorMoves = DIFFICULTY_TIERS
   const minimums = floorMinimums(minFloorMoves);
   const options = [0, 1, 2].map((floor) => solved
     .filter(({ entry }) => entry.runs === runs && entry.metrics.floorMoves[floor] >= minimums[floor])
-    .map(({ entry, attempt }) => ({ attempt, points: (GAP_FLOOR_WEIGHTS[floor] ?? 1) * entry.points[floor], turns: entry.floors[floor].turns, lives: entry.floors[floor].lives })));
+    .map(({ entry, attempt }) => ({
+      attempt, points: (GAP_FLOOR_WEIGHTS[floor] ?? 1) * entry.points[floor], turns: entry.floors[floor].turns, lives: entry.floors[floor].lives, par: entry.pars?.[floor] ?? 0,
+    })));
   if (options.some((list) => !list.length)) return [];
   const goal = Math.round(target * runs), slack = Math.round(TARGET_TOLERANCE * runs);
   const ranked = [];
   for (const a of options[0]) for (const b of options[1]) for (const c of options[2]) {
     if (a.turns + b.turns + c.turns > MAX_ROUTE_MOVES || a.lives + b.lives + c.lives > lives) continue;
     if (wholeDays && (a.attempt !== b.attempt || b.attempt !== c.attempt)) continue;
-    const off = Math.abs(a.points + b.points + c.points - goal);
-    ranked.push({ floors: [a.attempt, b.attempt, c.attempt], off, most: Math.max(a.points, b.points, c.points), total: a.points + b.points + c.points });
+    const off = Math.abs(a.points + b.points + c.points - goal), longest = Math.max(a.par, b.par, c.par);
+    // Every floor's moves past the cap count, so a floor that must run long doesn't excuse another.
+    const over = [a, b, c].reduce((sum, floor) => sum + Math.max(0, floor.par - MAX_FLOOR_PAR), 0);
+    ranked.push({ floors: [a.attempt, b.attempt, c.attempt], off, longest, over, most: Math.max(a.points, b.points, c.points), total: a.points + b.points + c.points });
   }
   ranked.sort((x, y) => {
+    if (x.over !== y.over) return x.over - y.over;
     const inX = x.off <= slack, inY = y.off <= slack;
     if (inX !== inY) return inX ? -1 : 1;
     const order = inX ? x.most - y.most || x.off - y.off : x.off - y.off || x.most - y.most;
     return order || x.floors[0] - y.floors[0] || x.floors[1] - y.floors[1] || x.floors[2] - y.floors[2];
   });
-  return ranked.map(({ floors, off, total }) => ({ floors, gap: Math.round(total / runs * 10) / 10, distance: off / runs, within: off <= slack }));
+  return ranked.map(({ floors, off, total, over, longest }) => ({ floors, gap: Math.round(total / runs * 10) / 10, distance: off / runs, within: off <= slack && !over, longest }));
 }
 
 /**
  * generateDaily's candidate searches for a raw daily, in order, up to `count`
  * (ATTEMPTS): after each one it stops as soon as some assembly of the floors
- * so far lands within TARGET_TOLERANCE of `target` (rankFloors). Every search
- * has the same fixed budget and the bot's runs are seeded, so which ones run
- * is a pure function of the date. Returns each searchCandidate() result.
+ * so far lands within TARGET_TOLERANCE of `target` with every floor short
+ * enough (rankFloors). With the full budget, a day whose best still has a
+ * floor over LONG_FLOOR_PAR goes on, up to EXTRA_ATTEMPTS more, until it has
+ * none. Every search has the same fixed budget and the bot's runs are seeded,
+ * so which ones run is a pure function of the date. Returns each
+ * searchCandidate() result.
  */
 export function searchCandidates(base, tier, settings, count = ATTEMPTS, target = targetForDate(base.date, tier)) {
   const found = [];
+  const best = () => rankFloors(found, target, tier)[0];
   for (let attempt = 0; attempt < count; attempt++) {
     found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
-    if (found[attempt].status === 'solved' && rankFloors(found, target, tier)[0]?.within) break;
+    if (found[attempt].status === 'solved' && best()?.within) return found;
+  }
+  if (count !== ATTEMPTS) return found;
+  for (let attempt = ATTEMPTS; attempt < ATTEMPTS + EXTRA_ATTEMPTS && !(best()?.longest <= LONG_FLOOR_PAR); attempt++) {
+    found.push(searchCandidate(candidateFor(base, tier, settings, attempt)));
   }
   return found;
 }
@@ -184,7 +206,7 @@ function certify(daily, actions, source, attempt, knobs) {
 
 /** True for a stored or remembered edition's `attempt`: 'fallback', or one candidate per floor. */
 export const validAttempt = (attempt) => attempt === 'fallback'
-  || (Array.isArray(attempt) && attempt.length === 3 && attempt.every((each) => Number.isInteger(each) && each >= 0 && each < ATTEMPTS));
+  || (Array.isArray(attempt) && attempt.length === 3 && attempt.every((each) => Number.isInteger(each) && each >= 0 && each < ATTEMPTS + EXTRA_ATTEMPTS));
 
 /**
  * Generate and certify every edition before returning any playable dungeon.
@@ -229,12 +251,26 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
   }
   // Assemble the day from the candidates' floors, the best assembly that certifies as one whole run.
   const found = searchCandidates(base, tier, settings, searches, targetForDate(base.date, tier));
+  let kept = null;
   for (const { floors } of rankFloors(found, targetForDate(base.date, tier), tier).slice(0, ASSEMBLY_TRIES)) {
     const actions = floors.flatMap((attempt, floor) => found[attempt].floors[floor].actions);
     const accepted = certify(candidateFor(base, tier, settings, floors), actions, 'generated', floors, settings);
     if (!accepted) continue;
-    if (official && !EDITIONS[base.date]) rememberEdition(accepted);
-    return accepted;
+    kept ??= accepted;
+    // A pawn starts each floor with the lives the floors before left it, so the
+    // bot can find a stitched floor much longer than it did in its own
+    // candidate (one king floor went from par 9 to 25): keep a pawn's day only
+    // if no floor runs past MAX_FLOOR_PAR further than its part said.
+    if (base.playerPiece === 'pawn') {
+      const pars = humanPar(accepted)?.par ?? [];
+      if (pars.some((par, floor) => par > Math.max(MAX_FLOOR_PAR, found[floors[floor]].pars[floor]))) continue;
+    }
+    kept = accepted;
+    break;
+  }
+  if (kept) {
+    if (official && !EDITIONS[base.date]) rememberEdition(kept);
+    return kept;
   }
   if (!fallback) return null;
   // Bounded search may miss a solution. Fall back to a tested complete dungeon,
@@ -245,9 +281,10 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
   if (!entry) throw new Error('No certified fallback for this edition.');
   const template = getRawDaily(entry.date);
   const species = base.species.map((creature, index) => ({ ...creature, piece: template.species[index].piece }));
+  // The template's layout, barricades included (they follow its date's weekday).
   const certified = certify({
     ...candidateFor(base, tier, settings), dungeonSeed: entry.dungeonSeed, targets: [...template.targets],
-    species, theme: buildTheme(species),
+    species, theme: buildTheme(species), openFiles: openPromotionFiles(entry.date),
   }, entry.actions, 'fallback', maxAttempts, settings);
   if (!certified) throw new Error('Dungeon certification failed. No unverified dungeon was released.');
   if (official && !EDITIONS[base.date]) rememberEdition(certified);

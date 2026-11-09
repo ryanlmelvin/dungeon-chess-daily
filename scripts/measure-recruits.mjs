@@ -155,7 +155,7 @@ function certTask({ date, tier, attempt }) {
       entry.metrics = { threatenedDecisions, floorMoves, turns, livesLost };
       entry.score = result.score;
       // The capped human gap the day's target judges, and its parts per floor (rankFloors treats a candidate without them as unmeasured).
-      entry.gap = result.gap; entry.points = result.points; entry.runs = result.runs;
+      entry.gap = result.gap; entry.points = result.points; entry.runs = result.runs; entry.pars = result.pars;
       entry.floors = result.floors.map(({ turns, lives }) => ({ turns, lives }));
       if (recruit === 'steer') {
         entry.recruit = result.metrics.recruit;

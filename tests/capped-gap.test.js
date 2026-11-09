@@ -62,7 +62,7 @@ test('generation measures every solved candidate with the human-like bot, as par
   // Past the stored editions, so generation searches: a Thursday (Tough) knight day.
   const date = '2031-03-13', base = getRawDaily(date), tier = tierForDate(date), settings = knobsFor(tier, base.playerPiece);
   const target = targetForDate(date);
-  assert.equal(target, 9.75);
+  assert.equal(target, 7);
   const found = searchCandidates(base, tier, settings);
   assert.ok(found.some((entry) => entry.status === 'solved'), 'a solved candidate to measure');
   for (const [attempt, entry] of found.entries()) {

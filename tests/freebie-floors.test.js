@@ -7,16 +7,17 @@ import { DIFFICULTY_TIERS, knobsFor, tierForDate, freebieFloor, floorMinimums } 
 import { act, createGame, scoredMoves } from '../src/rules.js';
 import { encodeRoute } from '../src/route-code.js';
 
-test('Tricky and harder tiers want every floor to take at least three moves', () => {
+test('no tier rules out quick floors any more: the freebie rule stays a tool for comparing rules', () => {
+  // A floor the route clears in two moves that a person needs several to find is
+  // a clever short floor, what the week now climbs with (src/difficulty.js MAX_FLOOR_PAR).
   assert.deepEqual(Object.fromEntries(Object.entries(DIFFICULTY_TIERS).map(([tier, entry]) => [tier, entry.minFloorMoves])),
-    { gentle: 0, fair: 0, tricky: 3, tough: 3, fiendish: 3 });
-  for (const tier of ['tricky', 'tough', 'fiendish']) {
-    assert.equal(freebieFloor({ floorMoves: [2, 9, 9] }, tier), true, tier);
-    assert.equal(freebieFloor({ floorMoves: [9, 9, 1] }, tier), true, tier);
-    assert.equal(freebieFloor({ floorMoves: [3, 9, 3] }, tier), false, tier);
-  }
-  for (const tier of ['gentle', 'fair', 'standard']) assert.equal(freebieFloor({ floorMoves: [1, 2, 3] }, tier), false, tier);
-  assert.equal(freebieFloor({}, 'fiendish'), false, 'no floor moves recorded, nothing to judge');
+    { gentle: 0, fair: 0, tricky: 0, tough: 0, fiendish: 0 });
+  for (const tier of ['gentle', 'fair', 'tricky', 'tough', 'fiendish', 'standard']) assert.equal(freebieFloor({ floorMoves: [1, 2, 3] }, tier), false, tier);
+  // Given a rule, it still finds a quick floor.
+  assert.equal(freebieFloor({ floorMoves: [2, 9, 9] }, 'tough', 3), true);
+  assert.equal(freebieFloor({ floorMoves: [9, 9, 1] }, 'tough', 3), true);
+  assert.equal(freebieFloor({ floorMoves: [3, 9, 3] }, 'tough', 3), false);
+  assert.equal(freebieFloor({}, 'fiendish', 3), false, 'no floor moves recorded, nothing to judge');
 });
 
 test('tooling can compare other freebie rules: every floor, or floor by floor', () => {
@@ -34,52 +35,48 @@ test('tooling can compare other freebie rules: every floor, or floor by floor', 
   assert.equal(freebieFloor({ floorMoves: [3, 9, 9] }, 'gentle', 4), true);
 });
 
-test('a freebie floor is never assembled into a Tricky-or-harder day; the candidate’s other floors still are', () => {
+test('under a freebie rule a quick floor is never assembled, but the candidate’s other floors still are', () => {
   // Each floor 1 a gap point at 10 runs; only the floor moves differ.
-  const found = (floorMoves) => ({ points: [10, 10, 10], runs: 10, metrics: { threatenedDecisions: 9, floorMoves }, floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })) });
-  const days = (list, tier, rule) => rankFloors(list, 3, tier, rule).map((entry) => entry.floors);
-  // Floor 1 of the first candidate cleared in two moves: floor 1 comes from the second, the rest from either.
-  assert.ok(days([found([2, 8, 8]), found([5, 8, 8])], 'tough').every((floors) => floors[0] === 1));
-  assert.deepEqual(days([found([2, 8, 8]), found([5, 8, 8])], 'tough')[0], [1, 0, 0]);
-  // Both quick on floor 1: no day, the fallback bank.
-  assert.deepEqual(days([found([2, 8, 8]), found([2, 8, 8])], 'tough'), []);
-  // Up to sixteen candidates, each floor from any of them that took long enough there.
-  assert.deepEqual(days([found([2, 8, 8]), null, found([8, 8, 1]), found([8, 2, 8])], 'tough')[0], [2, 0, 0]);
-  assert.equal(days([found([3, 8, 8])], 'tough').length, 1, 'three moves is no freebie');
-  assert.equal(days([found([2, 8, 8])], 'fair').length, 1, 'Fair keeps quick floors');
-  assert.equal(days([found([2, 8, 8])], 'tough', 0).length, 1, 'tooling may compare without the rule');
-  assert.equal(days([found([3, 8, 8])], 'tough', [4, 0, 0]).length, 0, 'or with another one');
+  const found = (floorMoves) => ({ points: [10, 10, 10], runs: 10, pars: [5, 5, 5], metrics: { threatenedDecisions: 9, floorMoves }, floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })) });
+  const days = (list, rule) => rankFloors(list, 3, 'tough', rule).map((entry) => entry.floors);
+  // By default quick floors are assembled like any other.
+  assert.deepEqual(days([found([2, 8, 8]), found([5, 8, 8])])[0], [0, 0, 0]);
+  // Under the old rule (3 moves), floor 1 of the first candidate is out: floor 1 comes from the second.
+  assert.ok(days([found([2, 8, 8]), found([5, 8, 8])], 3).every((floors) => floors[0] === 1));
+  assert.deepEqual(days([found([2, 8, 8]), found([5, 8, 8])], 3)[0], [1, 0, 0]);
+  assert.deepEqual(days([found([2, 8, 8]), found([2, 8, 8])], 3), [], 'both quick on floor 1: no day');
+  assert.deepEqual(days([found([2, 8, 8]), null, found([8, 8, 1]), found([8, 2, 8])], 3)[0], [2, 0, 0]);
+  assert.equal(days([found([3, 8, 8])], 3).length, 1, 'three moves is no freebie');
+  assert.equal(days([found([3, 8, 8])], [4, 0, 0]).length, 0, 'or another rule');
 });
 
-// A real first candidate, past the stored editions, whose route clears a floor
-// in under three moves on a Tricky-or-harder weekday.
-function freebieCandidate() {
+// A real first candidate, past the stored editions, whose route clears a floor in under three moves.
+function quickCandidate() {
   for (let day = 0; day < 40; day++) {
     const date = new Date(Date.UTC(2031, 2, 1 + day)).toISOString().slice(0, 10);
     const tier = tierForDate(date);
-    if (!DIFFICULTY_TIERS[tier].minFloorMoves) continue;
     const base = getRawDaily(date), knobs = knobsFor(tier, base.playerPiece);
     const found = searchCandidate(candidateFor(base, tier, knobs, 0));
-    if (found.metrics && found.metrics.threatenedDecisions >= knobs.minThreatenedDecisions && freebieFloor(found.metrics, tier)) return { date, tier, knobs, found };
+    if (found.metrics && found.metrics.threatenedDecisions >= knobs.minThreatenedDecisions && freebieFloor(found.metrics, tier, 3)) return { date, tier, knobs, found };
   }
   return null;
 }
 
-test('a route with a freebie floor never certifies a Tricky-or-harder day, searched or stored', (t) => {
-  const freebie = freebieCandidate();
-  if (!freebie) { t.skip('no freebie first candidate among the scanned dates'); return; }
-  const { date, tier, knobs, found } = freebie;
+test('a route with a quick floor certifies on any tier, searched or stored', (t) => {
+  const quick = quickCandidate();
+  if (!quick) { t.skip('no quick first candidate among the scanned dates'); return; }
+  const { date, tier, knobs, found } = quick;
   // Floor moves are the route's par: moves until each floor's challenge was complete.
   let state = createGame(candidateFor(getRawDaily(date), tier, knobs, 0));
   for (const action of found.actions) state = act(state, action);
   assert.deepEqual(found.metrics.floorMoves, state.records.map(scoredMoves));
-  assert.equal(generateDaily(date, { maxAttempts: 1, fallback: false }), null, `${date}: the first candidate alone is rejected`);
-  // Remembered on a device, the same route is distrusted and the date searched again.
+  const daily = generateDaily(date, { maxAttempts: 1, fallback: false });
+  assert.deepEqual(daily.generation.attempt, [0, 0, 0], `${date}: the first candidate alone makes the day`);
+  // Remembered on a device, the same route replays.
   const store = new Map([[`dchess-edition:v${GENERATOR_VERSION}:${date}`, JSON.stringify({ tier, attempt: [0, 0, 0], route: encodeRoute(found.actions) })]]);
   globalThis.localStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) };
   try {
-    const daily = generateDaily(date, { fallback: false });
-    const quick = found.metrics.floorMoves.findIndex((moves) => moves < DIFFICULTY_TIERS[tier].minFloorMoves);
-    assert.ok(daily === null || (daily.generation.attempt[quick] !== 0 && !freebieFloor(daily.generation.certificate.metrics, tier)), date);
+    const remembered = generateDaily(date, { fallback: false });
+    assert.deepEqual([remembered.generation.attempt, remembered.generation.certificate.actions], [[0, 0, 0], found.actions]);
   } finally { delete globalThis.localStorage; }
 });

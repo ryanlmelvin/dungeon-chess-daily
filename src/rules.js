@@ -7,8 +7,9 @@ import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcem
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
+import { openPromotionFiles } from './difficulty.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-export const RULES_VERSION = 9;
+export const RULES_VERSION = 10;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -888,6 +889,37 @@ export function floorSeed(state, floor = state.floor) {
 }
 const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 && seeds.every((seed) => Number.isInteger(seed) && seed >= 0);
 
+/**
+ * Barricades on a floor where monster pawns live (its targets or a decoy
+ * species): walls on the rank where they would promote (row 7, the player's
+ * side), all but the day's open squares (`openFiles`, src/difficulty.js
+ * openPromotionFiles of its date, or of a fallback's template date): every other square when half stay open, else the open
+ * ones drawn, both from the floor's own stream. A pawn on a barricaded file
+ * stops a square short, so promotion is rare rather than impossible. They come
+ * on top of the room's walls. The launch edition keeps its published layout.
+ */
+function promotionBarricades(state, residents) {
+  if (LEGACY_LAYOUT_SEEDS.has(floorSeed(state)) || !residents.some((creature) => creature.piece === 'pawn')) return [];
+  const rng = random(hash(`${floorSeed(state)}:barricades:${state.floor}`));
+  const files = [0, 1, 2, 3, 4, 5, 6, 7], open = state.openFiles ?? openPromotionFiles(state.date);
+  // A bishop takes only on its own colour, so a pawn stopped a square short must
+  // stop on it: on a bishop day the barricades stand on every other square, the
+  // ones off the bishop's colour (which it never uses), whatever the weekday.
+  // Six of eight left pawns stranded on the other colour, and only 21% of a
+  // bishop's eight-pawn candidates could be certified (79% with none).
+  if ((state.layoutPiece ?? state.startingPiece) === 'bishop') {
+    const colour = (state.player.x + state.player.y) % 2;
+    return files.filter((x) => (x + 6) % 2 === colour).map((x) => ({ x, y: 7 }));
+  }
+  if (open === 4) {
+    const parity = Math.floor(rng() * 2);
+    return files.filter((x) => x % 2 === parity).map((x) => ({ x, y: 7 }));
+  }
+  const kept = new Set();
+  while (kept.size < open) kept.add(Math.floor(rng() * 8));
+  return files.filter((x) => !kept.has(x)).map((x) => ({ x, y: 7 }));
+}
+
 function pawnFormation(state) {
   const rng = random(hash(`${floorSeed(state)}:pawns:${state.floor}`));
   const squares = [];
@@ -1093,9 +1125,19 @@ function setFloor(state, kingRecruit = false) {
   state.props = [];
   const reserved = [...state.enemies, ...state.items, state.player, state.exit];
   if (!LEGACY_LAYOUT_SEEDS.has(floorSeed(state))) reserved.push(...state.enemies.flatMap(openingSquares));
+  // Barricades go down before the room's own walls and add to them.
+  for (const tile of promotionBarricades(state, residents)) {
+    const previous = state.map[tile.y];
+    state.map[tile.y] = previous.slice(0, tile.x) + '#' + previous.slice(tile.x + 1);
+    if (!connectedBoard(state)) { state.map[tile.y] = previous; continue; }
+    state.props.push({ x: tile.x, y: tile.y, type: 'crate' });
+  }
+  const barricaded = state.props.length;
   const candidates = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if ((layoutPiece === 'bishop' && target.piece === 'pawn' && (x + y) % 2 === 0) || reserved.some((entry) => entry.x === x && entry.y === y) || (layoutPiece === 'pawn' && x >= 3 && x <= 5) || (Math.abs(x - 4) <= 1 && y >= 5)) continue;
+    // A barricaded floor's open promotion squares stay open: rare, not impossible.
+    if (state.map[y][x] === '#' || (barricaded && y === 7)) continue;
     candidates.push({ x, y, order: rng() });
   }
   candidates.sort((a, b) => a.order - b.order);
@@ -1111,7 +1153,7 @@ function setFloor(state, kingRecruit = false) {
     state.map[tile.y] = previous.slice(0, tile.x) + '#' + previous.slice(tile.x + 1);
     if (!connectedBoard(state)) { state.map[tile.y] = previous; continue; }
     state.props.push({ x: tile.x, y: tile.y, type: ['pillar', 'crate', 'barrel', 'rock'][Math.floor(rng() * 4)] });
-    if (state.props.length === (state.obstacleBase ?? 7) + state.floor) break;
+    if (state.props.length === (state.obstacleBase ?? 7) + state.floor + barricaded) break;
   }
   if (!state.legacyTurnOrder) {
     // Add the recruit after the layout is fixed; older editions keep their map.
@@ -1216,6 +1258,8 @@ export function createGame(daily = getRawDaily()) {
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
   // An assembled day's floors each come from their own candidate layout (floorSeed).
   if (validFloorSeeds(daily.floorSeeds)) state.floorSeeds = [...daily.floorSeeds];
+  // Barricades leave the edition's open promotion squares; a fallback keeps its template's.
+  state.openFiles = Number.isInteger(daily.openFiles) ? daily.openFiles : openPromotionFiles(daily.date);
   // Plain days carry no modifier field, so their saves keep their shape.
   if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
   if (daily.replayUnlocked === true) state.replayUnlocked = true;
@@ -1955,6 +1999,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if ((value.modifier ?? 'none') !== (daily.modifier ?? 'none')) return false;
     if (value.dungeonSeed !== (daily.dungeonSeed ?? daily.seed) || value.obstacleBase !== (daily.obstacleBase ?? 7) || value.difficulty !== (daily.difficulty ?? 'standard')) return false;
     if (!equal(value.floorSeeds ?? null, validFloorSeeds(daily.floorSeeds) ? daily.floorSeeds : null)) return false;
+    if (value.openFiles !== (Number.isInteger(daily.openFiles) ? daily.openFiles : openPromotionFiles(daily.date))) return false;
     if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0) || (value.screens ?? 0) !== (daily.screens ?? 0)) return false;
     // Not `edition`: the number moved when the archive began at 2026-11-01, and seed and date pin the day.
     if (value.seed !== daily.seed || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;

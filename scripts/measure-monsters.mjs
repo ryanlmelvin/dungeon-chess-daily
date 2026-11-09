@@ -62,7 +62,7 @@ if (!isMainThread) {
     // rankFloors adds up the floors' capped human gaps (searchCandidate runs the bot).
     parentPort.postMessage({
       id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null, gap: result.gap ?? null,
-      points: result.points ?? null, runs: result.runs ?? 0, floors: result.floors?.map(({ turns, lives }) => ({ turns, lives })) ?? null,
+      points: result.points ?? null, runs: result.runs ?? 0, pars: result.pars ?? null, floors: result.floors?.map(({ turns, lives }) => ({ turns, lives })) ?? null,
     });
   });
 } else {

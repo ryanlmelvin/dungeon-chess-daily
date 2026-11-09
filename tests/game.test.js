@@ -321,8 +321,9 @@ test('objectives, palettes, obstacles and mixed residents vary deterministically
     const decoys = floorDecoys(state);
     assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + decoys.length);
     assert.equal(new Set(state.enemies.map((enemy) => enemy.species)).size, 1 + new Set(decoys.map((species) => species.id)).size);
-    // The tier's obstacleBase; a wall that would cut the board in two is skipped.
-    assert.ok(state.props.length <= issue.obstacleBase && state.props.length >= Math.min(issue.obstacleBase, 4));
+    // The tier's obstacleBase, plus barricades on a floor with monster pawns; a wall that would cut the board in two is skipped.
+    const barricades = state.enemies.some((enemy) => enemy.piece === 'pawn') ? 8 - (issue.playerPiece === 'bishop' ? 4 : state.openFiles) : 0;
+    assert.ok(state.props.length <= issue.obstacleBase + barricades && state.props.length >= Math.min(issue.obstacleBase, 4));
     assert.equal(state.map.join('').split('#').length - 1, state.props.length);
     assert.ok(state.enemies.every((enemy) => walkable(state, enemy.x, enemy.y)));
     assert.ok(state.items.every((item) => walkable(state, item.x, item.y)));

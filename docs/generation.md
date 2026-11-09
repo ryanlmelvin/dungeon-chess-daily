@@ -91,8 +91,9 @@ open. The pickup check concerns terrain accessibility; it does not claim that co
 
 There is no mutate-until-it-passes loop. Each edition gets at most sixteen candidates
 (`ATTEMPTS` in `src/generation.js`) and 12,000 simulated transitions per
-candidate, then a finite choice among the days their floors make (at most
-4,096; the best 32 are tried for certification), then one certified fallback.
+candidate (up to sixteen more only while a floor would run past par 14),
+then a finite choice among the days their floors make (the best 32 are tried
+for certification), then one certified fallback.
 Every rejection, next seed, assembly and fallback choice is a pure function of
 the date, tier, calibration table, and rules version. The fallback builder is an offline authoring tool
 with its own finite scan; it is not an unbounded runtime repair operation.
@@ -123,15 +124,16 @@ searching the entire game tree for every proposed decoration.
    the candidates searched so far ([Floor assembly](#floor-assembly),
    `rankFloors`): floor 1 from any candidate, floor 2 from any, floor 3 from
    any, so that the three floors' gaps add up to the day's target. Once some
-   assembly lands within 0.1 of it (`TARGET_TOLERANCE`), the search stops;
+   assembly of short floors lands within 0.1 of it (`TARGET_TOLERANCE`), the search stops;
    otherwise the next layout seed is derived from the date and searched the
    same way, up to sixteen candidates (`ATTEMPTS`, `searchCandidates`), and
    the closest assembly is kept. The stitched route (each floor's part of its
    candidate's route, in turn) is certified as one whole run. The difficulty
-   score takes no part. From Tricky on, a floor its route cleared in fewer
-   than `minFloorMoves` (3) moves is never assembled (no freebie floors);
-   `certify` rejects such a stored or remembered route too, and the fallback
-   bank is built and verified to the same rule.
+   score takes no part. Floors stay short: an assembly whose every floor's
+   par is 10 or less (`MAX_FLOOR_PAR`) beats any other. A floor the route
+   clears in one or two moves counts like any other (the no-freebie rule is
+   retired; `minFloorMoves` stays for tooling, and `certify` still applies a
+   tier's rule if one is set).
 5. If no assembly certifies, the generator selects a previously certified
    full-dungeon template for the same tier, piece, and color. Date-specific
    appearances remain varied; target roles and gameplay RNG use the template's
@@ -429,31 +431,36 @@ new monsters cost generation (see [Measuring the monsters](#measuring-the-monste
 
 ## Weekly difficulty
 
-Difficulty rises through the week, and like the New York Times crossword
-every day from Monday to Saturday is meant to play harder than the day before.
+Difficulty rises through the week, like the New York Times crossword.
 `src/difficulty.js` maps the UTC weekday to one of five tiers (its monsters and
 rules) and to a target for the capped human gap ([below](#the-capped-human-gap)):
-Monday 3.75, then 2 harder every day (`TARGET_STEP`) to Saturday's 13.75, the
+Monday 2.5, then 1.5 harder every day (`TARGET_STEP`) to Saturday's 10, the
 hardest; Sunday matches Saturday (`WEEKDAY_TARGETS`). Generation assembles each
 day from the floors of its candidate layouts so that their gaps add up to the
-target ([Floor assembly](#floor-assembly)).
+target ([Floor assembly](#floor-assembly)), with every floor short
+([Short floors](#weekly-difficulty), below).
 
-| Day | Tier | Target |
-| --- | --- | --- |
-| Monday | Gentle | 3.75 |
-| Tuesday | Fair | 5.75 |
-| Wednesday | Tricky | 7.75 |
-| Thursday | Tough | 9.75 |
-| Friday | Tough | 11.75 |
-| Saturday | Fiendish | 13.75 |
-| Sunday | Fiendish | 13.75 |
+| Day | Tier | Target | Open promotion squares |
+| --- | --- | --- | --- |
+| Monday | Gentle | 2.5 | 2 |
+| Tuesday | Fair | 4 | 2 |
+| Wednesday | Tricky | 5.5 | 2 |
+| Thursday | Tough | 7 | 2 |
+| Friday | Tough | 8.5 | 4 |
+| Saturday | Fiendish | 10 | 4 |
+| Sunday | Fiendish | 10 | 4 |
 
-Monday and Saturday sit where the centres of the old Gentle and Fiendish bands
-were (2.5–5 and 12.5–15), so the week as a whole plays about as hard as before:
-Wednesday and Thursday a little easier than they averaged, Friday a little
-harder. Each tier keeps a band, half a step either side of its targets
-(Gentle 2.75–4.75, Fair 4.75–6.75, Tricky 6.75–8.75, Tough 8.75–12.75,
-Fiendish 12.75–14.75), which calibration fits the knobs to.
+The targets are what short floors reach. With every floor's par at 10 or less,
+Tough's monsters top out around 8 to 9 and Fiendish's around 10 (on 53 weeks
+of candidates, Friday's assembly aimed at 8.5 landed at 8.0 or more on three
+Fridays in four), so the first week of targets, Monday 3.75 rising by 2 a day
+to Saturday's 13.75, left Friday and the weekend short of theirs. Every day
+plays easier than under those targets, the weekend most of all. Thursday and
+Friday share the Tough monsters and may play alike; the owner preferred short
+floors to a sharp Thursday-to-Friday step. Each tier keeps a band, half a step
+either side of its targets (Gentle 1.75–3.25, Fair 3.25–4.75, Tricky
+4.75–6.25, Tough 6.25–9.25, Fiendish 9.25–10.75), which calibration fits the
+knobs to.
 
 The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
 each floor's clue and two suspects (the target's species and one other that can
@@ -463,16 +470,50 @@ open-and-shut case of its targets alone, every floor has a decoy to take for
 gold, and the king floor always has a royal guard.
 
 The tier also sets how smart the monsters are ([Smarter monsters by
-tier](#smarter-monsters-by-tier)), the main step from one tier to the next, and
-from Tricky on its `minFloorMoves` (3) rules out freebie floors: every floor of
-the certified route takes at least three moves. The route records them as
-`metrics.floorMoves`. Each floor's rollout first looks two moves ahead from
-the floor's start, so when the route needs three, the search found no quicker
-clear by its rules (no pickups, no lives past its allowance). The rule was 4
-at first; with two candidates and the old search that sent about 40% of Tricky-and-up days
-to the fallback bank, and three moves was the owner's choice (see [Measuring
-the monsters](#measuring-the-monsters)). `minFloorMoves` may also list each
-floor's own minimum (`floorMinimums`), which tooling uses to price other rules.
+tier](#smarter-monsters-by-tier)), the main step from one tier to the next.
+
+**Short floors.** No floor's par should pass 10 (`MAX_FLOOR_PAR`): the week
+climbs by how much cleverness a few moves take, not by how many moves there
+are. A playtest on 2026-11-09 found a par-27 floor (2026-11-07, eight pawn
+targets, several of them crowning) far too much, and asked for floors of a
+few moves. Generation prefers any assembly whose floors all keep to the cap
+over one closer to the day's target ([Floor assembly](#floor-assembly)); only
+a day none of whose candidates can keep a floor to it takes the shortest it
+has. The same playtest retired the no-freebie rule: from Tricky on, every
+floor of the certified route had to take at least three moves
+(`minFloorMoves` 3). A floor the route clears in two moves but a person needs
+several to find is exactly the clever short floor the week now climbs with,
+so every tier's `minFloorMoves` is 0. The rule (it was 4 at first, then 3,
+see [Measuring the monsters](#measuring-the-monsters)) stays available to
+tooling, and `minFloorMoves` may also list each floor's own minimum
+(`floorMinimums`).
+
+**Barricades.** Monster pawns promote to queens on the player's back rank
+(row 7), and on a long pawn floor several did. On a floor where monster
+pawns live (its targets or a decoy species), barricades wall that rank but
+for the day's open squares (`WEEKDAY_OPEN_PROMOTION_FILES`): two from Monday
+to Thursday, so a pawn rarely crowns, and every other square from Friday to
+Sunday, so crowning stays a threat on the hardest days. Which squares is
+drawn from the floor's own seed (`promotionBarricades` in `src/rules.js`),
+except on a bishop day: a bishop takes only on its own colour, so a pawn
+stopped a square short has to stop on it, and the barricades stand on every
+other square, the ones off the bishop's colour (which it never uses),
+whatever the weekday. With six of eight walled at random, pawns stranded on
+the other colour left only 21% of a bishop's eight-pawn candidates
+certifiable (43% with every other square at random, 79% with none). The
+barricades come on top of the room's walls, and the room's other walls stay
+off that rank, so the open squares stay open: a pawn on a barricaded file
+stops a square short, and promotion is rare, never impossible. An edition
+carries its count of open squares (`openFiles`, which saves record and
+`validateSave` checks); a fallback day keeps its template's, from the
+template's date, so the template's certificate still replays. On the same
+120 days of candidates, a pawn crowned in 39% of the bot's runs on floors with
+monster pawns with no barricades, 20% with every other square walled and 10%
+with six of the eight (80%, 48% and 27% on floors whose targets are the eight
+pawns). Those eight-pawn floors stay the longest: their par is 13 at the
+median even with barricades, so on about 7% of days one floor runs past par
+10, to 14 at most. The owner kept them, eight pawns and all, as the exception
+to the short-floor rule.
 
 ### Floor assembly
 
@@ -492,16 +533,20 @@ floors of the candidates it has searched (`rankFloors` in `src/generation.js`):
   par and gap are the same in its own candidate and in any day assembled with
   it, and the day's gap is the sum of its floors'. Saves record `floorSeeds`
   and `validateSave` checks them.
-- **The choice.** Floor f may come from any solved candidate whose route took
-  at least the tier's `minFloorMoves` there. Assemblies whose route would run
-  past `MAX_ROUTE_MOVES`, or lose more than a pawn's 4 spare lives, are
-  ruled out. An assembly within 0.1 of the target (`TARGET_TOLERANCE`) beats
-  any other, and among those the one whose hardest floor is lightest (the most
-  even day) wins; otherwise the closest does. Ties keep the earlier candidates.
+- **The choice.** Floor f may come from any solved candidate (whose route took
+  at least the tier's `minFloorMoves` there, none on any tier now).
+  Assemblies whose route would run past `MAX_ROUTE_MOVES`, or lose more than
+  a pawn's 4 spare lives, are ruled out. Short floors come first: an assembly
+  whose every floor's par keeps to `MAX_FLOOR_PAR` beats any other (else the
+  one whose floors run past it by the fewest moves in all, so a floor that must
+  run long excuses no other). Then an assembly within 0.1 of the
+  target (`TARGET_TOLERANCE`) beats any other, and among those the one whose
+  hardest floor is lightest (the most even day) wins; otherwise the closest
+  does. Ties keep the earlier candidates.
   Gaps are added in whole-number points (`floorGapPoints`: each floor's run
   values summed), so no choice depends on rounding.
 - **Search.** Candidates are searched in order, and the search stops as soon as
-  some assembly lands within the tolerance (about six candidates on average,
+  some assembly with every floor short enough lands within the tolerance (about six candidates on average,
   sixteen at most). The stitched route, each floor's part of its candidate's
   route in turn, is certified as one whole run by the independent replay; if
   it fails (it never has outside a pawn's lives), the next assembly is tried.
@@ -541,34 +586,56 @@ Preferring the most even assembly among those on target cost no precision
 (0.63 against 0.64 at twelve candidates). The adopted rule is the last row
 with that preference.
 
-**The shipped editions.** All 739 editions from 2026-11-01 were regenerated
-under this rule (no fallback day among them; a date searches 3.3 s at the
-median, 26 s at most, on the build machine) and, with the old editions,
-scored once more on 80 fresh bot runs per floor. Over the 52 weeks from
-2026-11-09:
+**The first shipped editions** (2026-11-09, commit 9897544) aimed at a week
+from 3.75 to 13.75 with no cap on floor length. Scored on 80 fresh bot runs
+per floor over the 52 weeks from 2026-11-09, they took the average miss from
+the day's target from 2.4 (the four-candidate band rule) to 0.6, the share of
+weeks rising every day from Monday to Saturday from 8% to 77%, and same-week
+pairs where a harder tier's day played easier from 16% to 1%. But 35% of their
+floors ran past par 10, to 35 at most, and the first playtest found that too
+much ([Short floors](#weekly-difficulty)).
+
+**Short floors** (the editions now shipped): the week re-spaced to 2.5–10,
+floors kept to par 10 first, the no-freebie rule retired and barricades on
+pawn floors. Against the first shipped editions, both scored the same way over
+the same 52 weeks:
 
 | | Mon | Tue | Wed | Thu | Fri | Sat | Sun |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Target | 3.75 | 5.75 | 7.75 | 9.75 | 11.75 | 13.75 | 13.75 |
-| Before: mean (sd) | 3.8 (1.6) | 5.7 (2.3) | 9.0 (2.2) | 10.5 (3.3) | 10.2 (3.7) | 14.0 (3.6) | 12.1 (3.4) |
-| After: mean (sd) | 3.8 (0.7) | 5.9 (0.7) | 8.1 (0.9) | 9.7 (0.9) | 11.6 (0.8) | 13.8 (0.8) | 13.5 (0.8) |
+| First editions: target | 3.75 | 5.75 | 7.75 | 9.75 | 11.75 | 13.75 | 13.75 |
+| First editions: mean (sd) | 3.8 (0.7) | 5.9 (0.7) | 8.1 (0.9) | 9.7 (0.9) | 11.6 (0.8) | 13.8 (0.8) | 13.5 (0.8) |
+| Short floors: target | 2.5 | 4 | 5.5 | 7 | 8.5 | 10 | 10 |
+| Short floors: mean (sd) | 2.6 (0.4) | 4.1 (0.8) | 5.4 (0.9) | 7.0 (1.4) | 7.8 (1.8) | 9.5 (1.8) | 9.5 (1.7) |
 
-| | Before | After |
+| | First editions | Short floors |
 | --- | --- | --- |
-| Average miss from the day's target | 2.4 | 0.6 |
-| Same week, a harder tier's day plays easier (neighbouring tiers) | 16% (30%) | 1% (2%) |
-| Weeks rising every day from Monday to Saturday | 8% | 77% |
-| Later day plays easier: Mon>Tue, Tue>Wed, Wed>Thu, Thu>Fri, Fri>Sat | 31%, 17%, 35%, 50%, 21% | 2%, 0%, 12%, 6%, 4% |
-| Fallback days | 11 | 0 |
-| Days whose hardest floor carries over 70% of the gap | 42% | 32% |
+| Floors over par 10 (days with one) | 35% (71%) | 3% (8%) |
+| Longest floor, median floor (par) | 35, 9 | 13, 7 |
+| Runs where a monster pawn crowns on floors with them, Mon–Thu / Fri–Sun | 33% / 39% | 13% / 23% |
+| Average miss from the day's target | 0.63 | 0.89 |
+| Weeks rising every day from Monday to Saturday | 77% | 35% |
+| Later day plays easier: Mon>Tue, Tue>Wed, Wed>Thu, Thu>Fri, Fri>Sat | 2%, 0%, 12%, 6%, 4% | 4%, 19%, 10%, 33%, 23% |
+| Same week, a harder tier's day plays easier | 1% | 7% |
+| Fallback days | 0 | 0 |
 
-Over all 105 weeks the same rows read 2.5 → 0.65, 18% (31%) → 2% (4%), 8% →
-72%, and 20 → 0 fallback days. The weakest step is Wednesday to Thursday:
-Tricky layouts sit above Wednesday's target (its raw candidates averaged about
-10), so Wednesday lands a little high (8.1 for 7.75). An easier Tricky setting
-in the next calibration would widen that step. A day still misses its target
-by about 1.5 now and then, when the forty runs it was chosen with were lucky;
-those misses stay between the neighbouring days' targets.
+Over all 105 weeks the longest floor is par 14 (55 of 739 days have one floor
+at 11 to 14, almost all of eight pawns, never two in a day). Short floors cost
+the climb its precision at the top: Thursday and Friday share the Tough
+monsters and play alike (the owner's call), and on about one day in ten,
+mostly a pawn's, no assembly of short floors reaches the target, so the day
+plays easier than its weekday (Friday 2026-11-20, a pawn day, at 3.0 for 8.5).
+Two safeguards keep floors to the cap the owner set:
+
+- **More layouts for a long floor.** When the best day of sixteen candidates
+  still has a floor over par 14 (`LONG_FLOOR_PAR`), generation searches up to
+  sixteen more (`EXTRA_ATTEMPTS`) until it hasn't: a knight's eight-pawn
+  floor on 2027-08-07 went from par 21 to 11.
+- **Pawn days measured whole.** A pawn starts each floor with the lives the
+  floors before left it, so a stitched floor can play much longer than it did
+  in its own candidate: a pawn's king floor on 2028-04-09 measured par 9 alone
+  and 25 in its day. Generation measures a pawn's stitched day again and moves
+  to the next assembly if any floor runs past par 10 further than its part
+  said.
 
 ### The capped human gap
 
