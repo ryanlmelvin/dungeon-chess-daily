@@ -17,7 +17,7 @@ test('the bot replays the certified route to a win with per-floor move counts', 
     assert.equal(run.turns, daily.generation.certificate.metrics.turns);
     assert.equal(run.floors.length, 3);
     assert.equal(run.floors.reduce((a, b) => a + b, 0), run.moves);
-    assert.ok(run.moves <= run.turns, 'moves after a challenge is complete are not scored');
+    assert.ok(run.moves <= run.turns + run.hits, 'moves after a challenge is complete are not scored; captures are');
   }
 });
 
@@ -30,11 +30,11 @@ test('the bot run uses the player-facing certificate and never mutates the editi
 });
 
 test('playerRun and verdict compare move totals', () => {
-  const won = { status: 'won', turns: 20, records: [{ turns: 5 }, { turns: 7 }, { turns: 8 }], player: { hp: 1, maxHp: 2 }, tries: 1 };
-  assert.deepEqual(playerRun(won), { moves: 20, floors: [5, 7, 8], livesLost: 1, tries: 1 });
-  // Moves after a floor's challenge is complete (gold, stairs) don't count.
-  const golden = { ...won, records: [{ turns: 5, scored: 3 }, { turns: 7 }, { turns: 8, scored: 8 }] };
-  assert.deepEqual(playerRun(golden), { moves: 18, floors: [3, 7, 8], livesLost: 1, tries: 1 });
+  const won = { status: 'won', turns: 20, records: [{ turns: 5 }, { turns: 7 }, { turns: 8 }], tries: 1 };
+  assert.deepEqual(playerRun(won), { moves: 20, floors: [5, 7, 8], tries: 1 });
+  // Moves after a floor's challenge is complete (gold, stairs) don't count; captures do.
+  const golden = { ...won, records: [{ turns: 5, scored: 3, hits: 1 }, { turns: 7 }, { turns: 8, scored: 8 }] };
+  assert.deepEqual(playerRun(golden), { moves: 19, floors: [4, 7, 8], tries: 1 });
   assert.equal(playerRun({ ...won, status: 'playing' }), null);
   assert.equal(verdict({ moves: 18 }, { moves: 20 }), 'You beat the bot by 2 moves.');
   assert.equal(verdict({ moves: 20 }, { moves: 20 }), 'You matched the bot move for move.');
@@ -52,7 +52,7 @@ test('the result card shows the human-like bot when it cleared every floor, else
   assert.equal(human.moves, summary.par.reduce((a, b) => a + b, 0));
   assert.equal(human.frames[0].turns, 0);
   assert.equal(human.frames.at(-1).status, 'won');
-  assert.ok(Number.isInteger(human.livesLost) && human.livesLost >= 0);
+  assert.ok(Number.isInteger(human.hits) && human.hits >= 0);
   const certified = dungeonBot(daily, { ...summary, runs: [summary.runs[0], null, summary.runs[2]] });
   assert.equal(certified.kind, 'certified');
   assert.deepEqual(certified.floors, botRun(daily).floors);

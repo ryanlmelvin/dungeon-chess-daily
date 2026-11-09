@@ -34,7 +34,7 @@ import { hash, random } from './random.js';
 import { steerRecruit } from './recruit-policy.js';
 
 /** Bump when the bot's play or its runs change, so remembered pars are recomputed. */
-export const HUMAN_BOT_VERSION = 3;
+export const HUMAN_BOT_VERSION = 4;
 /**
  * Seeded runs per floor; par is the median of the ones that succeed. Forty,
  * not five: a five-run reading of the capped human gap a day is aimed with
@@ -72,7 +72,7 @@ export function observe(state, known = new Map()) {
   const recruit = state.items.find((item) => item.type === 'companion');
   return {
     map: state.map, floor: state.floor, objective: state.objective.piece, exitOpen: state.exit.open,
-    player: { x: state.player.x, y: state.player.y, piece: state.player.piece, hp: state.player.hp },
+    player: { x: state.player.x, y: state.player.y, piece: state.player.piece },
     companion: state.companion ? { x: state.companion.x, y: state.companion.y, piece: state.companion.piece } : null,
     recruit: recruit ? { x: recruit.x, y: recruit.y, piece: recruit.piece } : null,
     // A composed floor's hint (src/composer.js) lies on the trick's square, so the bot may step on it.
@@ -116,7 +116,7 @@ export const SURE_HIT = 6;
  * would strike there at once, and for each monster of unknown role the same
  * scaled by the share of its possible roles that would (any role but the
  * floor's target, whose members are all the target species), at most
- * SURE_HIT (a move costs at most one life). 0 is safe. `doubleStep` marks a
+ * SURE_HIT (a move is captured at most once). 0 is safe. `doubleStep` marks a
  * pawn's double step (en passant); `lanes: false` leaves out the red lanes,
  * which move with the monsters.
  */
@@ -415,23 +415,24 @@ export function humanPlayer(start, { seed, recruit = defaultRecruit } = {}) {
 /**
  * Play one floor from `start` (a state at the start of a floor) with one
  * seeded run. Returns whether it completed the floor's challenge (`won`)
- * within `cap` moves without losing its last life, its scored moves there
- * (or those it played before failing), the lives it lost, its actions, and,
- * with `frames`, every position. `recruit` is the recruit policy (humanPlayer).
+ * within `cap` scored moves, its scored moves there, captures included (or
+ * those it played before failing), how often it was captured (`hits`), its
+ * actions, and, with `frames`, every position. `recruit` is the recruit
+ * policy (humanPlayer).
  */
 export function playFloor(start, { seed, recruit = defaultRecruit, cap = HUMAN_MOVE_CAP, frames: keep = false } = {}) {
   const player = humanPlayer(start, { seed, recruit });
-  const floor = start.floor, hp = start.player.hp, actions = [], frames = keep ? [start] : null;
+  const floor = start.floor, actions = [], frames = keep ? [start] : null;
   let state = start;
-  const result = (won, moves = floorScoredMoves(state), livesLost = hp - state.player.hp) => ({ won, moves, livesLost, actions, frames, state });
+  const result = (won, moves = floorScoredMoves(state)) => ({ won, moves, hits: state.hits - start.hits, actions, frames, state });
   while (state.status === 'playing' && state.floor === floor && !state.exit.open && floorScoredMoves(state) < cap) {
     const action = player.choose(state);
     const next = act(state, action);
     if (next === state) return result(false);
     actions.push(action);
     frames?.push(next);
-    // The last life lost starts the whole dungeon over: the run failed here.
-    if (next.events.some((event) => event.type === 'restart')) return result(false, floorScoredMoves(state) + 1, hp);
+    // A piece walled in with no move at all starts the whole dungeon over: the run failed here.
+    if (next.events.some((event) => event.type === 'restart')) return result(false, floorScoredMoves(state) + 1);
     player.saw(state, next);
     state = next;
   }
@@ -482,8 +483,8 @@ export function humanPar(daily, { runs = HUMAN_RUNS, recruit = defaultRecruit } 
   const par = [], shown = [], results = [];
   for (let floor = 0; floor < 3; floor++) {
     const outcomes = Array.from({ length: runs }, (_, run) => {
-      const { won, moves, livesLost } = playFloor(certified.starts[floor], { seed: runSeed(daily, floor, run), recruit });
-      return { won, moves, livesLost };
+      const { won, moves, hits } = playFloor(certified.starts[floor], { seed: runSeed(daily, floor, run), recruit });
+      return { won, moves, hits };
     });
     results.push(outcomes);
     const { par: value, run } = medianRun(outcomes, certified.floors[floor]);
@@ -494,7 +495,7 @@ export function humanPar(daily, { runs = HUMAN_RUNS, recruit = defaultRecruit } 
 
 /**
  * A floor's par and shown run from its runs' outcomes (see humanPar): of the
- * runs with exactly par's moves, the one that lost the fewest lives, then the first.
+ * runs with exactly par's moves, the one captured least, then the first.
  */
 export function medianRun(outcomes, certified) {
   const moves = outcomes.filter((outcome) => outcome.won).map((outcome) => outcome.moves).sort((a, b) => a - b);
@@ -502,7 +503,7 @@ export function medianRun(outcomes, certified) {
   const par = moves[Math.floor((moves.length - 1) / 2)];
   let run = -1;
   outcomes.forEach((outcome, index) => {
-    if (outcome.won && outcome.moves === par && (run < 0 || outcome.livesLost < outcomes[run].livesLost)) run = index;
+    if (outcome.won && outcome.moves === par && (run < 0 || outcome.hits < outcomes[run].hits)) run = index;
   });
   return { par, run };
 }
@@ -511,10 +512,9 @@ export function medianRun(outcomes, certified) {
  * The human-like bot's whole dungeon for the result card: on each floor the
  * run `runs[floor]` played from that floor's standard start, stitched into
  * one list of frames (each floor opens on its standard start; the last frame
- * takes the stairs out). Same shape as botRun(), plus `livesLost`. Null if
- * any floor has no run, a run doesn't complete its floor, or the three lost
- * as many lives as the piece has (as one run it would not have survived).
- * Each run is played again from its seed with the same recruit policy as
+ * takes the stairs out). Same shape as botRun(), plus `hits`, the times it
+ * was captured. Null if any floor has no run or a run doesn't complete its
+ * floor. Each run is played again from its seed with the same recruit policy as
  * humanPar, which is deterministic, so its recruit orders come out the same
  * and nothing but the run numbers needs storing.
  */
@@ -523,15 +523,15 @@ export function humanRun(daily, runs, { recruit = defaultRecruit } = {}) {
   const certified = certifiedFloors(daily);
   if (!certified) return null;
   const frames = [], floors = [];
-  let livesLost = 0, turns = 0;
+  let hits = 0, turns = 0;
   for (let floor = 0; floor < 3; floor++) {
     const result = playFloor(certified.starts[floor], { seed: runSeed(daily, floor, runs[floor]), recruit, frames: true });
     if (!result.won) return null;
     frames.push(...result.frames);
-    floors.push(result.moves); livesLost += result.livesLost; turns += result.actions.length;
+    floors.push(result.moves); hits += result.hits; turns += result.actions.length;
   }
   const out = act(frames.at(-1), { type: 'descend' });
-  if (out.status !== 'won' || livesLost >= certified.starts[0].player.hp) return null;
+  if (out.status !== 'won') return null;
   frames.push(out);
-  return { frames, turns, moves: floors.reduce((sum, moves) => sum + moves, 0), floors, livesLost };
+  return { frames, turns, moves: floors.reduce((sum, moves) => sum + moves, 0), floors, hits };
 }

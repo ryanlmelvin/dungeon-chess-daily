@@ -83,7 +83,7 @@ test('the certified route replays and validates, and older saves carrying stars 
     assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true, `turn ${state.turns}`);
   });
   assert.equal(won.status, 'won');
-  assert.deepEqual(won.records.map((record) => record.scored), route);
+  assert.deepEqual(won.records.map(scoredMoves), route);
   assert.ok(won.records.every((record) => record.stars === undefined));
   assert.equal(validateSave(JSON.parse(JSON.stringify(won)), daily.date), true);
   const legacy = structuredClone(won);
@@ -96,16 +96,18 @@ test('the share card shows each floor\'s moves against par, the floors side by s
   const pars = floorPars(daily);
   const floors = (state) => getShareText(state, pars).split('\n')[1].split('  ');
   const plain = (floor) => floor.replace(/ [\u{1F1EB}\u{1F1F7}🏰🔱]+$/u, '');
+  // A floor's score set to `total`: its scored moves, besides the captures its record keeps.
+  const scoreAs = (record, total) => { record.scored = total - (record.hits ?? 0); };
   assert.equal(getShareText(won, pars, { now: new Date(Date.UTC(2026, 10, 5)) }).split('\n')[0], 'Dungeon Chess Daily · Nov 5 ♟\uFE0E');
   assert.deepEqual(floors(won).map(plain), ['🟥', '⬛', '👑'].map((mark, floor) => `${mark} ${signed(route[floor] - pars[floor])}`));
-  const even = structuredClone(won); even.records.forEach((record, floor) => { record.scored = pars[floor]; });
+  const even = structuredClone(won); even.records.forEach((record, floor) => scoreAs(record, pars[floor]));
   assert.deepEqual(floors(even).map(plain), ['🟥 E', '⬛ E', '👑 E']);
-  const off = structuredClone(even); off.records[0].scored = pars[0] + 3; off.records[2].scored = pars[2] - 1;
+  const off = structuredClone(even); scoreAs(off.records[0], pars[0] + 3); scoreAs(off.records[2], pars[2] - 1);
   assert.deepEqual(floors(off).map(plain), ['🟥 +3', '⬛ E', `👑 ${signed(-1)}`]);
   let playing = null;
   playRoute((state) => { if (!playing && state.floor === 2) playing = structuredClone(state); });
   assert.deepEqual(floors(playing).map(plain), [`🟥 ${signed(route[0] - pars[0])}`, `⬛ ${signed(route[1] - pars[1])}`, '👑 ·']);
-  const wide = structuredClone(won); wide.records.forEach((record, floor) => { record.scored = pars[floor] + 42; });
+  const wide = structuredClone(won); wide.records.forEach((record, floor) => scoreAs(record, pars[floor] + 42));
   assert.deepEqual(floors(wide).map(plain), ['🟥 +42', '⬛ +42', '👑 +42']);
 });
 
@@ -117,29 +119,35 @@ test('moves spent before a floor restart keep counting toward that floor; a new 
   const spent = 3;
   for (const action of actions.slice(0, spent)) state = act(state, action);
   assert.equal(state.floor, 0);
+  // The floor's score so far: those moves, and every capture they took.
+  const first = floorScoredMoves(state);
+  assert.equal(first, spent + state.hits);
   state = resetFloor(state);
-  assert.equal(state.restartedMoves, spent);
+  assert.equal(state.restartedMoves, first);
   assert.equal(state.turns, 0, 'the floor itself starts over');
-  assert.equal(floorScoredMoves(state), spent);
+  assert.equal(state.hits, 0);
+  assert.equal(floorScoredMoves(state), first);
   assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true);
   // A second restart adds that attempt's moves too.
   state = act(state, actions[0]);
-  assert.equal(floorScoredMoves(state), spent + 1);
+  const again = floorScoredMoves(state) - first;
+  assert.equal(again, 1 + state.hits);
   state = resetFloor(state);
-  assert.equal(state.restartedMoves, spent + 1);
+  const before = first + again;
+  assert.equal(state.restartedMoves, before);
   let cleared = null;
   for (const action of actions) {
     state = act(state, action);
     if (!cleared && state.floor === 0 && state.objective.complete) cleared = state;
   }
   assert.equal(state.status, 'won');
-  assert.ok([...(cleared.notes ?? []), cleared.message].some((line) => line.startsWith(`You completed the challenge ✓ in ${route[0] + spent + 1} moves`)));
-  assert.equal(state.records[0].restartedMoves, spent + 1);
-  assert.equal(state.records[0].scored, route[0], 'the attempt that cleared the floor matches the route');
-  assert.deepEqual(state.records.map(scoredMoves), [route[0] + spent + 1, route[1], route[2]]);
-  assert.equal(playerRun(state).moves, route[0] + route[1] + route[2] + spent + 1);
+  assert.ok([...(cleared.notes ?? []), cleared.message].some((line) => line.startsWith(`You completed the challenge ✓ in ${route[0] + before} moves`)));
+  assert.equal(state.records[0].restartedMoves, before);
+  assert.equal(scoredMoves(state.records[0]) - before, route[0], 'the attempt that cleared the floor matches the route');
+  assert.deepEqual(state.records.map(scoredMoves), [route[0] + before, route[1], route[2]]);
+  assert.equal(playerRun(state).moves, route[0] + route[1] + route[2] + before);
   assert.equal(state.restartedMoves, undefined, 'later floors start with no earlier moves');
-  assert.equal(getShareText(state, pars).split('\n')[1].split(' ')[1], signed(route[0] + spent + 1 - pars[0]));
+  assert.equal(getShareText(state, pars).split('\n')[1].split(' ')[1], signed(route[0] + before - pars[0]));
   assert.equal(validateSave(JSON.parse(JSON.stringify(state)), daily.date), true);
   // Older saves carry no count: nothing earlier on the floor. Forged ones are rejected.
   const legacy = structuredClone(state); delete legacy.records[0].restartedMoves;
@@ -151,7 +159,7 @@ test('moves spent before a floor restart keep counting toward that floor; a new 
   }
   const snapshot = createGame(daily); snapshot.floorSnapshot.restartedMoves = 2;
   assert.equal(validateSave(snapshot, daily.date), false);
-  // Losing every life is a new try: the count starts over.
+  // A new try (here an old save's lost run) starts the count over.
   let doomed = createGame(daily);
   for (const action of actions.slice(0, spent)) doomed = act(doomed, action);
   doomed = resetFloor(doomed);
@@ -166,16 +174,17 @@ test('the scored count stops when the challenge is complete; later moves still c
   let done = null;
   playRoute((state) => { if (!done && state.floor === 0 && state.objective.complete) done = state; });
   const frozen = floorScoredMoves(done);
-  assert.equal(frozen, done.turns - done.floorStart.turns);
+  const moves = done.turns - done.floorStart.turns;
+  assert.equal(frozen, moves + done.hits - done.floorStart.hits);
   assert.ok([...(done.notes ?? []), done.message].some((line) => line.startsWith(`You completed the challenge ✓ in ${frozen} move`)));
   const after = act(act(done, { type: 'wait' }), { type: 'wait' });
   assert.equal(after.turns, done.turns + 2, 'waiting still spends moves');
-  assert.equal(floorScoredMoves(after), frozen);
+  assert.equal(floorScoredMoves(after), frozen + after.hits - done.hits, 'the waits are free; a capture still adds one');
   assert.equal(validateSave(JSON.parse(JSON.stringify(after)), daily.date), true);
   const left = act(after, { type: 'descend' });
-  assert.equal(left.records[0].turns, frozen + 2);
-  assert.equal(left.records[0].scored, frozen);
-  assert.equal(scoredMoves(left.records[0]), frozen);
+  assert.equal(left.records[0].turns, moves + 2);
+  assert.equal(left.records[0].scored, moves);
+  assert.equal(scoredMoves(left.records[0]), floorScoredMoves(after));
   // Older records have no scored count: every move counts.
   assert.equal(scoredMoves({ turns: 9 }), 9);
   const legacy = structuredClone(left); delete legacy.records[0].scored; delete legacy.floorSnapshot.records[0].scored;

@@ -14,8 +14,8 @@ const sum = (floors) => floors.reduce((total, moves) => total + moves, 0);
  * Replay the edition's certificate through the production engine. Returns each
  * position the bot passed through (frames[0] is the fresh dungeon), every chess
  * move it played (`turns`), its scored moves per floor and in total (moves
- * until each floor's challenge was complete), and the lives it lost. Returns
- * null if there is no certificate.
+ * until each floor's challenge was complete, captures included), and how often
+ * it was captured (`hits`). Returns null if there is no certificate.
  */
 export function botRun(daily) {
   const actions = daily?.generation?.certificate?.actions;
@@ -30,7 +30,7 @@ export function botRun(daily) {
   }
   if (state.status !== 'won') return null;
   const floors = state.records.map(scoredMoves);
-  return { frames, turns: state.turns, moves: sum(floors), floors, livesLost: frames[0].player.hp - state.player.hp };
+  return { frames, turns: state.turns, moves: sum(floors), floors, hits: state.hits };
 }
 
 /**
@@ -52,7 +52,7 @@ export function playerRun(state) {
   if (state?.status !== 'won' || !Array.isArray(state.records)) return null;
   return {
     moves: sum(state.records.map(scoredMoves)), floors: state.records.map(scoredMoves),
-    livesLost: state.player.maxHp - state.player.hp, tries: state.tries ?? (state.replayUnlocked ? 2 : 1),
+    tries: state.tries ?? (state.replayUnlocked ? 2 : 1),
   };
 }
 

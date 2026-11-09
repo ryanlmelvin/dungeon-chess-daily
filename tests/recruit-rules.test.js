@@ -28,7 +28,7 @@ function scenario(piece = 'rook', { x = 4, y = 6 } = {}) {
   const state = createGame(dailyFor(piece === 'king' ? 'rook' : piece));
   state.awaitingPlayer = false;
   Object.assign(state.player, { x, y, moved: true });
-  if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; state.player.hp = state.player.maxHp = 1; }
+  if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; }
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
   delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
   state.objective = { piece: 'knight', complete: false };

@@ -7,4 +7,3 @@ export const PIECES = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
 // with a warning.
 export const PLAYABLE_PIECES = PIECES.filter((piece) => piece !== 'king');
 export const PIECE_COUNTS = Object.freeze({ pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 });
-export const PIECE_LIVES = PIECE_COUNTS;

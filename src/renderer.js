@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import * as THREE from 'three';
 import { planBoardLayout } from './layout.js';
+import { frozen } from './rules.js';
 import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE, DANGER_HATCH } from './sprites.js';
 
 const VOID = 0x100d12;
@@ -581,7 +582,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       ring.position.set(next.player.x, 0.065, next.player.y);
       hints.add(ring);
     }
-    if (next.powers?.freeze) for (const enemy of next.enemies) cornerMarks(enemy.x, enemy.y, 0xa7dfff, 0.35, 0.1);
+    // Frost marks every frozen monster: all of them, but the king floor's king.
+    for (const enemy of next.enemies) if (frozen(next, enemy)) cornerMarks(enemy.x, enemy.y, 0xa7dfff, 0.35, 0.1);
     // Pinned monsters wear gold corners.
     for (const enemy of next.enemies) if (enemy.pinned) cornerMarks(enemy.x, enemy.y, 0xf2ce80, 0.36, 0.17);
     const danger = next.danger || next.enemies.flatMap((enemy) => enemy.phase === 'aim' ? enemy.intent || [] : []);

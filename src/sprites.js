@@ -726,24 +726,6 @@ export const SPRITES = Object.freeze({
     '.....xxxxxx.....',
     '................',
   ]),
-  'power-life': framed([
-    '................',
-    '......xxxx......',
-    '......xoox......',
-    '......xxxx......',
-    '......xwtx......',
-    '.....xxwtxx.....',
-    '....xwttttttx...',
-    '...xwhrrrrrrx...',
-    '..xwhrrrrrrrrx..',
-    '..xwhrererrrrx..',
-    '..xhrreeerrrrx..',
-    '..xrrrrerrrrrx..',
-    '...xrrrrrrrrx...',
-    '....xxxxxxxx....',
-    '................',
-    '................',
-  ]),
 
   // Each piece keeps its own silhouette even at badge size (about 20 screen
   // pixels): the pawn is short, the bishop a mitre under a ball, the queen a

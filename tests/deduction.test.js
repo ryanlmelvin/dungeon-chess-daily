@@ -20,7 +20,7 @@ const lines = (state) => [...(state.notes ?? []), state.message];
 // Empty the room around a test position: the player's rook at (4, 6).
 function scenario(game = createGame(daily)) {
   const state = structuredClone(game);
-  Object.assign(state.player, { piece: 'rook', x: 4, y: 6, hp: 2, maxHp: 2 });
+  Object.assign(state.player, { piece: 'rook', x: 4, y: 6 });
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
   return state;
 }
@@ -235,9 +235,10 @@ test('hints: the first is free, then identifying the target and the danger map e
   assert.equal(act(two, hint('danger')), two);
   assert.equal(act(two, hint('suspects')), two);
   assert.equal(validateSave(json(two), daily.date), true);
-  // A move afterwards counts on top.
+  // A move afterwards counts on top (this pawn route's first move is also captured).
+  const first = act(state, daily.generation.certificate.actions[0]);
   const moved = act(two, daily.generation.certificate.actions[0]);
-  assert.equal(floorScoredMoves(moved), 3);
+  assert.equal(floorScoredMoves(moved), floorScoredMoves(first) + 2);
 });
 
 test('an unmasked target needs no target hint, and nothing is for sale once the challenge is complete', () => {
@@ -264,11 +265,14 @@ test('paid hints score like moves: restarts keep them, and records, par, the sha
   const pars = botRun(daily).floors;
   const route = daily.generation.certificate.actions;
   let state = act(act(createGame(daily), hint('suspects')), hint('danger'));
-  // A restart keeps the hints (and shows them), counting the moves made before it once.
+  // A restart keeps the hints (and shows them), counting the moves made before it once,
+  // captures included: this pawn route's first move is captured.
+  const first = floorScoredMoves(act(createGame(daily), route[0]));
+  const extra = 2 + first;
   state = act(state, route[0]);
   const restarted = resetFloor(state);
   assert.deepEqual(restarted.hints, ['suspects', 'danger']);
-  assert.equal(restarted.restartedMoves, 1);
+  assert.equal(restarted.restartedMoves, first);
   assert.equal(floorScoredMoves(restarted), floorScoredMoves(state));
   assert.equal(validateSave(json(restarted), daily.date), true);
   state = restarted;
@@ -278,14 +282,14 @@ test('paid hints score like moves: restarts keep them, and records, par, the sha
     if (!cleared && state.objective.complete) cleared = state;
   }
   assert.equal(state.status, 'won');
-  assert.ok(lines(cleared).some((line) => line.startsWith(`You completed the challenge ✓ in ${pars[0] + 3} moves`)), lines(cleared).join(' | '));
+  assert.ok(lines(cleared).some((line) => line.startsWith(`You completed the challenge ✓ in ${pars[0] + extra} moves`)), lines(cleared).join(' | '));
   assert.deepEqual(state.records[0].hints, ['suspects', 'danger']);
   assert.equal(state.records[1].hints, undefined, 'hints are per floor');
-  assert.deepEqual(state.records.map(scoredMoves), [pars[0] + 3, pars[1], pars[2]]);
-  assert.equal(playerRun(state).moves, pars[0] + pars[1] + pars[2] + 3);
+  assert.deepEqual(state.records.map(scoredMoves), [pars[0] + extra, pars[1], pars[2]]);
+  assert.equal(playerRun(state).moves, pars[0] + pars[1] + pars[2] + extra);
   // No new symbols on the share card: the hints are just strokes.
   const card = getShareText(state, pars).split('\n');
-  assert.equal(card[1].split(' ').slice(0, 2).join(' '), '🟥 +3');
+  assert.equal(card[1].split(' ').slice(0, 2).join(' '), `🟥 +${extra}`);
   assert.doesNotMatch(card.join('\n'), /hint|💡|\?/i);
   assert.equal(validateSave(json(state), daily.date), true);
   // Forged or misplaced hints are rejected.
@@ -309,12 +313,10 @@ test('a Take-back undoes the move, not the hint bought since; a new try starts w
   assert.equal(back.turns, 0);
   assert.deepEqual(back.hints, ['suspects']);
   assert.equal(floorScoredMoves(back), 1);
-  // Losing every life starts a new try: fresh counts, fresh hints.
+  // A cornered piece starts a new try: fresh counts, fresh hints.
   const doomed = scenario(act(createGame(daily), hint('suspects')));
-  doomed.player.hp = 1;
-  const rook = doomed.species.find((species) => species.piece === 'rook') ?? doomed.species[3];
-  doomed.enemies = [{ ...monster('r', rook, 4, 0), piece: 'rook', phase: 'aim', target: { x: 4, y: 6 }, intent: Array.from({ length: 6 }, (_, n) => ({ x: 4, y: n + 1 })) }];
-  const lost = act(doomed, move(4, 5));
+  doomed.map[5] = '...###..'; doomed.map[6] = '...#.#..'; doomed.map[7] = '...###..';
+  const lost = act(doomed, { type: 'wait' });
   assert.equal(lost.tries, 2);
   assert.equal(lost.hints, undefined);
   assert.equal(lost.unmasked, undefined);

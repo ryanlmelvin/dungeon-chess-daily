@@ -105,12 +105,12 @@ test('a king may not castle out of, through or into close range; a rook may', ()
   // A rook castling beside its king has no check rule, but lands like any move.
   const rook = scenario('rook'); rook.companion = ally('king', 1, 6); rook.enemies.push(monster('n', 'knight', 3, 4));
   assert.equal(castles(rook).length, 1);
-  const hp = rook.player.hp;
+  const hits = rook.hits;
   const hit = act(rook, move(1, 6));
   assert.deepEqual([hit.companion.x, hit.companion.y], [3, 6]);
   assert.ok(find(hit, 'castle'));
   assert.equal(find(hit, 'close-capture').id, 'n');
-  assert.ok(hit.player.hp < hp || find(hit, 'restart'));
+  assert.equal(hit.hits, hits + 1);
 });
 
 test('black castles after the monsters move, and re-chooses when they block it', () => {

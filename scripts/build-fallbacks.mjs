@@ -60,7 +60,7 @@ if (process.argv.includes('--verify')) {
     if (daily.generation.source !== 'fallback' || daily.playerPiece !== piece) throw new Error(`${key}: runtime fallback mismatch.`);
     checked++;
   }
-  console.log(`Replayed ${checked} fallback certificates: all win without powerups or purchases, losing no lives (pawns at most 4).`);
+  console.log(`Replayed ${checked} fallback certificates: all win without powerups or purchases, never captured (pawns at most 4 times).`);
 } else {
   const budget = Number(process.env.FALLBACK_BUDGET ?? 100_000);
   const bank = {}, best = {}, tries = {};

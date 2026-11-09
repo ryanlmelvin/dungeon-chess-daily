@@ -22,8 +22,8 @@
 // with its orders left out.
 //
 // Part `floors` (recruit matching). On the first --floor-samples dates of
-// each (tier, piece), first candidate only, every floor from its start (full
-// lives, as if the floors before were cleared) with its recruit swapped for
+// each (tier, piece), first candidate only, every floor from its start (never
+// captured, as if the floors before were cleared) with its recruit swapped for
 // each piece in turn (same square), and once removed: the certificate search
 // on that floor alone (--floor-budget transitions) on Auto (the recruit may
 // join on every floor) and steered, and the human-like bot (src/human-bot.js,
@@ -62,10 +62,10 @@ const QUICK_BUDGET = 3000;
 const RECRUITS = ['none', ...PIECES];
 
 /**
- * The start of `floor` on `candidate`'s layout, with every life: the floors
+ * The start of `floor` on `candidate`'s layout, never captured: the floors
  * before it cleared at once, which leaves this floor exactly as a route
  * arriving there finds it (its layout is the seed's, and its monsters count
- * this floor's moves) except for lives and the run's move count.
+ * this floor's moves) except for the run's captures and move count.
  */
 function floorStart(candidate, floor) {
   let state = createGame(candidate);
@@ -151,12 +151,12 @@ function certTask({ date, tier, attempt }) {
     const result = searchCandidate(candidate, SEARCH_BUDGET, { recruit });
     const entry = { status: result.status, explored: result.explored, ms: Math.round(performance.now() - began) };
     if (result.metrics) {
-      const { threatenedDecisions, floorMoves, turns, livesLost } = result.metrics;
-      entry.metrics = { threatenedDecisions, floorMoves, turns, livesLost };
+      const { threatenedDecisions, floorMoves, turns, hits } = result.metrics;
+      entry.metrics = { threatenedDecisions, floorMoves, turns, hits };
       entry.score = result.score;
       // The capped human gap the day's target judges, and its parts per floor (rankFloors treats a candidate without them as unmeasured).
       entry.gap = result.gap; entry.points = result.points; entry.runs = result.runs; entry.pars = result.pars;
-      entry.floors = result.floors.map(({ turns, lives }) => ({ turns, lives }));
+      entry.floors = result.floors.map(({ turns, hits }) => ({ turns, hits }));
       if (recruit === 'steer') {
         entry.recruit = result.metrics.recruit;
         // Would the same moves still win with the recruit left to Auto (every floor's recruit may join)?
@@ -203,7 +203,7 @@ function floorTask({ date, tier, floor, recruit, budget }) {
   for (const [mode, policy] of recruit === 'none' ? [['auto', autoRecruit]] : [['auto', autoRecruit], ['steer', steerRecruit]]) {
     row.human[mode] = Array.from({ length: HUMAN_RUNS }, (_, run) => {
       const result = playFloor(start, { seed: runSeed(candidate, floor, run), recruit: policy, frames: true });
-      return { won: result.won, moves: result.moves, livesLost: result.livesLost, ...recruitStats(result.frames) };
+      return { won: result.won, moves: result.moves, hits: result.hits, ...recruitStats(result.frames) };
     });
   }
   return row;

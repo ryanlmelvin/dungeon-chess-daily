@@ -36,7 +36,7 @@
     </section>
     <section id="game-screen" class="game-screen" hidden aria-label="Dungeon">
       <div id="dungeon" class="dungeon" role="img" aria-label="Tap a square to move your chess piece. Capture enemies by landing on them."></div>
-      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><button id="modifier-status" type="button" hidden></button><span class="life-row"><span id="lives" class="life-markers" role="img" aria-label="Lives remaining"></span><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
+      <div class="game-status"><span id="gold-status"></span><span id="move-status"></span><span id="par-status" hidden></span><button id="modifier-status" type="button" hidden></button><span id="tool-tray" class="tool-tray" hidden><button id="pin-button" class="hint-button tool-button" type="button" aria-pressed="false" hidden>Pin</button><button id="leap-button" class="hint-button tool-button" type="button" hidden>Borrow</button><button id="takeback-button" class="hint-button tool-button" type="button" hidden>Take back</button></span><span id="king-practice-note" class="king-practice-note" hidden>Practice king: this dungeon may not be winnable.</span></div>
       <button id="game-menu-button" class="game-menu-button" aria-label="Pause and open menu">☰</button>
       <p id="objective" class="game-objective"><span id="objective-text"></span><button id="hint-button" class="hint-button" type="button" aria-haspopup="dialog">? Hint</button><span id="targets" class="target-row"><span class="target-label" aria-hidden="true">Targets left</span><span id="target-markers" class="target-markers" role="img" aria-label="Targets left"></span></span></p>
       <button id="wait-button" class="wait-button" type="button" aria-label="Wait: skip your move and let the monsters act" aria-keyshortcuts="Space" hidden>Wait</button>
@@ -59,7 +59,6 @@
       <article class="result-paper">
         <div class="paper-rule"><span>THE EVENING EDITION</span><span id="result-date"></span></div>
         <p id="result-kicker" class="eyebrow"></p><h2 id="result-title"></h2><p id="result-summary"></p>
-        <button id="result-en-passant" class="result-en-passant" type="button" aria-haspopup="dialog" aria-label="What is en passant?" hidden>What?</button>
 
         <div class="share-row">
           <pre id="share-preview"></pre>
@@ -121,7 +120,7 @@
         <ol>
           <li class="guide-quick"><button data-guide-section="quick">Quick start</button></li>
           <li><button data-guide-section="moving">Moving</button></li>
-          <li><button data-guide-section="turns">Turns &amp; lives</button></li>
+          <li><button data-guide-section="turns">Turns</button></li>
           <li><button data-guide-section="gold">Gold &amp; items</button></li>
           <li><button data-guide-section="recruits">Recruits</button></li>
           <li><button data-guide-section="special">Special moves</button></li>
@@ -146,7 +145,7 @@
       <article class="guide-page" data-section="quick" data-title="Danger" hidden>
         <canvas class="guide-wide" data-guide-art="danger" width="400" height="100" role="img" aria-label="A monster’s red attack path reaches the player’s square."></canvas>
         <p>A red path shows where a monster will capture next: step off it.</p>
-        <p>Up close there’s no warning: next to a monster, or a knight’s jump from one, you can be captured at once. Being captured costs a life.</p>
+        <p>Up close there’s no warning: next to a monster, or a knight’s jump from one, you can be captured at once. Being captured adds a move.</p>
       </article>
       <article class="guide-page" data-section="moving" data-title="Moving" hidden>
         <div class="move-diagrams">
@@ -160,19 +159,9 @@
         <p class="move-key"><span><i class="move-dot" aria-hidden="true"></i>Move</span><span><i class="capture-ring" aria-hidden="true"></i>Capture</span></p>
         <p>Tap your piece to see its moves. Pawns may open with two steps, and a pawn on the last rank becomes a queen for the floor.</p>
       </article>
-      <article class="guide-page" data-section="turns" data-title="Turns &amp; lives" hidden>
+      <article class="guide-page" data-section="turns" data-title="Turns" hidden>
         <p>Your daily piece is white: you move, then the monsters. In practice you can play black, and they move first.</p>
         <p>Tap <b>Wait</b> to skip a move. Far-off queens, rooks and bishops step closer and show a red path before they capture.</p>
-        <h3 id="guide-lives-title">Starting lives</h3>
-        <dl class="guide-lives" aria-labelledby="guide-lives-title">
-          <div><dt><canvas data-guide-art="piece-pawn" width="40" height="40" role="img" aria-label="Pawn"></canvas></dt><dd>8</dd></div>
-          <div><dt><canvas data-guide-art="piece-knight" width="40" height="40" role="img" aria-label="Knight"></canvas></dt><dd>2</dd></div>
-          <div><dt><canvas data-guide-art="piece-rook" width="40" height="40" role="img" aria-label="Rook"></canvas></dt><dd>2</dd></div>
-          <div><dt><canvas data-guide-art="piece-bishop" width="40" height="40" role="img" aria-label="Bishop"></canvas></dt><dd>2</dd></div>
-          <div><dt><canvas data-guide-art="piece-queen" width="40" height="40" role="img" aria-label="Queen"></canvas></dt><dd>1</dd></div>
-          <div><dt><canvas data-guide-art="piece-king" width="40" height="40" role="img" aria-label="King, practice only"></canvas></dt><dd>1</dd></div>
-        </dl>
-        <p>Lose them all and you’re back to floor 1.</p>
       </article>
       <article class="guide-page" data-section="turns" data-title="Off-balance" hidden>
         <canvas class="hint-art" data-guide-art="off-balance" width="200" height="200" role="img" aria-label="Animated board: a monster’s red path points at your rook; the rook steps aside, the monster lunges into the empty square and wobbles with stars over its head, and the rook captures it."></canvas>
@@ -186,12 +175,11 @@
       <article class="guide-page" data-section="gold" data-title="Items" hidden>
         <dl class="guide-pickups">
           <div><dt><canvas data-guide-art="power-shield" width="40" height="40" role="img" aria-label="Bone ward"></canvas></dt><dd><b>Bone ward:</b> blocks one capture.</dd></div>
-          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd><b>Frost hourglass:</b> freezes every monster for 3 moves.</dd></div>
+          <div><dt><canvas data-guide-art="power-freeze" width="40" height="40" role="img" aria-label="Frost hourglass"></canvas></dt><dd><b>Frost hourglass:</b> freezes every monster but the king for 3 moves.</dd></div>
           <div><dt><canvas data-guide-art="power-magnet" width="40" height="40" role="img" aria-label="Coin magnet"></canvas></dt><dd><b>Coin magnet:</b> grabs coins within 2 squares.</dd></div>
           <div><dt><canvas data-guide-art="power-pin" width="40" height="40" role="img" aria-label="Pin"></canvas></dt><dd><b>Pin:</b> freezes one monster for 3 moves.</dd></div>
           <div><dt><canvas data-guide-art="power-leap" width="40" height="40" role="img" aria-label="Borrowed move"></canvas></dt><dd><b>Borrowed move:</b> one knight move (a queen move, if you’re a knight).</dd></div>
           <div><dt><canvas data-guide-art="power-takeback" width="40" height="40" role="img" aria-label="Take-back"></canvas></dt><dd><b>Take-back:</b> undo your last move.</dd></div>
-          <div><dt><canvas data-guide-art="power-life" width="40" height="40" role="img" aria-label="Extra life"></canvas></dt><dd><b>Extra life:</b> one more life.</dd></div>
         </dl>
       </article>
       <article class="guide-page" data-section="recruits" data-title="Recruits" hidden>
@@ -232,7 +220,7 @@
       </article>
       <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
         <p>Each story in the paper describes one floor’s target. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
-        <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target.</p>
+        <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target, though a capture still adds one.</p>
         <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Back</button><span id="guide-count" hidden></span><button id="guide-toc">Contents</button><button id="guide-next">Next →</button></nav>

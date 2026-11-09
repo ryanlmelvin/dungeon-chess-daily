@@ -11,7 +11,7 @@
 // Route measurements are evidence of tactical pressure, not shortest-path
 // bounds or a claim that every winning strategy encounters these decisions.
 import { CALIBRATION } from './calibration.js';
-import { PIECE_LIVES } from './pieces.js';
+import { PIECE_COUNTS } from './pieces.js';
 
 // This module imports no game module: src/monster-ai.js reads the tiers while
 // it loads, and the rules import the monsters, so a cycle back here (once
@@ -155,24 +155,24 @@ export function knobsFor(tier, piece) {
  * dangerous the certified route was, not how hard a route is to find.
  *
  *   pressure = threatenedDecisions + 2 × narrowEscapes + turns / 4 + 20 × unsafeShare
- *   score    = pressure / √(lives left at the end of the route)
+ *   score    = pressure / √(slack left at the end of the route)
  *
  * - threatenedDecisions: moves made with a committed attack lane on the board;
  * - narrowEscapes: moves where exactly one legal move was safe;
  * - turns / 4: route length, i.e. how much there is to plan;
  * - unsafeShare: unsafe alternatives / legal alternatives over the route, i.e.
- *   how likely a careless move is to cost a life;
- * - lives left: the piece's lives (pawn 8, rook/knight/bishop 2, queen 1)
- *   minus those the route spent (pawn days only). Spare lives forgive mistakes,
- *   with diminishing returns, hence the square root. Without it a pawn day's
- *   long route would always out-score a queen day that ends at the first slip.
+ *   how likely a careless move is to be captured;
+ * - slack left: the piece's army count (pawn 8, rook/knight/bishop 2, queen 1)
+ *   minus the captures the route took (pawn days only), with diminishing
+ *   returns, hence the square root. It once counted the lives a run started
+ *   with; it stays so every certificate keeps its score.
  * It measures one witnessed route, not a shortest or forced one.
  */
 export function difficultyScore(metrics, piece) {
   const share = metrics.legalAlternatives ? metrics.unsafeAlternatives / metrics.legalAlternatives : 0;
   const pressure = metrics.threatenedDecisions + 2 * metrics.narrowEscapes + metrics.turns / 4 + 20 * share;
-  const livesLeft = Math.max(1, PIECE_LIVES[piece] - metrics.livesLost);
-  return Math.round(pressure / Math.sqrt(livesLeft) * 10) / 10;
+  const slack = Math.max(1, PIECE_COUNTS[piece] - metrics.hits);
+  return Math.round(pressure / Math.sqrt(slack) * 10) / 10;
 }
 
 /**

@@ -8,7 +8,8 @@ tuning knobs until the numbers land. Floors could be composed (the composer,
 below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 
 Status: idea, written 2026-11-09, with lichess measurements added the same
-day. Nothing here is built yet.
+day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
+rules) are built.
 
 ## What we measured
 
@@ -49,9 +50,9 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | --- | --- |
 | Build every floor around a short planted solution (par about 5) | Agreed |
 | Difficulty comes from how hidden the key move is, not from extra moves | Agreed |
-| Each lost life adds 1 move to that floor's score (no new share symbol) | Agreed |
+| No lives: each capture adds 1 move to that floor's score (no new share symbol) | Built (phase 1) |
 | Fix the count giveaway: the other suspect has as many copies as the target | Agreed |
-| The king floor's king ignores frost | Agreed |
+| The king floor's king ignores frost | Built (phase 1) |
 | No knight-against-knight standoffs; Gentle knights are brave if tiers stay | Agreed |
 | Tighter rooms: no open boards a target can flee across | Agreed |
 | Generation fast enough that calibration is no longer a step | Agreed (goal) |
@@ -335,13 +336,14 @@ targeting, floor assembly across candidates, and probably the fallback bank.
 
 These can ship ahead of the composer:
 
-1. **A lost life is a stroke.** Each life lost on a floor adds 1 to that
-   floor's moves, the way paid hints do: in the counter, par, the shop's par
-   line, the bot table and the share card, with no new symbol. Par is
-   recomputed for stored editions, which only reruns the bot.
-2. **The king ignores frost.** The frost hourglass still freezes the guards on
-   the king floor, but the king keeps moving. (Alternative: no hourglass on
-   floor 3.)
+1. **No lives; a capture is a stroke (built).** There are no lives. Each
+   capture of your piece adds 1 to that floor's moves, the way paid hints do,
+   even after its challenge is complete: in the counter, par, the shop's par
+   line, the bot table and the share card, with no new symbol. The shop's
+   extra life is gone. The bot's par and gap feed floor assembly, so every
+   edition was regenerated, not only re-scored.
+2. **The king ignores frost (built).** The frost hourglass still freezes the
+   guards on the king floor, but the king keeps moving.
 3. **Count giveaway.** Built into the composer. It could also be retrofitted
    into today's generator if we want it sooner, at the cost of one more slow
    rebuild.
@@ -368,8 +370,8 @@ Each phase ends with a preview you play before anything long runs or ships.
    players. Load a composed day in the dev preview through a dev-only date
    hook. Measure the replay acceptance rate, time per floor and the bot's miss
    rate. Decision: does it feel like a puzzle?
-1. **Scoring rules.** A lost life is a stroke; the king ignores frost. Small
-   changes: recompute par, preview, ship.
+1. **Scoring rules (built).** No lives, so a capture is a stroke; the king
+   ignores frost. Every edition regenerated, previewed, shipped.
 2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
    Breach days, recruits and powerup placement. Settle par here.
 3. **Switch.** Generate every edition with the composer, regenerate the

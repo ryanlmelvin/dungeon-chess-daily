@@ -33,8 +33,9 @@ Every returned edition has an explicit sequence of legal actions that:
   moves onto the other colour) and the recruit hunting on its own once floor 1
   or 2 is cleared both concern recruits of floors 1 and 2, which routes never
   pick up, so neither changes a certificate.
-- Loses no lives, except that a pawn's route may spend up to 4 of its 8; uses no
-  shield or freeze, and never restarts.
+- Is never captured, except that a pawn's route may be captured up to 4 times
+  (each a move on its floor's score); uses no shield or freeze, and never
+  restarts.
 
 The day's room modifier (`src/modifiers.js`) is part of the game state
 (`state.modifier`, absent on plain days), so the route is found and replayed
@@ -45,15 +46,15 @@ Pawn promotion is an ordinary chess rule and is permitted; the promoted queen
 turns back into a pawn at the stairs. The proof is one replay of the entire run,
 carrying every piece of state from floor to floor. The search finds it one
 floor at a time (see [The search](#the-search)), which is sound because
-nothing that changes how a floor plays carries over from the floor before
-except lives: the piece reverts, and monster tie-breaks and Collapse arrivals
-count the floor's own moves. Black's enemy phase can invalidate
+nothing that changes how a floor plays carries over from the floor before:
+the piece reverts, and monster tie-breaks and Collapse arrivals count the
+floor's own moves. Black's enemy phase can invalidate
 a clicked destination, so a certificate can include a re-selection that costs no
 player move. Extraction also costs no move. Waiting is an ordinary action that
 spends a move; certificates may wait so monsters walk into range. Under
 close-range captures a pawn can only strike from a square next to its target,
-which most targets attack, so pawn routes depend on waiting and on spending
-lives: in a one-year audit, waiting cut pawn days that needed a fallback from
+which most targets attack, so pawn routes depend on waiting and on being
+captured a few times: in a one-year audit, waiting cut pawn days that needed a fallback from
 63 of 75 to 12.
 
 The certificate is for proving a day can be won; par comes from a second bot
@@ -146,22 +147,22 @@ floor is searched from its standard start, the position where the route so
 far arrives, until its challenge is complete; then the route takes the stairs
 at once, which is the only action a cleared floor offers it and costs no
 budget. Three separate searches are enough because nothing that changes a
-floor's play carries over from the floor before but lives: a promoted pawn
-reverts at the stairs, monster tie-breaks and Collapse arrivals count the
-floor's own moves (`monsterTie`), and routes never buy, so gold is irrelevant.
-The run's 50-move cap carries over too.
+floor's play carries over from the floor before: a promoted pawn reverts at
+the stairs, monster tie-breaks and Collapse arrivals count the floor's own
+moves (`monsterTie`), and routes never buy, so gold is irrelevant. The run's
+captures and its 50-move cap carry over.
 
-- **Lives.** A pawn's route may spend 4 of its 8 lives across the run. Each
-  floor's search takes the clear that kept the most lives among those it
-  finds together, and when a later floor can't be certified with the lives
-  left, a floor that spent some is searched again keeping one more. Over 800
-  sampled candidates this lifted pawn days from 63% to 72% solved.
+- **Captures.** A pawn's route may be captured 4 times across the run
+  (`spendableHits`). Each floor's search takes the clear captured least among
+  those it finds together, and when a later floor can't be certified with the
+  captures left, a floor that took some is searched again allowing one fewer.
+  Over 800 sampled candidates this lifted pawn days from 63% to 72% solved.
 - **Identity.** The beam merges positions by `positionKey`: everything that
   decides how a position plays on, with the floor's own move count (tie-breaks,
   Collapse timing) but not the run's, and without coins, which only pay gold.
   Classic comparison monsters hash the run's count, so for them it stays.
-- **Distance.** Positions are ranked by progress, captures, lives and the
-  distance to the nearest target, measured in real moves for the player's
+- **Distance.** Positions are ranked by progress, captures, the times the
+  player was captured and the distance to the nearest target, measured in real moves for the player's
   piece around the room's walls (`targetDistance`, the BFS tables of
   `src/move-tables.js`; a pawn's count includes promoting on the way), not in
   coordinates. A target the piece can never land on counts as 10 moves.
@@ -289,9 +290,10 @@ from a bot that plays like a person, `src/human-bot.js`:
   runs were too few to aim a day with: a five-run reading of the same edition
   scattered by 1.2 (Gentle) to 2.2 (Tough) standard deviations' worth of gap,
   nearly a whole day's step ([Floor assembly](#floor-assembly)). A run succeeds when it completes
-  the challenge within 40 moves (`HUMAN_MOVE_CAP`) without losing its last
-  life; it may lose others, as players do.
-- **Par** is the lower median of the successful runs' scored moves. When every
+  the challenge within 40 scored moves (`HUMAN_MOVE_CAP`), each capture of
+  its piece counting one; it may be captured, as players are.
+- **Par** is the lower median of the successful runs' scored moves, captures
+  included. When every
   run fails, par is the certificate's moves on that floor plus 25%, rounded up,
   and the floor is recorded as failed.
 
@@ -301,11 +303,10 @@ in `src/editions.js` as `par`, with `runs`: the run the result card replays on
 each floor, or `null` where the bot failed. `--verify` checks both. A date past
 the window works par out once on the device (`src/par.js`) and remembers it in
 local storage. The result card's Dungeon Bot is the human-like bot when it
-cleared every floor without losing as many lives as the piece has (its floors
-are then the day's pars), else the certificate. Its replay plays the stored
+cleared every floor (its floors are then the day's pars), else the certificate. Its replay plays the stored
 runs again from their seeds with the same deterministic policy (`humanRun`), so
 its recruit orders come out the same and only the run numbers are stored.
-`HUMAN_BOT_VERSION` (now 3, for the forty runs) keys the pars a device
+`HUMAN_BOT_VERSION` (now 4, since captures score as moves) keys the pars a device
 remembers, so a changed bot works them out again.
 
 **The human gap.** `difficultyScore` measures how dangerous the certificate's
@@ -400,7 +401,7 @@ before it, on floors 1 and 2 (the king floor keeps its royal rules):
 - **Fiendish**: a non-pawn target with a step where it isn't exposed never takes
   one where it is (a filter, like the royal king's `safeKingMoves`), and guards
   bait: 2.5 for a guarded square from which they strike, so they wind up where
-  taking them costs the player a life.
+  taking them gets the player captured.
 
 Pawns keep their chains and only advance, which keeps pawn floors catchable.
 Monsters still can't pass, so one with no safe step must step into reach
@@ -479,7 +480,9 @@ targets, several of them crowning) far too much, and asked for floors of a
 few moves. Generation prefers any assembly whose floors all keep to the cap
 over one closer to the day's target ([Floor assembly](#floor-assembly)); only
 a day none of whose candidates can keep a floor to it takes the shortest it
-has. The same playtest retired the no-freebie rule: from Tricky on, every
+has. Since a capture adds a move, a pawn's floors may run 4 moves longer
+before one counts as long (its route may be captured 4 times); generation
+still aims every floor at 10. The same playtest retired the no-freebie rule: from Tricky on, every
 floor of the certified route had to take at least three moves
 (`minFloorMoves` 3). A floor the route clears in two moves but a person needs
 several to find is exactly the clever short floor the week now climbs with,
@@ -520,7 +523,8 @@ to the short-floor rule.
 A day is made of three floors, and each floor plays the same whatever floors
 come before it: its room, residents, pickups, recruit, ice, Collapse arrivals
 and monster tie-breaks all draw from `<seed>:<kind>:<floor>` streams, the
-player starts every floor on the same square, and only lives carry over. So
+player starts every floor on the same square, and only the run's captures,
+which change no play, carry over. So
 generation no longer keeps one whole candidate. It assembles the day from the
 floors of the candidates it has searched (`rankFloors` in `src/generation.js`):
 
@@ -535,8 +539,8 @@ floors of the candidates it has searched (`rankFloors` in `src/generation.js`):
   and `validateSave` checks them.
 - **The choice.** Floor f may come from any solved candidate (whose route took
   at least the tier's `minFloorMoves` there, none on any tier now).
-  Assemblies whose route would run past `MAX_ROUTE_MOVES`, or lose more than
-  a pawn's 4 spare lives, are ruled out. Short floors come first: an assembly
+  Assemblies whose route would run past `MAX_ROUTE_MOVES`, or be captured more
+  than a pawn's 4 allowed times, are ruled out. Short floors come first: an assembly
   whose every floor's par keeps to `MAX_FLOOR_PAR` beats any other (else the
   one whose floors run past it by the fewest moves in all, so a floor that must
   run long excuses no other). Then an assembly within 0.1 of the
@@ -549,7 +553,8 @@ floors of the candidates it has searched (`rankFloors` in `src/generation.js`):
   some assembly with every floor short enough lands within the tolerance (about six candidates on average,
   sixteen at most). The stitched route, each floor's part of its candidate's
   route in turn, is certified as one whole run by the independent replay; if
-  it fails (it never has outside a pawn's lives), the next assembly is tried.
+  it fails (it never has outside a pawn's capture allowance), the next assembly
+  is tried.
 
 **Why.** Two measurements, taken before the change, on the 738 editions from
 2026-11-01 and on 52 weeks from 2026-11-09 with up to sixteen candidates a day
@@ -565,7 +570,7 @@ itself):
 - **Floors are independent, so assembly multiplies the choice.** Sixteen
   candidates give up to 4,096 days for the search cost of sixteen. Of 60 days
   stitched from floors of three different candidates, 58 certified as one
-  whole run (the other two were pawn days over the 4-life allowance, which the
+  whole run (the other two were pawn days over the 4-capture allowance, which the
   choice now rules out), and the bot's runs on every stitched floor matched
   that floor's runs in its own candidate exactly.
 - Ruled out: the certified route as a noisy baseline. The bot beat the route
@@ -630,12 +635,10 @@ Two safeguards keep floors to the cap the owner set:
   still has a floor over par 14 (`LONG_FLOOR_PAR`), generation searches up to
   sixteen more (`EXTRA_ATTEMPTS`) until it hasn't: a knight's eight-pawn
   floor on 2027-08-07 went from par 21 to 11.
-- **Pawn days measured whole.** A pawn starts each floor with the lives the
-  floors before left it, so a stitched floor can play much longer than it did
-  in its own candidate: a pawn's king floor on 2028-04-09 measured par 9 alone
-  and 25 in its day. Generation measures a pawn's stitched day again and moves
-  to the next assembly if any floor runs past par 10 further than its part
-  said.
+- **Pawn days are no longer measured whole.** That check guarded against
+  lives carrying over: a pawn's king floor on 2028-04-09 once measured par 9
+  alone and 25 in its day. With no lives, a stitched floor plays exactly as in
+  its own candidate.
 
 ### The capped human gap
 
@@ -673,7 +676,7 @@ assembly](#floor-assembly) the ones the targets use now.
 - **Pawn days stay hard, and noisy, for the bot on Auto.** A pawn day's relic
   always sits on the pawn's own file, and the bot never takes it, so its pawn must
   capture its way around and often stands still under attack: about half of
-  its pawn runs fail on floors 1 and 2, mostly by losing all eight lives, and
+  its pawn runs failed on floors 1 and 2, mostly by losing all eight lives (when there were lives), and
   one setting's pawn gap swings from 7 to 25 between dates. On a single
   candidate the pawn's gap averaged 11 to 14 on every Gentle layout tried (13
   on the plain layout), against 1 to 11 for the other pieces, so Gentle pawn
@@ -849,16 +852,15 @@ it is stored on the certificate (`generation.certificate.score`) and reported
 beside the gap by calibration and the measurement scripts:
 
     pressure = threatenedDecisions + 2 × narrowEscapes + turns / 4 + 20 × unsafeShare
-    score    = pressure / √(lives left at the end of the route)
+    score    = pressure / √(slack left at the end of the route)
 
 Threatened decisions are moves made while a committed attack lane is on the
 board, narrow escapes are moves with exactly one safe option, `turns / 4`
 charges for route length, and `unsafeShare` is the fraction of legal
-alternatives along the route that would have lost a life. Lives left are the
-piece's lives (pawn 8, rook/knight/bishop 2, queen 1) minus those the route
-spent: spare lives forgive mistakes, with diminishing returns. Without that
-divisor a pawn's long, life-spending route always out-scores a queen day that
-ends at the first slip. The score's bands were 9–10.5, 10.5–12, 12–13.5,
+alternatives along the route that would have been captured. Slack left is the
+piece's army count (pawn 8, rook/knight/bishop 2, queen 1) minus the captures
+the route took, with diminishing returns. It once counted the lives a run
+started with, and it stays so every certificate keeps its score. The score's bands were 9–10.5, 10.5–12, 12–13.5,
 13.5–15 and 15–16.5.
 
 ### Knobs and calibration
@@ -903,9 +905,9 @@ the cheapest setting per (tier, piece): distance outside the tier's band,
 days outside it, and fallbacks (ten times as costly as a missed day, since
 they repeat a layout) all cost. An exact tie goes to the plainer setting
 (fewest screens, walls, decoys, then scatter and guards), never to whichever
-was measured first, so two runs with the same rows pick the same table. Its rows keep no per-floor move or life
+was measured first, so two runs with the same rows pick the same table. Its rows keep no per-floor move or capture
 counts, so the replay counts each floor's scored moves toward the route's cap
-and leaves a pawn's allowance of lives to generation's own certification.
+and leaves a pawn's capture allowance to generation's own certification.
 With sixteen candidates a date and forty bot runs a floor, measuring from
 scratch costs roughly eight times what it did with four candidates and five
 runs; the incremental run (below) measures again only what a change touches. Search time no longer counts by
@@ -973,10 +975,10 @@ deterministic and every floor's search starts from a position the floors before
 it fix, so what a row needs is known exactly:
 
 - **What a row keeps.** Its route, and every floor's search in the order the
-  search ran them (`searches`: the floor, the lives it had to keep, the
-  expansions it used, a digest of its start position and its route segment, or
-  `null` when it failed). A pawn day may search a floor again keeping more
-  lives, so a row can hold more than three. The digest covers the whole
+  search ran them (`searches`: the floor, the captures it allowed by its end,
+  the expansions it used, a digest of its start position and its route segment,
+  or `null` when it failed). A pawn day may search a floor again allowing fewer
+  captures, so a row can hold more than three. The digest covers the whole
   position but its words, events and version stamps, so a version bump alone
   changes nothing.
 - **Classes.** One per player piece × room modifier × floor × tier (5 × 3 × 3 ×
@@ -1004,14 +1006,14 @@ it fix, so what a row needs is known exactly:
   rules changed there, so the floor is searched again too.
 - **Searches.** Every row is searched again through `findWinningRoute`'s
   `floorSearch` hook, which stands in for a stored floor search wherever the
-  same floor is searched from the same start digest, keeping the same lives,
+  same floor is searched from the same start digest, with the same capture allowance,
   after the same expansions, and the floor's search fingerprint held: it
   replays the stored segment through the route rules instead (and searches if
   that no longer replays). Every other floor search runs. So a change to floor
   3 alone searches floor 3 alone, from the start the stored route reaches, with
   the budget floors 1 and 2 left, which is exactly what the full search does
   there; if that search fails on a pawn day, the full search's own logic goes
-  back to floor 2 keeping more lives, and those searches run too. A floor whose
+  back to floor 2 allowing fewer captures, and those searches run too. A floor whose
   search result changed changes the next floor's start, so that floor is
   searched too.
 - **Bot runs.** A floor's bot runs are kept when its class's search and bot
@@ -1325,7 +1327,7 @@ no orders.
   three moves: a freebie floor for a Manual player that the Auto certificate
   never sees.
 - `floors`: 12 of those dates per (tier, piece), first candidate, every floor
-  from its start with full lives, its recruit swapped for each piece in turn
+  from its start, never captured, its recruit swapped for each piece in turn
   (same square) and once removed; the floor searched alone (6,000 transitions)
   on Auto and steered, and the human-like bot's five runs on Auto and with a
   steering policy (`src/recruit-policy.js`, now the bot's default: keep

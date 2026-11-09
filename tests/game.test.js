@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES, POWERUPS, SHOP_ITEMS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, POWERUPS, SHOP_ITEMS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
@@ -12,7 +12,7 @@ const move = (x, y) => ({ type: 'move', x, y });
 const hasMove = (state, x, y) => legalMoves(state).some((tile) => tile.x === x && tile.y === y);
 function scenario(piece = 'rook', x = 4, y = 6) {
   const state = createGame(daily);
-  state.player = { piece, x, y, hp: 1, maxHp: 1, moved: false };
+  state.player = { piece, x, y, moved: false };
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = []; state.objective = {piece: 'king', complete: false};
   return state;
 }
@@ -113,7 +113,7 @@ test('player move and capture resolve BEFORE the surviving enemy response', () =
   const original = structuredClone(state);
   const next = act(state, move(4, 4));
   assert.deepEqual(state, original, 'the action must not mutate the prior save');
-  assert.equal(next.player.hp, 1, 'a captured monster must never get a response');
+  assert.equal(next.hits, 0, 'a captured monster must never get a response');
   assert.equal(next.enemies.length, 1);
   assert.equal(next.enemies[0].id, 'survivor');
   assert.deepEqual({ x: next.enemies[0].x, y: next.enemies[0].y }, { x: 4, y: 6 });
@@ -128,17 +128,16 @@ test('ranged captures warn for a full turn along their entire firing path', () =
   const state = scenario('king');
   state.enemies = [monster('shooter', 'rook', 4, 0)];
   const warning = act(state, move(4, 5));
-  assert.equal(warning.player.hp, 1, 'a newly announced capture cannot happen immediately');
+  assert.equal(warning.hits, 0, 'a newly announced capture cannot happen immediately');
   assert.equal(warning.enemies[0].phase, 'aim');
   assert.deepEqual({ x: warning.enemies[0].x, y: warning.enemies[0].y }, { x: 4, y: 1 }, 'a distant rook closes in one square first');
   assert.deepEqual(dangerTiles(warning), Array.from({ length: 6 }, (_, i) => ({ x: 4, y: i + 2 })));
-  warning.player.hp = 2; warning.player.maxHp = 2;
   const caught = act(warning, move(4, 4));
   assert.equal(caught.status, 'playing');
-  assert.equal(caught.player.hp, 1);
+  assert.equal(caught.hits, 1);
   assert.deepEqual({ x: caught.enemies[0].x, y: caught.enemies[0].y }, { x: 4, y: 1 }, 'a surviving player holds its square');
   const dodged = act(warning, move(5, 5));
-  assert.equal(dodged.player.hp, 2);
+  assert.equal(dodged.hits, 0);
   assert.deepEqual({ x: dodged.enemies[0].x, y: dodged.enemies[0].y }, { x: 4, y: 5 }, 'an escaped attack commits to the old target');
   assert.deepEqual(dangerTiles(dodged), []);
 });
@@ -147,7 +146,7 @@ test('enemy pawns cannot capture forward, and sequential enemy moves cannot shar
   const pawn = scenario('king', 4, 5);
   pawn.enemies = [monster('pawn', 'pawn', 4, 3)];
   const next = act(pawn, move(4, 4));
-  assert.equal(next.player.hp, 1);
+  assert.equal(next.hits, 0);
   assert.equal(next.enemies[0].phase, 'ready');
   assert.equal(next.enemies[0].y, 3);
   const state = scenario('knight');
@@ -210,8 +209,8 @@ test('moves remain available beyond sixty and final-floor extraction still works
 
 test('share text is a title, one line of floors (marker, moves against par and that floor\'s feats) and the link, without spoilers', () => {
   const state = createGame({ ...daily, playerPiece: 'pawn' });
-  state.status = 'won'; state.floor = 2; state.player.hp = 5;
-  state.records = [{ floor: 0, hp: 8, turns: 8 }, { floor: 1, hp: 6, turns: 12 }, { floor: 2, hp: 5, turns: 9 }];
+  state.status = 'won'; state.floor = 2;
+  state.records = [{ floor: 0, turns: 8 }, { floor: 1, turns: 12 }, { floor: 2, turns: 9 }];
   const url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/';
   const share = (pars) => getShareText(state, pars, { now: new Date(Date.UTC(2026, 10, 7)) });
   const floors = (pars) => share(pars).split('\n')[1];
@@ -256,7 +255,7 @@ test('save validation accepts real chess runs and rejects incompatible or corrup
   assert.equal(validateSave(state, '2026-11-06'), false);
   for (const mutate of [
     (save) => { save.schema = 1; }, (save) => { save.player.piece = 'dragon'; },
-    (save) => { save.player.hp = 99; }, (save) => { save.enemies[0].piece = 'dragon'; },
+    (save) => { save.hits = -1; }, (save) => { save.enemies[0].piece = 'dragon'; },
     (save) => { save.enemies[0].x = 99; }, (save) => { save.items.push(save.items[0]); },
     (save) => { save.records = [{ floor: 0, turns: 1, captures: 0, treasure: 0, grade: 'gold' }]; },
     (save) => { save.status = 'won'; }, (save) => { save.exit.open = true; },
@@ -284,7 +283,7 @@ function assertInitialArmy(state) {
   if (state.startingPiece==='bishop' && state.objective.piece==='bishop') assert.ok(state.enemies.filter((foe) => foe.role==='bishop').every((foe) => (foe.x+foe.y)%2===0));
 }
 
-test('100 consecutive certified dates win without powers, and only pawn routes spend lives, preserving valid saves', () => {
+test('100 consecutive certified dates win without powers, and only pawn routes are captured, preserving valid saves', () => {
   for (let day = 0; day < 100; day++) {
     const issue = getDaily(new Date(Date.UTC(2026, 10, 5 + day)));
     let state = createGame(issue);
@@ -296,7 +295,7 @@ test('100 consecutive certified dates win without powers, and only pawn routes s
       if (next.floor !== state.floor) assertInitialArmy(next);
       state = next;
       assert.equal(validateSave(state, state.date), true, `${state.date} save after move ${state.turns}`);
-      assert.ok(state.player.hp >= state.player.maxHp - (state.startingPiece === 'pawn' ? 4 : 0));
+      assert.ok(state.hits <= (state.startingPiece === 'pawn' ? 4 : 0));
       // Only the king floor's own recruit (a king) may help, under royal rules.
       if (royalRules(state)) assert.ok(state.companion === null || state.companion.basePiece === 'king');
       else assert.equal(state.companion, null);
@@ -390,29 +389,20 @@ test('coins and captures buy powerups between floors without spending a move; in
   assert.ok(POWERUPS.every((entry) => entry.name && entry.description && entry.cost > 0));
 });
 
-test('an extra life costs 10 gold, one per shop, and lasts the rest of the run', () => {
+test('there are no lives to buy: the shop sells no extra life, and no hourglass', () => {
   const state = scenario('rook'); state.enemies = [monster('key', 'king', 4, 2)];
-  state.gold = 9; state.floorSnapshot = structuredClone(state);
+  state.gold = 20; state.floorSnapshot = structuredClone(state);
   const cleared = act(state, move(4, 2));
   assert.equal(cleared.exit.open, true);
-  assert.equal(act(cleared, {type:'buy', id:'life'}), cleared, 'needs 10 gold');
-  cleared.gold = 20;
-  const bought = act(cleared, {type:'buy', id:'life'});
-  assert.equal(bought.gold, 10); assert.equal(bought.turns, cleared.turns);
-  assert.equal(bought.player.hp, cleared.player.hp + 1); assert.equal(bought.player.maxHp, cleared.player.maxHp + 1);
-  assert.deepEqual(bought.purchases, ['life']);
-  assert.equal(act(bought, {type:'buy', id:'life'}), bought, 'one per shop visit');
-  const next = act(bought, {type:'descend'});
-  assert.equal(next.floor, 1); assert.equal(next.player.hp, cleared.player.hp + 1);
-  assert.equal(next.records[0].lives, 1); assert.equal(next.records[0].hp, bought.player.hp);
-  assert.ok(SHOP_ITEMS.some((item) => item.id === 'life') && !SHOP_ITEMS.some((item) => item.id === 'freeze'));
+  assert.equal(act(cleared, {type:'buy', id:'life'}), cleared);
+  assert.ok(!SHOP_ITEMS.some((item) => item.id === 'life' || item.id === 'freeze'));
 });
 
-test('wards block life loss, freeze pauses committed attacks and magnets collect nearby coins', () => {
-  const state = scenario('king',4,5); state.player.hp = 2; state.powers.shield = 1;
+test('wards block a capture, freeze pauses committed attacks and magnets collect nearby coins', () => {
+  const state = scenario('king',4,5); state.powers.shield = 1;
   state.enemies = [monster('rook','rook',4,0,{x:4,y:4})];
   const blocked = act(state, move(4,4));
-  assert.equal(blocked.player.hp,2); assert.equal(blocked.powers.shield,0);
+  assert.equal(blocked.hits,0); assert.equal(blocked.powers.shield,0);
   assert.ok(blocked.events.some((event) => event.type === 'shield'));
   state.powers.freeze = 3;
   const frozen = act(state, move(4,4));
@@ -425,14 +415,15 @@ test('wards block life loss, freeze pauses committed attacks and magnets collect
   assert.deepEqual(collected.items,[{x:7,y:5,type:'coin'}]);
 });
 
-test('piece lives are preserved and exhaustion restarts the same deterministic edition', () => {
-  assert.equal(createGame(daily).player.hp, PIECE_LIVES[daily.playerPiece]);
+test('a cornered piece restarts the same deterministic edition', () => {
   const state = createGame(daily);
-  state.player = {piece:'king',x:4,y:5,hp:1,maxHp:1,moved:true}; state.map = Array(8).fill('........');
-  state.enemies = [monster('rook','rook',4,0,{x:4,y:4})]; state.items=[];
-  const restart = act(state,move(4,4));
-  assert.equal(restart.turns,0); assert.equal(restart.floor,0); assert.equal(restart.captures,0);
-  assert.equal(restart.player.hp,PIECE_LIVES[daily.playerPiece]);
+  // Walled in on every side, the piece has no move at all.
+  state.player = {piece:'king',x:4,y:5,moved:true}; state.map = Array(8).fill('........');
+  state.map[4] = '...###..'; state.map[5] = '...#.#..'; state.map[6] = '...###..';
+  state.enemies = []; state.items=[];
+  const restart = act(state,{type:'wait'});
+  assert.equal(restart.turns,0); assert.equal(restart.floor,0); assert.equal(restart.captures,0); assert.equal(restart.hits,0);
+  assert.equal(restart.player.piece,daily.playerPiece);
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
   assert.equal(restart.tries,2);
@@ -498,11 +489,13 @@ test('restarting a floor returns to its arrival state without costing a life or 
   assert.equal(resetFloor(state), state);
   assert.equal(arrivals.length, 3);
 
-  // Losing lives on a floor is undone; earlier attempts are still counted, never added to.
+  // Captures on a floor keep counting after a restart; earlier attempts are still counted, never added to.
   const hurt = structuredClone(arrivals[1]);
-  hurt.player.hp = 1; hurt.replayUnlocked = true; hurt.tries = 3;
+  hurt.hits += 2; hurt.replayUnlocked = true; hurt.tries = 3;
   const restored = resetFloor(hurt);
-  assert.equal(restored.player.hp, arrivals[1].player.hp);
+  assert.equal(restored.hits, arrivals[1].hits);
+  assert.equal(restored.restartedMoves, floorScoredMoves(hurt));
+  assert.equal(floorScoredMoves(restored), floorScoredMoves(hurt));
   assert.equal(restored.tries, 3);
   assert.equal(restored.replayUnlocked, true);
 
@@ -614,13 +607,12 @@ test('leftover hourglass moves stay on their floor, but hourglasses older saves 
 
 test("a monster's reply keeps the player's line from the same move in notes", () => {
   const state = scenario('rook');
-  state.player.hp = state.player.maxHp = 2;
   const pawn = { ...monster('p', 'pawn', 4, 3), name: 'Pip' };
   const rook = { ...monster('r', 'rook', 0, 3, { x: 4, y: 3 }), name: 'Rooky' };
   state.enemies = [pawn, rook, { ...monster('k', 'king', 7, 0), name: 'Kingo' }];
   const next = act(state, move(4, 3));
   assert.deepEqual(next.notes, ['Pip unmasked — a pawn! +1 gold.']);
-  assert.match(next.message, /^Rooky .*1 life left\.$/);
+  assert.match(next.message, /^Rooky .*\(\+1 move\)\.$/);
   // The next quiet move clears the notes and leaves no empty field behind.
   const quiet = act(next, move(4, 4));
   assert.equal(quiet.notes, undefined);

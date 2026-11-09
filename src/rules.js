@@ -1,6 +1,6 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-import { PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
+import { PIECES, PIECE_COUNTS } from './pieces.js';
 import { hash, hashMore, random } from './random.js';
 import { getRawDaily, shopStock } from './edition.js';
 import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
@@ -8,20 +8,20 @@ import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TAC
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 import { openPromotionFiles } from './difficulty.js';
-export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS, PIECE_LIVES } from './pieces.js';
-export const RULES_VERSION = 10;
+export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
+export const RULES_VERSION = 11;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
 export const POWERUPS = Object.freeze([
   { id: 'shield', name: 'Bone ward', cost: 3, max: 3, description: 'Block one capture. Stacks up to three.' },
   // Found in rooms only: sold in the shop, a stack of frozen moves won the last floor before any monster moved.
-  { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, sold: false, description: 'Freeze every monster for three moves.' },
+  { id: 'freeze', name: 'Frost hourglass', cost: 2, max: 6, sold: false, description: 'Freeze every monster but the king for three moves.' },
   { id: 'magnet', name: 'Coin magnet', cost: 4, max: 1, description: 'Collect coins within two tiles after every move.' },
   // Shop-only tools, used when you choose. None ever lies in a room.
   { id: 'pin', name: 'Pin', cost: 4, max: 1, description: 'Hold one monster still for three moves. Floor 2 only.' },
   { id: 'leap', name: 'Borrowed move', cost: 3, max: 1, description: 'Once, move like a knight (or like a queen if you’re a knight).' },
-  { id: 'takeback', name: 'Take-back', cost: 4, max: 1, description: 'Undo one move, even one that cost a life.' },
+  { id: 'takeback', name: 'Take-back', cost: 4, max: 1, description: 'Undo one move, even one that got you captured.' },
 ]);
 /** How long a pin holds, in monster turns. */
 export const PIN_MOVES = 3;
@@ -31,12 +31,12 @@ const pinned = (foe) => foe.pinned > 0;
 // A monster that lunged and missed is off-balance until the player's next move
 // ends (enemyTurn): like a pinned one, it can't capture at all.
 const offBalance = (foe) => foe.offBalance === true;
+// A Frost hourglass freezes every monster but the king floor's king.
+export const frozen = (state, foe) => state.powers?.freeze > 0 && !(royalRules(state) && foe.role === 'king');
 /** The state a Take-back returns to, or null when there is nothing to take back. */
 export function takebackTarget(state) {
   return state?.status === 'playing' && state.undo?.powers?.takeback > 0 ? state.undo : null;
 }
-/** One life beyond the piece's army count, at most one per shop visit. */
-export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 10, description: 'One more life for this run. Limit 1.' });
 /**
  * A pin works only before the last floor, whose target is the king. Earlier
  * floors never target the king, so a king there is a decoy, and a pin holds it
@@ -44,14 +44,13 @@ export const EXTRA_LIFE = Object.freeze({ id: 'life', name: 'Extra life', cost: 
  */
 export const pinUsable = (state) => state.floor < state.targets.length - 1;
 /** What the between-floor shop offers, in display order. */
-export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)).concat(EXTRA_LIFE));
+export const SHOP_ITEMS = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet'].map((id) => POWERUPS.find((power) => power.id === id)));
 /** The ids the shop after `floor` offers today (src/edition.js). */
 export function shopOffers(state, floor = state.floor) {
   return floor >= 2 ? [] : shopStock(state.date, floor);
 }
 // Older saves may hold hourglasses bought before they left the shop.
-const purchaseCost = (id) => (id === EXTRA_LIFE.id ? EXTRA_LIFE : POWERUPS.find((power) => power.id === id))?.cost;
-const livesBought = (purchases) => purchases.filter((id) => id === EXTRA_LIFE.id).length;
+const purchaseCost = (id) => POWERUPS.find((power) => power.id === id)?.cost;
 export const COMPANIONS = Object.freeze([
   { id: 'companion-pawn', piece: 'pawn', name: 'Pawn', cost: 2 },
   { id: 'companion-knight', piece: 'knight', name: 'Knight', cost: 4 },
@@ -100,7 +99,7 @@ function movesFor(state, unit, enemy = false, attacksOnly = false) {
     if (unit === state.companion && state.player.x === x && state.player.y === y) return 'friend';
     const foe = monsterOn(x, y);
     if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
-    if (enemy && state.player.x === x && state.player.y === y && state.player.hp) return 'opponent';
+    if (enemy && state.player.x === x && state.player.y === y) return 'opponent';
     return null;
   };
   const push = (x, y, requireCapture = false) => {
@@ -134,7 +133,7 @@ function occupantFor(state, unit, enemy, x, y) {
   if (unit === companion && player.x === x && player.y === y) return 'friend';
   const foe = enemyAt(state, x, y);
   if (foe && foe !== unit) return enemy ? 'friend' : 'opponent';
-  if (enemy && player.x === x && player.y === y && player.hp) return 'opponent';
+  if (enemy && player.x === x && player.y === y) return 'opponent';
   return null;
 }
 
@@ -213,8 +212,8 @@ function attackReach(state, unit) {
       }
       if (bit < 32) low |= 1 << bit; else high |= 1 << (bit - 32);
       count++;
-      // The player (with lives) is listed as a capture and ends the line.
-      if (player.x === x && player.y === y && player.hp) break;
+      // The player is listed as a capture and ends the line.
+      if (player.x === x && player.y === y) break;
     }
   }
   return new Reach(low, high, count);
@@ -302,15 +301,15 @@ function enPassantStriker(state, square) {
  * Judged as if the player stood on `square`, with any monster there taken.
  */
 export function closeAttacker(state, square) {
-  if (state.powers?.freeze > 0) return null;
   // Exactly what movesFor would say with the player moved onto `square` (any
   // monster there taken, a companion sharing it not shielding it): a capture
-  // needs a walkable square and a player with lives, and a monster one step
-  // away (or a knight's jump) can't be blocked, so the step's geometry decides.
+  // needs a walkable square, and a monster one step away (or a knight's jump)
+  // can't be blocked, so the step's geometry decides.
   // The hottest check in the certification search: no board copy, no move lists.
-  if (!state.player.hp || !walkable(state, square.x, square.y)) return null;
+  if (!walkable(state, square.x, square.y)) return null;
+  const frost = state.powers?.freeze > 0;
   for (const foe of state.enemies) {
-    if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe)) continue;
+    if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe) || (frost && frozen(state, foe))) continue;
     if (state.composed && guardedFromKing(state, foe, square)) continue;
     const dx = square.x - foe.x, dy = square.y - foe.y;
     const ax = Math.abs(dx), ay = Math.abs(dy);
@@ -359,7 +358,7 @@ export function unreachablePickups(state) {
  * square a remaining target could ever stand on (its own moves with every other
  * unit gone, which only removes blockers; promotion; en passant displacement)
  * is one the player's piece could never land on (its own moves likewise, pawn
- * diagonals always allowed, promotion, a pawn's re-entry after losing a life,
+ * diagonals always allowed, promotion, a pawn's re-entry after being captured,
  * one held Borrowed move at any point). Monsters never move onto the player's
  * square and a recruit on Auto can never take a target, so only the player's
  * own landing captures one. With Manual recruit control (`manualRecruit`) the
@@ -423,7 +422,7 @@ function recruitLandingSquares(state, playerLanding) {
 // Every square a monster could ever occupy, and (for a pawn player) the squares
 // from which the player could take it en passant.
 function targetSquares(state, foe, pawnPlayer) {
-  const board = { ...state, enemies: [], companion: null, player: { ...state.player, x: -9, y: -9, hp: 0 } };
+  const board = { ...state, enemies: [], companion: null, player: { ...state.player, x: -9, y: -9 } };
   const start = { x: foe.x, y: foe.y, piece: foe.piece, moved: Boolean(foe.moved) };
   const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}`;
   const queue = [start];
@@ -469,7 +468,7 @@ function playerLandingSquares(state) {
       if (moved.piece === 'pawn' && moved.y === 0) moved.piece = 'queen';
       enqueue(moved);
     }
-    // A promoted pawn that loses a life starts over as a pawn on (nearly) any open square.
+    // A promoted pawn that is captured starts over as a pawn on (nearly) any open square.
     if (state.startingPiece === 'pawn' && unit.piece === 'queen') {
       for (let y = 1; y <= 6; y++) for (let x = 0; x < 8; x++) if (walkable(state, x, y)) enqueue({ x, y, piece: 'pawn', moved: false, leap: unit.leap });
     }
@@ -510,7 +509,7 @@ function checkmate(state) {
   if (!(state.composed && state.floor === 2) || state.objective.complete) return false;
   const king = state.enemies.find((foe) => foe.role === 'king');
   if (!king || !kingThreatened(state, king) || safeKingMoves(state, king).length) return false;
-  const blocks = state.enemies.some((guard) => guard !== king && !pinned(guard)
+  const blocks = state.enemies.some((guard) => guard !== king && !pinned(guard) && !frozen(state, guard)
     && monsterMoves(state, guard).some((move) => hypothetically(guard, move, () => !kingThreatened(state, king))));
   if (blocks) return false;
   state.events.push({ type: 'checkmate', x: king.x, y: king.y });
@@ -600,7 +599,7 @@ function hypothetically(unit, square, evaluate) {
 function kingThreatened(state, king) {
   const hits = (unit, piece) => capturesAt(state, unit, false, king.x, king.y, piece);
   const borrowed = () => state.powers?.leap > 0 && hits(state.player, borrowedPiece(state));
-  return (state.player.hp > 0 && (hits(state.player) || borrowed())) || Boolean(state.companion && hits(state.companion));
+  return hits(state.player) || borrowed() || Boolean(state.companion && hits(state.companion));
 }
 function monsterMoves(state, foe) {
   return movesFor(state, foe, true).filter((move) => !move.capture && preservesPawnLane(state, move));
@@ -693,10 +692,11 @@ function returnToPawn(state) {
   }
 }
 
-// One capture of the player: a shield absorbs it, otherwise a life is lost.
-// Returns 'shield', 'captured' or 'restart' (the last life ended the run).
-// Events name the attacker (`by`, its square and name) so the board can show
-// which monster struck, even after a restart clears the room.
+// One capture of the player: a shield absorbs it, otherwise it adds a move to
+// the floor's score (`hits`, floorScoredMoves), as a paid hint does, even once
+// the floor's challenge is complete. Returns 'shield' or 'captured'. Events
+// name the attacker (`by`, its square and name) so the board can show which
+// monster struck.
 function capturePlayer(state, foe, close = false, enPassant = false) {
   const attacker = { by: foe.id, from: { x: foe.x, y: foe.y }, name: foe.name, ...(enPassant && { enPassant: true }) };
   const how = enPassant ? 'captured you en passant as you passed it' : close ? 'was guarding that square and captured you at once' : 'captured you along its red path';
@@ -706,19 +706,15 @@ function capturePlayer(state, foe, close = false, enPassant = false) {
     state.message = `${foe.name} ${how}, but your bone ward blocked it.`;
     return 'shield';
   }
-  state.player.hp--;
+  state.hits++;
   const captured = { type: 'player-captured', x: state.player.x, y: state.player.y, amount: 1, ...attacker, close };
-  if (state.player.hp === 0) {
-    restartRun(state, [captured], `${foe.name} ${enPassant ? 'captured you en passant' : how}. Out of lives. Back to the start of today’s dungeon.`);
-    return 'restart';
-  }
   // Clear the committed attack so
   // the monster must give another full turn of warning before a hit.
   foe.phase = 'ready'; foe.intent = []; foe.target = null;
   const demoted = state.startingPiece === 'pawn' && state.player.piece === 'queen';
   if (demoted) returnToPawn(state);
   state.events.push(captured);
-  state.message = `${foe.name} ${how}. ${demoted ? 'Back to a pawn. ' : ''}${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'} left.`;
+  state.message = `${foe.name} ${how} (+1 move).${demoted ? ' Back to a pawn.' : ''}`;
   return 'captured';
 }
 
@@ -741,17 +737,20 @@ function enemyTurn(state, hit = false) {
   // A pinned monster sits out this turn; the pin wears off after PIN_MOVES of them.
   const held = new Set(state.enemies.filter(pinned));
   for (const foe of held) if (!--foe.pinned) { delete foe.pinned; delete foe.held; state.events.push({ type: 'unpin', id: foe.id, x: foe.x, y: foe.y }); }
-  if (state.powers.freeze > 0) { state.powers.freeze--; return; }
   const royal = royalRules(state) ? state.enemies.find((foe) => foe.role === 'king') : null;
+  // Frost holds every monster but the king floor's king, which keeps its turn.
+  const frost = state.powers.freeze > 0;
+  if (frost) state.powers.freeze--;
+  if (frost && !royal) return;
   const order = royal ? [royal, ...state.enemies.filter((foe) => foe !== royal)] : state.enemies;
   const missed = [];
   for (const foe of order) {
-    if (held.has(foe)) continue;
+    if (held.has(foe) || (frost && foe !== royal)) continue;
     if (foe.phase === 'aim') {
       const capture = foe.intent.some((tile) => same(tile, state.player))
         && strikesPlayer(state, foe) && !guardedFromKing(state, foe, state.player);
       if (capture && hit) continue;
-      // A shield keeps the phase going; a lost life ends it.
+      // A shield keeps the phase going; a capture ends it.
       if (capture && capturePlayer(state, foe) === 'shield') continue;
       if (capture) { announceMisses(state, missed); return; }
       // The square a pawn just stepped up from is behind it, off its way forward,
@@ -776,8 +775,8 @@ function enemyTurn(state, hit = false) {
   announceMisses(state, missed);
 }
 
-// One line for the phase's missed lunges, after its other news; none once a
-// lost run has cleared the room.
+// One line for the phase's missed lunges, after its other news; none for a
+// monster no longer in the room.
 function announceMisses(state, missed) {
   const shown = missed.filter((foe) => state.enemies.includes(foe));
   if (!shown.length) return;
@@ -903,8 +902,7 @@ const FIXED_PAWN_FORMATION_SEEDS = new Set([1830689584, 1881022441]);
  * own. A day assembled from the floors of several candidate layouts
  * (src/generation.js) gives each floor its own (`floorSeeds`); otherwise every
  * floor shares the dungeon's seed. Nothing else about a floor depends on the
- * floors before it except lives, so a floor plays the same with any seeds
- * before it.
+ * floors before it, so a floor plays the same with any seeds before it.
  */
 export function floorSeed(state, floor = state.floor) {
   return state.floorSeeds?.[floor] ?? state.dungeonSeed ?? state.seed;
@@ -1083,7 +1081,7 @@ function applyLayoutPressure(state, layoutPiece, targetPiece) {
     for (const foe of decoys.slice(0, state.guards)) {
       const guards = (x, y) => targets.some((victim) => {
         if (foe.piece !== 'knight' && Math.max(Math.abs(victim.x - x), Math.abs(victim.y - y)) !== 1) return false;
-        const board = { ...state, map: Array(8).fill('........'), enemies: [], companion: null, player: { x: victim.x, y: victim.y, hp: 1 } };
+        const board = { ...state, map: Array(8).fill('........'), enemies: [], companion: null, player: { x: victim.x, y: victim.y } };
         return movesFor(board, { ...foe, x, y }, true, true).some((move) => move.x === victim.x && move.y === victim.y);
       });
       // The back four rows only (row 4 holds the coins), never on a pawn's file:
@@ -1150,7 +1148,7 @@ function setFloor(state, kingRecruit = false) {
   state.player.x = 4; state.player.y = 6; state.player.moved = false;
   state.exit = { x: 4, y: 0, open: false };
   state.objective = { piece: state.targets[state.floor], complete: false };
-  state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure };
+  state.floorStart = { turns: state.turns, captures: state.captures, treasure: state.treasure, hits: state.hits };
   delete state.restartedMoves;
   // Hints and unmaskings belong to one floor: its species never live on another.
   delete state.hints; delete state.unmasked;
@@ -1268,10 +1266,10 @@ function trapped(state) {
     && movesFor({ ...state, enemies: [] }, state.player).length === 0;
 }
 
-// Running out of lives or out of moves ends the try: back to floor 1, with one more try on the share card.
+// Running out of moves ends the try: back to floor 1, with one more try on the share card.
 // The certification search (src/fairness.js) throws away every transition
-// that ends the run, so while it runs a run-ending capture only marks the
-// restart instead of building a fresh dungeon (a seventh of its time before).
+// that ends the run, so while it runs a run-ending move only marks the
+// restart instead of building a fresh dungeon.
 let markRestartsOnly = false;
 /** Run `search` with restarts only marked; the search discards them anyway. */
 export function whileSearching(search) {
@@ -1310,8 +1308,9 @@ export function retryLostRun(previous) {
 export function createGame(daily = getRawDaily()) {
   const state = {
     schema: RULES_VERSION, rulesVersion: RULES_VERSION, dungeonSeed: daily.dungeonSeed ?? daily.seed, obstacleBase: daily.obstacleBase ?? 7, decoys: daily.decoys ?? 2, scatter: daily.scatter ?? 0, guards: daily.guards ?? 0, screens: daily.screens ?? 0, difficulty: daily.difficulty ?? 'standard', playerColor: daily.playerColor, legacyTurnOrder: false, awaitingPlayer: false, enPassant: null, date: daily.date, seed: daily.seed, edition: daily.edition, theme: structuredClone(daily.theme), species: structuredClone(daily.species), targets: [...daily.targets],
-    startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, hp: PIECE_LIVES[daily.playerPiece], maxHp: PIECE_LIVES[daily.playerPiece], moved: false },
-    turns: 0, status: 'playing', captures: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 }, records: [], events: [],
+    startingPiece: daily.playerPiece, floor: 0, player: { x: 4, y: 6, piece: daily.playerPiece, moved: false },
+    // `hits`: times a monster captured the player this try, each a move on its floor's score.
+    turns: 0, status: 'playing', captures: 0, hits: 0, paidCaptures: 0, treasure: 0, gold: 0, purchases: [], companionOrders: [], feats: [], powers: { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 }, records: [], events: [],
     message: `${captureGoal(daily.targets[0])}. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
@@ -1339,9 +1338,10 @@ function markFloorStart(state) {
 }
 
 /**
- * Return to the start of the current floor: same lives, gold and powers as on
- * arrival. The moves already spent on the floor keep counting toward its score
- * (`restartedMoves`), so a restart can't wipe a floor's count back to zero.
+ * Return to the start of the current floor: same gold and powers as on
+ * arrival. The moves already spent on the floor, captures included, keep
+ * counting toward its score (`restartedMoves`), so a restart can't wipe a
+ * floor's count back to zero.
  * Paid hints stay paid (and shown), and unmasked species stay unmasked.
  */
 export function resetFloor(previous) {
@@ -1369,11 +1369,10 @@ function keepKnowledge(state, previous) {
 function finishFloor(state) {
   const captures = state.captures - state.floorStart.captures;
   const treasure = state.treasure - state.floorStart.treasure;
-  // A life bought in this floor's shop is in `hp` but wasn't lost or kept on the floor.
-  const lives = livesBought(state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0));
+  const hits = state.hits - state.floorStart.hits;
   const turns = state.turns - state.floorStart.turns;
-  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), captures, treasure, hp: state.player.hp, ...(lives && { lives }), grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
-  // Paid hints are penalty moves on the floor's score (scoredMoves).
+  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), ...(hits && { hits }), captures, treasure, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  // Captures and paid hints are penalty moves on the floor's score (scoredMoves).
   if (state.hints?.length) state.records.at(-1).hints = [...state.hints];
   if (state.floor === 2) {
     state.status = 'won'; state.message = 'Your dispatch made the morning edition.';
@@ -1416,13 +1415,13 @@ function captureEnemy(state, captured, companion = false) {
   if ((captured.role ?? captured.piece) === state.objective.piece) {
     state.objective.complete = !state.enemies.some((foe) => (foe.role ?? foe.piece) === state.objective.piece);
     state.exit.open = state.objective.complete;
-    // The scored move count stops here: gathering gold afterwards is free.
+    // The move count stops here: gathering gold afterwards is free, though a capture still adds a move.
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
     const moves = floorScoredMoves(state);
     // The ✓ echoes the paused move counter; the UI adds par where the run has one.
     // A recruit already at your side hunts on its own from here (huntsAlone).
     if (state.exit.open) { state.message = unmasked; settle(state); }
-    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. Your score is locked in: ${state.floor < 2 ? 'explore for gold or take the stairs' : 'take the stairs to finish'}.${state.floor < 2 && state.companion ? ' Your recruit will automatically watch your back while you explore.' : ''}` : `${unmasked} Keep hunting.`;
+    state.message = state.exit.open ? `You completed the challenge ✓ in ${moves} ${moves === 1 ? 'move' : 'moves'}. ${state.floor < 2 ? 'Explore for gold or take the stairs' : 'Take the stairs to finish'}.${state.floor < 2 && state.companion ? ' Your recruit will automatically watch your back while you explore.' : ''}` : `${unmasked} Keep hunting.`;
   } else state.message = `${unmasked} +1 gold.`;
 }
 
@@ -1680,7 +1679,9 @@ function grantPower(state, id) {
   const power = POWERUPS.find((entry) => entry.id === id);
   state.powers[id] = Math.min(power.max, (state.powers[id] ?? 0) + (id === 'freeze' ? 3 : 1));
   state.events.push({ type: 'powerup', power: id, x: state.player.x, y: state.player.y });
-  state.message = `${power.name} acquired.`;
+  // The king floor's king shrugs off the frost (enemyTurn): say so where it happens.
+  const king = id === 'freeze' && royalRules(state) && state.enemies.some((foe) => foe.role === 'king');
+  state.message = king ? `${power.name} acquired: the guards freeze, but the king keeps moving.` : `${power.name} acquired.`;
 }
 
 // structuredClone's result for plain JSON-like data, faster: objects and arrays
@@ -1786,17 +1787,8 @@ function play(previous, action) {
     if (previous.floor >= 2 || !previous.exit.open || !previous.objective.complete) return previous;
     // Companions are no longer sold; older saves keep the orders they already placed.
     if (COMPANIONS.some((entry) => entry.id === action.id)) return previous;
-    // Only today's four offers are for sale.
+    // Only today's three offers are for sale.
     if (!shopOffers(previous).includes(action.id)) return previous;
-    if (action.id === EXTRA_LIFE.id) {
-      const thisVisit = previous.purchases.slice(previous.floorSnapshot?.purchases?.length ?? 0);
-      if (previous.gold < EXTRA_LIFE.cost || livesBought(thisVisit)) return previous;
-      const state = nextState(previous); delete state.undo; state.events = []; state.gold -= EXTRA_LIFE.cost; state.purchases.push(EXTRA_LIFE.id);
-      state.player.hp++; state.player.maxHp++;
-      state.events.push({ type: 'powerup', power: EXTRA_LIFE.id, x: state.player.x, y: state.player.y });
-      state.message = `Extra life bought. ${state.player.hp} lives.`;
-      return state;
-    }
     const power = POWERUPS.find((entry) => entry.id === action.id);
     if (!power || power.sold === false || (previous.powers[power.id] ?? 0) >= power.max || previous.gold < power.cost || previous.powers[power.id] >= power.max || (power.id === 'magnet' && coinlessFloor(previous, previous.floor + 1))) return previous;
     const state = nextState(previous); delete state.undo; state.events = []; state.gold -= power.cost; state.purchases.push(power.id); grantPower(state, power.id); return state;
@@ -1804,7 +1796,7 @@ function play(previous, action) {
   if (action.type === 'takeback') {
     const target = takebackTarget(previous);
     if (!target) return previous;
-    // Everything the move changed comes back, a lost life or a lost run included.
+    // Everything the move changed comes back, a capture or a lost run included.
     const state = structuredClone(target);
     delete state.notes; delete state.undo;
     state.powers.takeback--;
@@ -1845,7 +1837,6 @@ function play(previous, action) {
     state.events = [{ type: 'wait', x: state.player.x, y: state.player.y }]; state.message = '';
     if (state.playerColor === 'black' && !state.awaitingPlayer) {
       enemyTurn(state);
-      if (state.events.some((event) => event.type === 'restart')) return state;
       settle(state);
     }
     // Waiting is the player's move, so it spends any en passant window.
@@ -1874,8 +1865,6 @@ function play(previous, action) {
     // A castling rook lands beside its king, not on the square clicked.
     const closeBefore = threat(castleBefore ? castleBefore.player.to : iceSlide(state, action) ?? action);
     enemyTurn(state);
-    // Losing the last life starts a fresh run; the old click has no meaning there.
-    if (state.events.some((event) => event.type === 'restart')) return state;
     state.awaitingPlayer = true;
     const relocated = !same(origin, state.player) || origin.piece !== state.player.piece;
     // A destination the enemy phase newly put in close range also earns a fresh choice.
@@ -1975,7 +1964,6 @@ function play(previous, action) {
     const event = { type: 'close-capture', id: close.id, x: close.x, y: close.y, ...(passing && { enPassant: true }) };
     state.events.push(event);
     const hit = capturePlayer(state, close, true, passing);
-    if (hit === 'restart') { state.events.unshift(event); return state; }
     // As in chess, an en passant capture lands on the square the pawn skipped.
     const skipped = { x: state.player.x, y: state.player.y + 1 };
     if (passing && hit === 'captured' && walkable(state, skipped.x, skipped.y) && !enemyAt(state, skipped.x, skipped.y)) relocate(state, close, skipped);
@@ -2013,15 +2001,16 @@ const PIECE_MARKS = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', kni
 /**
  * Moves that count toward a floor's score: those until the challenge was
  * complete, plus those spent on the floor before any Restart this floor, plus
- * one per paid hint. Older records count every move.
+ * one per capture of the player there and one per paid hint. Older records
+ * count every move.
  */
 export function scoredMoves(record) {
   const moves = record?.scored ?? record?.turns;
-  return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) + hintMoves(record) : moves;
+  return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) + (record.hits ?? 0) + hintMoves(record) : moves;
 }
 
-/** Scored moves on the floor in progress, restarts and paid hints included: still counting until the challenge is complete. */
-export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0) + hintMoves(state); }
+/** Scored moves on the floor in progress, restarts, captures and paid hints included: moves count until the challenge is complete, captures always. */
+export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0) + ((state.hits ?? 0) - (state.floorStart.hits ?? 0)) + hintMoves(state); }
 
 /** The edition's full date, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself), as the archive and dialogs name it. */
 export function shareDate(date) {
@@ -2073,11 +2062,11 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     // Each capture may also pay a fork and a combo bonus (tactics.js).
     const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1);
-    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, maxGold)) return false;
-    if (!value.player || !walkable(value, value.player.x, value.player.y) || !Array.isArray(value.purchases) || value.player.maxHp !== PIECE_LIVES[value.startingPiece] + livesBought(value.purchases) || !integer(value.player.hp, 1, value.player.maxHp) || typeof value.player.moved !== 'boolean') return false;
+    // A turn holds at most two captures of the player: the monsters' phase before a black move, then the move's own square.
+    if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.hits, 0, 2 * value.turns) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, maxGold)) return false;
+    if (!value.player || !walkable(value, value.player.x, value.player.y) || !Array.isArray(value.purchases) || typeof value.player.moved !== 'boolean') return false;
     if (value.player.piece !== value.startingPiece && !(value.startingPiece === 'pawn' && value.player.piece === 'queen')) return false;
-    if (value.status === 'playing' && value.player.hp < 1) return false;
-    if (value.status === 'won' && (value.player.hp < 1 || value.floor !== 2 || !value.objective.complete)) return false;
+    if (value.status === 'won' && (value.floor !== 2 || !value.objective.complete)) return false;
     if (!value.powers || !POWERUPS.every((power) => integer(value.powers[power.id] ?? 0, 0, power.max))) return false;
     // A Take-back's saved position must itself be a valid save, one deep.
     if (value.undo !== undefined && !(value.undo && typeof value.undo === 'object' && value.undo.undo === undefined && validateSave(value.undo, date, daily))) return false;
@@ -2122,7 +2111,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       // A reinforcement only enters while its role has room under a chess army's counts.
       if (original !== template.enemies.find((entry) => entry.id === foe.id) && value.enemies.filter((entry) => entry.role === foe.role).length > PIECE_COUNTS[foe.role]) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
-      if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || (same(foe, value.player) && value.player.hp !== 0)) return false;
+      if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || same(foe, value.player)) return false;
       if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
       // Saves from before missed lunges unbalanced a monster have no flag; a missed lunge resets its wind-up.
       if (foe.offBalance !== undefined && !(foe.offBalance === true && foe.phase === 'ready')) return false;
@@ -2145,14 +2134,14 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && (record.lives === undefined || record.lives === 1) && (record.hp === undefined || (integer(record.hp, 1, value.player.maxHp) && record.hp - (record.lives ?? 0) <= (value.records[index - 1]?.hp ?? PIECE_LIVES[value.startingPiece]) && (value.status === 'won' || index < value.records.length - 1 || value.player.hp <= record.hp))) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && (record.hits === undefined || integer(record.hits, 1, 2 * record.turns)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.records.every((record) => record.hints === undefined || validHints(record.hints))) return false;
-    if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure)) return false;
+    if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure) || !integer(value.floorStart.hits, 0, value.hits)) return false;
     if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;
     const previous = value.records.slice(0, value.floor);
-    for (const key of ['turns', 'captures', 'treasure']) if (previous.reduce((sum, record) => sum + record[key], 0) !== value.floorStart[key]) return false;
+    for (const key of ['turns', 'captures', 'treasure', 'hits']) if (previous.reduce((sum, record) => sum + (record[key] ?? 0), 0) !== value.floorStart[key]) return false;
     const coinsLeft = value.items.filter((item) => item.type === 'coin').length;
     if (!validCaveIn(value)) return false;
     // Coins a cave-in buried were never collected.
@@ -2160,12 +2149,12 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
-      if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.restartedMoves !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
+      if (!start || start.floorSnapshot !== undefined || start.replayUnlocked !== undefined || start.tries !== undefined || start.restartedMoves !== undefined || start.status !== 'playing' || start.floor !== value.floor || start.turns !== value.floorStart.turns || start.hits !== value.floorStart.hits || !equal(start.records, value.records.slice(0, value.floor)) || !validateSave(start, date, daily)) return false;
       if (start.hints !== undefined || start.unmasked !== undefined) return false;
     }
     if (value.status === 'won' && (value.restartedMoves ?? 0) !== (value.records[2]?.restartedMoves ?? 0)) return false;
     if (value.status === 'won' && !equal(value.hints, value.records[2]?.hints)) return false;
-    if (value.status === 'won' && ['turns', 'captures', 'treasure'].some((key) => value.records.reduce((sum, record) => sum + record[key], 0) !== value[key])) return false;
+    if (value.status === 'won' && ['turns', 'captures', 'treasure', 'hits'].some((key) => value.records.reduce((sum, record) => sum + (record[key] ?? 0), 0) !== value[key])) return false;
     // Saves from before en passant have no window; a present one names a pawn that just double-stepped.
     const ep = value.enPassant;
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)

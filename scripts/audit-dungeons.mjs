@@ -15,9 +15,9 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start))
   || !(difficulty === 'weekly' || Object.hasOwn(DIFFICULTY_TIERS, difficulty))) {
   throw new Error(`Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days] [weekly|${Object.keys(DIFFICULTY_TIERS).join('|')}]`);
 }
-const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, livesLost: {}, modifiers: {}, scores: {}, maxGenerationMs: 0 };
+const summary = { start, days: count, difficulty, generated: 0, fallback: 0, brokenFallback: 0, longestRoute: 0, promotedRoutes: 0, pieces: {}, colors: {}, fallbacksBy: {}, captured: {}, modifiers: {}, scores: {}, maxGenerationMs: 0 };
 // Per room modifier: certification source and the certified routes' measurements.
-const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, generated: 0, fallback: 0, brokenFallback: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, livesLost: 0, slides: 0, reinforcements: 0 };
+const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, generated: 0, fallback: 0, brokenFallback: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, captured: 0, slides: 0, reinforcements: 0 };
 const tally = (bucket, key) => { bucket[key] = (bucket[key] ?? 0) + 1; };
 for (let offset = 0; offset < count; offset++) {
   const date = new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -51,11 +51,11 @@ for (let offset = 0; offset < count; offset++) {
   }
   entry.days++; entry[daily.generation.source]++;
   entry.totalTurns += state.turns; entry.longestRoute = Math.max(entry.longestRoute, state.turns);
-  entry.threatenedDecisions += proof.metrics.threatenedDecisions; entry.livesLost += proof.metrics.livesLost;
+  entry.threatenedDecisions += proof.metrics.threatenedDecisions; entry.captured += proof.metrics.hits;
   summary[daily.generation.source]++;
   summary.longestRoute = Math.max(summary.longestRoute, state.turns);
   summary.promotedRoutes += Number(proof.metrics.promotion);
-  if (proof.metrics.livesLost) tally(summary.livesLost, `${daily.playerPiece}:${proof.metrics.livesLost}`);
+  if (proof.metrics.hits) tally(summary.captured, `${daily.playerPiece}:${proof.metrics.hits}`);
   summary.pieces[daily.playerPiece] = (summary.pieces[daily.playerPiece] ?? 0) + 1;
   ((summary.scores[daily.difficulty] ??= {})[daily.playerPiece] ??= []).push(daily.generation.certificate.score);
   summary.colors[daily.playerColor] = (summary.colors[daily.playerColor] ?? 0) + 1;

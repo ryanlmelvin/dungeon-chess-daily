@@ -12,7 +12,7 @@ function scenario(piece='king',color='white',x=4,y=6) {
   for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor==='white'){daily=candidate;break;}}
   // Every daily is white; black engine tests flip the color, as practice does.
   const state=createGame(daily);state.playerColor=color;Object.assign(state.player,{x,y});
-  if(piece==='king'){state.startingPiece="king";state.player.piece="king";state.player.hp=state.player.maxHp=1;}
+  if(piece==='king'){state.startingPiece="king";state.player.piece="king";}
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
   // Knights are the challenge here, so the kings and queens below are fair game for a recruit.
   state.objective={piece:'knight',complete:false};return state;
@@ -176,7 +176,7 @@ test('players pass through companions while companions block enemy attack lanes'
   assert.ok(legalMoves(state).some((tile)=>tile.x===4&&tile.y===4));
   assert.ok(legalMoves(state).some((tile)=>tile.x===4&&tile.y===3));
   const next=act(state,move(4,5));
-  assert.equal(next.player.hp,state.player.hp);assert.ok(!next.events.some((event)=>event.type==='player-captured'));
+  assert.equal(next.hits,state.hits);assert.ok(!next.events.some((event)=>event.type==='player-captured'));
 });
 
 test('recruiting a pawn in front of a pawn player does not remove its forward move',()=>{
@@ -198,14 +198,15 @@ test('an immobile recruit may share its recruitment square until the player leav
   const left=act(recruited,move(3,4));assert.equal(left.companion.sharing,false);
 });
 
-test('floor changes and exhausted lives clear the active companion',()=>{
+test('floor changes and a cornered run clear the active companion',()=>{
   const state=scenario('queen');state.objective={piece:'king',complete:false};state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
   const cleared=act(state,move(4,2));const downstairs=act(cleared,{type:'descend'});
   assert.equal(downstairs.floor,1);assert.equal(downstairs.companion,null);
   assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,1);
+  // Walled in on every side, the king has no move at all: the try ends.
   const doomed=scenario('king','white',4,5);doomed.companion=ally('pawn',0,7);
-  doomed.enemies=[{...foe('attacker','rook',4,0),phase:'aim',target:{x:4,y:4},intent:[{x:4,y:4}]}];
-  const reset=act(doomed,move(4,4));
+  doomed.map[4]='...###..';doomed.map[5]='...#.#..';doomed.map[6]='...###..';
+  const reset=act(doomed,{type:'wait'});
   assert.equal(reset.turns,0);assert.equal(reset.companion,null);assert.ok(reset.events.some((event)=>event.type==='restart'));
 });
 

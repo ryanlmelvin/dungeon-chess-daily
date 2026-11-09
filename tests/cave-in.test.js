@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, createGame, legalMoves, resetFloor, scoredMoves, takebackTarget, validateSave } from '../src/rules.js';
+import { act, createGame, floorScoredMoves, legalMoves, resetFloor, scoredMoves, takebackTarget, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { candidateFor } from '../src/generation.js';
 import { knobsFor, tierForDate } from '../src/difficulty.js';
@@ -27,16 +27,16 @@ function room({ difficulty = 'tricky', floor = 0, piece = 'knight', enemies = []
   const state = createGame(getRawDaily('2026-11-09'));
   for (const key of ['modifier', 'ice', 'reinforcements', 'reinforcementsSkipped']) delete state[key];
   Object.assign(state, { difficulty, floor, startingPiece: piece, playerColor: 'white', awaitingPlayer: false, enPassant: null, companion: null });
-  state.player = { piece, x: 4, y: 6, hp: 2, maxHp: 2, moved: true };
+  state.player = { piece, x: 4, y: 6, moved: true };
   state.map = Array(8).fill('........'); state.props = []; state.items = items; state.enemies = enemies;
   state.objective = { piece: 'king', complete: false };
   state.powers.freeze = freeze;
   return state;
 }
 
-// One move or wait past the clear that keeps every life and leaves every
+// One move or wait past the clear that is never captured and leaves every
 // pickup but coins alone: a coin when one is in reach, else a wait, else a move.
-const hurts = (before, after) => after.player.hp < before.player.hp || after.events.some((event) => event.type === 'restart');
+const hurts = (before, after) => after.hits > before.hits || after.events.some((event) => event.type === 'restart');
 function safeStep(state) {
   const on = (tile, coins) => state.items.some((item) => (item.type === 'coin') === coins && item.x === tile.x && item.y === tile.y);
   const moves = legalMoves(state).filter((tile) => !on(tile, false));
@@ -50,8 +50,8 @@ function safeStep(state) {
 
 // A real cave-in, built rather than stored: a real edition's floor 1 (a raw
 // candidate layout, no certificate involved) cleared by the human-like bot,
-// then played on past the clear (coins first, never another pickup, never a
-// lost life) until the ceiling caves in, with gold at risk and the room's
+// then played on past the clear (coins first, never another pickup, never
+// captured) until the ceiling caves in, with gold at risk and the room's
 // powerup still lying there. Certified routes never get this far: they take
 // the stairs right after the clear.
 let built;
@@ -181,10 +181,10 @@ test('after a cave-in the shop still sells with the banked gold, and Pin and Bor
   assert.equal(act(state, { type: 'pin', id: 'd' }), state);
   assert.deepEqual(legalMoves(state), []);
   // The shop at the stairs: buying spends the banked gold, as if you'd taken the stairs.
-  const bought = act(state, { type: 'buy', id: 'life' });
-  assert.deepEqual([bought.gold, bought.player.hp, bought.caveIn.moves], [0, 3, 0]);
+  const bought = act(state, { type: 'buy', id: 'shield' });
+  assert.deepEqual([bought.gold, bought.powers.shield, bought.caveIn.moves], [7, 1, 0]);
   const below = act(bought, descend);
-  assert.deepEqual([below.floor, below.gold, below.player.hp], [1, 0, 3]);
+  assert.deepEqual([below.floor, below.gold, below.powers.shield], [1, 7, 1]);
 });
 
 test('floor 2 caves in too, but the last floor never does', () => {
@@ -220,21 +220,22 @@ test('a Take-back during the countdown rewinds it, even the move that caved it i
   assert.equal(act(rewound, descend).gold, 1);
 });
 
-test('losing the last life during the countdown starts a fresh run with no cave-in; a held Take-back can return', () => {
+test('a capture during the countdown adds a move to the cleared floor; a held Take-back can undo it', () => {
   // Gentle monsters: the rook on the player's row winds up even though the player could take it back (Tricky up won't).
   const state = room({ difficulty: 'gentle', piece: 'rook', freeze: 0, enemies: [foe('k', 'king', 4, 4), foe('r', 'rook', 0, 4)] });
-  state.player.hp = state.player.maxHp = 1;
   const cleared = act(state, move(4, 4));
   assert.ok(cleared.caveIn);
   assert.equal(cleared.enemies.find((entry) => entry.id === 'r').phase, 'aim');
   const armed = structuredClone(cleared); armed.powers.takeback = 1;
-  const lost = act(armed, wait);
-  assert.ok(lost.events.some((event) => event.type === 'restart'));
-  assert.deepEqual([lost.floor, lost.turns, lost.gold, lost.exit.open], [0, 0, 0, false]);
-  assert.equal(lost.caveIn, undefined); assert.equal(lost.dropped, undefined);
-  assert.ok(takebackTarget(lost));
-  const back = act(lost, takeback);
-  assert.deepEqual(back.caveIn, cleared.caveIn); assert.equal(back.player.hp, 1); assert.equal(back.exit.open, true);
+  const hit = act(armed, wait);
+  assert.ok(hit.events.some((event) => event.type === 'player-captured'));
+  assert.deepEqual([hit.status, hit.floor, hit.exit.open], ['playing', 0, true]);
+  assert.equal(hit.caveIn.moves, cleared.caveIn.moves - 1);
+  assert.equal(floorScoredMoves(hit), floorScoredMoves(cleared) + 1, 'the wait is free, the capture is not');
+  assert.ok(takebackTarget(hit));
+  const back = act(hit, takeback);
+  assert.deepEqual(back.caveIn, cleared.caveIn); assert.equal(back.hits, cleared.hits); assert.equal(back.exit.open, true);
+  assert.equal(floorScoredMoves(back), floorScoredMoves(cleared));
 });
 
 test('black, Pin and Collapse days: one tick per completed move, none for free actions', () => {
@@ -271,11 +272,12 @@ test('the shop at the stairs spends banked gold first', () => {
   state.gold = 10;
   state = act(act(act(state, move(3, 4)), move(5, 5)), move(7, 4));
   assert.equal(state.gold, 12); assert.equal(goldAtRisk(state), 2);
-  const bought = act(state, { type: 'buy', id: 'life' });
-  assert.equal(bought.gold, 2); assert.equal(goldAtRisk(bought), 2);
+  let bought = state;
+  for (let ward = 0; ward < 3; ward++) bought = act(bought, { type: 'buy', id: 'shield' });
+  assert.equal(bought.gold, 3); assert.equal(goldAtRisk(bought), 2);
   assert.deepEqual(bought.caveIn, state.caveIn, 'buying is not a move');
   const caved = act(act(act(bought, wait), wait), wait);
-  assert.deepEqual([caved.caveIn.moves, caved.gold, caved.dropped], [0, 0, 2]);
+  assert.deepEqual([caved.caveIn.moves, caved.gold, caved.dropped], [0, 1, 2]);
 });
 
 test('a real floor plays on past its clear into a cave-in, and every frame is a valid save', () => {

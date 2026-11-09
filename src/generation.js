@@ -63,19 +63,19 @@ export function candidateFor(base, tier, knobs, attempt = 0) {
 
 /**
  * A replayable route's floors, in order: each floor's actions (its stairs
- * last), the moves it spent (`turns`, toward MAX_ROUTE_MOVES) and the lives it
- * lost (a pawn's route may lose some).
+ * last), the moves it spent (`turns`, toward MAX_ROUTE_MOVES) and the times
+ * it was captured (`hits`; a pawn's route may be captured a few times).
  */
 export function routeFloors(candidate, actions) {
   let state = createGame(candidate);
   const floors = [];
-  let part = { actions: [], turns: state.turns, hp: state.player.hp };
+  let part = { actions: [], turns: state.turns, hits: state.hits };
   for (const action of actions) {
     const next = act(state, action);
     part.actions.push(action);
     if (action.type === 'descend' && (next.floor !== state.floor || next.status === 'won')) {
-      floors.push({ actions: part.actions, turns: next.turns - part.turns, lives: part.hp - next.player.hp });
-      part = { actions: [], turns: next.turns, hp: next.player.hp };
+      floors.push({ actions: part.actions, turns: next.turns - part.turns, hits: next.hits - part.hits });
+      part = { actions: [], turns: next.turns, hits: next.hits };
     }
     state = next;
   }
@@ -121,8 +121,8 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = '
  * rule; tooling may pass 0 or a floorMinimums list). Floor f may come from any
  * of them; the day's capped human gap is the sum of its floors' (weighted by
  * GAP_FLOOR_WEIGHTS), its route the floors' routes in turn, which must stay
- * within MAX_ROUTE_MOVES and lose at most `lives` lives (a pawn's allowance;
- * the verifier still checks the whole run).
+ * within MAX_ROUTE_MOVES and be captured at most `hits` times (a pawn's
+ * allowance; the verifier still checks the whole run).
  *
  * Order: floors short enough come first: an assembly whose every floor's par
  * keeps to MAX_FLOOR_PAR beats any other (else the one whose floors run past
@@ -137,7 +137,7 @@ export function searchCandidate(candidate, budget = SEARCH_BUDGET, { recruit = '
  * `wholeDays` (tooling that measures each candidate as a whole) keeps only
  * days whose three floors come from one candidate.
  */
-export function rankFloors(found, target, tier, minFloorMoves = DIFFICULTY_TIERS[tier]?.minFloorMoves ?? 0, { lives = 4, wholeDays = false } = {}) {
+export function rankFloors(found, target, tier, minFloorMoves = DIFFICULTY_TIERS[tier]?.minFloorMoves ?? 0, { hits = 4, wholeDays = false } = {}) {
   const solved = found.map((entry, attempt) => ({ entry, attempt })).filter(({ entry }) => entry?.points && entry.metrics && entry.floors?.length === 3);
   if (!solved.length) return [];
   const runs = solved[0].entry.runs;
@@ -145,13 +145,13 @@ export function rankFloors(found, target, tier, minFloorMoves = DIFFICULTY_TIERS
   const options = [0, 1, 2].map((floor) => solved
     .filter(({ entry }) => entry.runs === runs && entry.metrics.floorMoves[floor] >= minimums[floor])
     .map(({ entry, attempt }) => ({
-      attempt, points: (GAP_FLOOR_WEIGHTS[floor] ?? 1) * entry.points[floor], turns: entry.floors[floor].turns, lives: entry.floors[floor].lives, par: entry.pars?.[floor] ?? 0,
+      attempt, points: (GAP_FLOOR_WEIGHTS[floor] ?? 1) * entry.points[floor], turns: entry.floors[floor].turns, hits: entry.floors[floor].hits, par: entry.pars?.[floor] ?? 0,
     })));
   if (options.some((list) => !list.length)) return [];
   const goal = Math.round(target * runs), slack = Math.round(TARGET_TOLERANCE * runs);
   const ranked = [];
   for (const a of options[0]) for (const b of options[1]) for (const c of options[2]) {
-    if (a.turns + b.turns + c.turns > MAX_ROUTE_MOVES || a.lives + b.lives + c.lives > lives) continue;
+    if (a.turns + b.turns + c.turns > MAX_ROUTE_MOVES || a.hits + b.hits + c.hits > hits) continue;
     if (wholeDays && (a.attempt !== b.attempt || b.attempt !== c.attempt)) continue;
     const off = Math.abs(a.points + b.points + c.points - goal), longest = Math.max(a.par, b.par, c.par);
     // Every floor's moves past the cap count, so a floor that must run long doesn't excuse another.
@@ -256,15 +256,6 @@ export function generateDaily(date = new Date(), { difficulty, maxAttempts = ATT
     const actions = floors.flatMap((attempt, floor) => found[attempt].floors[floor].actions);
     const accepted = certify(candidateFor(base, tier, settings, floors), actions, 'generated', floors, settings);
     if (!accepted) continue;
-    kept ??= accepted;
-    // A pawn starts each floor with the lives the floors before left it, so the
-    // bot can find a stitched floor much longer than it did in its own
-    // candidate (one king floor went from par 9 to 25): keep a pawn's day only
-    // if no floor runs past MAX_FLOOR_PAR further than its part said.
-    if (base.playerPiece === 'pawn') {
-      const pars = humanPar(accepted)?.par ?? [];
-      if (pars.some((par, floor) => par > Math.max(MAX_FLOOR_PAR, found[floors[floor]].pars[floor]))) continue;
-    }
     kept = accepted;
     break;
   }

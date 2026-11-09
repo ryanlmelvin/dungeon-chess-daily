@@ -286,12 +286,12 @@ test('an arrival that lands next to you never strikes as it lands: it winds up o
   const queen = landed.enemies.find((entry) => entry.id === 'f0-r0');
   assert.equal(queen.piece, 'queen');
   assert.equal(kingSteps(queen, landed.player), 1);
-  assert.equal(landed.player.hp, state.player.hp);
+  assert.equal(landed.hits, state.hits);
   assert.equal(queen.phase, 'ready');
   assert.ok(!landed.events.some((event) => event.type === 'player-captured' || event.type === 'close-capture'));
   // Its next turn is the warning: it aims at you, and you still have your move to get away.
   const warned = waitHolding(landed);
-  assert.equal(warned.player.hp, state.player.hp);
+  assert.equal(warned.hits, state.hits);
   const aiming = warned.enemies.find((entry) => entry.id === 'f0-r0');
   assert.equal(aiming.phase, 'aim');
   assert.deepEqual(aiming.target, { x: 4, y: 0 });

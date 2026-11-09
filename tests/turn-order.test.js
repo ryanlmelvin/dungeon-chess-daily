@@ -24,7 +24,7 @@ function dailyFor(piece,color) {
 }
 function scenario(piece='rook',color='black',x=4,y=6) {
   const state=createGame(dailyFor(piece,color));state.playerColor=color;
-  if(piece==='king'){state.startingPiece="king";state.player.piece="king";state.player.hp=state.player.maxHp=1;}
+  if(piece==='king'){state.startingPiece="king";state.player.piece="king";}
   Object.assign(state.player,{x,y});
   state.map=Array(8).fill('........'); state.props=[]; state.items=[]; state.enemies=[];
   state.objective={piece:'king',complete:false};
@@ -136,32 +136,30 @@ test('a black promoted pawn hit returns for a fresh selection before any stale m
   const state=scenario('pawn','black',4,0); state.player.piece='queen';
   state.enemies=[monster('attacker','rook',0,0,{x:4,y:0})];
   const next=act(state,move(4,1));
-  assert.equal(next.player.piece,'pawn'); assert.equal(next.player.hp,7);
+  assert.equal(next.player.piece,'pawn'); assert.equal(next.hits,1);
   assert.deepEqual([next.player.x,next.player.y],[4,6]);
   assert.equal(next.turns,0); assert.equal(next.awaitingPlayer,true);
   assert.ok(!next.events.some((event)=>event.type==='move'));
   assert.match(next.message,/replacement pawn/);
   const reply=act(next,move(4,5));
-  assert.equal(reply.turns,1); assert.equal(reply.player.hp,7);
+  assert.equal(reply.turns,1); assert.equal(reply.hits,1);
   assert.ok(!reply.events.some((event)=>event.type==='enemy-phase'));
 });
 
-test('black exhaustion discards the stale click, while shields must already be owned before the enemy phase',()=>{
+test('black: a hit before the move adds a move and the click still plays, while shields must already be owned before the enemy phase',()=>{
   const state=scenario('queen'); state.enemies=[monster('attacker','rook',4,0,{x:4,y:6})];
   state.items=[{x:3,y:6,type:'powerup',power:'shield'}];
-  const reset=act(state,move(3,6));
-  assert.deepEqual(reset.events.map((event)=>event.type),['player-captured','restart']);
-  const black={...getDaily(state.date),playerColor:'black'};
-  const fresh=createCandidate(black);
-  assert.deepEqual({...reset,events:fresh.events,message:fresh.message},{...fresh,replayUnlocked:true,tries:2});
-  assert.equal(reset.playerColor,'black'); assert.equal(reset.awaitingPlayer,false);
-  assert.equal(validateCandidate(reset,reset.date,black),true);
+  const hit=act(state,move(3,6));
+  assert.deepEqual(hit.events.map((event)=>event.type).filter((type)=>['enemy-phase','player-captured','move','powerup'].includes(type)),['enemy-phase','player-captured','move','powerup']);
+  assert.equal(hit.hits,1); assert.equal(hit.turns,1); assert.equal(hit.status,'playing');
+  assert.equal(hit.powers.shield,1,'the ward picked up after the hit is still held');
+  assert.equal(hit.playerColor,'black'); assert.equal(hit.awaitingPlayer,false);
   state.gold=3;
   assert.equal(act(state,{type:'buy',id:'shield'}),state,'no mid-floor shopping');
   // A ward bought between floors carries into this room.
   const ward=structuredClone(state); ward.gold=0; ward.purchases=['shield']; ward.powers.shield=1;
   const protectedMove=act(ward,move(3,6));
-  assert.equal(protectedMove.player.hp,1); assert.equal(protectedMove.turns,1);
+  assert.equal(protectedMove.hits,0); assert.equal(protectedMove.turns,1);
   assert.equal(protectedMove.powers.shield,1,'the old ward blocks first; the destination pickup replaces it afterward');
   assert.ok(protectedMove.events.findIndex((event)=>event.type==='shield')<protectedMove.events.findIndex((event)=>event.type==='powerup'));
 });

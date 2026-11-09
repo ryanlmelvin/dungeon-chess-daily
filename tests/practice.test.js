@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialPiece, legalMoves, PIECES, PIECE_LIVES, unreachablePickups, validateSave } from '../src/game.js';
+import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialPiece, legalMoves, PIECES, unreachablePickups, validateSave } from '../src/game.js';
 import { createGame as createRawGame } from '../src/rules.js';
 import { candidateFor } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
@@ -30,14 +30,14 @@ function nextFloor(previous) {
   return act(state, { type: 'descend' });
 }
 
+// Walled in on every side, the piece has no move at all: the try ends (rules.js trapped).
 function exhaust(previous) {
   const state = structuredClone(previous);
-  state.player.hp = 1; state.player.x = 4; state.player.y = 6;
-  state.map = Array(8).fill('........'); state.props = []; state.items = [];
+  state.player.x = 4; state.player.y = 6;
+  state.map = Array(8).fill('........'); state.map[5] = '...###..'; state.map[6] = '...#.#..'; state.map[7] = '...###..';
+  state.props = []; state.items = []; state.enemies = [];
   state.powers = { shield: 0, freeze: 0, magnet: 0 };
-  state.enemies = [{ id: 'attacker', piece: 'rook', role: 'rook', species: 'bat', name: 'Bat', x: 4, y: 0, moved: true,
-    phase: 'aim', target: { x: 4, y: 6 }, intent: Array.from({ length: 7 }, (_, index) => ({ x: 4, y: index + 1 })) }];
-  return act(state, move(4, 5));
+  return act(state, { type: 'wait' });
 }
 
 test('all twelve choices keep every official room across all floors, fitted to the piece, and validate only as practice', () => {
@@ -59,7 +59,7 @@ test('all twelve choices keep every official room across all floors, fitted to t
           assert.deepEqual(unreachablePickups(practice), [], label);
         }
         assert.equal(practice.startingPiece, piece); assert.equal(practice.playerColor, color);
-        assert.equal(practice.player.maxHp, PIECE_LIVES[piece]); assert.equal(practice.player.hp, PIECE_LIVES[piece]);
+        assert.equal(practice.hits, 0);
         assert.equal(practice.layoutPiece, daily.playerPiece); assert.equal(practice.practice, true);
         assert.equal(validateSave(roundTrip(practice), date, { practice: true }), true);
         assert.equal(validateSave(practice, date), false, 'practice must not enter the official save slot');
@@ -116,7 +116,7 @@ test('practice choices control movement and the selected color controls who acts
   }
 });
 
-test('life exhaustion unlocks selection durably and preserves the chosen piece, color and layout', () => {
+test('a cornered run unlocks selection durably and preserves the chosen piece, color and layout', () => {
   const daily = getDaily('2026-11-05');
   assert.equal(canChoosePiece(createGame(daily)), false);
   const officialReset = exhaust(createGame(daily));
@@ -131,7 +131,7 @@ test('life exhaustion unlocks selection durably and preserves the chosen piece, 
     const practice = createPracticeGame(daily, { piece: 'queen', color });
     const reset = exhaust(practice);
     assert.equal(reset.startingPiece, 'queen'); assert.equal(reset.player.piece, 'queen');
-    assert.equal(reset.playerColor, color); assert.equal(reset.player.hp, 1);
+    assert.equal(reset.playerColor, color); assert.equal(reset.hits, 0);
     assert.equal(reset.practice, true); assert.equal(reset.replayUnlocked, true);
     assert.deepEqual(layout(reset), layout(practice));
     assert.equal(reset.turns, 0); assert.equal(reset.gold, 0); assert.equal(reset.floor, 0);

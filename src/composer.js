@@ -25,7 +25,7 @@
 // coins, the powerup and the recruit lie off the line. Failures reroll the
 // instance (and the dressing) from their own seeded streams, then try the
 // next motif, then a plain walk to walled-in targets, which always composes.
-import { createGame, act, legalMoves, closeAttacker, paperSuspects, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
+import { createGame, act, legalMoves, closeAttacker, floorScoredMoves, paperSuspects, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
 import { getRawDaily } from './edition.js';
 import { tierForDate } from './difficulty.js';
 import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from './fairness.js';
@@ -367,8 +367,8 @@ export function motifsFor(piece, target, floor) {
 }
 
 // The position at the start of `floor` with `room` there: earlier floors are
-// stand-ins whose one target the player takes at once. Nothing but lives
-// carries from floor to floor, and a planted line loses none, so a floor plays
+// stand-ins whose one target the player takes at once. Nothing that changes
+// play carries from floor to floor (a capture only scores), so a floor plays
 // the same here as in its day.
 const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4) };
 const standIn = (piece) => ({ map: Array(8).fill('........'), enemies: [{ ...FIRST_TAKE[piece], cast: 0 }], items: [] });
@@ -402,7 +402,7 @@ function actionsFrom(state) {
  * player's moves and waits, up to `maxDepth` moves: { depth, lines } (at most
  * `cap` lines, all `depth` moves long, each ending with the floor's challenge
  * complete), or null when nothing wins in time. Each step is a certificate
- * step (src/fairness.js routeTransition): no life lost, no power used.
+ * step (src/fairness.js routeTransition): never captured, no power used.
  */
 export function shortestWins(start, maxDepth, cap = 64) {
   for (let depth = 1; depth <= maxDepth; depth++) {
@@ -435,21 +435,20 @@ function walkRoute(start) {
 }
 
 /**
- * The lowest score of a win within `depth` moves that may lose lives, as a
+ * The lowest score of a win within `depth` moves that may be captured, as a
  * player in a hurry might play it (taking a guarded target and absorbing the
- * hit), each lost life counting one move (agreed: a lost life is a stroke).
+ * hit): its scored moves, each capture one more (src/rules.js floorScoredMoves).
  * Lines that end the run, or pick up a powerup or recruit, don't count.
  * Infinity when nothing wins in time.
  */
-export function hastyScore(start, depth, lives = start.player.hp) {
+export function hastyScore(start, depth, from = floorScoredMoves(start)) {
   if (depth <= 0) return Infinity;
   let best = Infinity;
   for (const action of actionsFrom(start)) {
     const next = act(start, action);
     if (next === start || next.status !== 'playing' || next.events.some((event) => event.type === 'restart') || next.floor !== start.floor) continue;
-    const lost = lives - next.player.hp;
-    if (next.exit.open) best = Math.min(best, 1 + lost);
-    else best = Math.min(best, 1 + hastyScore(next, depth - 1, lives));
+    if (next.exit.open) best = Math.min(best, floorScoredMoves(next) - from);
+    else best = Math.min(best, hastyScore(next, depth - 1, from));
   }
   return best;
 }
@@ -463,12 +462,12 @@ function ideaSquare(built, states, line) {
     && states[at + 1].events.some((event) => event.type === 'miss' && same(event, states[at].player)));
   return n >= 0 ? { x: line[n].x, y: line[n].y } : null;
 }
-// Does `line` win from `start`, as played (pickups included), losing no life?
+// Does `line` win from `start`, as played (pickups included), never captured?
 function winsAsPlayed(start, line) {
   let state = start;
   for (const action of line) {
     const next = act(state, action);
-    if (next === state || next.player.hp < state.player.hp || next.events.some((event) => event.type === 'restart')) return false;
+    if (next === state || next.hits > state.hits || next.events.some((event) => event.type === 'restart')) return false;
     state = next;
   }
   return state.exit.open;
@@ -520,7 +519,7 @@ export function botGuard(start, base, floor, par) {
   let short = 0, missed = 0;
   for (let run = 0; run < BOT_GUARD.runs; run++) {
     const result = playFloor(start, { seed: runSeed(base, floor, run) });
-    if (result.won && result.moves + result.livesLost <= BOT_GUARD.short) short++;
+    if (result.won && result.moves <= BOT_GUARD.short) short++;
     if (!result.won || result.moves > par + BOT_GUARD.slack) missed++;
   }
   return { ok: short === 0 && missed <= BOT_GUARD.missShare * BOT_GUARD.runs, short, missed };
@@ -736,14 +735,14 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date) } = {}) 
   const daily = { ...base, composed: floors.map((floor) => floor.room) };
   // The proof runs on the day's twin without its hint powerups (a certified
   // route collects none); picking one up changes no monster's move, so the
-  // real day is then replayed as played, hints collected, losing no life.
+  // real day is then replayed as played, hints collected, never captured.
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
   const proof = verifyWinningRoute(createGame(twin), actions);
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
   let played = createGame(daily);
   for (const action of actions) {
     const next = act(played, action);
-    if (next === played || next.player.hp < played.player.hp) throw new Error(`Composed day ${raw.date} failed as played.`);
+    if (next === played || next.hits > played.hits) throw new Error(`Composed day ${raw.date} failed as played.`);
     played = next;
   }
   if (played.status !== 'won') throw new Error(`Composed day ${raw.date} failed as played.`);

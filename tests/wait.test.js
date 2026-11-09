@@ -43,7 +43,7 @@ test('a monster that walks next to a waiting player only aims, so the player str
   state.enemies = [monster('k', 'king', 4, 4)];
   const next = act(state, wait);
   const king = next.enemies[0];
-  assert.equal(next.player.hp, state.player.hp);
+  assert.equal(next.hits, state.hits);
   assert.equal(king.phase, 'aim');
   assert.ok(legalMoves(next).some((tile) => tile.x === king.x && tile.y === king.y && tile.capture));
 });

@@ -17,7 +17,7 @@ import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
 import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
-import { pinUsable, captureGoal, shareDate, whileSearching, createGame as createComposedGame } from './rules.js';
+import { pinUsable, captureGoal, shareDate, createGame as createComposedGame } from './rules.js';
 import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
 import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
@@ -60,8 +60,8 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${composedDay ? 'composed:' : practice ? 'practice:' : 'daily:'}v10:${daily.date}`;
-const practiceModeKey = () => `${prefix}practice:active:v10:${daily.date}`;
+const key = () => `${prefix}${composedDay ? 'composed:' : practice ? 'practice:' : 'daily:'}v11:${daily.date}`;
+const practiceModeKey = () => `${prefix}practice:active:v11:${daily.date}`;
 function setPracticeMode(enabled) {
   practice = enabled;
   try {
@@ -95,13 +95,6 @@ const pendingOrder = () => (ordering && ordering.from === state ? ordering : nul
 // After an ordered turn the board animates only what followed its preview.
 let shownEvents = null;
 const boardEvents = () => (shownEvents?.state === state ? shownEvents.events : state.events);
-// A capture that ends the run rebuilds floor one at once (rules.js restartRun).
-// Until the Captured page opens, the board stays on the room you fell in and
-// plays that last turn, the attacker's strike and the hit, to the end.
-let fallenBoard = null;
-const fallenView = () => (fallenBoard?.state === state ? fallenBoard.board : null);
-// The strike lands within about half a second; the rest is a beat to take it in.
-const FALL_TO_RESULT_MS = 1500;
 function syncMusic() {
   music.setTrack(screen === 'game' && state?.status === 'playing' && document.visibilityState === 'visible' ? editionTracks(daily.date)[state.floor] : null);
 }
@@ -391,21 +384,8 @@ function parResult(game) {
   const diff = floorScoredMoves(game) - par;
   return diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`;
 }
-function renderLives() {
-  // While the fatal turn plays, the lost last life is already gone.
-  const { hp, maxHp } = (fallenView() ?? state).player;
-  const markers = $('lives');
-  markers.setAttribute('aria-label', `${hp} of ${maxHp} ${state.playerColor} ${state.startingPiece} ${hp === 1 ? 'life' : 'lives'} remaining`);
-  markers.replaceChildren(...Array.from({ length: hp }, () => {
-    const marker = document.createElement('canvas');
-    marker.width = marker.height = SPRITE_SIZE;
-    marker.setAttribute('aria-hidden', 'true');
-    drawSprite(marker.getContext('2d'), `piece-${state.startingPiece}`, 0, 0, 1, piecePalette(state.playerColor));
-    return marker;
-  }));
-}
 // Targets still on the board, drawn in the enemy's color inside a red-edged
-// frame under the objective, so they never read as the player's lives (top left).
+// frame under the objective.
 function renderTargets() {
   const piece = state.objective.piece;
   const left = state.enemies.filter((foe) => (foe.role ?? foe.piece) === piece).length;
@@ -430,7 +410,6 @@ function updateGame() {
   $('practice-label').hidden = !practice;
   // A king can't step beside the monster king and its recruit can't take it.
   $('king-practice-note').hidden = !(practice && state.startingPiece === 'king');
-  renderLives();
   // Gold won since the door opened is at risk until the stairs bank it (src/cave-in.js).
   const risk = goldAtRisk(state);
   $('gold-status').replaceChildren(`${state.gold} gold`, ...(risk ? [Object.assign(document.createElement('span'), { className: 'gold-risk', textContent: ` · ${risk} at risk` })] : []));
@@ -440,7 +419,7 @@ function updateGame() {
   $('move-status').textContent = `${moves} ${moves === 1 ? 'move' : 'moves'}`;
   const paused = state.objective.complete;
   $('move-status').classList.toggle('paused', paused);
-  $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so later moves don’t count' : ''}`);
+  $('move-status').setAttribute('aria-label', `${$('move-status').textContent} on this floor${paused ? ', paused: challenge complete, so only a capture still adds one' : ''}`);
   renderPar();
   renderTools();
   const pinnedFoe = state.enemies.find((foe) => foe.pinned && !foe.held);
@@ -614,7 +593,7 @@ function reserveObjectiveRoom() {
   panel.classList.add('beside');
   panel.style.width = `${Math.round(width)}px`;
   panel.style.left = `${Math.round(board.left - 12 - width)}px`;
-  // Below the gold, moves and lives in the top-left corner.
+  // Below the gold and moves in the top-left corner.
   panel.style.top = `${Math.round(Math.max(board.rowTop, held.statusBottom + 10))}px`;
 }
 // Wait is the one action button off the board. Stacked, it rides in the
@@ -678,8 +657,6 @@ function paintBoard(){
   // Waiting for the recruit's order: your move as played so far, and the recruit's squares.
   const pending=pendingOrder();
   if(pending){renderer?.render({...pending.board,events:pending.shown,danger:dangerTiles(pending.board),legalMoves:[],showMoves:false,recruitMoves:pending.moves,recruitHold:!pending.hop,cursor,pinning:false,...hintMarks(pending.board)});return;}
-  const fallen=fallenView();
-  if(fallen){renderer?.render({...fallen,danger:dangerTiles(fallen),legalMoves:[],showMoves:false,cursor:null,pinning:false});return;}
   renderer?.render({...state,events:boardEvents(),danger:dangerTiles(state),legalMoves:legalMoves(state),showMoves:showMoves&&!pinning,cursor,pinning,...hintMarks(state)});
 }
 // Paid hints stay on the board for the rest of the floor: rings around the
@@ -735,8 +712,6 @@ function enterGame() {
   refreshFromOtherWindow();
   if (state?.status && state.status !== 'playing') return showResult();
   if (deathTakeback()) return showDeath();
-  // Back on the board before the Captured page opened: the fresh run, as saved.
-  fallenBoard = null;
   switchScreen('game');
   if (!ensureRenderer()) return;
   if (!state) { state = newGame(); save(); }
@@ -962,7 +937,6 @@ function showTacticCallout(events) {
   calloutTimer = setTimeout(() => { callout.hidden = true; }, 1600);
 }
 $('special-move-dialog').addEventListener('close', () => cancelAnimationFrame(specialMoveFrame));
-$('result-en-passant').addEventListener('click', () => openSpecialMove('en-passant', 'enemy'));
 $('modifier-status').addEventListener('click', () => { if (state) notify(modifierOf(state).explain); });
 // The rubble comes down (renderer.js), then the shop opens with what the
 // cave-in cost: the rubble carried the player down the stairs (src/cave-in.js
@@ -1007,10 +981,6 @@ function takeAction(action) {
   // The preview already played this turn up to the recruit's phase; the board animates the rest.
   const continues = pending && JSON.stringify(next.events.slice(0, pending.phase)) === JSON.stringify(pending.shown);
   shownEvents = continues ? { state: next, events: next.events.slice(pending.phase) } : null;
-  // The same turn with the restart only marked: the board as you were captured on it.
-  const fell = next.events.some(event => event.type === 'restart') && next.events.some(event => event.type === 'player-captured');
-  const fallen = fell ? whileSearching(() => act(state, action)) : null;
-  fallenBoard = fallen ? { state: next, board: { ...fallen, events: fallen.events.slice(continues ? pending.phase : 0).filter(event => event.type !== 'restart') } } : null;
   state = next;showMoves=state.awaitingPlayer;cursor=null;save();updateGame();playSound(boardEvents());
   const caveIn = state.events.find(event => event.type === 'cave-in');
   if (caveIn) {
@@ -1019,7 +989,7 @@ function takeAction(action) {
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
-  const animationTime = fallenBoard ? FALL_TO_RESULT_MS : special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
   // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
   const explainAt = special === 'cave-in' ? 1100 : animationTime;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
@@ -1130,17 +1100,14 @@ function renderShop() {
       });
       $('shop-items').append(button);
     }
-    const life = power.id === 'life';
-    // Lives bought since this floor began: the shop is the only place to buy one.
-    const lifeThisVisit = life && state.purchases.slice(state.floorSnapshot?.purchases?.length ?? 0).includes('life');
-    const owned = life ? 0 : state.powers[power.id];
-    // Each shop shows only the day's four offers (src/edition.js).
+    const owned = state.powers[power.id];
+    // Each shop shows only the day's three offers (src/edition.js).
     button.hidden = !shopOffers(state).includes(power.id);
-    button.disabled = state.gold < power.cost || (life ? lifeThisVisit : owned >= power.max);
+    button.disabled = state.gold < power.cost || owned >= power.max;
     button.querySelector('strong').textContent = `${power.name} · ${power.cost} gold`;
     // What the player already has, worded so it never reads as the shop's stock.
     const held = power.id === 'magnet' ? 'already active' : `you hold ${owned}`;
-    button.querySelector('span').textContent = `${power.description}${life ? ` (you have ${state.player.hp} ${state.player.hp === 1 ? 'life' : 'lives'})` : owned ? ` (${held})` : ''}`;
+    button.querySelector('span').textContent = `${power.description}${owned ? ` (${held})` : ''}`;
   }
 }
 // The shop is offered once a floor is cleared, as the player takes its stairs.
@@ -1177,8 +1144,7 @@ function showResult() {
   $('result-kicker').hidden=!runLabel();
   $('result-kicker').textContent=`${runLabel()} EDITION`;
   $('result-title').textContent=won?'You made the headlines.':'Some stories bury the lead.';
-  $('result-en-passant').hidden = true;
-  $('result-summary').textContent=won?'Your story lives to see another day.':state.player.hp===0?`Captured on floor ${state.floor+1}. Tomorrow is another story.`:state.message;
+  $('result-summary').textContent=won?'Your story lives to see another day.':state.message;
   if (state.status === 'lost') return showDeath();
   showResultActions(true);
   const shareable = isOfficialPiece(state, daily);
@@ -1203,22 +1169,17 @@ function showResultActions(finished) {
   $('result-actions').hidden = !finished;
   if (!finished) { $('share-preview').hidden = true; $('share-button').hidden = true; }
 }
-// A death ends the try, so the only way forward is another one.
+// A cornered piece ends the try, so the only way forward is another one.
 function showDeath() {
-  fallenBoard = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
   showResultActions(false);
   $('result-date').textContent=paperDate(daily.date);
   $('result-kicker').hidden=!runLabel();
   $('result-kicker').textContent=`${runLabel()} EDITION`;
-  const trapped = state.status === 'lost' || state.message.startsWith('No legal moves');
-  $('result-title').textContent=trapped?'Cornered.':'Captured.';
-  const fatal = state.events.find(event => event.type === 'player-captured' && event.name);
-  const culprit = !fatal ? '' : fatal.enPassant ? `${fatal.name} captured you en passant as your pawn advanced past it. ` : `${fatal.name} ${fatal.close ? 'was guarding the square you moved to and captured you' : 'captured you along its red path'}. `;
-  $('result-en-passant').hidden = trapped || !fatal?.enPassant;
-  $('result-summary').textContent=trapped?'No legal moves left. The dungeon has the last word — this time.':`${culprit}Out of lives. The story isn’t over yet.`;
-  $('next-edition').textContent=deathTakeback()?'Out of lives: take back that move, or try again from floor one.':'Out of lives: try again from floor one.';
+  $('result-title').textContent='Cornered.';
+  $('result-summary').textContent='No legal moves left. The dungeon has the last word — this time.';
+  $('next-edition').textContent=deathTakeback()?'Take back that move, or try again from floor one.':'Try again from floor one.';
   $(deathTakeback() ? 'death-takeback-button' : 'retry-button').focus({preventScroll:true});
 }
 $('death-takeback-button').addEventListener('click',()=>{
@@ -1304,7 +1265,7 @@ $('confirm-dialog').addEventListener('close', () => {
   const resolve = confirmResolve; confirmResolve = null;
   resolve?.(false);
 });
-// Voluntary resets cost nothing: no life and no extra try.
+// Voluntary resets cost nothing: no extra try.
 function startOver(next, message) {
   $('menu-dialog').close();
   hopelessShown = null;
@@ -1327,14 +1288,14 @@ async function offerHopelessRestart() {
   const floor = state.floor + 1;
   const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
   const who = recruitManual && (state.companion || waitingRecruit(state)) ? 'Neither your piece nor your recruit can ever' : 'Your piece can never';
-  if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
+  if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${floor} restarted.`);
 }
 $('reset-floor-button').addEventListener('click', async () => {
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
-  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the lives, gold and powers you arrived with. Moves already made here still count toward this floor’s score.', `Restart floor ${state.floor + 1}`)) return;
+  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the gold and powers you arrived with. Moves already made here still count toward this floor’s score.', `Restart floor ${state.floor + 1}`)) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${state.floor + 1} restarted.`);
@@ -1479,7 +1440,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:v10:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice)saves[`daily:v11:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);progressStatus('Backup download requested.');
 });
@@ -1559,7 +1520,7 @@ getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`
 // Practice wins never reveal it, so it cannot spoil a daily run still in play.
 const BOT_NOTES = {
   human: 'This bot plays like a careful player: it sees only what you see, steers its recruit, and never goes out of its way for a powerup. Its moves on each floor set that floor’s par.',
-  certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, no lost lives (pawn days may spend four), no ally but the floor 3 recruit.',
+  certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, never captured (pawn days at most four times), no ally but the floor 3 recruit.',
 };
 let botCache = null;
 function currentBot() {
@@ -1578,7 +1539,6 @@ function renderBotComparison() {
   const columns = [
     ...bot.floors.map((moves, index) => [`F${index + 1}`, `Floor ${index + 1} moves`, you.floors[index] ?? '–', moves]),
     ['Total', 'Total moves', you.moves, bot.moves, 'bot-total'],
-    ['Lives lost', 'Lives lost', you.livesLost, bot.livesLost],
     ...(you.tries > 1 ? [['Tries', 'Tries', you.tries, 1]] : []),
   ];
   const cell = (tag, text, className) => { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; };
@@ -1612,7 +1572,7 @@ function replayFrame() {
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${moves}${frame.exit?.open ? ' ✓' : ''} of ${total}`;
   // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose|take the stairs)\b|^\s*Your score\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed').replace(/\bYou dropped\b/, 'The bot dropped') : '';
+  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose|take the stairs)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed').replace(/\bYou dropped\b/, 'The bot dropped') : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
   // Drop the live game's placement (an inline top plus the replay's own

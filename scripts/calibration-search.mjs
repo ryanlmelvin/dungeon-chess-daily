@@ -32,7 +32,7 @@ import { hash, random } from '../src/random.js';
 export const DATA_VERSION = 3;
 
 /** The route metrics a row keeps: the score's, and floorMoves for the freebie rule and the route's side of the gap. */
-export const SCORE_METRICS = Object.freeze(['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves']);
+export const SCORE_METRICS = Object.freeze(['turns', 'threatenedDecisions', 'narrowEscapes', 'hits', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves']);
 const pickMetrics = (metrics) => Object.fromEntries(SCORE_METRICS.map((name) => [name, metrics[name]]));
 
 /** The header fields a data file must carry for these rules (dataProblem checks them). */
@@ -184,15 +184,16 @@ export const classKey = (piece, modifier, floor, tier) => `${piece}/${modifier}/
 /**
  * A row's `searches`: every floor's search in the order the certificate
  * search ran them (src/fairness.js findWinningRoute; a pawn day may search a
- * floor again keeping more lives), each [floor (0-2), lives it had to keep
- * (minHp), expansions it used, stateDigest of its start, its route segment
+ * floor again allowing fewer captures), each [floor (0-2), the most captures
+ * the run may have by its end (maxHits), expansions it used, stateDigest of
+ * its start, its route segment
  * (encodeRoute, stairs last) or null when it failed]. A floorSearch hook that
  * records them.
  */
 export function recordFloors(searches) {
-  return ({ start, minHp, search }) => {
+  return ({ start, maxHits, search }) => {
     const done = search();
-    searches.push([start.floor, minHp, done.explored, stateDigest(start), done.floor ? encodeRoute(done.floor.actions) : null]);
+    searches.push([start.floor, maxHits, done.explored, stateDigest(start), done.floor ? encodeRoute(done.floor.actions) : null]);
     return done;
   };
 }
@@ -244,17 +245,17 @@ export function floorStart(candidate, searches, floor) {
 /**
  * A stored floor search's result again: the segment's actions replayed from
  * `start` through the route rules (src/fairness.js routeTransition), never
- * below `minHp` lives, moving only while the floor's challenge is open and
+ * captured more than `maxHits` times in the run, moving only while the floor's challenge is open and
  * taking the stairs right after it. Null when any step no longer holds.
  */
-function replaySegment(start, segment, minHp) {
+function replaySegment(start, segment, maxHits) {
   const actions = decodeRoute(segment);
   let state = start;
   for (const [index, action] of actions.entries()) {
     const descend = action.type === 'descend';
     if (descend !== (index === actions.length - 1) || state.exit.open !== descend) return null;
     const next = routeTransition(state, action);
-    if (!next || next.player.hp < minHp) return null;
+    if (!next || next.hits > maxHits) return null;
     state = next;
   }
   return { actions, state };
@@ -263,8 +264,8 @@ function replaySegment(start, segment, minHp) {
 /**
  * A floorSearch hook (src/fairness.js findWinningRoute) that stands in for
  * the searches a row already holds (`stored`, its `searches`): wherever the
- * same floor is searched from the same start (stateDigest), keeping the same
- * lives, after the same expansions, and `fresh[floor]` is false, the stored
+ * same floor is searched from the same start (stateDigest), with the same
+ * capture allowance, after the same expansions, and `fresh[floor]` is false, the stored
  * result is replayed instead (replaySegment), with its expansions. Search is
  * deterministic, so that is what searching would give, as long as the
  * floor's search behaves as before: the class fingerprints' job. Every other
@@ -279,10 +280,10 @@ export function reuseFloors(stored, fresh, searches, tally) {
     known.set(`${entry[0]}|${entry[1]}|${before}|${entry[3]}`, entry);
     before += entry[2];
   }
-  return ({ start, minHp, explored, search }) => {
+  return ({ start, maxHits, explored, search }) => {
     const digest = stateDigest(start);
-    const entry = fresh[start.floor] ? undefined : known.get(`${start.floor}|${minHp}|${explored}|${digest}`);
-    const floor = entry && entry[4] !== null ? replaySegment(start, entry[4], minHp) : null;
+    const entry = fresh[start.floor] ? undefined : known.get(`${start.floor}|${maxHits}|${explored}|${digest}`);
+    const floor = entry && entry[4] !== null ? replaySegment(start, entry[4], maxHits) : null;
     if (entry && (entry[4] === null || floor)) {
       tally.served[start.floor]++;
       searches.push([...entry]);
@@ -291,7 +292,7 @@ export function reuseFloors(stored, fresh, searches, tally) {
     tally.searched[start.floor]++;
     const done = search();
     tally.expansions += done.explored;
-    searches.push([start.floor, minHp, done.explored, digest, done.floor ? encodeRoute(done.floor.actions) : null]);
+    searches.push([start.floor, maxHits, done.explored, digest, done.floor ? encodeRoute(done.floor.actions) : null]);
     return done;
   };
 }
@@ -445,8 +446,8 @@ export function classFingerprint(probes, floor, { searchProbes = SEARCH_PROBES }
     const digest = stateDigest(start);
     bot.update(`${digest}\n`);
     for (let run = 0; run < HUMAN_RUNS; run++) {
-      const { won, moves, livesLost, actions } = playFloor(start, { seed: runSeed(candidate, floor, run) });
-      bot.update(`${won}|${moves}|${livesLost}|${JSON.stringify(actions)}\n`);
+      const { won, moves, hits, actions } = playFloor(start, { seed: runSeed(candidate, floor, run) });
+      bot.update(`${won}|${moves}|${hits}|${JSON.stringify(actions)}\n`);
     }
     search.update(`${digest}\n`);
     whileSearching(() => {

@@ -12,7 +12,6 @@ import { ATTEMPTS, EXTRA_ATTEMPTS, GENERATOR_VERSION, candidateFor, candidateSee
 import { knobsFor, tierForDate, freebieFloor, LONG_FLOOR_PAR } from '../src/difficulty.js';
 import { distanceTable } from '../src/move-tables.js';
 import { encodeRoute } from '../src/route-code.js';
-import { PIECE_LIVES } from '../src/pieces.js';
 
 const descend = { type: 'descend' };
 const dayAfter = (start, day) => new Date(Date.parse(`${start}T00:00:00Z`) + day * 86_400_000).toISOString().slice(0, 10);
@@ -91,24 +90,24 @@ test('each floor is certified from its standard start: how long the floors befor
   }
 });
 
-test('lives carry over: a pawn’s route spends at most four across the run, and each floor starts with what the last one left', () => {
+test('captures carry over: a pawn’s route is captured at most four times across the run', () => {
   const found = searchedRoute(() => true, { start: '2031-05-01', want: (daily) => daily.playerPiece === 'pawn' });
   assert.ok(found, 'a searched pawn route');
   const { daily, route } = found;
   const { frames, starts } = replay(daily, route.actions);
   const proof = verifyWinningRoute(createGame(daily), route.actions);
   assert.equal(proof.valid, true);
-  assert.ok(proof.metrics.livesLost <= 4);
-  const hp = [0, ...starts].map((index) => frames[index].player.hp);
-  assert.ok(hp.every((lives, floor) => !floor || lives <= hp[floor - 1]));
-  assert.ok(frames.every((frame) => frame.player.hp >= PIECE_LIVES.pawn - 4));
-  // From a floor-2 start with every spare life already spent, the search may lose none.
+  assert.ok(proof.metrics.hits <= 4);
+  const hits = [0, ...starts].map((index) => frames[index].hits);
+  assert.ok(hits.every((count, floor) => !floor || count >= hits[floor - 1]));
+  assert.ok(frames.every((frame) => frame.hits <= 4));
+  // From a floor-2 start with the whole allowance already taken, the search may be captured no more.
   const spent = structuredClone(frames[starts[0]]);
-  spent.player.hp = PIECE_LIVES.pawn - 4;
+  spent.hits = 4; spent.floorStart.hits = 4;
   const strict = findWinningRoute(spent, { maxExpansions: 3000 });
   if (strict.status === 'solved') {
     let state = spent;
-    for (const action of strict.actions) { state = act(state, action); assert.equal(state.player.hp, PIECE_LIVES.pawn - 4); }
+    for (const action of strict.actions) { state = act(state, action); assert.equal(state.hits, 4); }
   }
 });
 

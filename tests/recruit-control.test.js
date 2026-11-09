@@ -28,7 +28,7 @@ function scenario(piece = 'rook', { color = 'white', x = 4, y = 6 } = {}) {
   const state = createGame(dailyFor(piece === 'king' ? 'rook' : piece));
   state.playerColor = color; state.awaitingPlayer = false;
   Object.assign(state.player, { x, y, moved: true });
-  if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; state.player.hp = state.player.maxHp = 1; }
+  if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; }
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
   delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
   // Knights are the challenge here, so other monsters are decoys.
@@ -103,7 +103,7 @@ test('an ordered recruit may capture the challenge piece, and it counts toward t
   // The scored move count stops on the recruit's capture as on yours.
   assert.equal(second.objective.moves, 2);
   // The completion line is filed in notes; the cave-in's crack line (src/cave-in.js) follows it in the log.
-  assert.ok((second.notes ?? []).includes('You completed the challenge ✓ in 2 moves. Your score is locked in: explore for gold or take the stairs. Your recruit will automatically watch your back while you explore.'));
+  assert.ok((second.notes ?? []).includes('You completed the challenge ✓ in 2 moves. Explore for gold or take the stairs. Your recruit will automatically watch your back while you explore.'));
   assert.match(second.message, /^The ceiling starts to crack!/);
 });
 
@@ -178,24 +178,19 @@ test('the turn you recruit, the new recruit may stay on your square or move off 
   assert.equal(shared.companion.sharing, true);
 });
 
-test('a close-range hit that turn still leaves the recruit its order; a run-ending one ends the turn there', () => {
+test('a close-range hit that turn still leaves the recruit its order', () => {
   const state = scenario('rook', { x: 7, y: 7 });
   state.companion = ally('rook', 0, 6); state.enemies = [foe('guard', 'king', 6, 4)];
-  // Ending next to the monster king costs a life at once; the monsters still take their turn, with no second hit.
+  // Ending next to the monster king is captured at once (one move more); the monsters still take their turn, with no second hit.
   const hit = act(state, move(7, 5, { x: 6, y: 6 }));
-  assert.equal(hit.player.hp, state.player.hp - 1);
+  assert.equal(hit.hits, state.hits + 1);
   assert.deepEqual(at(hit.companion), [6, 6]);
   const order = types(hit);
   assert.ok(order.indexOf('close-capture') < order.indexOf('companion-phase'));
   assert.ok(order.indexOf('companion-phase') < order.indexOf('enemy-phase'));
   // The preview shows the hit already taken.
   const choice = recruitChoice(state, move(7, 5));
-  assert.equal(choice.board.player.hp, state.player.hp - 1);
-  // With one life left the run restarts before the recruit's phase, so the order goes unused.
-  const last = structuredClone(state); last.player.hp = 1;
-  assert.equal(recruitChoice(last, move(7, 5)), null);
-  const restarted = act(last, move(7, 5, { x: 6, y: 6 }));
-  assert.ok(types(restarted).includes('restart')); assert.equal(restarted.companion, null);
+  assert.equal(choice.board.hits, state.hits + 1);
 });
 
 test('castling is the recruit’s move: an order to move it again is no action', () => {
@@ -379,7 +374,7 @@ test('the challenge-complete message mentions your recruit on floors 1 and 2, on
     setup(state);
     return act(state, move(7, 2));
   };
-  const done = 'You completed the challenge ✓ in 1 move. Your score is locked in: explore for gold or take the stairs.';
+  const done = 'You completed the challenge ✓ in 1 move. Explore for gold or take the stairs.';
   for (const floor of [0, 1]) {
     const joined = clear((state) => { state.floor = floor; state.companion = ally('knight', 0, 0); });
     assert.ok(said(joined).includes(`${done} ${line}`), `floor ${floor + 1}`);
@@ -415,7 +410,7 @@ test('a recruit that joins after the clear hunts on its own from its first move'
   both.enemies = [foe('target', 'knight', 7, 2), foe('decoy', 'bishop', 5, 3)];
   const swept = act(both, move(7, 2));
   assert.equal(swept.exit.open, true);
-  assert.ok(said(swept).includes('You completed the challenge ✓ in 1 move. Your score is locked in: explore for gold or take the stairs. A knight joins you and hunts on its own for the rest of this room.'), said(swept));
+  assert.ok(said(swept).includes('You completed the challenge ✓ in 1 move. Explore for gold or take the stairs. A knight joins you and hunts on its own for the rest of this room.'), said(swept));
 });
 
 test('on the last floor, once the king falls to your piece, the recruit hunts on its own: no order step before the stairs', () => {
@@ -432,7 +427,7 @@ test('on the last floor, once the king falls to your piece, the recruit hunts on
   assert.ok(!taken.enemies.some((monster) => monster.role === 'king'));
   assert.equal(taken.exit.open, true);
   const lines = [...(taken.notes ?? []), taken.message];
-  assert.ok(lines.some((text) => /^You completed the challenge ✓ in \d+ moves?\. Your score is locked in: take the stairs to finish\.$/.test(text)), lines.join(' | '));
+  assert.ok(lines.some((text) => /^You completed the challenge ✓ in \d+ moves?\. Take the stairs to finish\.$/.test(text)), lines.join(' | '));
   // An order the capture still carries is ignored, and later moves have no order step either.
   assert.deepEqual(act(state, move(square.x, square.y, 'hold')), taken);
   assert.equal(recruitChoice(taken, wait()), null);

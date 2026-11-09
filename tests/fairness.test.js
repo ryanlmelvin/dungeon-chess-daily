@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable, RULES_VERSION } from '../src/rules.js';
-import { findWinningRoute, livesSpendable, verifyWinningRoute } from '../src/fairness.js';
+import { findWinningRoute, spendableHits, verifyWinningRoute } from '../src/fairness.js';
 import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 import { TIER_IDS, knobsFor } from '../src/difficulty.js';
 
@@ -46,15 +46,15 @@ function replay(daily) {
     }
     const next = act(state, action);
     assert.notEqual(next, state, 'every certified action must do something');
-    // Only a pawn's route may spend lives, and at most livesSpendable of them.
-    assert.ok(next.player.hp >= initial.player.hp - livesSpendable(initial));
+    // Only a pawn's route may be captured, and at most spendableHits times.
+    assert.ok(next.hits <= spendableHits(initial));
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
     if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.deepEqual(next.companionOrders, []);
-    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'player-captured' && !livesSpendable(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
+    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'player-captured' && !spendableHits(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
     if (next.floor !== state.floor && next.status === 'playing') {
@@ -156,18 +156,20 @@ test('certified saves reject edited turn order, legacy mode and earlier rules ve
   }
 });
 
-test('life loss and restart are rejected even when moves are legal and spare lives remain', () => {
+test('a capture and a restart are rejected even when the moves are legal', () => {
   const state = scenario();
   state.enemies = [monster('attacker', 'rook', 4, 0, { x: 4, y: 6 })];
   const action = move(4, 5);
-  const damaged = act(state, action);
-  assert.ok(damaged.events.some((event) => event.type === 'player-captured'));
-  assert.equal(damaged.player.hp, state.player.hp - 1);
+  const captured = act(state, action);
+  assert.ok(captured.events.some((event) => event.type === 'player-captured'));
+  assert.equal(captured.hits, state.hits + 1);
   assert.equal(verifyWinningRoute(state, [action]).valid, false);
-  state.player.hp = 1;
-  const restarted = act(state, action);
+  // A pawn walled in ahead has no move at all once it steps up: the try ends.
+  const pawn = scenario('pawn');
+  pawn.map[4] = '....#...';
+  const restarted = act(pawn, action);
   assert.ok(restarted.events.some((event) => event.type === 'restart'));
-  assert.equal(verifyWinningRoute(state, [action]).valid, false);
+  assert.equal(verifyWinningRoute(pawn, [action]).valid, false);
 });
 
 test('obstacles are enforced while gameplay has no move deadline', () => {
@@ -181,7 +183,7 @@ test('obstacles are enforced while gameplay has no move deadline', () => {
   assert.equal(verifyWinningRoute(state, [move(4, 4)]).valid, false);
 });
 
-test('connected geometry is insufficient when an enemy-first attack makes every move fatal', () => {
+test('connected geometry is insufficient when an enemy-first attack makes every move a capture', () => {
   const state = scenario('king', 'black');
   state.map[7] = '#.......';
   state.enemies = [monster('attacker', 'rook', 4, 0, { x: 4, y: 6 })];
@@ -196,7 +198,7 @@ test('connected geometry is insufficient when an enemy-first attack makes every 
   assert.ok(legalMoves(state).length > 0);
   for (const action of legalMoves(state)) {
     const next = act(state, { ...action, type: 'move' });
-    assert.ok(next.events.some((event) => event.type === 'restart'));
+    assert.ok(next.events.some((event) => event.type === 'player-captured'));
   }
   const result = findWinningRoute(state, { maxExpansions: 100, beamWidth: 4 });
   assert.equal(result.status, 'unknown', 'bounded failure must never be called a proof of impossibility');

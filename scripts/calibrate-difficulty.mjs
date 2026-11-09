@@ -42,7 +42,7 @@
 // route moves (final turns), wall time (search and bot), the metrics the
 // score and the freebie rule need, the bot's runs per floor (`human`: each
 // run's moves, null where it failed), the route and every floor's search
-// (`searches`: lives kept, expansions, a digest of its start and its route
+// (`searches`: the capture allowance, expansions, a digest of its start and its route
 // segment), plus min/median/p90/max summaries per piece and setting, and a
 // fingerprint per class (piece, room modifier, floor, tier).
 // The next brute-force run reuses that file (docs/generation.md, "Incremental
@@ -162,9 +162,9 @@ if (!isMainThread) {
     ? { metrics: entry.metrics, score: difficultyScore(entry.metrics, piece), gap: storedGap(entry) } : null));
   // The same searches as generation's floor assembly sees them (rankFloors):
   // each floor's capped-gap points from the bot's stored runs. Rows keep no
-  // per-floor move or life counts, so each floor counts its scored moves
+  // per-floor move or capture counts, so each floor counts its scored moves
   // toward the route's cap (its par, from the stored runs, toward MAX_FLOOR_PAR)
-  // and no lives (generation's own certification still
+  // and no captures (generation's own certification still
   // holds a pawn day to its allowance), and a candidate below the threat
   // minimum gives no floors (generation checks the minimum on the whole day).
   const assembly = (found, minThreatenedDecisions) => found.map((entry) => {
@@ -173,7 +173,7 @@ if (!isMainThread) {
     const results = entry.human.map((runs) => runs.map((moves) => ({ won: moves !== null, moves: moves ?? 0 })));
     return {
       metrics: entry.metrics, points: floorGapPoints({ results, certified: floorMoves }), runs: entry.human[0].length,
-      pars: results.map((outcomes, floor) => medianRun(outcomes, floorMoves[floor]).par), floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })),
+      pars: results.map((outcomes, floor) => medianRun(outcomes, floorMoves[floor]).par), floors: floorMoves.map((moves) => ({ turns: moves, hits: 0 })),
     };
   });
   const quantiles = (values) => {
@@ -827,7 +827,7 @@ if (!isMainThread) {
     await writeDataFile(dataPath, {
       generated: new Date().toISOString(), ...stamp, measure: 'cappedGap', start, samples, grid: gridName,
       settingKey: 'obstacleBase/decoys/scatter/guards[/screens]@tier', humanRuns: "row.human: per floor, each bot run's moves when it won, else null",
-      searches: 'row.searches: each floor search in order, [floor 0-2, lives kept (minHp), expansions, start digest, route segment or null]; row.route: the route',
+      searches: 'row.searches: each floor search in order, [floor 0-2, captures allowed by its end (maxHits), expansions, start digest, route segment or null]; row.route: the route',
       classKey: "piece/modifier/floor/tier: probe rows, fingerprints of its search (rules, monsters, modifier, search) and bot, and the bot's code hash",
       summary,
     }, classes, rows);

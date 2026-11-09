@@ -37,7 +37,7 @@ test('tooling can compare other freebie rules: every floor, or floor by floor', 
 
 test('under a freebie rule a quick floor is never assembled, but the candidate’s other floors still are', () => {
   // Each floor 1 a gap point at 10 runs; only the floor moves differ.
-  const found = (floorMoves) => ({ points: [10, 10, 10], runs: 10, pars: [5, 5, 5], metrics: { threatenedDecisions: 9, floorMoves }, floors: floorMoves.map((moves) => ({ turns: moves, lives: 0 })) });
+  const found = (floorMoves) => ({ points: [10, 10, 10], runs: 10, pars: [5, 5, 5], metrics: { threatenedDecisions: 9, floorMoves }, floors: floorMoves.map((moves) => ({ turns: moves, hits: 0 })) });
   const days = (list, rule) => rankFloors(list, 3, 'tough', rule).map((entry) => entry.floors);
   // By default quick floors are assembled like any other.
   assert.deepEqual(days([found([2, 8, 8]), found([5, 8, 8])])[0], [0, 0, 0]);

@@ -179,11 +179,13 @@ test('older paid companion saves require the purchased source and cannot restore
   ]) {const bad=structuredClone(arrived);mutate(bad);assert.equal(validateSave(bad,bad.date),false);}
 });
 
-test('exhausting lives clears older reservations and the spent-gold ledger with the rest of the run',()=>{
-  const doomed=legacyOrder(bank(),'queen');doomed.player.hp=1;doomed.player.x=4;doomed.player.y=6;
-  doomed.items=[];doomed.powers={shield:0,freeze:0,magnet:0};
-  doomed.enemies=[{id:'attacker',piece:'rook',role:'rook',species:'bat',palette:'ice',name:'Ice bat',x:4,y:0,moved:true,phase:'aim',target:{x:4,y:5},intent:[{x:4,y:5}]}];
-  const reset=act(doomed,move(4,5));
+test('a cornered run clears older reservations and the spent-gold ledger with the rest of the run',()=>{
+  // Downstairs with the order delivered, then walled in on every side: no move at all ends the try.
+  const doomed=act(legacyOrder(bank(),'queen'),{type:'descend'});doomed.player.x=4;doomed.player.y=6;
+  doomed.map=Array(8).fill('........');doomed.map[5]='...###..';doomed.map[6]='...#.#..';doomed.map[7]='...###..';
+  doomed.items=[];doomed.enemies=[];doomed.powers={shield:0,freeze:0,magnet:0};
+  if(doomed.companion)Object.assign(doomed.companion,{x:4,y:6,sharing:true});
+  const reset=act(doomed,{type:'wait'});
   assert.ok(reset.events.some((event)=>event.type==='restart'));assert.deepEqual(reset.companionOrders,[]);
   assert.equal(reset.gold,0);assert.deepEqual(reset.purchases,[]);assert.equal(reset.companion,null);
   assert.equal(validateSave(reset,reset.date),true);

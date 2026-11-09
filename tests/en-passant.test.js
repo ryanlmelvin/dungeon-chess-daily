@@ -108,42 +108,42 @@ test('en passant is offered only to a pawn on rank 3 beside the double-stepped p
 });
 
 test('a monster pawn captures a double-stepping pawn en passant at once', () => {
-  const state = scenario('pawn', 'white'); const hp = state.player.hp;
+  const state = scenario('pawn', 'white'); const hits = state.hits;
   state.enemies = [monster('p', 'pawn', 5, 4)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, hp - 1);
+  assert.equal(next.hits, hits + 1);
   assert.deepEqual(find(next, 'close-capture'), { type: 'close-capture', id: 'p', x: 5, y: 4, enPassant: true });
   assert.equal(find(next, 'player-captured').enPassant, true);
   // The monsters still take their turn after the hit.
   assert.ok(find(next, 'enemy-phase'));
-  assert.match(next.message, /Ice bat captured you en passant as you passed it\./);
+  assert.match(next.message, /Ice bat captured you en passant as you passed it \(\+1 move\)\./);
   // As in chess, the capturing pawn lands on the square the double step skipped.
   assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [4, 5]);
   assert.deepEqual(find(next, 'enemy-move'), { type: 'enemy-move', id: 'p', from: { x: 5, y: 4 }, x: 4, y: 5 });
 });
 
 test('a single step beside the monster pawn is the ordinary diagonal attack', () => {
-  const state = scenario('pawn', 'white', 4, 6); const hp = state.player.hp;
+  const state = scenario('pawn', 'white', 4, 6); const hits = state.hits;
   state.enemies = [monster('p', 'pawn', 5, 4)];
   const next = act(state, move(4, 5));
-  assert.equal(next.player.hp, hp - 1);
+  assert.equal(next.hits, hits + 1);
   const close = find(next, 'close-capture');
   assert.equal(close.id, 'p'); assert.equal(close.enPassant, undefined);
   assert.equal(find(next, 'player-captured').enPassant, undefined);
 });
 
 test('a frozen monster pawn never strikes en passant', () => {
-  const state = scenario('pawn', 'white'); const hp = state.player.hp; state.powers.freeze = 2;
+  const state = scenario('pawn', 'white'); const hits = state.hits; state.powers.freeze = 2;
   state.enemies = [monster('p', 'pawn', 3, 4)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, hp); assert.equal(find(next, 'close-capture'), undefined);
+  assert.equal(next.hits, hits); assert.equal(find(next, 'close-capture'), undefined);
 });
 
 test('a shield absorbs an en passant capture', () => {
-  const state = scenario('pawn', 'white'); const hp = state.player.hp; state.powers.shield = 1;
+  const state = scenario('pawn', 'white'); const hits = state.hits; state.powers.shield = 1;
   state.enemies = [monster('p', 'pawn', 3, 4)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, hp); assert.equal(next.powers.shield, 0);
+  assert.equal(next.hits, hits); assert.equal(next.powers.shield, 0);
   assert.equal(find(next, 'shield').enPassant, true);
   assert.equal(find(next, 'close-capture').enPassant, true);
   assert.match(next.message, /en passant as you passed it, but your bone ward blocked it\./);
@@ -151,15 +151,15 @@ test('a shield absorbs an en passant capture', () => {
 
 test('black: a double step newly exposed to en passant earns a fresh choice', () => {
   // The frost wears off in this enemy phase, so the pawn beside the landing square wakes up.
-  const state = scenario('pawn', 'black'); const hp = state.player.hp; state.powers.freeze = 1;
+  const state = scenario('pawn', 'black'); const hits = state.hits; state.powers.freeze = 1;
   state.enemies = [monster('p', 'pawn', 3, 4)];
   const next = act(state, move(4, 4));
   assert.equal(next.awaitingPlayer, true);
   assert.deepEqual([next.player.x, next.player.y], [4, 6]);
-  assert.equal(next.player.hp, hp); assert.equal(find(next, 'close-capture'), undefined);
+  assert.equal(next.hits, hits); assert.equal(find(next, 'close-capture'), undefined);
   // Insisting on the double step is then captured en passant.
   const hit = act(next, move(4, 4));
-  assert.equal(hit.player.hp, hp - 1); assert.equal(find(hit, 'close-capture').enPassant, true);
+  assert.equal(hit.hits, hits + 1); assert.equal(find(hit, 'close-capture').enPassant, true);
 });
 
 test('saves with an en passant window validate and survive JSON; malformed ones do not', () => {

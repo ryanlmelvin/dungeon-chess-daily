@@ -13,7 +13,7 @@ import { EDITIONS_RANGE } from '../src/editions.js';
 import { generateDaily } from '../src/generation.js';
 import { humanPar, autoRecruit } from '../src/human-bot.js';
 import { humanGap, cappedGap, DIFFICULTY_TIERS } from '../src/difficulty.js';
-import { PLAYABLE_PIECES, PIECE_LIVES } from '../src/pieces.js';
+import { PLAYABLE_PIECES } from '../src/pieces.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const index = process.argv.indexOf(`--${name}`); return index > 0 ? process.argv[index + 1] : fallback; };
@@ -26,10 +26,9 @@ function measure(date, auto) {
     date, tier: daily.difficulty, piece: daily.playerPiece, score: daily.generation.certificate.score,
     certified: human.certified, par: human.par, failed: human.runs.map((run) => run === null),
     won: human.results.map((runs) => runs.filter((run) => run.won).length), runs: human.results[0].length,
-    lives: human.results.map((runs) => runs.filter((run) => run.won && run.livesLost > 0).length),
-    // The result card shows the bot when every floor has a run and, as one run, it would have survived (humanRun).
-    shown: human.runs.every((run) => run !== null)
-      && human.runs.reduce((sum, run, floor) => sum + human.results[floor][run].livesLost, 0) < PIECE_LIVES[daily.playerPiece],
+    captured: human.results.map((runs) => runs.filter((run) => run.won && run.hits > 0).length),
+    // The result card shows the bot when every floor has a run (humanRun).
+    shown: human.runs.every((run) => run !== null),
     gap: humanGap(human).total, capped: cappedGap(human), ms: performance.now() - began,
   };
 }
@@ -84,6 +83,6 @@ if (!isMainThread) {
   console.log('\nBy piece:\n');
   console.log(header);
   for (const piece of PLAYABLE_PIECES) console.log(line('all', piece, rows.filter((row) => row.piece === piece)));
-  const lives = sum(rows.map((row) => sum(row.lives))), wins = sum(rows.map((row) => sum(row.won)));
-  console.log(`\n${percent(rows.filter((row) => !row.failed.some(Boolean)).length, rows.length)} of editions had a human-like run clear every floor; the result card shows the human-like bot on ${percent(rows.filter((row) => row.shown).length, rows.length)} (the rest lost too many lives in all). ${percent(lives, wins)} of winning floor runs lost a life. Bot time: median ${median(rows.map((row) => row.ms)).toFixed(0)} ms per edition, ${((performance.now() - began) / 1000).toFixed(1)} s in all on ${jobs} threads.`);
+  const captured = sum(rows.map((row) => sum(row.captured))), wins = sum(rows.map((row) => sum(row.won)));
+  console.log(`\n${percent(rows.filter((row) => !row.failed.some(Boolean)).length, rows.length)} of editions had a human-like run clear every floor, so the result card shows the human-like bot on them. ${percent(captured, wins)} of winning floor runs were captured at least once. Bot time: median ${median(rows.map((row) => row.ms)).toFixed(0)} ms per edition, ${((performance.now() - began) / 1000).toFixed(1)} s in all on ${jobs} threads.`);
 }

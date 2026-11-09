@@ -17,13 +17,13 @@ function dailyFor(piece) {
   }
   throw Error(`No ${piece} edition found`);
 }
-function scenario({ piece = 'rook', color = 'white', at = [4, 6], hp = 3, floor = 0 } = {}) {
+function scenario({ piece = 'rook', color = 'white', at = [4, 6], floor = 0 } = {}) {
   const state = createGame({ ...dailyFor(piece === 'king' ? 'rook' : piece), playerColor: color });
   Object.assign(state, { floor, map: Array(8).fill('........'), props: [], items: [], enemies: [], companion: null, awaitingPlayer: false });
   state.objective = { piece: 'king', complete: false };
   state.exit = { x: 4, y: 0, open: false };
   state.powers = { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 };
-  Object.assign(state.player, { piece, x: at[0], y: at[1], hp, maxHp: hp });
+  Object.assign(state.player, { piece, x: at[0], y: at[1] });
   return state;
 }
 // A monster; `lane` (with its last square the target) winds it up.
@@ -40,7 +40,7 @@ test('after a close-range hit the monsters still move and wind up, but a strike 
   const state = scenario();
   state.enemies = [monster('rook', 'rook', 0, 4, row4(1, 4)), monster('guard', 'king', 5, 3), monster('far', 'king', 0, 0)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, 2, 'one hit');
+  assert.equal(next.hits, 1, 'one hit');
   assert.equal(count(next, 'player-captured'), 1);
   assert.equal(count(next, 'enemy-phase'), 1);
   const rook = foe(next, 'rook');
@@ -51,7 +51,7 @@ test('after a close-range hit the monsters still move and wind up, but a strike 
   assert.ok(dangerTiles(next).some((tile) => tile.x === 4 && tile.y === 4));
   // Staying put next turn, the held strike lands.
   const stayed = act(next, wait);
-  assert.equal(stayed.player.hp, 1);
+  assert.equal(stayed.hits, 2);
   assert.equal(stayed.events.find((event) => event.type === 'player-captured').by, 'rook');
 });
 
@@ -59,7 +59,7 @@ test('a bone ward absorbs the close-range hit without freezing the board, and no
   const state = scenario(); state.powers.shield = 2;
   state.enemies = [monster('rook', 'rook', 0, 4, row4(1, 4)), monster('guard', 'king', 5, 3), monster('far', 'king', 0, 0)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, 3);
+  assert.equal(next.hits, 0);
   assert.equal(next.powers.shield, 1, 'only one ward spent: no double hit');
   assert.equal(count(next, 'shield'), 1);
   assert.equal(foe(next, 'rook').phase, 'aim');
@@ -82,7 +82,7 @@ test('black’s turn order is unchanged: one enemy phase, before the move, even 
   const state = scenario({ color: 'black' });
   state.enemies = [monster('guard', 'king', 5, 5)];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, 2);
+  assert.equal(next.hits, 1);
   assert.equal(count(next, 'enemy-phase'), 1);
   assert.ok(next.events.findIndex((event) => event.type === 'enemy-phase') < next.events.findIndex((event) => event.type === 'close-capture'));
 });
@@ -129,14 +129,14 @@ test('a monster that lunges and misses lands on its target, off-balance, and say
   assert.equal(bat.phase, 'ready');
   assert.deepEqual(next.events.find((event) => event.type === 'miss'), { type: 'miss', id: 'bat', x: 4, y: 5 });
   assert.equal(next.message, 'Violet bat lunged and missed — it’s off-balance!');
-  assert.equal(next.player.hp, 3);
+  assert.equal(next.hits, 0);
 });
 
 test('an off-balance monster can’t capture at close range, even when you end beside it', () => {
   const missed = act(baited(), move(4, 6));
   assert.equal(closeAttacker(missed, { x: 5, y: 6 }), null);
   const beside = act(missed, move(5, 6));
-  assert.equal(beside.player.hp, 3);
+  assert.equal(beside.hits, 0);
   assert.equal(count(beside, 'close-capture'), 0);
   // Your move is over: it finds its feet and winds up as usual.
   const bat = foe(beside, 'bat');
@@ -149,7 +149,7 @@ test('an off-balance monster doesn’t guard: taking a monster beside it is safe
   missed.enemies.push(monster('prey', 'rook', 5, 6));
   const taken = act(missed, move(5, 6));
   assert.equal(taken.captures, 1);
-  assert.equal(taken.player.hp, 3);
+  assert.equal(taken.hits, 0);
   assert.equal(count(taken, 'close-capture'), 0);
 });
 
@@ -159,7 +159,7 @@ test('punish: the player captures the off-balance monster where it landed', () =
   const punished = act(missed, move(4, 5));
   assert.equal(punished.captures, 1);
   assert.equal(punished.enemies.length, 0);
-  assert.equal(punished.player.hp, 3);
+  assert.equal(punished.hits, 0);
 });
 
 test('off-balance lasts only until the end of your next move: waiting spends it too', () => {
@@ -177,7 +177,7 @@ test('an off-balance monster pawn can’t capture en passant', () => {
   const state = scenario({ piece: 'pawn' });
   state.enemies = [{ ...monster('pawn', 'pawn', 5, 4), offBalance: true }];
   const next = act(state, move(4, 4));
-  assert.equal(next.player.hp, 3);
+  assert.equal(next.hits, 0);
   assert.equal(count(next, 'close-capture'), 0);
 });
 
@@ -189,7 +189,7 @@ test('a lunge at a pawn that steps forward lands on the square behind it', () =>
   const knight = foe(next, 'knight');
   assert.deepEqual([knight.x, knight.y], [4, 5], 'it lands on the square the pawn left');
   assert.equal(knight.offBalance, true);
-  assert.equal(next.player.hp, 3);
+  assert.equal(next.hits, 0);
 });
 
 test('a royal king that misses and won’t land in danger stays put, off-balance', () => {
@@ -203,7 +203,7 @@ test('a royal king that misses and won’t land in danger stays put, off-balance
   assert.match(missed.message, /lunged and missed/);
   // Ending beside it is safe for this one move.
   const beside = act(missed, move(4, 6));
-  assert.equal(beside.player.hp, 3);
+  assert.equal(beside.hits, 0);
   assert.equal(count(beside, 'close-capture'), 0);
 });
 
@@ -214,7 +214,7 @@ test('black: the miss comes before your move, which it can’t punish; it recove
   const next = act(state, move(5, 6));
   assert.equal(next.awaitingPlayer, false);
   assert.deepEqual([next.player.x, next.player.y], [5, 6]);
-  assert.equal(next.player.hp, 3);
+  assert.equal(next.hits, 0);
   assert.equal(count(next, 'close-capture'), 0);
   assert.equal(foe(next, 'bat').offBalance, undefined);
   assert.match([...(next.notes ?? []), next.message].join(' '), /lunged and missed/);

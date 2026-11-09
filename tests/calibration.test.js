@@ -61,15 +61,15 @@ test('tier bands are contiguous and increasing', () => {
 });
 
 test('the difficulty score grows with every kind of pressure', () => {
-  const base = { turns: 20, threatenedDecisions: 5, narrowEscapes: 1, livesLost: 0, unsafeAlternatives: 10, legalAlternatives: 100 };
+  const base = { turns: 20, threatenedDecisions: 5, narrowEscapes: 1, hits: 0, unsafeAlternatives: 10, legalAlternatives: 100 };
   const score = difficultyScore(base, 'pawn');
-  for (const [key, value] of Object.entries({ threatenedDecisions: 8, narrowEscapes: 3, livesLost: 2, unsafeAlternatives: 30 })) {
+  for (const [key, value] of Object.entries({ threatenedDecisions: 8, narrowEscapes: 3, hits: 2, unsafeAlternatives: 30 })) {
     assert.ok(difficultyScore({ ...base, [key]: value }, 'pawn') > score, key);
   }
   assert.equal(difficultyScore({ ...base, legalAlternatives: 0, unsafeAlternatives: 0 }, 'pawn') <= score, true);
   assert.ok(Number.isFinite(score));
-  // The same pressure is harder with fewer lives to spare.
-  const unharmed = { ...base, livesLost: 0 };
+  // The same pressure is harder with a smaller army count (less slack).
+  const unharmed = { ...base, hits: 0 };
   assert.ok(difficultyScore(unharmed, 'queen') > difficultyScore(unharmed, 'rook'));
   assert.ok(difficultyScore(unharmed, 'rook') > difficultyScore(unharmed, 'pawn'));
 });
@@ -98,9 +98,9 @@ test('the calibration table covers every tier and piece with valid knobs, and th
 });
 
 // A searched candidate as rankFloors sees it: each floor's capped-gap points over `runs` runs, its route's
-// moves until each floor's clear, and the moves and lives each floor's part of the route spent.
-const candidateOf = (points, { runs = 10, floorMoves = [8, 8, 8], turns = [8, 8, 8], lives = [0, 0, 0] } = {}) => ({
-  points, runs, metrics: { threatenedDecisions: 9, floorMoves }, floors: [0, 1, 2].map((floor) => ({ turns: turns[floor], lives: lives[floor] })),
+// moves until each floor's clear, and the moves and captures each floor's part of the route took.
+const candidateOf = (points, { runs = 10, floorMoves = [8, 8, 8], turns = [8, 8, 8], hits = [0, 0, 0] } = {}) => ({
+  points, runs, metrics: { threatenedDecisions: 9, floorMoves }, floors: [0, 1, 2].map((floor) => ({ turns: turns[floor], hits: hits[floor] })),
 });
 
 test('a day is assembled from the floors of its candidates so that their gaps add up to its target', () => {
@@ -146,16 +146,16 @@ test('short floors come first: no floor over par 10 when any assembly avoids one
   assert.deepEqual([one.floors[1], one.longest], [1, 14]);
 });
 
-test('an assembled route stays within the move cap and a pawn’s allowance of lives', () => {
+test('an assembled route stays within the move cap and a pawn’s allowance of captures', () => {
   const long = candidateOf([30, 30, 30], { turns: [20, 20, 20] }), short = candidateOf([0, 0, 0], { turns: [5, 5, 5] });
   // Three 20-move floors would run past 50 moves; two of them fit.
   const ranked = rankFloors([long, short], 9, 'fair');
   assert.ok(ranked.every(({ floors }) => floors.filter((attempt) => attempt === 0).length < 3));
   assert.deepEqual(ranked[0].floors, [0, 0, 1]);
-  // A pawn route may lose 4 lives in all.
-  const costly = candidateOf([30, 30, 30], { lives: [3, 3, 0] }), safe = candidateOf([0, 0, 0]);
+  // A pawn route may be captured 4 times in all.
+  const costly = candidateOf([30, 30, 30], { hits: [3, 3, 0] }), safe = candidateOf([0, 0, 0]);
   assert.ok(rankFloors([costly, safe], 9, 'fair').every(({ floors }) => !(floors[0] === 0 && floors[1] === 0)));
-  assert.deepEqual(rankFloors([costly, safe], 9, 'fair', 0, { lives: 6 })[0].floors, [0, 0, 0]);
+  assert.deepEqual(rankFloors([costly, safe], 9, 'fair', 0, { hits: 6 })[0].floors, [0, 0, 0]);
   // Tooling that measures whole candidates can keep each day to one candidate.
   assert.ok(rankFloors([long, short, costly], 6, 'fair', 0, { wholeDays: true }).every(({ floors }) => floors[0] === floors[1] && floors[1] === floors[2]));
 });

@@ -8,8 +8,8 @@ import { ATTEMPTS, candidateFor, rankFloors, generateDaily, searchCandidates } f
 import { humanPar } from '../src/human-bot.js';
 import { humanSummary } from '../src/par.js';
 
-const won = (moves) => ({ won: true, moves, livesLost: 0 });
-const lost = (moves = 12) => ({ won: false, moves, livesLost: 2 });
+const won = (moves) => ({ won: true, moves, hits: 0 });
+const lost = (moves = 12) => ({ won: false, moves, hits: 2 });
 
 test('each run counts its moves past the route, from 0 up to the cap, and a failed run counts the cap', () => {
   assert.equal(GAP_RUN_CAP, 10);

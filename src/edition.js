@@ -156,9 +156,9 @@ const HINTS = {
 const DAILY_COLOR = 'white';
 
 /** Everything the between-floor shop can stock, in display order. */
-export const SHOP_STOCK = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet', 'life']);
-/** Items each shop visit offers: the extra life, always, plus three drawn. */
-export const SHOP_SIZE = 4;
+export const SHOP_STOCK = Object.freeze(['shield', 'pin', 'leap', 'takeback', 'magnet']);
+/** Items each shop visit offers, drawn from the stock. */
+export const SHOP_SIZE = 3;
 /**
  * The day's offers for the shop after floor `shop` (0 or 1), the same for
  * everyone. Its own hash stream, so no other draw of the edition moves. The
@@ -166,9 +166,9 @@ export const SHOP_SIZE = 4;
  * floor has no coins) or the pin (it doesn't work there).
  */
 export function shopStock(date, shop) {
-  const pool = SHOP_STOCK.filter((id) => id !== 'life' && (shop === 0 || (id !== 'magnet' && id !== 'pin')));
+  const pool = SHOP_STOCK.filter((id) => shop === 0 || (id !== 'magnet' && id !== 'pin'));
   const rank = (id) => hash(`${date}:shop:${shop}:${id}`);
-  const chosen = new Set(['life', ...[...pool].sort((a, b) => rank(a) - rank(b)).slice(0, SHOP_SIZE - 1)]);
+  const chosen = new Set([...pool].sort((a, b) => rank(a) - rank(b)).slice(0, SHOP_SIZE));
   return SHOP_STOCK.filter((id) => chosen.has(id));
 }
 

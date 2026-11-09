@@ -1,6 +1,5 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-import { PIECE_LIVES } from './pieces.js';
 import { act, legalMoves, dangerTiles, unreachablePickups, royalRules, scoredMoves, recruitChoice, whileSearching } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 
@@ -59,7 +58,7 @@ export function positionKey(state, includeTime = true) {
   return JSON.stringify([
     state.floor, includeTime ? floorMoves(state) : null, includeTime && state.classicMonsters === true ? state.turns : null,
     state.status, state.exit.open, state.playerColor, state.awaitingPlayer,
-    state.player.x, state.player.y, state.player.piece, state.player.hp, state.player.moved,
+    state.player.x, state.player.y, state.player.piece, state.hits, state.player.moved,
     state.enemies.map((enemy) => [enemy.id, enemy.x, enemy.y, enemy.piece, enemy.role,
       enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true, enemy.pinned ?? 0]),
     state.items.filter((item) => item.type !== 'coin'), state.powers, state.companion, state.companions, state.enPassant ?? null,
@@ -106,7 +105,7 @@ function score(state, tableFor, mode = AUTO) {
   }
   return state.floor * 2000 + (state.exit.open ? 1600 : 0) + state.captures * 35
     - nearest * 8 - floorMoves(state) * 0.7
-    - (PIECE_LIVES[state.startingPiece] - state.player.hp) * 150
+    - state.hits * 150
     + (state.player.piece === 'queen' && state.startingPiece === 'pawn' ? (promoteFirst ? 300 : 50) : 0)
     + (state.player.piece === 'pawn' ? (6 - state.player.y) * (promoteFirst ? 30 : 6) : 0)
     + (mode.ally(state) && state.companion ? 40 : 0);
@@ -189,22 +188,23 @@ function recruitOrders(state, action, auto, tableFor) {
   return orders.slice(0, RECRUIT_ORDERS);
 }
 
-// Lives a proof route may spend: pawn days start with extra lives, so their
-// certified route may lose up to 4; every other piece's route loses none.
-export const livesSpendable = (state) => (state.startingPiece === 'pawn' ? 4 : 0);
+// Captures a proof route may take: a pawn day's certified route may be
+// captured up to 4 times across the run (each a move on its floor's score);
+// every other piece's route never is.
+export const spendableHits = (state) => (state.startingPiece === 'pawn' ? 4 : 0);
 
 function safeStep(state, action, mode) {
   const next = act(state, action);
   return next !== state && next.status !== 'lost' && !hurt(next) && !powered(next, mode)
-    && next.player.hp === state.player.hp ? next : null;
+    && next.hits === state.hits ? next : null;
 }
 /** `options`: the recruit mode, as findWinningRoute takes it. */
 export function safeTransition(state, action, options) {
   return safeStep(state, action, recruitMode(options));
 }
 
-// Like safeTransition, but damage is allowed while hp stays at or above the
-// day's spendable-lives floor. Restarts, losses, powers and shields still reject.
+// Like safeTransition, but captures are allowed up to the day's spendableHits.
+// Restarts, losses, powers and shields still reject.
 // Certified routes finish within this many chess moves. Real routes rarely pass
 // 40, so the search drops any line that runs past the cap instead of exploring it.
 export const MAX_ROUTE_MOVES = 50;
@@ -214,8 +214,7 @@ function routeStep(state, next, mode) {
   if (next === state || next.status === 'lost' || powered(next, mode)) return null;
   if (next.turns > MAX_ROUTE_MOVES) return null;
   if (next.events.some((event) => event.type === 'restart' || event.type === 'shield')) return null;
-  if (next.player.hp < PIECE_LIVES[state.startingPiece] - livesSpendable(state)) return null;
-  if (next.player.hp > state.player.hp) return null;
+  if (next.hits > spendableHits(state)) return null;
   return next;
 }
 /** `options`: the recruit mode, as findWinningRoute takes it. */
@@ -232,8 +231,8 @@ function routeFor(node) {
 /**
  * Replay a positive certificate through the production engine, without changing
  * its map, residents, pickups, AI, or rules. A valid proof wins all three rooms
- * within the move budget, with no bought/collected powers, no lost lives (pawn
- * routes may lose up to 4), and no
+ * within the move budget, with no bought/collected powers, never captured (pawn
+ * routes may be captured up to 4 times), and no
  * ally except the king floor's own recruit.
  * Metrics describe this witnessed route; they are not shortest-path bounds or
  * claims that its tactical decisions are unavoidable on every winning route.
@@ -262,7 +261,7 @@ function verifyRoute(initial, actions, options) {
   let state = initial;
   const metrics = {
     turns: 0, actions: actions.length, threatenedDecisions: 0, unsafeAlternatives: 0, legalAlternatives: 0,
-    narrowEscapes: 0, positioningMoves: 0, captureOpportunities: 0, promotion: false, livesLost: 0,
+    narrowEscapes: 0, positioningMoves: 0, captureOpportunities: 0, promotion: false, hits: 0,
   };
   const recruit = { orders: 0, captures: 0, targetCaptures: 0, clears: 0, joined: 0, promotions: 0, hops: 0 };
   for (const action of actions) {
@@ -301,7 +300,7 @@ function verifyRoute(initial, actions, options) {
       if (captureAvailable) metrics.captureOpportunities++;
     }
     const next = routeStep(state, act(state, action), mode);
-    if (!next) return { valid: false, reason: 'The route loses too many lives, uses a power, takes invalid stairs.' };
+    if (!next) return { valid: false, reason: 'The route is captured too often, uses a power, takes invalid stairs.' };
     if (next.floor !== state.floor && unreachablePickups(next).length) {
       return { valid: false, reason: 'A later floor has an unreachable pickup.' };
     }
@@ -314,8 +313,8 @@ function verifyRoute(initial, actions, options) {
     return { valid: false, reason: 'The route does not complete all three rooms within the move budget.' };
   }
   metrics.turns = state.turns;
-  metrics.livesLost = initial.player.hp - state.player.hp;
-  // Moves each floor took until its challenge was complete: the floor's par.
+  metrics.hits = state.hits - initial.hits;
+  // Moves each floor took until its challenge was complete, captures included.
   metrics.floorMoves = state.records.map(scoredMoves);
   if (mode !== AUTO) metrics.recruit = recruit;
   return { valid: true, state, metrics };
@@ -344,24 +343,25 @@ function countRecruit(recruit, state, next, action) {
 // takes over (fewer when the candidate's budget is nearly spent).
 export const ROLLOUT_BUDGET = 2000;
 
-// Of the floor clears among `nodes`, the one that kept the most lives (the
-// first of those): only a pawn's route may spend any, and every life left
-// carries to the next floor.
+// Of the floor clears among `nodes`, the one captured least (the first of
+// those): only a pawn's route may be captured at all, and the run's
+// allowance left carries to the next floor.
 function bestClear(nodes) {
   let best = null;
-  for (const node of nodes) if (node.state.exit.open && (!best || node.state.player.hp > best.state.player.hp)) best = node;
+  for (const node of nodes) if (node.state.exit.open && (!best || node.state.hits < best.state.hits)) best = node;
   return best;
 }
 
 /**
  * Search one floor from `start` until its challenge is complete, then take the
- * stairs at once, never dropping below `minHp` lives. `budget` is the
- * candidate's, shared by its floors: { explored, maxExpansions, beamWidth };
- * `explored` grows. Returns the floor's actions (the stairs last) and the
- * state after the stairs (the next floor's start, or the won run), or null
- * when the budget runs out or every line loses too many lives first.
+ * stairs at once, never captured more than `maxHits` times in the run.
+ * `budget` is the candidate's, shared by its floors: { explored,
+ * maxExpansions, beamWidth }; `explored` grows. Returns the floor's actions
+ * (the stairs last) and the state after the stairs (the next floor's start, or
+ * the won run), or null when the budget runs out or every line is captured
+ * too often first.
  */
-function searchFloor(start, budget, minHp, mode = AUTO) {
+function searchFloor(start, budget, maxHits, mode = AUTO) {
   const { maxExpansions, beamWidth } = budget;
   // The room's walls are fixed for the floor; a pawn may also hunt as a queen.
   const tables = {};
@@ -376,7 +376,7 @@ function searchFloor(start, budget, minHp, mode = AUTO) {
       budget.explored++;
       const next = act(node.state, action);
       const state = routeStep(node.state, next, mode);
-      if (state && state.player.hp >= minHp) result.push({ state, parent: node, action });
+      if (state && state.hits <= maxHits) result.push({ state, parent: node, action });
       return next;
     };
     for (const action of actionsFor(node.state, mode)) {
@@ -399,10 +399,10 @@ function searchFloor(start, budget, minHp, mode = AUTO) {
   const horizon = (MAX_ROUTE_MOVES - start.turns) * 2 + 1;
   if (start.exit.open) return done(root);
 
-  // A clear that kept every life ends a floor's search at once; one that spent
-  // lives (pawns only) waits until the step or layer it was found in is done,
-  // in case another clear there kept more.
-  const intact = (node) => node.state.player.hp === start.player.hp;
+  // A clear never captured ends a floor's search at once; one that was (pawns
+  // only) waits until the step or layer it was found in is done, in case
+  // another clear there was captured less.
+  const intact = (node) => node.state.hits === start.hits;
 
   // Most ordinary rooms yield to a cheap two-ply rollout. Revisiting a board
   // is penalized only as a heuristic; the beam's identity keeps the clock.
@@ -470,16 +470,16 @@ function searchFloor(start, budget, minHp, mode = AUTO) {
  * and then the route takes the stairs. Nothing else carries over that could
  * change a floor's play: the piece reverts at the stairs, monster tie-breaks
  * and Collapse arrivals count the floor's own moves, and routes never buy, so
- * gold doesn't matter. What does carry over is lives and the run's 50-move
- * cap. A pawn's route may spend up to 4 lives across the run, so each floor's
- * search prefers the clear that kept the most, and when a later floor can't
- * be certified with the lives left, a floor that spent some is searched again
- * keeping one more. The floors share one budget, in order, so a quick floor
- * leaves more for the next.
+ * gold doesn't matter. What does carry over is the run's captures and its
+ * 50-move cap. A pawn's route may be captured up to 4 times across the run, so
+ * each floor's search prefers the clear captured least, and when a later floor
+ * can't be certified with the captures left, a floor that took some is
+ * searched again allowing one fewer. The floors share one budget, in order,
+ * so a quick floor leaves more for the next.
  *
  * `floorSearch` (tooling only: scripts/calibrate-difficulty.mjs keeps each
  * floor's search so a later calibration can reuse it) sees every floor's
- * search in turn. It is called with { start, minHp, explored, search }:
+ * search in turn. It is called with { start, maxHits, explored, search }:
  * `explored` counts the candidate's expansions before this floor, and
  * `search()` runs the floor's search, returning { floor, explored }, the
  * floor's { actions, state } (its stairs last, the state after them) or null,
@@ -500,29 +500,29 @@ function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit 
   if (!initial || initial.status !== 'playing' || hasPowers(initial, mode) || unreachablePickups(initial).length) return { status: 'unknown', explored: 0 };
   const budget = { explored: 0, maxExpansions, beamWidth };
   // One floor's search, through floorSearch when tooling watches.
-  const searchOne = (state, minHp) => {
+  const searchOne = (state, maxHits) => {
     const before = budget.explored;
-    const search = () => ({ floor: searchFloor(state, budget, minHp, mode), explored: budget.explored - before });
+    const search = () => ({ floor: searchFloor(state, budget, maxHits, mode), explored: budget.explored - before });
     if (!floorSearch) return search().floor;
-    const { floor, explored } = floorSearch({ start: state, minHp, explored: before, search });
+    const { floor, explored } = floorSearch({ start: state, maxHits, explored: before, search });
     budget.explored = before + explored;
     return floor;
   };
   let blocked = false;
   // The route from `state` to the end of the run, or null.
   const finish = (state) => {
-    for (let minHp = PIECE_LIVES[state.startingPiece] - livesSpendable(state); ;) {
-      const floor = searchOne(state, minHp);
+    for (let maxHits = spendableHits(state); ;) {
+      const floor = searchOne(state, maxHits);
       if (!floor) return null;
       if (floor.state.status === 'won') return floor.actions;
       // A later floor with an unreachable pickup can't be certified by any route.
       if (unreachablePickups(floor.state).length) { blocked = true; return null; }
       const rest = finish(floor.state);
       if (rest) return [...floor.actions, ...rest];
-      // Too few lives left for what follows? Keep one more on this floor.
-      const kept = floor.state.player.hp;
-      if (blocked || kept === state.player.hp || budget.explored >= maxExpansions) return null;
-      minHp = kept + 1;
+      // Too few captures left for what follows? Allow one fewer by this floor's end.
+      const taken = floor.state.hits;
+      if (blocked || taken === state.hits || budget.explored >= maxExpansions) return null;
+      maxHits = taken - 1;
     }
   };
   const actions = finish(initial);
@@ -532,17 +532,17 @@ function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit 
 /**
  * One floor's search alone, for tooling (scripts/measure-recruits.mjs): from
  * `start`, the start of a floor, the route until its challenge is complete,
- * then its stairs, never below `minHp` lives (by default the run's own
- * allowance). The budgets and recruit modes are findWinningRoute's, with the
+ * then its stairs, never captured more than `maxHits` times in the run (by
+ * default the run's own allowance). The budgets and recruit modes are findWinningRoute's, with the
  * whole budget for this floor. `state` is the position after the stairs.
  */
-export function findFloorRoute(start, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit, minHp } = {}) {
+export function findFloorRoute(start, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit, maxHits } = {}) {
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
     throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
   }
   const mode = recruitMode({ recruit, everyRecruit });
   if (!start || start.status !== 'playing' || hasPowers(start, mode)) return { status: 'unknown', explored: 0 };
   const budget = { explored: 0, maxExpansions, beamWidth };
-  const floor = searchFloor(start, budget, minHp ?? PIECE_LIVES[start.startingPiece] - livesSpendable(start), mode);
+  const floor = searchFloor(start, budget, maxHits ?? spendableHits(start), mode);
   return floor ? { status: 'solved', actions: floor.actions, state: floor.state, explored: budget.explored } : { status: 'unknown', explored: budget.explored };
 }

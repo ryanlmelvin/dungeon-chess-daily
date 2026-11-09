@@ -19,7 +19,7 @@ import { encodeRoute } from '../src/route-code.js';
 import { getRawDaily } from '../src/edition.js';
 
 test('a data row keeps the bot\'s runs compactly and gives back the same capped human gap', () => {
-  const run = (won, moves) => ({ won, moves, livesLost: won ? 0 : 2 });
+  const run = (won, moves) => ({ won, moves, hits: won ? 0 : 2 });
   const human = { results: [[run(true, 7), run(false, 12)], [run(true, 6), run(true, 19)], [run(false, 40), run(true, 8)]], certified: [5, 6, 8] };
   const runs = compactRuns(human);
   assert.deepEqual(runs, [[7, null], [6, 19], [null, 8]], 'moves where a run won, null where it failed');
@@ -53,7 +53,7 @@ test('a position\'s digest ignores its words, events and version stamps, not the
 });
 
 // Cheap candidates: a solved knight day and a pawn day whose search fails
-// after keeping more lives on floor 1 (it searches floor 1 again).
+// after allowing fewer captures on floor 1 (it searches floor 1 again).
 const knight = candidateFor(getRawDaily('2026-11-30'), 'tough', { obstacleBase: 7, decoys: 2, scatter: 0, guards: 0 }, 0);
 const pawn = candidateFor(getRawDaily('2026-12-31'), 'tough', { obstacleBase: 7, decoys: 2, scatter: 0, guards: 0 }, 0);
 const knightRow = measureCandidate(knight), pawnRow = measureCandidate(pawn);
@@ -76,11 +76,11 @@ test('a measured row keeps its route and every floor\'s search, as generation se
     assert.equal(stateDigest(floorStart(knight, knightRow.searches, floor)), stateDigest(starts[floor]));
     assert.equal(knightRow.searches[floor][3], stateDigest(starts[floor]));
   }
-  // The pawn day searched floor 1 again keeping more lives, then gave up.
+  // The pawn day searched floor 1 again allowing fewer captures, then gave up.
   assert.equal(pawnRow.status, 'unknown');
   assert.equal(pawnRow.route, null);
   assert.deepEqual(pawnRow.searches.map(([floor]) => floor), [0, 1, 0]);
-  assert.ok(pawnRow.searches[2][1] > pawnRow.searches[0][1], 'the second search of floor 1 keeps more lives');
+  assert.ok(pawnRow.searches[2][1] < pawnRow.searches[0][1], 'the second search of floor 1 allows fewer captures');
 });
 
 test('measuring again reuses exactly what still holds', () => {

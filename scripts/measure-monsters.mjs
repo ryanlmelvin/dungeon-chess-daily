@@ -37,7 +37,7 @@ import { ATTEMPTS, candidateFor, rankFloors, searchCandidate, targetForDate } fr
 import { DIFFICULTY_TIERS, TIER_IDS, knobsFor, tierForDate, bandDistance, floorMinimums } from '../src/difficulty.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
 
-const KEPT_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'livesLost', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves'];
+const KEPT_METRICS = ['turns', 'threatenedDecisions', 'narrowEscapes', 'hits', 'unsafeAlternatives', 'legalAlternatives', 'floorMoves'];
 // Freebie rules to compare (src/difficulty.js floorMinimums): every floor, or floors 1 to 3 each.
 const ADOPTED = DIFFICULTY_TIERS.tricky.minFloorMoves;
 const describe = (rule) => {
@@ -62,7 +62,7 @@ if (!isMainThread) {
     // rankFloors adds up the floors' capped human gaps (searchCandidate runs the bot).
     parentPort.postMessage({
       id, status: result.status, explored: result.explored, ms: Math.round(performance.now() - began), metrics, score: result.score ?? null, gap: result.gap ?? null,
-      points: result.points ?? null, runs: result.runs ?? 0, pars: result.pars ?? null, floors: result.floors?.map(({ turns, lives }) => ({ turns, lives })) ?? null,
+      points: result.points ?? null, runs: result.runs ?? 0, pars: result.pars ?? null, floors: result.floors?.map(({ turns, hits }) => ({ turns, hits })) ?? null,
     });
   });
 } else {

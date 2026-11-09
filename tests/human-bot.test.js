@@ -78,14 +78,14 @@ test('the bot never reads a hidden role: reassigning them changes nothing it see
 });
 
 test('a floor\'s par is the lower median of its successful runs, else the route plus 25%', () => {
-  const won = (moves) => ({ won: true, moves, livesLost: 0 });
-  const lost = (moves) => ({ won: false, moves, livesLost: 1 });
+  const won = (moves) => ({ won: true, moves, hits: 0 });
+  const lost = (moves) => ({ won: false, moves, hits: 1 });
   assert.deepEqual(medianRun([won(9), won(7), lost(40), won(12), won(7)], 6), { par: 7, run: 1 });
   assert.deepEqual(medianRun([won(9), won(7), won(12)], 6), { par: 9, run: 0 });
   assert.deepEqual(medianRun([lost(40), won(15), lost(3)], 6), { par: 15, run: 1 });
   assert.deepEqual(medianRun([lost(40), lost(40), lost(5)], 13), { par: 17, run: null });
-  // Of the runs with par's moves, the result card replays the one that lost the fewest lives.
-  assert.deepEqual(medianRun([{ won: true, moves: 7, livesLost: 1 }, won(9), { won: true, moves: 7, livesLost: 0 }], 6), { par: 7, run: 2 });
+  // Of the runs with par's moves, the result card replays the one captured least.
+  assert.deepEqual(medianRun([{ won: true, moves: 7, hits: 1 }, won(9), { won: true, moves: 7, hits: 0 }], 6), { par: 7, run: 2 });
   assert.deepEqual([failedFloorPar(13), failedFloorPar(4), failedFloorPar(3), failedFloorPar(8)], [17, 5, 4, 10]);
   // Real editions: a failed floor gets the route's moves plus 25%; others the median run's moves.
   for (let day = 0; day < 12; day++) {
@@ -107,7 +107,7 @@ test('a floor\'s par is the lower median of its successful runs, else the route 
 });
 
 test('the human gap counts extra moves over the route, a failed run as the whole cap', () => {
-  const run = (won, moves) => ({ won, moves, livesLost: 0 });
+  const run = (won, moves) => ({ won, moves, hits: 0 });
   const gap = humanGap({ results: [[run(true, 6), run(true, 8)], [run(true, 5), run(false, 3)], [run(false, 9), run(false, 40)]], certified: [5, 5, 10] });
   assert.deepEqual(gap.floors, [2, (5 + HUMAN_MOVE_CAP) / 2 - 5, HUMAN_MOVE_CAP - 10]);
   assert.deepEqual(gap.failed, [0, 0.5, 1]);

@@ -12,7 +12,7 @@ const hasMove = (state, x, y) => legalMoves(state).some((tile) => tile.x === x &
 function scenario(piece = 'rook', x = 4, y = 6) {
   const state = createGame(daily);
   state.playerColor = 'white'; state.modifier = 'none';
-  state.player = { piece, x, y, hp: 2, maxHp: 2, moved: false };
+  state.player = { piece, x, y, moved: false };
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = []; state.objective = { piece: 'king', complete: false };
   return state;
 }
@@ -22,13 +22,13 @@ function monster(id, piece, x, y, target = null) {
 
 const dates = Array.from({ length: 60 }, (_, day) => new Date(Date.UTC(2026, 10, 7 + day)).toISOString().slice(0, 10));
 
-test('each shop offers the extra life plus three drawn items, the same for everyone, varying by shop and day', () => {
+test('each shop offers three items drawn from its stock, the same for everyone, varying by shop and day', () => {
   let differ = 0;
   for (const date of dates) {
     const [first, second] = [shopStock(date, 0), shopStock(date, 1)];
     for (const offers of [first, second]) {
       assert.equal(offers.length, SHOP_SIZE);
-      assert.ok(offers.includes('life'), `${date}: extra life always stocked`);
+      assert.ok(!offers.includes('life'), `${date}: no lives to buy`);
       assert.ok(offers.every((id) => SHOP_ITEMS.some((item) => item.id === id)));
     }
     assert.ok(!second.includes('magnet'), `${date}: no magnet before the coinless last floor`);
@@ -40,8 +40,8 @@ test('each shop offers the extra life plus three drawn items, the same for every
   assert.ok(new Set(dates.map((date) => shopStock(date, 0).join())).size > 5, 'offers change from day to day');
 });
 
-test('the shop sells the three tools beside the ward, magnet and extra life, but no hourglass, and only what it stocks', () => {
-  assert.deepEqual(SHOP_ITEMS.map((item) => item.id), ['shield', 'pin', 'leap', 'takeback', 'magnet', 'life']);
+test('the shop sells the three tools beside the ward and magnet, but no hourglass or extra life, and only what it stocks', () => {
+  assert.deepEqual(SHOP_ITEMS.map((item) => item.id), ['shield', 'pin', 'leap', 'takeback', 'magnet']);
   for (const id of ['pin', 'leap', 'takeback']) {
     const state = scenario(); state.enemies = [monster('k', 'king', 4, 2)]; state.gold = 9;
     state.date = dates.find((date) => shopStock(date, 0).includes(id));
@@ -69,7 +69,7 @@ test('a pin is free, clears an aimed attack, and holds the monster for three mon
   for (let turn = 1; turn <= PIN_MOVES; turn++) {
     next = act(next, { type: 'wait' });
     assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [0, 6], `held on monster turn ${turn}`);
-    assert.equal(next.player.hp, 2);
+    assert.equal(next.hits, 0);
   }
   assert.equal(next.enemies[0].pinned, undefined, 'the pin wears off');
   assert.equal(act(next, { type: 'pin', id: 'r' }), next, 'one pin per purchase');
@@ -80,9 +80,9 @@ test('a pinned monster beside you can’t capture at close range', () => {
   state.enemies = [monster('n', 'knight', 3, 3), monster('k', 'king', 7, 0)]; state.powers.pin = 1;
   // The knight at (3,3) covers (4,5): stepping there is normally a close-range capture.
   const exposed = act(state, move(4, 5));
-  assert.equal(exposed.player.hp, 1);
+  assert.equal(exposed.hits, 1);
   const safe = act(act(state, { type: 'pin', id: 'n' }), move(4, 5));
-  assert.equal(safe.player.hp, 2);
+  assert.equal(safe.hits, 0);
 });
 
 test('a king can be pinned like any monster before the last floor, where it is always a decoy', () => {
@@ -90,16 +90,16 @@ test('a king can be pinned like any monster before the last floor, where it is a
   state.floor = 1; state.objective = { piece: 'pawn', complete: false }; state.powers.pin = 1;
   state.enemies = [monster('k', 'king', 3, 4), monster('p', 'pawn', 0, 0)];
   // Stepping beside the king, to (4,5), is normally a close-range capture.
-  assert.equal(act(state, move(4, 5)).player.hp, 1);
+  assert.equal(act(state, move(4, 5)).hits, 1);
   const pinned = act(state, { type: 'pin', id: 'k' });
   assert.notEqual(pinned, state, 'refusing a king would point it out');
   assert.equal(pinned.enemies[0].pinned, PIN_MOVES);
   assert.equal(pinned.powers.pin, 0);
   let next = act(pinned, move(4, 5));
-  assert.equal(next.player.hp, 2, 'a pinned king can’t capture at close range');
+  assert.equal(next.hits, 0, 'a pinned king can’t capture at close range');
   for (let turn = 2; turn <= PIN_MOVES; turn++) next = act(next, { type: 'wait' });
   assert.deepEqual([next.enemies[0].x, next.enemies[0].y], [3, 4], `held for ${PIN_MOVES} monster turns`);
-  assert.equal(next.player.hp, 2);
+  assert.equal(next.hits, 0);
   assert.equal(next.enemies[0].pinned, undefined, 'the pin wears off');
 });
 
@@ -122,23 +122,25 @@ test('a Borrowed move offers knight squares without arming, spent only when used
   assert.equal(hasMove(knight, 4, 2), true);
 });
 
-test('a Take-back undoes the last move, a lost life included, once per purchase', () => {
+test('a Take-back undoes the last move, a capture included, once per purchase', () => {
   const state = scenario(); state.powers.takeback = 1;
   state.enemies = [monster('r', 'rook', 0, 6, { x: 4, y: 6 }), monster('k', 'king', 7, 0)];
   assert.equal(takebackTarget(state), null, 'nothing to take back yet');
   const hit = act(state, { type: 'wait' });
-  assert.equal(hit.player.hp, 1);
+  assert.equal(hit.hits, 1);
   const back = act(hit, { type: 'takeback' });
-  assert.equal(back.player.hp, 2); assert.equal(back.turns, state.turns);
+  assert.equal(back.hits, 0); assert.equal(back.turns, state.turns);
   assert.equal(back.powers.takeback, 0);
   assert.equal(act(back, { type: 'takeback' }), back);
   const later = act(back, move(4, 5));
   assert.equal(takebackTarget(later), null, 'used up');
 });
 
-test('a Take-back can undo the move that ended the run, but not cross the stairs', () => {
-  const state = scenario(); state.player.hp = state.player.maxHp = 1; state.powers.takeback = 1;
-  state.enemies = [monster('r', 'rook', 0, 6, { x: 4, y: 6 }), monster('k', 'king', 7, 0)];
+test('a Take-back can undo the move that cornered you, but not cross the stairs', () => {
+  // Walled in on every side: the wait leaves no move at all, which ends the try.
+  const state = scenario(); state.powers.takeback = 1;
+  state.map[5] = '...###..'; state.map[6] = '...#.#..'; state.map[7] = '...###..';
+  state.enemies = [monster('r', 'rook', 0, 0), monster('k', 'king', 7, 0)];
   const lost = act(state, { type: 'wait' });
   assert.ok(lost.events.some((event) => event.type === 'restart'));
   const back = act(lost, { type: 'takeback' });
