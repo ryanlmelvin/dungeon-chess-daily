@@ -25,7 +25,7 @@
 // coins, the powerup and the recruit lie off the line. Failures reroll the
 // instance (and the dressing) from their own seeded streams, then try the
 // next motif, then a plain walk to walled-in targets, which always composes.
-import { createGame, act, legalMoves, paperSuspects, PIECES, PIECE_COUNTS } from './rules.js';
+import { createGame, act, legalMoves, closeAttacker, paperSuspects, PIECES, PIECE_COUNTS } from './rules.js';
 import { getRawDaily } from './edition.js';
 import { tierForDate } from './difficulty.js';
 import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from './fairness.js';
@@ -50,7 +50,7 @@ export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 
  * motif only where no level-3 one fits the matchup (a knight against knights,
  * a bishop against bishops or a queen); the walk always composes.
  */
-export const FLOOR_MOTIFS = Object.freeze([['bait', 'fork'], ['squeeze', 'bait', 'fork'], ['net']]);
+export const FLOOR_MOTIFS = Object.freeze([['bait'], ['squeeze', 'bait'], ['net']]);
 /**
  * One monster ruleset for every composed day, a placeholder while the plan's
  * open question (one ruleset or five tiers) is settled: Fair, where every
@@ -192,7 +192,8 @@ const MOTIFS = {
     for (const perch of shuffle(perches, rng)) {
       if (chosen.length === count) break;
       const { tile } = perch;
-      if (!inside(tile) || same(tile, START) || same(tile, EXIT) || tile.y > 5 || chebyshev(tile, START) < 2) continue;
+      // Perches may share the start's rank (a rook winds up along it), never sit behind it.
+      if (!inside(tile) || same(tile, START) || same(tile, EXIT) || tile.y > 6 || chebyshev(tile, START) < 2) continue;
       if (count === 1 && (covers(target, tile, START) || reachable(target, tile).some((square) => same(square, START)))) continue;
       if (chosen.some((other) => other.dir === perch.dir || chebyshev(other.tile, tile) < 2
         || other.lane.some((square) => same(square, tile)) || perch.lane.some((square) => same(square, other.tile)))) continue;
@@ -213,10 +214,9 @@ const MOTIFS = {
       if (!guard) { if (direct) return null; continue; }
       const spots = shuffle(firstSteps('king', perch.tile).concat(KNIGHT.map(([dx, dy]) => at(perch.tile.x + dx, perch.tile.y + dy))).filter(inside), rng);
       const spot = spots.find((tile) => plan.free(tile) && covers(guard.role, tile, perch.tile) && !covers(guard.role, tile, bait)
-        && !covers(guard.role, tile, START) && box(plan.clone(), guard.role, tile));
+        && !covers(guard.role, tile, START));
       if (!spot) { context.guards.unshift(guard); if (direct) return null; continue; }
       plan.place(guard.cast, guard.role, spot);
-      box(plan, guard.role, spot);
     }
     return { plan, motif: 'bait' };
   },
@@ -497,6 +497,18 @@ function usesIdea(built, states, line) {
   return true;
 }
 
+// Turns of the line on which a decoy presses the player: a wind-up lane on
+// the player's square, or a decoy guarding a square the player could move to.
+function pressure(states) {
+  let turns = 0;
+  for (const state of states.slice(0, -1)) {
+    const lane = state.enemies.some((foe) => foe.phase === 'aim' && foe.intent.some((tile) => same(tile, state.player)));
+    const guarded = legalMoves(state).some((move) => { const foe = closeAttacker(state, move); return foe && foe.role !== state.objective.piece; });
+    if (lane || guarded) turns++;
+  }
+  return turns;
+}
+
 // Share of monster turns along a line in which the monster had at most one
 // step, or was committed to a wind-up (both are forced replies).
 function forcedShare(states) {
@@ -513,21 +525,23 @@ function forcedShare(states) {
   return total ? forced / total : 1;
 }
 
-// Wall in the remaining decoys well away from the line, then lay the coins,
-// the powerup and the recruit off it, on squares the player can reach.
+// Every piece moves every turn, so decoys roam free: each starts two to four
+// of its own moves from the planted line, close enough to press in while it
+// plays out, never beside the start. Then the coins, the powerup and the
+// recruit go off the line, on squares the player can reach.
 function dress(plan, context, line, base, floor, rng) {
   const lineSquares = [START, ...line.filter((action) => action.type === 'move')];
   plan.keep(...lineSquares);
   const far = (tile, gap) => lineSquares.every((square) => chebyshev(square, tile) >= gap) && plan.units.every((unit) => chebyshev(unit, tile) >= 2);
+  const squares = Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3));
   for (const decoy of context.quiet) {
-    const spots = shuffle(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)), rng).filter((tile) => plan.free(tile) && far(tile, 3));
-    const costed = spots.map((tile) => {
-      const trial = plan.clone();
-      trial.place(decoy.cast, decoy.role, tile);
-      return box(trial, decoy.role, tile) ? { trial, walls: trial.walls.size - plan.walls.size } : null;
-    }).filter(Boolean).sort((a, b) => a.walls - b.walls);
-    if (!costed.length) return null;
-    Object.assign(plan, costed[0].trial);
+    const moves = distanceTable(plan.map(), decoy.role === 'pawn' ? 'king' : decoy.role);
+    const reach = (tile) => Math.min(...lineSquares.map((square) => moves[index(tile) * 64 + index(square)]));
+    const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, START) >= 2 && !covers(decoy.role, tile, START)
+      && plan.units.every((unit) => chebyshev(unit, tile) >= 2));
+    const spot = spots.find((tile) => reach(tile) >= 2 && reach(tile) <= 4) ?? spots[0];
+    if (!spot) return null;
+    plan.place(decoy.cast, decoy.role, spot);
   }
   const table = distanceTable(plan.map(), context.piece);
   const moves = (tile) => table[index(START) * 64 + index(tile)];
@@ -601,21 +615,26 @@ export function composeFloor(base, floor, { trace } = {}) {
       const planted = found.lines.map((line) => ({ line, states: playLine(start, line) })).find(({ line, states }) => states && usesIdea(built, states, line));
       if (!planted) { trace?.({ motif, attempt, stage: 'idea', depth: found.depth, lines: found.lines, room: built.plan.room() }); continue; }
       tally.replayed++;
-      for (let dressing = 0; dressing < DRESS_ATTEMPTS; dressing++) {
+      let best = null;
+      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
         const plan = dress(built.plan.clone(), context, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
         if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
         const room = plan.room();
         const dressed = floorStart(base, floor, room);
         const states = playLine(dressed, planted.line);
-        const hasty = hastyScore(dressed, BOT_GUARD.short);
+        const hasty = !states?.at(-1).exit.open || motif === 'walk' ? Infinity : hastyScore(dressed, BOT_GUARD.short);
         const why = !states?.at(-1).exit.open ? 'line' : motif === 'walk' ? null : shortestWins(dressed, found.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line: planted.line }); continue; }
         const guard = botGuard(dressed, base, floor, planted.line.length + 1);
-        if (!guard.ok && motif !== 'walk') { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); break; }
+        if (!guard.ok && motif !== 'walk') { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); continue; }
+        const felt = pressure(states);
+        if (!best || felt > best.pressure) best = { room, states, hasty, pressure: felt };
+      }
+      if (best) {
         tally.kept++;
         return {
-          room, line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
-          lines: found.lines.length, forced: forcedShare(states), matched: cast.matched, lifeTrade: hasty < planted.line.length, stats, ms: performance.now() - began,
+          room: best.room, line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
+          lines: found.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < planted.line.length, stats, ms: performance.now() - began,
         };
       }
     }

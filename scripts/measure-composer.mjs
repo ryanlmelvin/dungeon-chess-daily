@@ -55,7 +55,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const botPar = medianRun(outcomes, floor.line.length).par;
     rows.push({
       date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
-      firstMoves: floor.firstMoves, forced: floor.forced, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
+      firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
     });
   });
 }
@@ -73,6 +73,7 @@ function summarize(group) {
     unique: percent(group.filter((row) => row.firstMoves === 1).length, group.length),
     miss: `${percent(all.filter((run) => !run.won || run.moves > run.par + 4).length, all.length)} / ${percent(all.filter((run) => !run.won || run.moves > run.botPar + 4).length, all.length)}`,
     pars: `${mean(group.map((row) => row.par)).toFixed(1)} / ${mean(group.map((row) => row.botPar)).toFixed(1)}`,
+    pressure: `${mean(group.map((row) => row.pressure)).toFixed(1)} (${percent(group.filter((row) => row.pressure > 0).length, group.length)})`,
     short: `${percent(won.filter((run) => run.moves <= 2).length, all.length)} / ${percent(won.filter((run) => run.moves + run.lives <= 2).length, all.length)}`,
     stalled: mean(all.map((run) => run.stalled)).toFixed(2),
     lives: mean(all.map((run) => run.lives)).toFixed(2),
@@ -92,8 +93,8 @@ const days = new Set(rows.map((row) => row.date));
 console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}); ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
-const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + lives) | Stalled moves / run | Lives lost / run | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|';
-const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.lives} | ${s.ms} |`; };
+const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + lives) | Stalled moves / run | Lives lost / run | Pressured turns on the line (floors with any) | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|';
+const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.lives} | ${s.pressure} | ${s.ms} |`; };
 console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
