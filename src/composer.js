@@ -474,28 +474,37 @@ function winsAsPlayed(start, line) {
   return state.exit.open;
 }
 /**
- * Items hint at the trick: one lies on the key square, a coin on floors 1
- * and 2 (a coin never changes play) and a bone ward on the king floor, which
- * has no gold and no floor after it to carry the ward into. The ward is kept
- * only if the line still wins and the hasty check and bot guard pass with
- * it; otherwise the king floor has no hint.
+ * A hint marks the trick's key square, so the trick is findable without
+ * every hint being a coin. Floor 1: a coin, or a held decoy standing there,
+ * which the key move takes while it sleeps. Floor 2: a coin or a coin magnet
+ * (a magnet carried out of floor 1 would sweep up floor 2's hint coin; out of
+ * floor 2 it meets only the coinless king floor). The king floor: a bone
+ * ward, with no floor after it to carry the ward into. A coin never changes
+ * play; any other hint is kept only if the line still wins with nothing
+ * shorter, and the hasty check and bot guard pass. Returns { room, kind }.
  */
 function hinted(built, best, line, base, floor, rng, carried) {
   const square = ideaSquare(built, best.states, line);
-  if (!square) return best.room;
-  for (const kind of floor === 2 ? ['shield'] : ['coin']) {
+  if (!square) return { room: best.room, kind: null };
+  const kinds = floor === 2 ? ['shield'] : shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng);
+  for (const kind of kinds) {
     const room = structuredClone(best.room);
     if (kind === 'coin') {
       const coin = room.items.find((item) => item.type === 'coin');
       if (coin) Object.assign(coin, { x: square.x, y: square.y, hint: true });
       else room.items.push({ x: square.x, y: square.y, type: 'coin', hint: true });
-      return room;
+      return { room, kind };
     }
-    room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
+    if (kind === 'held') {
+      const sleeper = room.enemies.find((foe) => foe.held);
+      if (!sleeper) continue;
+      Object.assign(sleeper, { x: square.x, y: square.y });
+    } else room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
     const start = floorStart(base, floor, room, carried);
-    if (winsAsPlayed(start, line) && hastyScore(start, BOT_GUARD.short) > BOT_GUARD.short && botGuard(start, base, floor, line.length + 1).ok) return room;
+    if (winsAsPlayed(start, line) && (kind !== 'held' || !shortestWins(start, line.length - 1))
+      && hastyScore(start, BOT_GUARD.short) > BOT_GUARD.short && botGuard(start, base, floor, line.length + 1).ok) return { room, kind };
   }
-  return best.room;
+  return { room: best.room, kind: null };
 }
 
 /**
@@ -609,6 +618,10 @@ function dress(plan, context, line, base, floor, rng) {
   const coinless = floor === 2;
   const coins = coinless ? [] : open.filter((tile) => far(tile, 1)).slice(0, 3);
   for (const tile of coins) plan.items.push({ x: tile.x, y: tile.y, type: 'coin' });
+  // Every floor keeps a red herring: floors 1 and 2 have coins off the line; the
+  // coinless king floor gets a decoy bone ward away from it.
+  const herring = coinless && open.find((tile) => plan.free(tile) && far(tile, 2) && chebyshev(tile, START) > 1);
+  if (herring) plan.items.push({ x: herring.x, y: herring.y, type: 'powerup', power: 'shield' });
   if (floor === 2) {
     // The king floor's recruit, a king, waits one move from the start, as always,
     // too far from the royal king to step beside it within the line.
@@ -691,9 +704,9 @@ export function composeFloor(base, floor, { trace, carried = null } = {}) {
       }
       if (best) {
         tally.kept++;
-        const room = hinted(built, best, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
+        const { room, kind } = hinted(built, best, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
         return {
-          room, hint: room.items.find((item) => item.hint)?.power ?? (room.items.some((item) => item.hint) ? 'coin' : null), line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
+          room, hint: kind, line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
           lines: found.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < planted.line.length, stats, ms: performance.now() - began,
         };
       }
