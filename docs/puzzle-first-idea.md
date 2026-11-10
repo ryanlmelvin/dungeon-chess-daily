@@ -10,7 +10,7 @@ below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 Status: idea, written 2026-11-09, with lichess measurements added the same
 day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
 rules) are built. Phase 2 has begun in the preview: floors start on varied
-squares, and rook and queen days compose.
+squares, rook and queen days compose, and so do floors with pawn targets.
 
 ## What we measured
 
@@ -64,6 +64,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Kings never stand side by side (king rule 3) | Dropped after play (2026-11-09): it kept the recruit king from cornering a king that slipped its net, so the chase never ended |
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
 | Composed floors start on varied squares (b2–g2, d1 or e1), each floor its own | Built in the preview (2026-11-09): a player meets a king-floor route from their last 8 days of that piece on 10–18% of days, against 61–68% from e2 |
+| A pawn target on a composed floor is two pawns | Chosen after playing one and two (2026-11-10): the count rule allows at most two, and two gave longer, more forced lines |
 
 ## Lichess puzzles
 
@@ -299,7 +300,8 @@ Knight, bishop, rook and queen players are built; pawn players come next.
 - **No count giveaway.** The composer sets decoy counts so that the paper's
   other suspect has the same number of copies as the target: two for rooks,
   knights and bishops, one for a queen or king. On pawn floors, eight copies
-  always name the target, so the paper can call them open-and-shut.
+  always name the target, so the paper can call them open-and-shut; composed
+  floors use two pawns instead, so the rule holds there too.
 - **Par.** I suggest par equal to the planted line plus 1. That gives a
   careful player who spots the idea a spare move: E means "found it", under
   par means "found the exact line" or a clever use of a powerup or recruit,
@@ -377,8 +379,10 @@ Each phase ends with a preview you play before anything long runs or ships.
    ignores frost. Every edition regenerated, previewed, shipped.
 2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
    Breach days, recruits and powerup placement. Settle par here. Built so
-   far: varied start squares, and rook and queen players (bait, squeeze and
-   the king's net along the pocket's line).
+   far: varied start squares, rook and queen players (bait, squeeze and the
+   king's net along the pocket's line), and pawn targets (two pawns that
+   march into a squeeze or wind up at a bait; a wall under each one's file
+   keeps it from crowning).
 3. **Switch.** Generate every edition with the composer, regenerate the
    archive (minutes), retire calibration, and update the README, the manual
    and `docs/generation.md`.

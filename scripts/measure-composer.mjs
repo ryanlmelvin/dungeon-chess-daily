@@ -10,7 +10,9 @@
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from.
 // Read-only.
-//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…] [--json path]
+//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…]
+//     [--pawn-days] [--json path]
+// --pawn-days measures only the days whose floors 1–2 have pawn targets.
 import { writeFileSync } from 'node:fs';
 import { composeDay, MOTIF_LEVELS, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
@@ -26,6 +28,7 @@ const tier = arg('tier', undefined);
 // Where floors may start the player (src/composer.js START_SETS, or square names); omitted, the composer's own choice.
 const starts = arg('starts', undefined);
 const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
+const pawnDays = process.argv.includes('--pawn-days');
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -46,7 +49,8 @@ const rows = [];
 const began = performance.now();
 for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
-  if (!pieces.includes(raw.playerPiece) || raw.targets.slice(0, 2).some((role) => role === 'pawn')) continue;
+  const pawnTargets = raw.targets.slice(0, 2).some((role) => role === 'pawn');
+  if (!pieces.includes(raw.playerPiece) || (pawnDays && !pawnTargets)) continue;
   let composed;
   try { composed = composeDay(date, { tier, starts }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
@@ -106,7 +110,7 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
 }
 const days = new Set(rows.map((row) => row.date));
 const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
-console.log(`Composer over ${days.size} ${pieces.join(', ')} days (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' with pawn targets' : ''} (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
@@ -119,6 +123,15 @@ console.log(`\nBy motif and piece:\n\n${header}`);
 for (const motif of motifs) for (const piece of pieces) {
   const group = floorsOf.filter((row) => row.motif === motif && row.piece === piece);
   if (group.length) console.log(line(`${motif} · ${piece}`, group));
+}
+const pawnFloors = floorsOf.filter((row) => row.target === 'pawn');
+if (pawnFloors.length) {
+  console.log(`\nPawn-target floors by motif and piece:\n\n${header}`);
+  for (const motif of motifs) for (const piece of pieces) {
+    const group = pawnFloors.filter((row) => row.motif === motif && row.piece === piece);
+    if (group.length) console.log(line(`${motif} · ${piece}`, group));
+  }
+  console.log(line('all pawn floors', pawnFloors));
 }
 console.log(`\nBy floor (level: floor 1 at 2, floor 2 at 3, the net at 3–4):\n\n${header}`);
 for (const f of [0, 1, 2]) {

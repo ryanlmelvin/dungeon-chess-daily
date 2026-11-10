@@ -36,7 +36,7 @@ import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 
 export const COMPOSER_VERSION = 1;
-/** The player pieces the composer builds days for (days whose floors 1 and 2 have pawn targets aren't composed yet). */
+/** The player pieces the composer builds days for, whatever their targets (pawn players come later). */
 export const COMPOSED_PIECES = Object.freeze(['knight', 'bishop', 'rook', 'queen']);
 /** A planted line takes this many player moves, waits included. */
 export const LINE_MOVES = Object.freeze({ min: 3, max: 4 });
@@ -86,6 +86,14 @@ export const START_SETS = Object.freeze({
   wide: Object.freeze(['b2', 'c2', 'd2', 'e2', 'f2', 'g2', 'd1', 'e1'].map(squareOf)),
 });
 export const COMPOSED_STARTS = 'wide';
+/**
+ * How many pawns make a floor's target: two. A chess army's eight is far too
+ * many for a planted line of 3 or 4 moves, and the count rule (the paper's
+ * other suspect shows as many copies as the target) allows at most two, the
+ * most any other piece has. The user chose two over one after playing both
+ * (2026-11-10): longer, more forced lines, under more pressure.
+ */
+export const PAWN_TARGETS = 2;
 /** A start set by name, or a list of square names ('c2,d2,e2'). */
 export function startSquares(starts = COMPOSED_STARTS) {
   if (Array.isArray(starts)) return starts;
@@ -291,6 +299,7 @@ function beyond(from, through, tile) {
 // squeeze, the `landing` squares the targets must step onto.
 const MOTIFS = {
   bait(context) {
+    if (context.target === 'pawn') return pawnBait(context);
     const { piece, target, count, rng, start } = context;
     const plan = new Plan(start);
     // Two targets wind up at the start square; a lone queen at the square the
@@ -344,6 +353,7 @@ const MOTIFS = {
   },
 
   squeeze(context) {
+    if (context.target === 'pawn') return pawnSqueeze(context);
     const { piece, target, count, rng, start } = context;
     if (!SQUEEZES[piece].includes(target)) return null;
     const plan = new Plan(start);
@@ -495,6 +505,69 @@ const MOTIFS = {
   },
 };
 
+// Pawn targets march one square down their file every turn and never leave
+// it: a missed lunge stays put and a capture doesn't move them, so their one
+// choice is a diagonal strike at you. A wall on the promotion rank under a
+// target pawn's file stops it a square short, so a composed floor's pawns
+// never crown (production walls most of that rank; src/rules.js
+// promotionBarricades). On a bishop floor the stop square must be on the
+// bishop's colour, or a pawn stopped there could never be taken, so where
+// the second rank's square is off it the wall stands there instead.
+function barricade(plan, piece, file) {
+  const offColour = piece === 'bishop' && (file + 6) % 2 !== (plan.start.x + plan.start.y) % 2;
+  return plan.wall(at(file, offColour ? 6 : 7));
+}
+
+// Pawn targets: bait. A pawn strikes only the two squares diagonally ahead of
+// it, so the two pawns wind up at the start square from just above it. Step
+// aside: they lunge, miss and stand off-balance, unable to take back, and you
+// take them. A pawn your first move could take spoils it (a bishop or queen
+// beside them): a guard on its square would punish the planted capture too.
+function pawnBait(context) {
+  const { piece, rng, start } = context;
+  const plan = new Plan(start);
+  plan.keep(start);
+  // Never on the second rank of their march (a pawn there may step two).
+  const perches = shuffle([-1, 1].map((dx) => at(start.x + dx, start.y - 1)), rng).filter((tile) => inside(tile) && tile.y !== 1 && plan.free(tile));
+  if (perches.length < PAWN_TARGETS || perches.some((tile) => reachable(piece, start).some((square) => same(square, tile)))) return null;
+  for (const tile of perches) {
+    plan.place(0, 'pawn', tile);
+    if (!barricade(plan, piece, tile.x)) return null;
+  }
+  return { plan, motif: 'bait', pawns: true };
+}
+
+// Pawn targets: squeeze. The key square, your first move, covers the squares
+// the pawns must march onto next (their landings), and a pawn can't decline
+// its step: each starts just above its landing.
+function pawnSqueeze(context) {
+  const { piece, rng, start } = context;
+  const plan = new Plan(start);
+  const first = reachable(piece, start);
+  const key = shuffle(first.filter((tile) => tile.y >= 1 && tile.y <= 5), rng)[0];
+  if (!key) return null;
+  plan.keep(start, key);
+  const fromKey = reachable(piece, key);
+  const landings = shuffle(fromKey.filter((tile) => tile.y <= 5 && tile.y >= 1 && tile.y !== 2 && !same(tile, start) && !first.some((square) => same(square, tile))), rng);
+  const pockets = [];
+  for (const landing of landings) {
+    if (pockets.length === PAWN_TARGETS) break;
+    if (pockets.some((pocket) => pocket.landing.x === landing.x || chebyshev(pocket.landing, landing) < 2)) continue;
+    const home = at(landing.x, landing.y - 1);
+    if ([home, landing].some((tile) => same(tile, start) || same(tile, key) || !plan.free(tile))) continue;
+    // At home the pawn must not strike the key (it would wind up rather than step), nor stand where you could take it at once.
+    if (covers('pawn', home, key) || fromKey.some((square) => same(square, home)) || first.some((square) => same(square, home))) continue;
+    pockets.push({ landing, home });
+  }
+  if (pockets.length < PAWN_TARGETS) return null;
+  for (const pocket of pockets) plan.keep(pocket.home, pocket.landing, ...between(key, pocket.landing));
+  for (const pocket of pockets) {
+    plan.place(0, 'pawn', pocket.home);
+    if (!barricade(plan, piece, pocket.landing.x)) return null;
+  }
+  return { plan, motif: 'squeeze', key, landing: pockets.map((pocket) => pocket.landing) };
+}
+
 // A slider's three-move routes from the start to any of `mates` over the
 // plan's walls (monsters ignored), landing on no mate before the last move:
 // { moves, passed }, `passed` every square the route lands on or crosses.
@@ -631,8 +704,9 @@ export function hastyScore(start, depth, from = floorScoredMoves(start)) {
 function ideaSquare(built, states, line) {
   if (built.motif === 'squeeze' || built.motif === 'net') return built.key;
   if (built.motif !== 'bait') return null;
+  // A lunge lands on the square you left; a pawn's misses where it stands.
   const n = line.findIndex((action, at) => action.type === 'move' && at + 1 < line.length
-    && states[at + 1].events.some((event) => event.type === 'miss' && same(event, states[at].player)));
+    && states[at + 1].events.some((event) => event.type === 'miss' && (built.pawns ? isTarget(states[at], event.id) : same(event, states[at].player))));
   return n >= 0 ? { x: line[n].x, y: line[n].y } : null;
 }
 // Does `line` win from `start`, as played (pickups included), never captured?
@@ -715,6 +789,12 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 function usesIdea(built, states, line) {
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
+  if (built.motif === 'bait' && built.pawns) {
+    // A target pawn strikes at the square the player just left, misses, and a target is taken next.
+    return line.some((action, n) => n + 1 < line.length && action.type === 'move'
+      && states[n + 1].events.some((event) => event.type === 'miss' && isTarget(states[n], event.id))
+      && line[n + 1].type === 'move' && states[n + 1].enemies.some((foe) => same(foe, line[n + 1]) && isTarget(states[n + 1], foe.id)));
+  }
   if (built.motif === 'bait') {
     // A target lunges onto the square the player just left and is taken there next.
     return line.some((action, n) => {
@@ -817,7 +897,7 @@ function dress(plan, context, line, base, floor, rng) {
 // rest, which wait walled in. On the king floor every decoy waits.
 function castFor(base, floor) {
   const target = base.targets[floor];
-  const count = PIECE_COUNTS[target];
+  const count = target === 'pawn' ? PAWN_TARGETS : PIECE_COUNTS[target];
   const species = [base.species[floor], base.species[3 + floor * 2], base.species[4 + floor * 2]];
   const suspect = paperSuspects(base, floor).find((entry) => entry.id !== species[0].id) ?? species[1];
   const suspectCast = species[1].id === suspect.id ? 1 : 2;
