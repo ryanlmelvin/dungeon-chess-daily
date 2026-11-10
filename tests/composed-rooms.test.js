@@ -83,3 +83,81 @@ test('a pawn player composes days that mix tempo and crown floors and three mate
   assert.ok(seen.crown >= 2 && seen.tempo >= 2, 'both kinds of floor');
   assert.deepEqual([...seen.mates].sort(), ['both', 'king', 'queen']);
 });
+
+// Ice and Breach days keep their modifier on composed floors (src/composer.js).
+// 2026-11-24 is an Ice bishop day. Its first floor's line aims one square
+// short of the key square, on ice, and skids onto it ('skid'), and so does
+// its king floor's mate; on its second floor the key square is ice too, so a
+// move aimed straight at it skids past and only the skid stops there
+// ('lock'). Every room lays its own ice, never on a wall, under a monster, on
+// the start or on the exit, and the day wins as played, never captured.
+test('an Ice day lays each composed room’s ice around its planted line', async () => {
+  const { composeDay } = await import('../src/composer.js');
+  const { ICE_TILES } = await import('../src/modifiers.js');
+  const { daily, floors } = composeDay('2026-11-24');
+  assert.equal(daily.modifier, 'ice');
+  assert.deepEqual(floors.map((floor) => floor.ice), ['skid', 'lock', 'skid']);
+  let state = createGame(daily);
+  for (const floor of floors) {
+    assert.deepEqual(state.ice, daily.composed[state.floor].ice, 'the room’s own ice, not the seeded draw');
+    assert.equal(state.ice.length, ICE_TILES);
+    const start = { ...state.player };
+    for (const tile of state.ice) {
+      assert.notEqual(state.map[tile.y][tile.x], '#');
+      assert.ok(!state.enemies.some((foe) => foe.x === tile.x && foe.y === tile.y), 'never under a monster');
+      assert.ok(!(tile.x === start.x && tile.y === start.y) && !(tile.x === 4 && tile.y === 0), 'never on the start or the exit');
+    }
+    const hint = floor.room.items.find((item) => item.hint);
+    const skids = [];
+    for (const action of [...floor.line, { type: 'descend' }]) {
+      const next = act(state, action);
+      assert.ok(next !== state && next.hits === state.hits, 'never captured');
+      const slide = next.events.find((event) => event.type === 'slide');
+      if (slide) {
+        skids.push(slide);
+        if (floor.ice === 'lock') {
+          const direct = act(state, { type: 'move', x: slide.x, y: slide.y });
+          assert.ok(direct.player.x !== slide.x || direct.player.y !== slide.y, 'aimed straight at the key square, you skid past it');
+        }
+      }
+      state = next;
+    }
+    assert.equal(skids.length, floor.ice === 'off' ? 0 : 1);
+    if (skids.length && hint) assert.deepEqual([skids[0].x, skids[0].y], [hint.x, hint.y], 'the skid lands on the hinted key square');
+  }
+  assert.equal(state.status, 'won');
+});
+
+test('a composed room’s ice replaces the day’s seeded draw', () => {
+  const daily = getRawDaily('2026-11-24');
+  const room = { map: Array(8).fill('........'), enemies: [{ x: 0, y: 0, cast: 0 }], items: [] };
+  assert.equal(createGame({ ...daily, composed: [room, room, room] }).ice.length, 8, 'a room without ice gets the seeded draw');
+  const ice = [{ x: 4, y: 3 }, { x: 2, y: 5 }];
+  assert.deepEqual(createGame({ ...daily, composed: [{ ...room, ice }, room, room] }).ice, [{ x: 4, y: 3 }, { x: 2, y: 5 }]);
+  assert.deepEqual(createGame({ ...daily, composed: [{ ...room, ice: [] }, room, room] }).ice, []);
+});
+
+// No monster ever stands on a composed pawn player's file, so a Breach
+// arrival comes in off it, even when the door square is free; published
+// editions keep the door square. 2026-12-16 is a Breach pawn day.
+test('a composed Breach day brings arrivals in off a pawn player’s file', async () => {
+  const { arrivalSquare } = await import('../src/modifiers.js');
+  const daily = getRawDaily('2026-12-16');
+  assert.deepEqual([daily.modifier, daily.playerPiece], ['collapse', 'pawn']);
+  const room = { map: Array(8).fill('........'), enemies: [{ x: 0, y: 3, cast: 0 }], items: [] };
+  const state = createGame({ ...daily, composed: [room, room, room] });
+  assert.deepEqual([state.player.x, state.player.y], [4, 6]);
+  const square = arrivalSquare(state, 0);
+  assert.ok(square.x !== 4 && Math.max(Math.abs(square.x - 4), square.y) === 1, 'beside the door, off the e-file');
+  const { composed, ...published } = state;
+  assert.deepEqual(arrivalSquare(published, 0), { x: 4, y: 0 }, 'a published edition’s arrival still takes the door square');
+  assert.deepEqual(arrivalSquare({ ...state, player: { ...state.player, piece: 'queen' } }, 0), { x: 4, y: 0 }, 'once promoted, the door square again');
+  // Ten moves in, the first arrival comes in beside the door (nobody stands on its square).
+  const { collapseTick } = await import('../src/modifiers.js');
+  const due = structuredClone(state);
+  Object.assign(due, { turns: 10, message: '', events: [] });
+  collapseTick(due);
+  const arrival = due.events.find((event) => event.type === 'reinforcement');
+  assert.ok(arrival && arrival.x !== 4, 'it came in off the e-file');
+  assert.match(due.message, /^.+ stumbles in beside the door\.$/);
+});

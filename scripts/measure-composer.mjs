@@ -10,16 +10,21 @@
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from; on a
 // pawn player's king floor, its mate is the queen's, both's or the king's
-// (src/composer.js PAWN_MATES). Read-only.
+// (src/composer.js PAWN_MATES). On Ice days a floor's ice meets its line one
+// way (src/composer.js iceVariants: lock, skid or off); on Breach days a run
+// meets an arrival from its tenth move on. Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…]
-//     [--pawn-days] [--json path]
-// --pawn-days measures only the days whose floors 1–2 have pawn targets.
+//     [--pawn-days] [--modifiers ice,collapse,none] [--modifier none|ice|collapse] [--json path]
+// --pawn-days measures only the days whose floors 1–2 have pawn targets; --modifiers only the
+// days whose own modifier is listed (Breach is 'collapse'); --modifier composes every day under
+// that modifier instead of its own (none: as a plain day, to compare).
 import { writeFileSync } from 'node:fs';
 import { composeDay, MOTIF_LEVELS, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { tierForDate, DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { certifiedFloors, playFloor, runSeed, medianRun, HUMAN_RUNS } from '../src/human-bot.js';
 import { targetDistance } from '../src/fairness.js';
+import { floorScoredMoves } from '../src/rules.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); return at > 0 ? process.argv[at + 1] : fallback; };
@@ -30,6 +35,8 @@ const tier = arg('tier', undefined);
 const starts = arg('starts', undefined);
 const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 const pawnDays = process.argv.includes('--pawn-days');
+const modifiers = arg('modifiers', null)?.split(',') ?? null;
+const forced = arg('modifier', null);
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -51,16 +58,18 @@ const began = performance.now();
 for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
   const pawnTargets = raw.targets.slice(0, 2).some((role) => role === 'pawn');
-  if (!pieces.includes(raw.playerPiece) || (pawnDays && !pawnTargets)) continue;
+  if (!pieces.includes(raw.playerPiece) || (pawnDays && !pawnTargets) || (modifiers && !modifiers.includes(raw.modifier))) continue;
   let composed;
-  try { composed = composeDay(date, { tier, starts }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+  try { composed = composeDay(date, { tier, starts, ...(forced && { daily: { ...raw, modifier: forced } }) }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
   const certified = certifiedFloors(daily);
   floors.forEach((floor, f) => {
     const par = floor.line.length + 1;
     const outcomes = Array.from({ length: runs }, (_, run) => {
       const result = playFloor(certified.starts[f], { seed: runSeed(daily, f, run), frames: true });
-      return { won: result.won, moves: result.moves, hits: result.hits, stalled: stalled(result.frames) };
+      // Breach: the move (scored, as par counts) at which the run met its first arrival, if it did.
+      const arrived = result.frames.findIndex((frame) => frame.events.some((event) => event.type === 'reinforcement'));
+      return { won: result.won, moves: result.moves, hits: result.hits, stalled: stalled(result.frames), arrival: arrived > 0 ? floorScoredMoves(result.frames[arrived]) - floorScoredMoves(result.frames[0]) : null };
     });
     // Par two ways (an open question): the planted line plus one, or the bot's median (src/human-bot.js medianRun, as production).
     const botPar = medianRun(outcomes, floor.line.length).par;
@@ -71,7 +80,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const begin = square(floor.room.start ?? { x: 4, y: 6 });
     const route = `${begin}: ${floor.line.map((action) => (action.type === 'move' ? square(action) : 'wait')).join(' ')}`;
     rows.push({
-      date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
+      date, tier: daily.difficulty, modifier: daily.modifier, ice: floor.ice ?? null, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
       walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null, start: begin, route, mate: floor.mate ?? null,
     });
@@ -96,6 +105,7 @@ function summarize(group) {
     past: percent(all.filter((run) => !run.won || run.moves > run.planted).length, all.length),
     short: `${percent(won.filter((run) => run.moves - run.hits <= 2).length, all.length)} / ${percent(won.filter((run) => run.moves <= 2).length, all.length)}`,
     stalled: mean(all.map((run) => run.stalled)).toFixed(2),
+    arrivals: `${percent(all.filter((run) => run.arrival !== null).length, all.length)} / ${percent(all.filter((run) => run.arrival !== null && run.arrival <= run.par + 4).length, all.length)}`,
     hits: mean(all.map((run) => run.hits)).toFixed(2),
     botMedian: median(group.map((row) => median(row.outcomes.filter((run) => run.won).map((run) => run.moves)))),
     ms: `${mean(group.map((row) => row.ms)).toFixed(1)} / ${median(group.map((row) => row.ms)).toFixed(1)}`,
@@ -111,12 +121,12 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
 }
 const days = new Set(rows.map((row) => row.date));
 const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
-console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' with pawn targets' : ''} (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' with pawn targets' : ''}${modifiers ? ` whose modifier is ${modifiers.join(' or ')}` : ''}${forced ? `, composed as ${forced} days` : ''} (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
-const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Walls | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|';
-const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.walls} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.ms} |`; };
+const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Walls | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | Runs meeting an arrival (all / by par+4) | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
+const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.walls} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.arrivals} | ${s.ms} |`; };
 console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
@@ -139,6 +149,26 @@ for (const f of [0, 1, 2]) {
   const group = floorsOf.filter((row) => row.floor === f);
   const levels = [...new Set(group.map((row) => row.level))].sort().map((level) => `L${level} ${percent(group.filter((row) => row.level === level).length, group.length)}`).join(', ');
   console.log(line(`floor ${f + 1} (${levels})`, group));
+}
+const modifierNames = [...new Set(floorsOf.map((row) => row.modifier))];
+if (modifierNames.length > 1 || modifierNames[0] !== 'none') {
+  console.log(`\nBy modifier (Breach is collapse):\n\n${header}`);
+  for (const modifier of modifierNames) console.log(line(modifier, floorsOf.filter((row) => row.modifier === modifier)));
+}
+const icy = floorsOf.filter((row) => row.ice);
+if (icy.length) {
+  // lock: the key square is ice and only a skid from the square before stops there; skid: a skid
+  // from the square before lands there; off: ice off the line (src/composer.js iceVariants).
+  console.log(`\nIce floors by how the ice meets the line (lock: only a skid stops on the key square; skid: a skid lands there; off: ice off the line):\n\n${header}`);
+  for (const kind of ['lock', 'skid', 'off']) {
+    const group = icy.filter((row) => row.ice === kind);
+    if (group.length) console.log(line(kind, group));
+  }
+  console.log(`\n| Piece · floor | Floors | lock | skid | off |\n|---|---|---|---|---|`);
+  for (const piece of pieces) for (const f of [0, 1, 2]) {
+    const group = icy.filter((row) => row.piece === piece && row.floor === f);
+    if (group.length) console.log(`| ${piece} · floor ${f + 1} | ${group.length} | ${['lock', 'skid', 'off'].map((kind) => percent(group.filter((row) => row.ice === kind).length, group.length)).join(' | ')} |`);
+  }
 }
 console.log(`\nBy tier:\n\n${header}`);
 for (const tier of Object.keys(DIFFICULTY_TIERS)) {

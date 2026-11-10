@@ -22,6 +22,12 @@
 // pawn where each target steps or marches into a diagonal, or up to the last
 // rank, where the new queen finishes the floor or mates.
 //
+// A day keeps its modifier. On Ice days each room lays its own ice around the
+// planted line: where the line's key move runs along a line, it aims one
+// square short, on ice, and skids onto the key square; the other tiles lie
+// off the line (iceVariants). On Breach days a monster comes in at the door
+// every ten moves, long after a planted line of 3 or 4 has opened the stairs.
+//
 // Monsters are deterministic (seeded ties), so a floor is a one-player puzzle:
 // an exact search over the player's moves (shortestWins) finds its true
 // shortest wins. A motif instance is kept only when its shortest win takes
@@ -38,6 +44,7 @@ import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
+import { ICE_TILES } from './modifiers.js';
 
 export const COMPOSER_VERSION = 1;
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -909,14 +916,20 @@ function pawnPickups(map, start) {
   }
   return squares;
 }
-// A pawn line's hint square: its first quiet move's before the first take,
-// else the first take's where a pickup there can be reached, else none.
+// A pawn line's hint square: its first quiet move's before the first take
+// (where it comes to rest), else the first take's where a pickup there can be
+// reached, else none.
 function pawnKey(states, line) {
   const first = line.findIndex((action, n) => states[n + 1].events.some((event) => event.type === 'capture'));
-  const quiet = line.slice(0, first).find((action) => action.type === 'move');
-  if (quiet) return { x: quiet.x, y: quiet.y };
+  const quiet = pawnQuiet(states, line);
+  if (quiet >= 0) return { x: states[quiet + 1].player.x, y: states[quiet + 1].player.y };
   const take = line[first];
   return take && pawnPickups(states[0].map, states[0].player).has(index(take)) ? { x: take.x, y: take.y } : null;
+}
+// A pawn line's first quiet move before its first take (pawnKey's), or -1.
+function pawnQuiet(states, line) {
+  const first = line.findIndex((action, n) => states[n + 1].events.some((event) => event.type === 'capture'));
+  return line.slice(0, first).findIndex((action) => action.type === 'move');
 }
 
 // A slider's three-move routes from the start to any of `mates` over the
@@ -977,7 +990,9 @@ const standIn = (piece) => ({ map: Array(8).fill('........'), enemies: [{ ...FIR
 // `carried`: powers the earlier floors' hints hand on (a bone ward lasts the
 // whole run), for the checks that play as a person would.
 function floorStart(base, floor, room, carried = null) {
-  let state = createGame({ ...base, composed: [0, 1, 2].map((f) => (f === floor ? room : standIn(base.playerPiece))) });
+  // On an Ice day a room laid no ice yet has none: the motif, its search and the dressing come first (iceVariants).
+  const laid = base.modifier === 'ice' && !room.ice ? { ...room, ice: [] } : room;
+  let state = createGame({ ...base, composed: [0, 1, 2].map((f) => (f === floor ? laid : standIn(base.playerPiece))) });
   for (let f = 0; f < floor; f++) {
     state = act(state, { type: 'move', ...FIRST_TAKE[base.playerPiece] });
     state = act(state, { type: 'descend' });
@@ -1062,14 +1077,19 @@ export function hastyScore(start, depth, from = floorScoredMoves(start)) {
 
 // The planted idea's key square: the sidestep a lunge punishes (bait), the
 // square covering the landing squares (squeeze) or the mating square (net).
+// A move's square is where it comes to rest (on ice, past the square aimed at).
 function ideaSquare(built, states, line) {
   if (built.pawnLine) return pawnKey(states, line);
   if (built.motif === 'squeeze' || built.motif === 'net') return built.key;
   if (built.motif !== 'bait') return null;
-  // A lunge lands on the square you left; a pawn's misses where it stands.
-  const n = line.findIndex((action, at) => action.type === 'move' && at + 1 < line.length
+  const n = sidestep(built, states, line);
+  return n >= 0 ? { x: states[n + 1].player.x, y: states[n + 1].player.y } : null;
+}
+// The bait's sidestep: the line's move after which a lunge lands on the square
+// you left (a pawn's misses where it stands), or -1.
+function sidestep(built, states, line) {
+  return line.findIndex((action, at) => action.type === 'move' && at + 1 < line.length
     && states[at + 1].events.some((event) => event.type === 'miss' && (built.pawns ? isTarget(states[at], event.id) : same(event, states[at].player))));
-  return n >= 0 ? { x: line[n].x, y: line[n].y } : null;
 }
 // Does `line` win from `start`, as played (pickups included), never captured?
 function winsAsPlayed(start, line) {
@@ -1197,6 +1217,85 @@ function usesIdea(built, states, line) {
   return true;
 }
 
+/**
+ * Ice days (src/modifiers.js): each composed room lays its ICE_TILES ice
+ * tiles around its planted line instead of the day's seeded draw. Where the
+ * line's move onto its key square (keyMove) runs two squares or more along a
+ * line, the line aims one square short, on ice, and skids onto the key
+ * square: 'lock' ices the key square too, so a move aimed straight at it
+ * skids past it (where the square beyond is open and empty then), and only
+ * the skid stops there; 'skid' ices only the square before it. Every other
+ * tile ('off', and the rest of those two) lies off the line: on no square it
+ * moves to or comes to rest on, and never on a wall, under a monster or a
+ * pickup, on the start or on the exit (as the seeded draw). Ice can't make a
+ * slider's line shorter: a skid only ends where the slider could have moved
+ * straight away, so ice just takes stops from it. A pawn's skid goes a square
+ * further than its step, so its variants are tried with tiles anywhere off
+ * the line, then off the files it walks. The variants to judge, best first:
+ * { kind, room, line }.
+ */
+function iceVariants(room, line, states, built, rng) {
+  const start = room.start ?? HOME;
+  const taken = new Set([...room.enemies, ...room.items, start, EXIT].map(index));
+  const usable = (tile) => inside(tile) && room.map[tile.y][tile.x] !== '#' && !taken.has(index(tile));
+  // The squares the line moves to or comes to rest on.
+  const onLine = new Set([...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index));
+  const off = shuffle(SQUARES.filter((tile) => usable(tile) && !onLine.has(index(tile))), rng);
+  const files = new Set(states.filter((state) => state.player.piece === 'pawn').map((state) => state.player.x));
+  const pools = files.size ? [off, off.filter((tile) => !files.has(tile.x))] : [off];
+  const variants = [];
+  const add = (kind, tiles, trial) => {
+    for (const pool of pools) {
+      const ice = [...tiles, ...pool.filter((tile) => !tiles.some((other) => same(other, tile)))].slice(0, ICE_TILES)
+        .map(({ x, y }) => ({ x, y })).sort((a, b) => a.y - b.y || a.x - b.x);
+      // Off its files from the start, a pawn's second pool would only repeat the first.
+      if (variants.at(-1)?.kind === kind && JSON.stringify(variants.at(-1).room.ice) === JSON.stringify(ice)) continue;
+      variants.push({ kind, line: trial, room: { ...room, ice } });
+    }
+  };
+  const n = keyMove(built, states, line);
+  const skid = n >= 0 ? skidOnto(states, line, n, (tile) => usable(tile) && !onLine.has(index(tile))) : { miss: 'key' };
+  // Why no skid fits, for the trace: no key move, a capture, a knight's or king's move, one square, the square short of it taken.
+  variants.miss = skid.miss ?? null;
+  if (!skid.miss) {
+    const aimed = line.map((action, at) => (at === n ? { type: 'move', x: skid.aim.x, y: skid.aim.y } : action));
+    if (skid.lock && usable(skid.key)) add('lock', [skid.aim, skid.key], aimed);
+    add('skid', [skid.aim], aimed);
+  }
+  add('off', [], line);
+  return variants;
+}
+// The line's move onto its planted idea's key square, or -1: the squeeze's
+// key square, the bait's sidestep, a net's mate (its last move) or a pawn
+// line's first quiet move before its first take (its hint square).
+function keyMove(built, states, line) {
+  if (built.pawnLine) return pawnQuiet(states, line);
+  if (built.motif === 'net') return line.at(-1).type === 'move' ? line.length - 1 : -1;
+  if (built.motif === 'squeeze') return line.findIndex((action, n) => action.type === 'move' && same(states[n + 1].player, built.key));
+  if (built.motif === 'bait') return sidestep(built, states, line);
+  return -1;
+}
+// A skid onto where the line's move `n` comes to rest: a slider, or a pawn
+// moving straight, that runs there two squares or more and takes nothing can
+// aim one square short instead (`aim`, which must suit `fits`) and skid on.
+// `lock` when the square beyond is open and empty as the move is made, so ice
+// on the key square too would carry a move aimed at it past it. Where no skid
+// fits, { miss } says why.
+function skidOnto(states, line, n, fits) {
+  const before = states[n], after = states[n + 1];
+  // A move onto a monster takes it, which never skids (checkmate's capture of the king comes after the move).
+  if (line[n].type !== 'move' || before.enemies.some((foe) => same(foe, line[n]))) return { miss: 'capture' };
+  const from = before.player, to = after.player;
+  const dx = Math.sign(to.x - from.x), dy = Math.sign(to.y - from.y);
+  if (!(RAYS[from.piece] || (from.piece === 'pawn' && dx === 0))) return { miss: 'piece' };
+  if (chebyshev(from, to) < 2) return { miss: 'short' };
+  const aim = at(to.x - dx, to.y - dy), beyond = at(to.x + dx, to.y + dy);
+  if (!fits(aim)) return { miss: 'aim' };
+  const lock = inside(beyond) && before.map[beyond.y][beyond.x] !== '#' && !before.enemies.some((foe) => same(foe, beyond))
+    && !(before.companion && same(before.companion, beyond));
+  return { aim, key: at(to.x, to.y), lock };
+}
+
 // Turns of the line on which a decoy presses the player: a wind-up lane on
 // the player's square, or a decoy guarding a square the player could move to.
 function pressure(states) {
@@ -1296,14 +1395,16 @@ function castFor(base, floor) {
 }
 
 /**
- * Compose one floor of `base` (a raw daily with its tier, no modifier and
+ * Compose one floor of `base` (a raw daily with its tier, its modifier and
  * floorSeeds). Returns { room, line, motif, depth, firstMoves, forced, tried,
  * kept, ms }: `tried` and `kept` count motif instances built and accepted per
  * motif (`replayed` those whose planted idea won within the line's length).
+ * On an Ice day `ice` says how the room's ice meets the line (iceVariants).
  */
 export function composeFloor(base, floor, { trace, carried = null, starts = startSquares() } = {}) {
   const began = performance.now();
   const piece = base.playerPiece;
+  const icy = base.modifier === 'ice';
   const cast = castFor(base, floor);
   const seed = base.floorSeeds[floor];
   const stats = {};
@@ -1350,6 +1451,26 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
       const planted = candidates.find(({ line }) => follows(line)) ?? candidates[0];
       if (!planted) { trace?.({ motif, attempt, stage: 'idea', depth: found.depth, lines: found.lines, room: built.plan.room() }); continue; }
       tally.replayed++;
+      // The dressed room's checks, for `line` and its positions `states` from `dressed`: the line
+      // wins and (a pawn's) uses the idea, nothing wins sooner or in a hasty two (the exact
+      // checks), and the bot guard passes. { hasty } when the room passes, else null. Without
+      // `exact` only the line and the guard are checked, `hasty` taken as known.
+      const judge = (room, dressed, line, states, wins, { exact = true, guarded = true, hasty: known = Infinity } = {}) => {
+        // The search runs unpowered; the hasty check and bot guard start with what earlier hints carried in.
+        const real = carried ? floorStart(base, floor, room, carried) : dressed;
+        const hasty = !exact ? known : !states?.at(-1).exit.open || loose ? Infinity : hastyScore(real, BOT_GUARD.short);
+        // A pawn's idea (its takes, its mate's kind) is checked again on the dressed room.
+        const idea = exact && (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
+        const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose || !exact ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
+        if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
+        if (!guarded) return { hasty };
+        // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
+        // fallback is still a puzzle, judged until its last tries.
+        const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
+        const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
+        if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
+        return { hasty };
+      };
       let best = null;
       for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
         const plan = dress(built.plan.clone(), context, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
@@ -1366,20 +1487,24 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
             .find(({ other, after }) => after && usesIdea(built, after, other)) : null;
           if (fit) { line = fit.other; states = fit.after; wins = again; }
         }
-        // The search runs unpowered; the hasty check and bot guard start with what earlier hints carried in.
-        const real = carried ? floorStart(base, floor, room, carried) : dressed;
-        const hasty = !states?.at(-1).exit.open || loose ? Infinity : hastyScore(real, BOT_GUARD.short);
-        // A pawn's idea (its takes, its mate's kind) is checked again on the dressed room.
-        const idea = (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
-        const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
-        if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); continue; }
-        // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
-        // fallback is still a puzzle, judged until its last tries.
-        const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
-        const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
-        if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); continue; }
-        const felt = pressure(states);
-        if (!best || felt > best.pressure) best = { room, states, hasty, pressure: felt, line, wins };
+        // On an Ice day a dressing that passes the exact checks without ice gets its ice laid
+        // around the line, each way of laying it (iceVariants, best first) judged in turn, the
+        // first to pass kept. A slider's ice only takes stops away, so its exact checks still
+        // hold and only the line and the bot guard are judged again; a pawn's skid can open a
+        // shortcut, so a pawn's are judged in full.
+        const plain = icy && states?.at(-1).exit.open ? judge(room, dressed, line, states, wins, { guarded: false }) : null;
+        if (icy && states?.at(-1).exit.open && !plain) continue;
+        const trials = plain ? iceVariants(room, line, states, built, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}:ice`))) : [{ room, line, dressed, states }];
+        if (trials.miss !== undefined) trace?.({ motif, attempt, stage: 'ice', offered: trials.map((trial) => trial.kind), miss: trials.miss });
+        for (const trial of trials) {
+          const start = trial.dressed ?? floorStart(base, floor, trial.room);
+          const after = trial.states ?? clean(playLine(start, trial.line));
+          const passed = judge(trial.room, start, trial.line, after, wins, plain ? { exact: piece === 'pawn', hasty: plain.hasty } : {});
+          if (!passed) continue;
+          const felt = pressure(after);
+          if (!best || felt > best.pressure) best = { room: trial.room, states: after, hasty: passed.hasty, pressure: felt, line: trial.line, wins, ...(trial.kind && { ice: trial.kind }) };
+          break;
+        }
       }
       if (best) {
         tally.kept++;
@@ -1388,7 +1513,8 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const composed = {
           room, hint: kind, line, motif: name, depth: wins.depth, firstMoves: new Set(wins.lines.map((other) => JSON.stringify(other[0]))).size,
           ...(piece === 'pawn' && floor === 2 && { mate: mateKind(best.states, line) }),
-          lines: wins.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < line.length, stats, ms: performance.now() - began,
+          lines: wins.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < line.length,
+          ...(best.ice && { ice: best.ice }), stats, ms: performance.now() - began,
         };
         // A pawn's tempo line with nothing to hint at (it opens with a wait) gives way to a crown line, if one composes.
         if (piece === 'pawn' && motif === 'tempo' && !kind) { spare = composed; break; }
@@ -1403,15 +1529,15 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
 export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:${COMPOSER_VERSION}:${date}:${floor}`));
 
 /**
- * A composed day for a canonical date: the raw daily with the date's tier, no
+ * A composed day for a canonical date: the raw daily with the date's tier and
  * modifier, a composed room per floor and the planted lines as its
  * certificate, proved by verifyWinningRoute. `floors` describes each floor.
- * `daily` overrides the raw daily (tooling: synthetic casts); `starts` the
- * start set (startSquares).
+ * `daily` overrides the raw daily (tooling: synthetic casts, or another
+ * modifier); `starts` the start set (startSquares).
  */
 export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts } = {}) {
   const squares = startSquares(starts);
-  const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: 'none', floorSeeds: composedSeeds(raw.date) };
+  const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};

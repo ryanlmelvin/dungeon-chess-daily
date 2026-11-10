@@ -136,13 +136,16 @@ export function reinforcement(state, n) {
  * player, the recruit or a monster stands there, the nearest square (in king
  * steps from the door square) that is open and holds none of them, a tie
  * settled by the day's seed. Null only on a board with no such square left.
+ * On a composed day (src/composer.js, the dev preview) no monster ever stands
+ * on a pawn player's file, so an arrival comes in off it, the door square too.
  */
 export function arrivalSquare(state, n) {
   const door = { x: state.exit.x, y: state.exit.y };
-  if (open(state, door.x, door.y) && !occupied(state, door)) return door;
+  const lane = state.composed && state.player.piece === 'pawn' ? state.player.x : null;
+  if (open(state, door.x, door.y) && !occupied(state, door) && door.x !== lane) return door;
   let best = null;
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    if (!open(state, x, y) || occupied(state, { x, y })) continue;
+    if (!open(state, x, y) || occupied(state, { x, y }) || x === lane) continue;
     const steps = Math.max(Math.abs(x - door.x), Math.abs(y - door.y));
     const tie = hash(`${roomSeed(state)}:arrival:${state.floor}:${n}:${x},${y}`);
     if (!best || steps < best.steps || (steps === best.steps && tie < best.tie)) best = { x, y, steps, tie };
@@ -169,12 +172,13 @@ export function collapseTick(state) {
     state.message = `${state.message ? `${state.message} ` : ''}The door rattles, but nothing comes through.`;
     return;
   }
-  const blocked = !same(square, state.exit);
+  // Beside the door: someone stands on its square, or (a composed day) it lies on a pawn player's file.
+  const aside = !same(square, state.exit), blocked = aside && (!open(state, state.exit.x, state.exit.y) || occupied(state, state.exit));
   foe.x = square.x; foe.y = square.y;
   state.enemies.push(foe);
   state.reinforcements = spawned + 1;
   state.events.push({ type: 'reinforcement', id: foe.id, x: foe.x, y: foe.y });
-  state.message = `${state.message ? `${state.message} ` : ''}${blocked ? `The door is blocked, so ${foe.name} squeezes in nearby.` : `${foe.name} stumbles in through the door.`}`;
+  state.message = `${state.message ? `${state.message} ` : ''}${blocked ? `The door is blocked, so ${foe.name} squeezes in nearby.` : aside ? `${foe.name} stumbles in beside the door.` : `${foe.name} stumbles in through the door.`}`;
 }
 
 /** Extra monsters a floor may hold under this modifier (for save bounds). */

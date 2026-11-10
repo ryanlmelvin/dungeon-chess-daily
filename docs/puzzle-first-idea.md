@@ -10,8 +10,8 @@ below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 Status: idea, written 2026-11-09, with lichess measurements added the same
 day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
 rules) are built. Phase 2 has begun in the preview: floors start on varied
-squares, rook and queen days compose, and so do floors with pawn targets and
-pawn players.
+squares, rook and queen days compose, and so do floors with pawn targets,
+pawn players, and Ice and Breach days with their modifier.
 
 ## What we measured
 
@@ -68,6 +68,8 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A pawn target on a composed floor is two pawns | Chosen after playing one and two (2026-11-10): the count rule allows at most two, and two gave longer, more forced lines |
 | Pawn players' floors 1–2: tempo lines (quiet moves time the diagonal takes), and crown lines (promote within the line) where a tempo line would leave nothing to hint at | Chosen after playing both (2026-11-10): crown is the more obvious, so it takes about a quarter of floors |
 | Pawn players' king floor: a mix of mates by the recruit king without promotion, by the promoted queen with the recruit's help, and by the queen alone; whichever is planted, the pawn can always walk up its file and promote | Chosen after playing each (2026-11-10): about 48%, 29% and 23% |
+| Ice days: where it fits, the line skids onto its key square, and that square is ice too, so only the skid stops there | Chosen after play (2026-11-10), over a skid onto a plain square or ice off the line. A skid plays as its own slow, teetering slide, and every ice tile wears a snowflake |
+| Floor 1's hint can be a sleeping decoy on the key square, looking just like the floor's other sleepers | Kept after play (2026-11-10): working out which sleeper is the hint is part of the challenge |
 | Pawn floors where a target pawn waits on your pawn's file (frozen there until you take elsewhere; it sets up en passant) | Kept (2026-11-10). On composed days a pawn walled in under such a pawn is cornered at once, since that pawn can never move away |
 | Par is the planted line + 1 | Agreed (2026-11-10), after playing composed floors with it |
 | One monster ruleset for every day: Fair | Agreed (2026-11-10). Practice offers all five tiers: built, a Monsters choice in the practice menu |
@@ -314,6 +316,24 @@ target pawn may still wait on the file, frozen there until the pawn takes
 elsewhere; a pawn that walks up under it is cornered (composed days count
 that pawn as terrain, src/rules.js trapped).
 
+### Ice and Breach days
+
+Composed days keep the day's modifier, and every floor is proved with it on.
+On Ice days the composer lays each room's eight ice tiles itself, around the
+planted line, instead of the seeded draw. Where the line's move onto its key
+square (the squeeze's key square, the bait's sidestep, the net's mate, a
+pawn's first quiet move) runs two squares or more along a line, the line aims
+one square short, on ice, and skids onto the key square. Where the square
+beyond is open, the key square is ice too, so a move aimed straight at it
+skids past it and only the skid stops there. The other tiles lie off the
+line. Ice can't shorten a slider's line (a skid only ends where the slider
+could have moved anyway), and a pawn's tiles stay off its files wherever a
+skid up the file would win sooner. Knights never slide, so their floors are
+those of a plain day. On Breach days a monster comes in every ten moves,
+long after a planted line of 3 or 4 has opened the stairs, so only a player
+far over par meets one; on a pawn player's day it comes in off the pawn's
+file, since no monster ever stands there.
+
 ### Identification and par
 
 - **No count giveaway.** The composer sets decoy counts so that the paper's
@@ -400,8 +420,9 @@ Each phase ends with a preview you play before anything long runs or ships.
    far: varied start squares, rook and queen players (bait, squeeze and the
    king's net along the pocket's line), pawn targets (two pawns that
    march into a squeeze or wind up at a bait; a wall under each one's file
-   keeps it from crowning), and pawn players (tempo and crown floors; the
-   king floor mated by the recruit king, the queen, or both).
+   keeps it from crowning), pawn players (tempo and crown floors; the
+   king floor mated by the recruit king, the queen, or both), and Ice and
+   Breach days (below).
 3. **Switch.** Generate every edition with the composer, regenerate the
    archive (minutes), retire calibration and the weekday tiers (every day
    plays Fair, par is the planted line + 1, and the two king rules hold),

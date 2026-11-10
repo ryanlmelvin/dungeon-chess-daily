@@ -916,12 +916,14 @@ const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 &&
  * rows of '.' and '#'), `enemies` ({ x, y, cast }, where cast 0 is the floor's
  * target species and 1 and 2 its decoy species; tooling may pass a `species`
  * instead), `items` (coins, a powerup, the recruit) and, for tooling, the
- * player's `start`. No published edition has them.
+ * player's `start`. On an Ice day a room may lay its own `ice` tiles (open
+ * squares); without them it gets the day's seeded draw. No published edition
+ * has them.
  */
 const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && room.map.length === 8
   && room.map.every((row) => typeof row === 'string' && /^[.#]{8}$/.test(row))
-  && Array.isArray(room.enemies) && Array.isArray(room.items)
-  && [...room.enemies, ...room.items, ...(room.start ? [room.start] : [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
+  && Array.isArray(room.enemies) && Array.isArray(room.items) && (room.ice === undefined || Array.isArray(room.ice))
+  && [...room.enemies, ...room.items, ...(room.start ? [room.start] : []), ...(room.ice ?? [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
 const validComposed = (rooms) => Array.isArray(rooms) && rooms.length === 3 && rooms.every(validComposedRoom);
 
 /**
@@ -1134,6 +1136,8 @@ function composedRoom(state) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
   }
   setupFloorModifier(state);
+  // On an Ice day a composed room lays its own ice (placed around its planted line), not the seeded draw.
+  if (state.modifier === 'ice' && room.ice) state.ice = room.ice.map(({ x, y }) => ({ x, y })).sort((a, b) => a.y - b.y || a.x - b.x);
   // The opening wind-ups; a held decoy stays asleep until it wakes, like a pinned monster.
   if (state.playerColor === 'white') for (const foe of state.enemies) if (!pinned(foe)) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
 }
