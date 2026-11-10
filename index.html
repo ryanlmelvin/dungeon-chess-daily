@@ -221,7 +221,7 @@
       <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
         <p>Each story in the paper describes one floor’s target. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
         <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target, though a capture still adds one.</p>
-        <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece.</p>
+        <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece, against any monsters.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Back</button><span id="guide-count" hidden></span><button id="guide-toc">Contents</button><button id="guide-next">Next →</button></nav>
     </section>
@@ -263,8 +263,9 @@
       <div class="piece-controls">
         <label for="practice-piece">Piece<select id="practice-piece" aria-describedby="piece-warning king-warning"></select></label>
         <label for="practice-color">Color<select id="practice-color" aria-describedby="piece-warning"><option value="white">White</option><option value="black">Black</option></select></label>
+        <label for="practice-monsters">Monsters<select id="practice-monsters" aria-describedby="piece-warning"></select></label>
       </div>
-      <p id="piece-warning" role="status" hidden>Changing from today's official piece or color means no completion message to share with friends. Today's challenge may be impossible with your chosen piece.</p>
+      <p id="piece-warning" role="status" hidden>Changing from today's official piece, color or monsters means no completion message to share with friends. Today's challenge may be impossible with your choices.</p>
       <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, so floor 3 may be impossible: only your recruit can capture it, and not on Auto.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>

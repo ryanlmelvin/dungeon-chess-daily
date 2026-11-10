@@ -70,7 +70,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Pawn players' king floor: a mix of mates by the recruit king without promotion, by the promoted queen with the recruit's help, and by the queen alone; whichever is planted, the pawn can always walk up its file and promote | Chosen after playing each (2026-11-10): about 48%, 29% and 23% |
 | Pawn floors where a target pawn waits on your pawn's file (frozen there until you take elsewhere; it sets up en passant) | Kept (2026-11-10). On composed days a pawn walled in under such a pawn is cornered at once, since that pawn can never move away |
 | Par is the planted line + 1 | Agreed (2026-11-10), after playing composed floors with it |
-| One monster ruleset for every day: Fair | Agreed (2026-11-10). Practice would offer all five tiers |
+| One monster ruleset for every day: Fair | Agreed (2026-11-10). Practice offers all five tiers: built, a Monsters choice in the practice menu |
 | King-floor rules: checkmate wins, and the king can't take a piece the recruit king guards | Agreed (2026-11-10), after playing them in the preview |
 
 ## Lichess puzzles

@@ -8,9 +8,9 @@ import { TACTIC_COPY, RECRUIT_COPY, BISHOP_PAIR_COPY } from './tactics-art.js';
 import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
-import { tierLabel, DIFFICULTY_TIERS } from './difficulty.js';
+import { tierLabel, DIFFICULTY_TIERS, TIER_IDS } from './difficulty.js';
 import { archiveMonth, dailySaveKey, isArchiveDate, shiftMonth, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialPiece, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialRun, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
 import { recruitChoice } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
@@ -279,7 +279,7 @@ function ensureRenderer() {
 // keeps the earlier ones in state.notes. The last two lines show; scroll for more.
 const MESSAGE_LOG_MAX = 40;
 let messageLog = [], loggedState = null, logGame = '', logAction = 0;
-const gameKey = (game) => [game.date, game.practice ? 'practice' : 'daily', archiveMode, game.startingPiece, game.playerColor].join('|');
+const gameKey = (game) => [game.date, game.practice ? 'practice' : 'daily', archiveMode, game.startingPiece, game.playerColor, game.difficulty].join('|');
 function clearMessageLog() { messageLog = []; loggedState = null; }
 function logState() {
   if (state === loggedState) return;
@@ -1135,7 +1135,7 @@ function playSound(events=[]) {
 }
 // Archive and practice runs are labeled so a shared line never passes as today's.
 const runLabel = () => [composedDay && 'COMPOSED', archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
-function shareText(){if (!isOfficialPiece(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
+function shareText(){if (!isOfficialRun(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -1147,7 +1147,7 @@ function showResult() {
   $('result-summary').textContent=won?'Your story lives to see another day.':state.message;
   if (state.status === 'lost') return showDeath();
   showResultActions(true);
-  const shareable = isOfficialPiece(state, daily);
+  const shareable = isOfficialRun(state, daily);
   $('share-preview').hidden = !shareable;
   $('share-button').hidden = !shareable;
   // The card without its link. Should a line wrap, it breaks only between the title's
@@ -1198,21 +1198,23 @@ $('retry-button').addEventListener('click',()=>{
   enterGame();
 });
 $('share-button').addEventListener('click',async()=>{
-  if (!state || state.status === 'playing' || !isOfficialPiece(state, daily)) return;
+  if (!state || state.status === 'playing' || !isOfficialRun(state, daily)) return;
   const text=shareText();
   if(navigator.share){try{await navigator.share({text});return;}catch(error){if(error.name==='AbortError')return;}}
   try{await navigator.clipboard.writeText(text);notify('Edition copied. Ready to paste — no spoilers.');}
   catch{$('copy-text').value=text;$('copy-dialog').showModal();$('copy-text').select();}
 });
 function updatePieceWarning() {
-  $('piece-warning').hidden = $('practice-piece').value === daily.playerPiece && $('practice-color').value === daily.playerColor;
+  $('piece-warning').hidden = $('practice-piece').value === daily.playerPiece && $('practice-color').value === daily.playerColor && $('practice-monsters').value === daily.difficulty;
   $('king-warning').hidden = $('practice-piece').value !== 'king';
 }
+// Piece, color and monsters start on the run's own: the day's, or the practice run's.
 function openPieceChooser() {
   if (turnLocked || !state || !(practice || canChoosePiece(state))) return;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('practice-piece').value = state.startingPiece;
   $('practice-color').value = state.playerColor;
+  $('practice-monsters').value = TIER_IDS.includes(state.difficulty) ? state.difficulty : daily.difficulty;
   $('official-piece').textContent = `${archiveMode ? 'This edition’s' : 'Today’s'} official piece: ${daily.playerColor} ${daily.playerPiece}.`;
   $('piece-start').textContent = state.status === 'playing' ? 'Restart dungeon' : 'Start practice';
   updatePieceWarning();
@@ -1223,14 +1225,15 @@ for (const piece of PIECES) {
   option.value = piece; option.textContent = piece[0].toUpperCase() + piece.slice(1);
   $('practice-piece').append(option);
 }
-$('practice-piece').addEventListener('change', updatePieceWarning);
-$('practice-color').addEventListener('change', updatePieceWarning);
+// Every ruleset (src/difficulty.js): the rooms stay the day's, only the monsters change.
+for (const tier of TIER_IDS) $('practice-monsters').append(new Option(DIFFICULTY_TIERS[tier].name, tier));
+for (const id of ['practice-piece', 'practice-color', 'practice-monsters']) $(id).addEventListener('change', updatePieceWarning);
 $('practice-button').addEventListener('click', () => { if (!composedDay) openPieceChooser(); });
 $('change-piece-button').addEventListener('click', openPieceChooser);
 $('piece-form').addEventListener('submit', event => {
   event.preventDefault();
   if (!state || !(practice || canChoosePiece(state))) return;
-  const next = createPracticeGame(daily, { piece: $('practice-piece').value, color: $('practice-color').value });
+  const next = createPracticeGame(daily, { piece: $('practice-piece').value, color: $('practice-color').value, difficulty: $('practice-monsters').value });
   setPracticeMode(true);
   lastSaved = null;
   try { lastSaved = localStorage.getItem(key()); } catch {}
@@ -1319,7 +1322,7 @@ $('reset-day-button').addEventListener('click', async () => {
   }
   if (!await askConfirm(`Restart ${archiveMode ? 'this' : 'today’s'} ${practice ? 'practice ' : ''}dungeon?`, 'You start again from floor 1, and this run is discarded.', 'Restart from floor 1')) return;
   if (!state) return;
-  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : newGame();
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor, difficulty: state.difficulty }) : newGame();
   startOver(next, `${archiveMode ? 'This' : 'Today’s'} dungeon restarted from floor 1.`);
 });
 let rolloverDates = null;
@@ -1330,7 +1333,7 @@ $('rollover-new').addEventListener('click', () => {
 $('rollover-current').addEventListener('click', () => {
   $('rollover-dialog').close();
   if (!state || rolloverDates?.current !== daily.date) return;
-  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor }) : newGame();
+  const next = practice ? createPracticeGame(daily, { piece: state.startingPiece, color: state.playerColor, difficulty: state.difficulty }) : newGame();
   startOver(next, `The ${shareDate(daily.date)} dungeon restarted from floor 1.`);
 });
 $('result-paper-button').addEventListener('click',()=>{
@@ -1530,7 +1533,7 @@ function currentBot() {
   return botCache.run;
 }
 function renderBotComparison() {
-  const you = !practice && isOfficialPiece(state, daily) ? playerRun(state) : null;
+  const you = !practice && isOfficialRun(state, daily) ? playerRun(state) : null;
   const bot = you ? currentBot() : null;
   $('bot-compare').hidden = !bot;
   if (!bot) return;

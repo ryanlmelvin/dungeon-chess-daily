@@ -6,12 +6,13 @@
 // route's moves plus 25% when every run failed. The build stores it with each
 // edition (src/editions.js); a date past
 // that window works it out once on the device and remembers it. Only the
-// number is ever shown, never a route. Pars are for the official piece and
-// color, so a practice run with any other piece or color has no par.
+// number is ever shown, never a route. Pars are for the official piece,
+// color and monsters, so a practice run with any other choice has no par.
 import { EDITIONS } from './editions.js';
 import { encodeRoute } from './route-code.js';
 import { RULES_VERSION } from './rules.js';
 import { tierForDate } from './difficulty.js';
+import { isOfficialRun } from './game.js';
 import { humanPar, HUMAN_BOT_VERSION, HUMAN_RUNS } from './human-bot.js';
 
 /** A stored summary: three positive pars, and per floor the run shown (null where the bot failed). */
@@ -76,9 +77,9 @@ export function floorPars(daily) {
   return humanSummary(daily)?.par ?? null;
 }
 
-/** Pars for this run: only the official piece and color have one. */
+/** Pars for this run: only the official piece, color and monsters have one. */
 export function runPars(state, daily) {
-  if (!state || !daily || state.startingPiece !== daily.playerPiece || state.playerColor !== daily.playerColor) return null;
+  if (!daily || !isOfficialRun(state, daily)) return null;
   return floorPars(daily);
 }
 

@@ -190,7 +190,11 @@ dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0;
   #shop-dialog { max-width: 720px; }
   .shop-items { grid-template-columns: 1fr 1fr; }
 }
-.piece-controls label { font-size: 20px; }
+/* Piece, Color and Monsters share one row: each starts as wide as its longest
+   option, so Fiendish fits beside the others on an iPhone SE, and they share
+   what room is left. */
+.piece-controls label { font-size: 20px; flex: 1 1 auto; }
+@media (max-width: 400px) { .piece-controls { gap: 8px; } }
 .piece-controls select {
   font-size: 22px;
   line-height: 1.2;
@@ -198,6 +202,20 @@ dialog .guide-back { margin: 8px 0; padding: 8px 0; background: none; border: 0;
   border: 2px solid var(--menu-edge);
   background: var(--menu-shadow);
   padding: 8px;
+}
+/* The practice chooser never scrolls on a phone either: short screens (an
+   iPhone SE in Safari, with both warnings) tighten its notes, and its start
+   button stays on screen regardless. */
+#piece-start { position: sticky; bottom: 0; }
+@media (max-height: 600px) {
+  #piece-dialog .dialog-heading { margin-bottom: 8px; padding-bottom: 6px; }
+  #piece-dialog p { font-size: 18px; line-height: 1.15; }
+}
+/* A phone on its side: a wider chooser, so its notes take fewer lines. */
+@media (max-height: 500px) and (min-width: 640px) {
+  #piece-dialog { max-width: 720px; }
+  #piece-dialog p { font-size: 16px; margin: 8px 0; }
+  #piece-start { margin-top: 8px; }
 }
 dialog textarea { font-size: 20px; line-height: 1.2; background: var(--menu-shadow); }
 .pwa-dialog button { margin-top: 8px; }

@@ -24,7 +24,7 @@ function playRoute(each = () => {}) {
   return state;
 }
 
-test('each floor\'s par is the human-like bot\'s, stored by the build, for the official piece and color only', () => {
+test('each floor\'s par is the human-like bot\'s, stored by the build, for the official piece, color and monsters only', () => {
   const pars = floorPars(daily);
   assert.deepEqual(pars, humanPar(daily).par);
   assert.deepEqual(pars, EDITIONS[daily.date].par, 'the build stored the same pars');
@@ -34,6 +34,7 @@ test('each floor\'s par is the human-like bot\'s, stored by the build, for the o
   const otherPiece = daily.playerPiece === 'rook' ? 'bishop' : 'rook';
   assert.equal(parFor(createPracticeGame(daily, { piece: otherPiece }), daily), null);
   assert.equal(parFor(createPracticeGame(daily, { color: 'black' }), daily), null);
+  assert.equal(parFor(createPracticeGame(daily, { difficulty: daily.difficulty === 'gentle' ? 'fair' : 'gentle' }), daily), null);
   assert.equal(floorPars({ ...daily, generation: undefined }), null);
 });
 

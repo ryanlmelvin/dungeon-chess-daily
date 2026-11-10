@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialPiece, legalMoves, PIECES, unreachablePickups, validateSave } from '../src/game.js';
+import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialRun, legalMoves, PIECES, unreachablePickups, validateSave } from '../src/game.js';
 import { createGame as createRawGame } from '../src/rules.js';
 import { candidateFor } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
+import { DIFFICULTY_TIERS, TIER_IDS } from '../src/difficulty.js';
+import { monsterSmarts } from '../src/monster-ai.js';
+import { CAVE_IN_MOVES, caveInMoves } from '../src/cave-in.js';
 
 const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
 const move = (x, y) => ({ type: 'move', x, y });
@@ -153,15 +156,15 @@ test('legacy exhaustion events become durable before the next action clears them
 test('sharing eligibility follows the starting piece and color, including official pawn promotion', () => {
   const daily = getDaily('2026-11-05');
   const official = createGame(daily);
-  assert.equal(isOfficialPiece(official, daily), true);
+  assert.equal(isOfficialRun(official, daily), true);
   official.player.piece = 'queen';
-  assert.equal(isOfficialPiece(official, daily), true);
+  assert.equal(isOfficialRun(official, daily), true);
   for (const piece of PIECES) for (const color of ['white', 'black']) {
     const practice = createPracticeGame(daily, { piece, color });
-    assert.equal(isOfficialPiece(practice, daily), piece === daily.playerPiece && color === daily.playerColor);
+    assert.equal(isOfficialRun(practice, daily), piece === daily.playerPiece && color === daily.playerColor);
     assert.equal(canChoosePiece(practice), true);
   }
-  assert.equal(isOfficialPiece(null, daily), false);
+  assert.equal(isOfficialRun(null, daily), false);
   assert.equal(canChoosePiece(null), false);
   for (const status of ['won', 'lost']) assert.equal(canChoosePiece({ ...official, status }), true);
   assert.equal(canChoosePiece(createGame(getDaily('2026-11-06'))), false);
@@ -188,4 +191,63 @@ test('save validation rejects forged practice metadata while accepting older off
     const forged = structuredClone(practice); mutate(forged);
     assert.equal(validateSave(forged, daily.date, { practice: true }), false);
   }
+});
+
+test('every monster ruleset keeps the official rooms on every floor and changes only the monsters', () => {
+  for (const date of dates) {
+    const daily = getDaily(date);
+    const floors = [createGame(daily)];
+    floors.push(nextFloor(floors[0])); floors.push(nextFloor(floors[1]));
+    for (const difficulty of TIER_IDS) {
+      let practice = createPracticeGame(daily, { difficulty });
+      for (let floor = 0; floor < 3; floor++) {
+        const label = `${date}: ${difficulty} monsters, floor ${floor}`;
+        assert.deepEqual(layout(practice), layout(floors[floor]), label);
+        // The ruleset sets how smart the monsters are and, as on its weekday, the cave-in countdown.
+        assert.equal(practice.difficulty, difficulty, label);
+        assert.equal(monsterSmarts(practice), DIFFICULTY_TIERS[difficulty].rank, label);
+        assert.equal(caveInMoves(practice), CAVE_IN_MOVES[difficulty], label);
+        assert.equal(isOfficialRun(practice, daily), difficulty === daily.difficulty, label);
+        assert.equal(validateSave(roundTrip(practice), date, { practice: true }), true, label);
+        assert.equal(validateSave(practice, date), false, 'practice must not enter the official save slot');
+        if (floor < 2) practice = nextFloor(practice);
+      }
+    }
+  }
+});
+
+test('a practice run on the day\'s monsters plays exactly as the official run, and other rulesets\' monsters move their own way', () => {
+  const where = (state) => JSON.stringify(state.enemies.map(({ id, x, y }) => [id, x, y]));
+  const wait = (state) => act(state, { type: 'wait' });
+  let parted = 0;
+  for (const date of dates) {
+    const daily = getDaily(date);
+    assert.equal(createPracticeGame(daily).difficulty, daily.difficulty, 'practice starts on the day\'s own monsters');
+    let official = createGame(daily), same = createPracticeGame(daily);
+    let runs = TIER_IDS.map((difficulty) => createPracticeGame(daily, { difficulty }));
+    for (let turn = 0; turn < 4; turn++) {
+      official = wait(official); same = wait(same); runs = runs.map(wait);
+      assert.equal(where(same), where(official), `${date}, wait ${turn + 1}`);
+    }
+    if (new Set(runs.map(where)).size > 1) parted++;
+  }
+  assert.ok(parted >= dates.length / 2, `the rulesets' monsters parted ways on ${parted} of ${dates.length} days`);
+});
+
+test('a practice run keeps its monsters through a restart and a reload, and forged or unknown rulesets are refused', () => {
+  const daily = getDaily('2026-11-05');
+  const other = TIER_IDS.find((tier) => tier !== daily.difficulty);
+  const practice = createPracticeGame(daily, { piece: 'queen', color: 'black', difficulty: other });
+  const reset = exhaust(practice);
+  assert.equal(reset.difficulty, other); assert.equal(reset.replayUnlocked, true);
+  assert.deepEqual(layout(reset), layout(practice));
+  assert.equal(validateSave(roundTrip(reset), daily.date, { practice: true }), true);
+  for (const difficulty of ['standard', 'nightmare', ['fair'], null, undefined]) {
+    const forged = structuredClone(practice); forged.difficulty = difficulty;
+    assert.equal(validateSave(roundTrip(forged), daily.date, { practice: true }), false, JSON.stringify(difficulty));
+  }
+  // The official slot only ever holds the day's own monsters.
+  const official = createGame(daily); official.difficulty = other;
+  assert.equal(validateSave(roundTrip(official), daily.date), false);
+  for (const difficulty of ['nightmare', 'standard', null]) assert.throws(() => createPracticeGame(daily, { difficulty }), RangeError);
 });
