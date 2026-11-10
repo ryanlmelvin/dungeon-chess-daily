@@ -1263,10 +1263,14 @@ function setFloor(state, kingRecruit = false) {
 const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
 
 // Waiting answers a board where monsters block every move, so only terrain can
-// truly trap the player: no move even with every monster gone.
+// truly trap the player: no move even with every monster gone. On a composed
+// day (the dev preview, src/composer.js) a monster pawn on a pawn player's own
+// file counts as terrain too: it may never step onto that file, its only way
+// forward, so it never moves away. Published editions never have `composed`.
 function trapped(state) {
-  return state.status === 'playing' && !state.exit.open && legalMoves(state).length === 0
-    && movesFor({ ...state, enemies: [] }, state.player).length === 0;
+  if (state.status !== 'playing' || state.exit.open || legalMoves(state).length !== 0) return false;
+  const stays = (foe) => Boolean(state.composed) && state.player.piece === 'pawn' && foe.piece === 'pawn' && foe.x === state.player.x;
+  return movesFor({ ...state, enemies: state.enemies.filter(stays) }, state.player).length === 0;
 }
 
 // Running out of moves ends the try: back to floor 1, with one more try on the share card.
