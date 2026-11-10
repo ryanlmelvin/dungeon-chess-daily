@@ -16,12 +16,28 @@ const MOVE_COLOR = 0x56dcff;
 // powerup's art about 0.41 of its 0.55 (updateItems).
 const RECRUIT_DOT = { square: 0.15, coin: 0.25, powerup: 0.31 };
 const ICE_COLOR = 0xbfeaff;
+// Each ice tile wears a snowflake, so it reads as ice, not glass.
+const SNOWFLAKE = ['...i.i...', '....i....', '..i.i.i..', 'i..iii..i', '.iiiciii.', 'i..iii..i', '..i.i.i..', '....i....', '...i.i...'];
+const SNOWFLAKE_PALETTE = { i: '#eefaff', c: '#ffffff' };
+const SNOWFLAKE_SIZE = 0.56;
+// Ice (src/modifiers.js): a skid is a move of its own. The piece first reaches
+// the square you tapped (SKID_LEAD, a normal move), then slides slowly on to
+// where it stops (SKID_MS), teetering on its feet as it goes.
+const SKID_LEAD = 150;
+const SKID_MS = 600;
+const SKID_WOBBLE = 0.3;
+const SKID_SWAYS = 2;
+// How much longer a turn with a skid takes to play than one without: its
+// landing waits SKID_LEAD + SKID_MS instead of a normal move's 145 ms.
+const SKID_EXTRA_MS = SKID_LEAD + SKID_MS - 145;
 // Choosing a pin: a white crosshair, never mistaken for a fork's gold ring.
 const PIN_TARGET = 0xffffff;
 // Pieces, monsters and their sparks draw after everything lying on the floor
 // (hint marks and pickups) whatever their height, so a monster standing on a
 // waiting recruit, a coin or a powerup stays in front of it.
 const ACTOR_LAYER = 1;
+// The dark footprint under every piece and monster.
+const SHADOW_OPACITY = 0.8;
 // A waiting recruit fades while a monster stands on its square.
 const COVERED_RECRUIT_OPACITY = 0.35;
 // How long an attacker's lunge toward the player lasts.
@@ -110,6 +126,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
   textures.set('danger-hatch', hatchTexture());
   textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
+  textures.set('snowflake', pixelTexture(SNOWFLAKE, SNOWFLAKE_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
@@ -262,16 +279,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         if (x % 2) tileMark(board, x + 0.32, y - 0.29, 0.065, 0.035, chip, 0.015);
       }
     }
-    // Ice days: glazed tiles with a couple of bright glints.
+    // Ice days: glazed tiles, each with a snowflake.
     if (next.ice?.length) {
       const glaze = basic(ICE_COLOR, { transparent: true, opacity: 0.42, depthWrite: false });
-      const glint = basic(0xffffff, { transparent: true, opacity: 0.8, depthWrite: false });
+      const flake = basic(0xffffff, { map: textures.get('snowflake'), transparent: true, alphaTest: 0.5, depthWrite: false });
       for (const tile of next.ice) {
         tileMark(board, tile.x, tile.y, 0.9, 0.9, glaze, 0.006);
-        const streak = tileMark(board, tile.x - 0.16, tile.y - 0.14, 0.32, 0.04, glint, 0.008);
-        streak.rotation.z = Math.PI / 4;
-        const dot = tileMark(board, tile.x + 0.2, tile.y + 0.18, 0.14, 0.04, glint, 0.008);
-        dot.rotation.z = Math.PI / 4;
+        tileMark(board, tile.x, tile.y, SNOWFLAKE_SIZE, SNOWFLAKE_SIZE, flake, 0.008);
       }
     }
     // The exit is a door set into the back wall, behind the exit square, so the
@@ -338,11 +352,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     art.position.y = 0.15;
     art.userData.tile = { x: data.x, y: data.y };
     group.add(art);
-    tileMark(group, 0, 0, player ? 0.46 : 0.42, 0.26, basic(0x09070c, { transparent: true, opacity: 0.8 }), 0.012);
+    const shadow = tileMark(group, 0, 0, player ? 0.46 : 0.42, 0.26, basic(0x09070c, { transparent: true, opacity: SHADOW_OPACITY }), 0.012);
     if (companion) tileRing(group, 0, 0, 0.23, 0.27, MINT, 0.6, 0.035);
     group.position.set(origin.x, 0, origin.y);
     actors.add(group);
-    const entity = { group, art, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(origin.x, 0, origin.y), pendingTarget: null, moveAt: 0, removeAt: 0, spawnAt: 0, player, companion, flash: 0, flashAt: 0, flashPosition: null, strikeAt: 0, strikeTo: null, strikeFrom: null, strikeOffset: new THREE.Vector3() };
+    const entity = { group, art, shadow, spriteId: `${id}:${palette || ''}`, target: new THREE.Vector3(origin.x, 0, origin.y), pendingTarget: null, moveAt: 0, removeAt: 0, spawnAt: 0, player, companion, flash: 0, flashAt: 0, flashPosition: null, strikeAt: 0, strikeTo: null, strikeFrom: null, strikeOffset: new THREE.Vector3() };
     entities.set(key, entity);
     return entity;
   }
@@ -457,6 +471,30 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const angle = timestamp / 260 + i * Math.PI * 2 / 3;
       star.position.set(Math.cos(angle) * 0.27, 0, Math.sin(angle) * 0.11);
     });
+  }
+
+  // Tilts a piece's art by `angle` about its feet, not its middle: a piece's
+  // base row sits 2 of its 20 rows above the sprite's bottom edge (sprites.js).
+  function teeter(entity, angle) {
+    const feet = entity.art.scale.y * (entity.art.center.y - 0.1);
+    entity.art.material.rotation = angle;
+    entity.art.position.set(-feet * Math.sin(angle), 0.15, 0).addScaledVector(SCREEN_UP, feet * (Math.cos(angle) - 1));
+    // Its shadow fades as it leans, so the lifted side never bares a dark block.
+    entity.shadow.material.opacity = SHADOW_OPACITY * (1 - 0.6 * Math.min(1, Math.abs(angle) / SKID_WOBBLE));
+  }
+
+  // Ice: until its skid starts the piece heads for the square you tapped. Then
+  // its feet slip: it slides on to where it stops, slowing as it goes, and
+  // teeters side to side, the sway dying away as it comes to rest.
+  function skidStep(entity, timestamp) {
+    const skid = entity.skid;
+    if (timestamp < skid.at) { entity.target.copy(skid.aim); return; }
+    skid.from ??= entity.group.position.clone();
+    const t = Math.min(1, (timestamp - skid.at) / SKID_MS);
+    entity.target.lerpVectors(skid.from, skid.to, Math.sin(t * Math.PI / 2));
+    entity.group.position.copy(entity.target);
+    teeter(entity, SKID_WOBBLE * Math.sin(t * Math.PI * 2 * SKID_SWAYS) * (1 - t));
+    if (t >= 1) entity.skid = null;
   }
 
   function updateItems(items) {
@@ -693,13 +731,17 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // A black move can stop after the enemies act and await a new destination.
     // That phase has no turn increment; its marker still drives the animation.
     const animateTurn = !changedBoard && !reducedMotion && (next.turns > currentTurn || enemyPhase || playerMoved || companionPhase);
+    // Ice: a skid plays slowly after the move onto the square you tapped, and
+    // everything after your move waits for it to come to rest.
+    const slide = animateTurn ? events.find((event) => event.type === 'slide') : null;
+    const skid = slide ? SKID_EXTRA_MS : 0;
     const playerDelay = blackPhase && playerMoved ? 175 : 0;
     // The recruit moves after its player, before the monsters of a white turn.
     // With no move of yours to show (a wait, or a Manual order whose move was
     // already shown) it goes first.
-    const companionDelay = companionPhase && (playerMoved || blackPhase) ? playerDelay + 175 : 0;
-    const enemyDelay = !blackPhase && enemyPhase && (playerMoved || companionPhase) ? (playerMoved ? 175 : 0) + (companionPhase ? 175 : 0) : 0;
-    const captureAt = now + playerDelay + 145;
+    const companionDelay = companionPhase && (playerMoved || blackPhase) ? playerDelay + skid + 175 : 0;
+    const enemyDelay = !blackPhase && enemyPhase && (playerMoved || companionPhase) ? (playerMoved ? 175 + skid : 0) + (companionPhase ? 175 : 0) : 0;
+    const captureAt = now + playerDelay + skid + 145;
     // Unmaskings land with their capture: the player's at captureAt, the recruit's after its own step.
     const enemyPalette = next.playerColor === 'black' ? 'white' : 'black';
     const unmaskedNow = changedBoard ? [] : events.filter((event) => event.type === 'unmask');
@@ -729,12 +771,19 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       }
       entity.removeAt = 0;
       const delay = player ? playerDelay : companion ? companionDelay : enemyDelay;
+      // A skidding piece heads for the square you tapped; its skid (skidStep) takes it on from there.
+      const goal = player && slide ? slide.from : point;
       if (animateTurn && delay) {
-        entity.pendingTarget = new THREE.Vector3(point.x, 0, point.y);
+        entity.pendingTarget = new THREE.Vector3(goal.x, 0, goal.y);
         entity.moveAt = now + delay;
       } else if (animateTurn || !entity.pendingTarget || changedBoard || reducedMotion) {
-        entity.target.set(point.x, 0, point.y);
+        entity.target.set(goal.x, 0, goal.y);
         entity.pendingTarget = null;
+      }
+      if (player && animateTurn) {
+        // A new turn ends a skid still under way.
+        if (entity.skid) teeter(entity, 0);
+        entity.skid = slide ? { aim: new THREE.Vector3(goal.x, 0, goal.y), to: new THREE.Vector3(point.x, 0, point.y), at: now + playerDelay + SKID_LEAD, from: null } : null;
       }
       entity.art.userData.tile = { x: data.x, y: data.y };
       const spriteName = player || companion ? `piece-${data.piece || 'pawn'}` : data.species || 'skull';
@@ -808,7 +857,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     if (animateTurn) {
       clear(hints);
-      pendingHints = { next, at: now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 };
+      pendingHints = { next, at: now + Math.max(playerDelay + skid, companionDelay, enemyDelay) + 175 };
     } else if (pendingHints && !changedBoard) pendingHints.next = next;
     else {
       pendingHints = null;
@@ -820,7 +869,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (changedBoard) pendingQuake = null;
     else {
       const ceiling = events.find((event) => event.type === 'cave-crack' || event.type === 'cave-tremor' || event.type === 'cave-in');
-      if (ceiling) pendingQuake = { event: ceiling, at: animateTurn ? now + Math.max(playerDelay, companionDelay, enemyDelay) + 175 : now };
+      if (ceiling) pendingQuake = { event: ceiling, at: animateTurn ? now + Math.max(playerDelay + skid, companionDelay, enemyDelay) + 175 : now };
     }
     for (const event of unmaskedNow) popRole(event, revealAt(event), enemyPalette);
     currentTurn = next.turns;
@@ -909,6 +958,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         entity.target.copy(entity.pendingTarget);
         entity.pendingTarget = null;
       }
+      if (entity.skid && !entity.pendingTarget) skidStep(entity, timestamp);
       if (entity.flashAt && timestamp >= entity.flashAt) {
         entity.flashAt = 0;
         entity.flash = 0.3;
@@ -1077,6 +1127,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     resize,
     exitAnchor,
     boardRect,
+    // How much longer a turn with these events takes to play out: an ice skid's slow slide.
+    skidTime: (events) => !reducedMotion && events?.some((event) => event.type === 'slide') ? SKID_EXTRA_MS : 0,
     // The planned arrangement ('beside', 'stacked' or 'natural'), where Wait
     // goes, and the board's box (door and first row included) in CSS pixels.
     layout: () => layout,

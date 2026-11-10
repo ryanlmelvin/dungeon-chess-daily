@@ -989,7 +989,7 @@ function takeAction(action) {
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
   const special = autoExplainer(state.events, tacticSeen);
-  const animationTime = special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400;
+  const animationTime = (special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400) + (renderer?.skidTime(state.events) ?? 0);
   // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
   const explainAt = special === 'cave-in' ? 1100 : animationTime;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
@@ -1592,8 +1592,8 @@ function scheduleReplay() {
   clearTimeout(replay.timer);
   if (!replay.playing || replay.index >= replay.run.frames.length - 1) { replay.playing = false; return; }
   const frame = replay.run.frames[replay.index];
-  // Hold a little longer on each new floor so the room can be read.
-  const pause = REPLAY_SPEEDS[replay.speed].ms * (replay.index === 0 || frame.events.some((event) => event.type === 'descend') ? 1.6 : 1);
+  // Hold a little longer on each new floor so the room can be read, and on an ice skid while it slides.
+  const pause = REPLAY_SPEEDS[replay.speed].ms * (replay.index === 0 || frame.events.some((event) => event.type === 'descend') ? 1.6 : 1) + (renderer?.skidTime(frame.events) ?? 0);
   replay.timer = setTimeout(() => { replay.index++; replayFrame(); scheduleReplay(); }, pause);
 }
 function startBotReplay() {
