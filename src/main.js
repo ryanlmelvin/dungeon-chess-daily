@@ -1521,6 +1521,7 @@ getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`
 const BOT_NOTES = {
   human: 'This bot plays like a careful player: it sees only what you see, steers its recruit, and never goes out of its way for a powerup. Its moves on each floor set that floor’s par.',
   certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, never captured (pawn days at most four times), no ally but the floor 3 recruit.',
+  planted: 'This is the line each floor was built around: a shortest win, never captured. Par is one move more.',
 };
 let botCache = null;
 function currentBot() {

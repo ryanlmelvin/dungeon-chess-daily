@@ -5,6 +5,7 @@ import { getDaily } from '../src/game.js';
 import { botRun, dungeonBot, playerRun, verdict } from '../src/bot.js';
 import { humanSummary } from '../src/par.js';
 import { EDITIONS } from '../src/editions.js';
+import { composeDay } from '../src/composer.js';
 
 test('the bot replays the certified route to a win with per-floor move counts', () => {
   for (let day = 0; day < 6; day++) {
@@ -60,4 +61,14 @@ test('the result card shows the human-like bot when it cleared every floor, else
   assert.equal(dungeonBot({ ...daily, generation: undefined }), null);
   const failed = Object.keys(EDITIONS).find((date) => EDITIONS[date].runs.includes(null));
   assert.equal(dungeonBot(getDaily(failed)).kind, 'certified', failed);
+});
+
+test('a composed day (the dev preview) replays its planted lines', () => {
+  const { daily, floors } = composeDay('2026-11-16');
+  const run = dungeonBot(daily);
+  assert.equal(run.kind, 'planted');
+  assert.deepEqual(run.floors, floors.map((floor) => floor.line.length), 'each floor scores its planted line');
+  assert.deepEqual(run.floors.map((moves) => moves + 1), daily.composedPar, 'par is one more');
+  assert.equal(run.frames.length, daily.generation.certificate.actions.length + 1);
+  assert.equal(run.frames.at(-1).status, 'won');
 });
