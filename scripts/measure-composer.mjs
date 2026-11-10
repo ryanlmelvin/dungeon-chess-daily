@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Measure the phase-0 composer (src/composer.js) over every knight and bishop
-// date whose first two floors have non-pawn targets: per motif, how often a
+// Measure the phase-0 composer (src/composer.js) over every knight, bishop,
+// rook and queen date (or --pieces) whose first two floors have non-pawn
+// targets: per motif, how often a
 // built instance's planted idea wins within the line's length (replay
 // acceptance), time per floor, and the human-like bot's runs from each floor's
 // start (src/human-bot.js playFloor, 40 seeded runs, steering its recruit as
@@ -9,9 +10,9 @@
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from.
 // Read-only.
-//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--starts e2|wide|c2,d2,…] [--json path]
+//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…] [--json path]
 import { writeFileSync } from 'node:fs';
-import { composeDay, MOTIF_LEVELS } from '../src/composer.js';
+import { composeDay, MOTIF_LEVELS, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { tierForDate, DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { certifiedFloors, playFloor, runSeed, medianRun, HUMAN_RUNS } from '../src/human-bot.js';
@@ -24,6 +25,7 @@ const start = arg('start', '2026-11-01'), end = arg('end', '2028-11-08'), runs =
 const tier = arg('tier', undefined);
 // Where floors may start the player (src/composer.js START_SETS, or square names); omitted, the composer's own choice.
 const starts = arg('starts', undefined);
+const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -44,7 +46,7 @@ const rows = [];
 const began = performance.now();
 for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
-  if (!['knight', 'bishop'].includes(raw.playerPiece) || raw.targets.slice(0, 2).some((role) => role === 'pawn')) continue;
+  if (!pieces.includes(raw.playerPiece) || raw.targets.slice(0, 2).some((role) => role === 'pawn')) continue;
   let composed;
   try { composed = composeDay(date, { tier, starts }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
@@ -104,7 +106,7 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
 }
 const days = new Set(rows.map((row) => row.date));
 const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
-console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Composer over ${days.size} ${pieces.join(', ')} days (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
@@ -114,7 +116,7 @@ console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
 console.log(`\nBy motif and piece:\n\n${header}`);
-for (const motif of motifs) for (const piece of ['knight', 'bishop']) {
+for (const motif of motifs) for (const piece of pieces) {
   const group = floorsOf.filter((row) => row.motif === motif && row.piece === piece);
   if (group.length) console.log(line(`${motif} · ${piece}`, group));
 }
@@ -129,7 +131,7 @@ for (const tier of Object.keys(DIFFICULTY_TIERS)) {
   const group = floorsOf.filter((row) => row.tier === tier);
   if (group.length) console.log(line(DIFFICULTY_TIERS[tier].name, group));
 }
-for (const piece of ['knight', 'bishop']) {
+for (const piece of pieces) {
   const kings = floorsOf.filter((row) => row.floor === 2 && row.piece === piece && row.shape);
   if (!kings.length) continue;
   const shapes = {};

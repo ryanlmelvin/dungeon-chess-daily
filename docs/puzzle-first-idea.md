@@ -9,7 +9,8 @@ below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 
 Status: idea, written 2026-11-09, with lichess measurements added the same
 day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
-rules) are built.
+rules) are built. Phase 2 has begun in the preview: floors start on varied
+squares, and rook and queen days compose.
 
 ## What we measured
 
@@ -62,6 +63,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Floors taken from lichess puzzles (CC0) | King floors at scale, with chess king rules (trying them in the phase-0 preview); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
 | Kings never stand side by side (king rule 3) | Dropped after play (2026-11-09): it kept the recruit king from cornering a king that slipped its net, so the chase never ended |
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
+| Composed floors start on varied squares (b2–g2, d1 or e1), each floor its own | Built in the preview (2026-11-09): a player meets a king-floor route from their last 8 days of that piece on 10–18% of days, against 61–68% from e2 |
 
 ## Lichess puzzles
 
@@ -289,8 +291,8 @@ always brings the planted line back.
 
 A motif's level is how quiet the key move is: a capture or a threat is level
 1, a non-capturing move that sets up a capture two moves later is level 4 or
-more. The library needs an entry for each player piece and target role. Start
-with knight and bishop players and grow from there.
+more. The library needs an entry for each player piece and target role.
+Knight, bishop, rook and queen players are built; pawn players come next.
 
 ### Identification and par
 
@@ -374,7 +376,9 @@ Each phase ends with a preview you play before anything long runs or ships.
 1. **Scoring rules (built).** No lives, so a capture is a stroke; the king
    ignores frost. Every edition regenerated, previewed, shipped.
 2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
-   Breach days, recruits and powerup placement. Settle par here.
+   Breach days, recruits and powerup placement. Settle par here. Built so
+   far: varied start squares, and rook and queen players (bait, squeeze and
+   the king's net along the pocket's line).
 3. **Switch.** Generate every edition with the composer, regenerate the
    archive (minutes), retire calibration, and update the README, the manual
    and `docs/generation.md`.
@@ -397,7 +401,9 @@ Each phase ends with a preview you play before anything long runs or ships.
 ## Risks
 
 - **Repetition.** A small library can feel samey. Variety comes from motif ×
-  piece × target role × walls × dressing; track it as the library grows.
+  piece × target role × start square × walls × dressing; track it as the
+  library grows (`scripts/measure-composer.mjs` counts the lines and king
+  pockets a player meets again within their last 8 days of that piece).
 - **Fragile lines.** The monster AI may disturb planted lines often. Phase 0
   measures the acceptance rate. If it is low, make the quiet zone stricter or
   the monsters on the key line more forced.

@@ -1,12 +1,13 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// Phase 0 of docs/puzzle-first-plan.md: a prototype composer that builds each
-// floor around a planted solution instead of searching a random room. It is
+// Phases 0 and 2 of docs/puzzle-first-idea.md: a prototype composer that builds
+// each floor around a planted solution instead of searching a random room. It is
 // tooling and a dev-only preview (src/main.js ?composed=), never part of a
 // published edition: production generation (src/generation.js) is unchanged.
 //
-// Every floor is a small room shaped by its motif, for a knight or bishop
-// player, under today's rules (every monster moves every turn):
+// Every floor is a small room shaped by its motif, for a knight, bishop, rook
+// or queen player starting on one of a few home-rank squares (START_SETS),
+// under today's rules (every monster moves every turn):
 //
 // - Bait: targets wind up at you from walled perches; step aside, a lunge
 //   lands on the square you left, off-balance, and you take it there.
@@ -14,7 +15,8 @@
 //   one square of yours covers the squares they must step onto.
 // - Fork: one square of yours hits two walled-in targets at once.
 // - Net (king floor): the king paces a two-square pocket; one check covers
-//   both squares, so it can't step out, and you take it.
+//   both squares, so it can't step out: checkmate. A knight checks from one
+//   square; a bishop, rook or queen along the pocket's own line.
 //
 // Monsters are deterministic (seeded ties), so a floor is a one-player puzzle:
 // an exact search over the player's moves (shortestWins) finds its true
@@ -34,6 +36,8 @@ import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 
 export const COMPOSER_VERSION = 1;
+/** The player pieces the composer builds days for (days whose floors 1 and 2 have pawn targets aren't composed yet). */
+export const COMPOSED_PIECES = Object.freeze(['knight', 'bishop', 'rook', 'queen']);
 /** A planted line takes this many player moves, waits included. */
 export const LINE_MOVES = Object.freeze({ min: 3, max: 4 });
 /** Motif instances tried per motif, and dressings per instance, before moving on. */
@@ -48,9 +52,11 @@ export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
- * a bishop against bishops or a queen); the walk always composes.
+ * a bishop against bishops or a queen); floor 1 to the squeeze only where no
+ * bait fits (a queen against a queen, which the bait square would let you
+ * take at once); the walk always composes.
  */
-export const FLOOR_MOTIFS = Object.freeze([['bait'], ['squeeze', 'bait'], ['net']]);
+export const FLOOR_MOTIFS = Object.freeze([['bait', 'squeeze'], ['squeeze', 'bait'], ['net']]);
 /**
  * One monster ruleset for every composed day, a placeholder while the plan's
  * open question (one ruleset or five tiers) is settled: Fair, where every
@@ -211,19 +217,21 @@ const empty = new Plan();
 const reachable = (piece, from, plan = empty) => reach(plan, piece, from);
 const SQUARES = Object.freeze(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)));
 
-/** Attempts a bishop's king floor gives the day's pocket before trying the next. */
+/** Attempts a slider's king floor gives the day's pocket before trying the next. */
 export const NET_TRIES = 20;
-/** Walls a bishop net's funnel may add, at most. */
-export const FUNNEL_WALLS = 6;
+/** Walls a slider net's funnel may add, at most: a rook or queen reaches more of the board in two moves. */
+export const FUNNEL_WALLS = Object.freeze({ bishop: 6, rook: 8, queen: 10 });
+/** Planted routes a slider net tries per pocket before giving it up (a bishop has few enough to try them all). */
+export const NET_ROUTES = Object.freeze({ bishop: Infinity, rook: 24, queen: 24 });
 /**
- * A bishop net's funnel: walls that make the squares the bishop mates from
+ * A slider net's funnel: walls that make the squares the piece mates from
  * (`mates`) a trip of three moves or more, and `most` at most, so no mate
  * comes sooner than a planted line. A bishop reaches most of its colour in
- * two moves, so each wall is the one that lengthens the trip most, or else
- * cuts the most short routes (counted by the first-move squares they start
- * from), ties broken by `rng`; none stands beside the start or on a square
- * the plan keeps open. The distances ignore monsters: the exact search has
- * the last word.
+ * two moves, a rook or queen nearly every square, so each wall is the one
+ * that lengthens the trip most, or else cuts the most short routes (counted
+ * by the first-move squares they start from), ties broken by `rng`; none
+ * stands beside the start or on a square the plan keeps open. The distances
+ * ignore monsters: the exact search has the last word.
  */
 function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
   const { start } = plan;
@@ -235,7 +243,7 @@ function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
   let now = measure();
   for (let walls = 0; ; walls++) {
     if (now.near >= LINE_MOVES.min && now.near <= most) return true;
-    if (walls === FUNNEL_WALLS) return false;
+    if (walls === FUNNEL_WALLS[piece]) return false;
     let best = null;
     for (const tile of shuffle(SQUARES, rng)) {
       if (chebyshev(tile, start) < 2 || !plan.free(tile)) continue;
@@ -248,6 +256,33 @@ function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
     plan.walls.add(index(best.tile));
     now = best.after;
   }
+}
+
+/**
+ * The targets a squeeze can pocket, for each player piece. At home a target
+ * must not see the key square, or it winds up there instead of stepping out
+ * onto the landing. Where the player covers the landing along a line the
+ * target moves on too (a rook against a rook, a queen against anything but a
+ * knight), the landing sits beside the key, which the box leaves open, and
+ * the pocket points away from the key (alongLine, beyond); the target steps
+ * out beside you and is taken before it can strike. No knight against a
+ * knight, no bishop against a bishop or queen, and no rook against a queen
+ * (none of 757 such pockets held: a queen leaves through the key square).
+ */
+const SQUEEZES = Object.freeze({ knight: ['rook', 'bishop', 'queen'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight', 'rook'], queen: ['knight', 'bishop', 'rook', 'queen'] });
+// Could a monster of `role` on `from` move along the line to `to` (open or not)?
+function alongLine(role, from, to) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  if (role === 'knight') return Math.abs(dx * dy) === 2;
+  if (role === 'king' || role === 'pawn') return false;
+  const straight = dx === 0 || dy === 0, diagonal = Math.abs(dx) === Math.abs(dy);
+  return (straight && role !== 'bishop') || (diagonal && role !== 'rook');
+}
+// Does `tile` lie on the ray from `from` through its neighbour `through`, past it?
+function beyond(from, through, tile) {
+  const dx = through.x - from.x, dy = through.y - from.y;
+  for (let k = 1; k < 8; k++) if (same(at(through.x + dx * k, through.y + dy * k), tile)) return true;
+  return false;
 }
 
 // The motifs. Each builds a plan for one floor from its context (the player's
@@ -310,9 +345,7 @@ const MOTIFS = {
 
   squeeze(context) {
     const { piece, target, count, rng, start } = context;
-    // A pocketed target must not see the player's squares, so only roles whose
-    // lines differ from the player's (and no knight against a knight).
-    if (!(piece === 'knight' ? ['rook', 'bishop', 'queen'] : ['rook', 'knight']).includes(target)) return null;
+    if (!SQUEEZES[piece].includes(target)) return null;
     const plan = new Plan(start);
     // Two targets: the key square is the first move. A lone queen: the second.
     const first = reachable(piece, start);
@@ -322,7 +355,8 @@ const MOTIFS = {
     if (!key) return null;
     plan.keep(start, key);
     const fromStart = reachable(piece, start);
-    const landings = shuffle(reachable(piece, key).filter((tile) => tile.y <= 5 && !same(tile, start) && !fromStart.some((square) => same(square, tile))), rng);
+    const landings = shuffle(reachable(piece, key).filter((tile) => tile.y <= 5 && !same(tile, start) && !fromStart.some((square) => same(square, tile))
+      && (!alongLine(target, tile, key) || chebyshev(tile, key) === 1)), rng);
     const pockets = [];
     for (const landing of landings) {
       if (pockets.length === count) break;
@@ -330,6 +364,7 @@ const MOTIFS = {
       const step = shuffle(firstSteps(target === 'queen' ? 'king' : target, landing), rng).find((tile) => tile.y <= 5
         && !same(tile, start) && !same(tile, key) && !same(tile, EXIT) && !covers(target, tile, key)
         && !reachable(piece, key).some((square) => same(square, tile)) && !fromStart.some((square) => same(square, tile))
+        && !(alongLine(target, landing, key) && beyond(tile, landing, key))
         && !pockets.some((pocket) => chebyshev(pocket.landing, tile) < 2 || chebyshev(pocket.home, tile) < 2));
       if (step) pockets.push({ landing, home: step });
     }
@@ -341,7 +376,7 @@ const MOTIFS = {
     for (const pocket of pockets) {
       if (!box(plan, target, pocket.home, [pocket.landing])) return null;
       plan.kept.delete(index(pocket.landing));
-      if (!box(plan, target, pocket.landing, [pocket.home])) return null;
+      if (!box(plan, target, pocket.landing, [pocket.home, ...(alongLine(target, pocket.landing, key) ? [key] : [])])) return null;
       plan.keep(pocket.landing);
     }
     return { plan, motif: 'squeeze', key, landing: pockets.map((pocket) => pocket.landing) };
@@ -371,10 +406,12 @@ const MOTIFS = {
 
   net(context) {
     const { piece, rng, start } = context;
+    const slider = Boolean(RAYS[piece]);
     const options = [];
     for (let y = 0; y <= 2; y++) for (let x = 0; x < 8; x++) {
       const home = at(x, y);
-      for (const [dx, dy] of DIAGONAL) {
+      // A knight's pocket is diagonal; a slider's runs along one of its own lines.
+      for (const [dx, dy] of slider ? RAYS[piece] : DIAGONAL) {
         const other = at(x + dx, y + dy);
         if (!inside(other) || other.y > 2 || same(home, EXIT) || same(other, EXIT)) continue;
         if (piece === 'knight') {
@@ -384,13 +421,14 @@ const MOTIFS = {
             if (inside(check) && KNIGHT.some(([ax, ay]) => check.x - other.x === ax && check.y - other.y === ay)
               && chebyshev(check, home) > 1 && chebyshev(check, other) > 1) options.push({ home, other, check, line: [] });
           }
-        } else if ((x + y) % 2 === (start.x + start.y) % 2) {
-          // A check along the pocket's diagonal covers both squares. The far
-          // end (`other`) meets the board's edge or a wall. The check comes
-          // from any square of the diagonal on the open side, down to the
-          // mouth next to `home`, which mates once the king has paced back to
-          // `other` (beside the king, the bishop would be taken). A wall just
-          // past the check square ends the diagonal there.
+        } else if (piece !== 'bishop' || (x + y) % 2 === (start.x + start.y) % 2) {
+          // A check along the pocket's line covers both squares. The far end
+          // (`other`) meets the board's edge or a wall. The check comes from
+          // any square of the line on the open side, down to the mouth next
+          // to `home`, which mates once the king has paced back to `other`
+          // (beside the king, the checker would be taken). A wall just past
+          // the check square ends the line there. Walls box the pocket in, so
+          // no other line reaches it.
           for (let k = 1; k < 8; k++) {
             const check = at(x - dx * k, y - dy * k);
             if (!inside(check) || same(check, start) || same(check, EXIT)) break;
@@ -399,28 +437,28 @@ const MOTIFS = {
         }
       }
     }
-    for (const pick of piece === 'bishop' ? pocketOrder(options, context) : shuffle(options, rng).slice(0, 48)) {
+    for (const pick of slider ? pocketOrder(options, context) : shuffle(options, rng).slice(0, 48)) {
       const plan = new Plan(start);
       plan.keep(start, pick.check, ...pick.line);
-      // A bishop's king starts deep in its pocket: two turns from the exit along the line.
-      plan.place(0, 'king', piece === 'bishop' ? pick.other : pick.home);
+      // A slider's king starts deep in its pocket: two turns from the exit along the line.
+      plan.place(0, 'king', slider ? pick.other : pick.home);
       plan.keep(pick.home, pick.other);
       // The pocket's mouth (next to `home`, toward the check) stays open.
-      const mouth = piece === 'bishop' && chebyshev(pick.check, pick.home) === 1 ? [pick.check] : [];
+      const mouth = slider && chebyshev(pick.check, pick.home) === 1 ? [pick.check] : [];
       if (!box(plan, 'king', pick.home, [pick.other, ...pick.line, ...mouth])) continue;
       if (!box(plan, 'king', pick.other, [pick.home])) continue;
       if (pick.cap && inside(pick.cap) && !plan.wall(pick.cap)) continue;
       // Checkmate wins at once on composed king floors (src/rules.js), so every
       // check square must be three or more moves from the start (the king
       // floor's fallback lets that go).
-      if (piece === 'bishop' && !context.relaxed) {
-        // The bishop's way in is planted: a three-move route to a mating
+      if (slider && !context.relaxed) {
+        // The slider's way in is planted: a three-move route to a mating
         // square, picked at random, stays open while the funnel walls every
         // faster one, so a pocket needs a different path from day to day. A
         // mate from the mouth alone lands while the pacing king is back at
         // the far end, after an even number of its moves: on the third move.
         const mates = [pick.check, ...pick.line];
-        for (const route of shuffle(bishopRoutes(plan, mates), rng)) {
+        for (const route of shuffle(slideRoutes(plan, piece, mates), rng).slice(0, NET_ROUTES[piece])) {
           const trial = plan.clone();
           trial.keep(...route.passed);
           if (funnel(trial, piece, mates, rng, mouth.length ? LINE_MOVES.min : LINE_MOVES.max) && recruitSquares(trial, piece, trial.units[0]).length) {
@@ -429,7 +467,7 @@ const MOTIFS = {
         }
         continue;
       }
-      if (piece !== 'bishop') {
+      if (!slider) {
         const far = () => { const table = distanceTable(plan.map(), piece); return table[index(start) * 64 + index(pick.check)] >= LINE_MOVES.min; };
         if (!context.relaxed && !far()) continue;
       }
@@ -457,16 +495,16 @@ const MOTIFS = {
   },
 };
 
-// A bishop's three-move routes from the start to any of `mates` over the
+// A slider's three-move routes from the start to any of `mates` over the
 // plan's walls (monsters ignored), landing on no mate before the last move:
 // { moves, passed }, `passed` every square the route lands on or crosses.
-function bishopRoutes(plan, mates) {
+function slideRoutes(plan, piece, mates) {
   const { start } = plan, routes = [], mate = (tile) => mates.some((square) => same(square, tile));
-  for (const first of reach(plan, 'bishop', start, false)) {
+  for (const first of reach(plan, piece, start, false)) {
     if (mate(first)) continue;
-    for (const second of reach(plan, 'bishop', first, false)) {
+    for (const second of reach(plan, piece, first, false)) {
       if (same(second, start) || mate(second)) continue;
-      for (const last of reach(plan, 'bishop', second, false).filter(mate)) {
+      for (const last of reach(plan, piece, second, false).filter(mate)) {
         routes.push({ moves: [first, second, last], passed: [first, second, last, ...between(start, first), ...between(first, second), ...between(second, last)] });
       }
     }
@@ -478,7 +516,7 @@ function bishopRoutes(plan, mates) {
 // from the royal king `king` to step beside it within the line.
 const recruitSquares = (plan, piece, king) => reach(plan, piece, plan.start).filter((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
 
-// The order a bishop's net tries its options in. Each day ranks the pockets
+// The order a slider's net tries its options in. Each day ranks the pockets
 // from its own seed: an attempt takes the first one it can build (some never
 // can, beside the exit), its checks shuffled, and the day keeps that pocket
 // for NET_TRIES attempts before the next in its ranking. So every pocket
@@ -505,7 +543,7 @@ export function motifsFor(piece, target, floor) {
 // stand-ins whose one target the player takes at once. Nothing that changes
 // play carries from floor to floor (a capture only scores), so a floor plays
 // the same here as in its day.
-const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4) };
+const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4), rook: at(4, 4), queen: at(2, 4) };
 const standIn = (piece) => ({ map: Array(8).fill('........'), enemies: [{ ...FIRST_TAKE[piece], cast: 0 }], items: [] });
 // `carried`: powers the earlier floors' hints hand on (a bone ward lasts the
 // whole run), for the checks that play as a person would.
@@ -652,7 +690,8 @@ function hinted(built, best, line, base, floor, rng, carried) {
 export const BOT_GUARD = Object.freeze({ runs: HUMAN_RUNS, short: 2, slack: 4, missShare: 1 / 3 });
 export function botGuard(start, base, floor, par) {
   let short = 0, missed = 0;
-  for (let run = 0; run < BOT_GUARD.runs; run++) {
+  // The verdict is settled at the first short run or the miss that tips the share, so the runs stop there.
+  for (let run = 0; run < BOT_GUARD.runs && short === 0 && missed <= BOT_GUARD.missShare * BOT_GUARD.runs; run++) {
     const result = playFloor(start, { seed: runSeed(base, floor, run) });
     if (result.won && result.moves <= BOT_GUARD.short) short++;
     if (!result.won || result.moves > par + BOT_GUARD.slack) missed++;
