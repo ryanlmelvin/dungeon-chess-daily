@@ -1134,7 +1134,8 @@ function composedRoom(state) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
   }
   setupFloorModifier(state);
-  if (state.playerColor === 'white') for (const foe of state.enemies) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
+  // The opening wind-ups; a held decoy stays asleep until it wakes, like a pinned monster.
+  if (state.playerColor === 'white') for (const foe of state.enemies) if (!pinned(foe)) (royalRules(state) ? aimAtPlayer : windUp)(state, foe);
 }
 
 function setFloor(state, kingRecruit = false) {
