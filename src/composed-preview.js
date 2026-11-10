@@ -3,15 +3,21 @@
 // The dev-only preview of composed days (src/composer.js, phase 0 of
 // docs/puzzle-first-idea.md). src/main.js loads this module only in a dev
 // build opened with ?composed=YYYY-MM-DD, so published builds never carry it.
-import { composeDay } from './composer.js';
+import { composeDay, START_SETS, COMPOSED_STARTS } from './composer.js';
 import { RULES_VERSION } from './rules.js';
+
+// The start set the page's query names (&starts=e2 or wide), else the composer's own.
+const startsFor = (search) => { const name = new URLSearchParams(search).get('starts'); return Object.hasOwn(START_SETS, name ?? '') ? name : COMPOSED_STARTS; };
 
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
   const date = new URLSearchParams(search).get('composed');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return null;
-  try { return composeDay(date).daily; } catch (error) { console.error(error); return null; }
+  try { return composeDay(date, { starts: startsFor(search) }).daily; } catch (error) { console.error(error); return null; }
 }
+
+/** Each start set saves apart; e2 keeps the key earlier previews used. */
+export const composedSaveTag = (search) => (startsFor(search) === 'e2' ? 'composed:' : `composed:${startsFor(search)}:`);
 
 /** A saved composed run belongs to its day: the same date and the same rooms. */
 export function composedSaveFits(value, daily) {

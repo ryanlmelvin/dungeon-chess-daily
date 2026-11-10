@@ -9,7 +9,7 @@
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from.
 // Read-only.
-//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--json path]
+//   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--starts e2|wide|c2,d2,…] [--json path]
 import { writeFileSync } from 'node:fs';
 import { composeDay, MOTIF_LEVELS } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
@@ -22,6 +22,8 @@ const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); 
 const start = arg('start', '2026-11-01'), end = arg('end', '2028-11-08'), runs = Number(arg('runs', HUMAN_RUNS));
 // One monster ruleset for every day (--tier gentle … fiendish); omitted, the composer's own choice.
 const tier = arg('tier', undefined);
+// Where floors may start the player (src/composer.js START_SETS, or square names); omitted, the composer's own choice.
+const starts = arg('starts', undefined);
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -44,7 +46,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
   if (!['knight', 'bishop'].includes(raw.playerPiece) || raw.targets.slice(0, 2).some((role) => role === 'pawn')) continue;
   let composed;
-  try { composed = composeDay(date, { tier }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+  try { composed = composeDay(date, { tier, starts }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
   const certified = certifiedFloors(daily);
   floors.forEach((floor, f) => {
@@ -58,10 +60,13 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
     const king = f === 2 ? floor.room.enemies.find((foe) => foe.cast === 0) : null;
     const mate = floor.line.findLast((action) => action.type === 'move');
+    // The floor's start (e2 unless the room names one) and its planted line from there.
+    const begin = square(floor.room.start ?? { x: 4, y: 6 });
+    const route = `${begin}: ${floor.line.map((action) => (action.type === 'move' ? square(action) : 'wait')).join(' ')}`;
     rows.push({
       date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
-      walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null,
+      walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null, start: begin, route,
     });
   });
 }
@@ -99,7 +104,7 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
 }
 const days = new Set(rows.map((row) => row.date));
 const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
-console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}); ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Composer over ${days.size} knight and bishop days (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
@@ -132,6 +137,33 @@ for (const piece of ['knight', 'bishop']) {
   const ranked = Object.entries(shapes).sort((a, b) => b[1] - a[1]);
   const squares = new Set(kings.map((row) => row.shape.split(',')[0]));
   console.log(`\n${piece[0].toUpperCase()}${piece.slice(1)} king floors: ${ranked.length} shapes over ${squares.size} king squares; the commonest takes ${percent(ranked[0][1], kings.length)}. ${ranked.map(([shape, n]) => `${shape}: ${n}`).join('; ')}.`);
+}
+// Repetition, as a daily player of one piece meets it: each piece's floors in
+// date order. A line is the floor's start and planted moves; a king floor's
+// shape is its pocket (the royal king's square and the mating square). "Seen
+// lately" counts floors whose line or shape came up on one of that piece's
+// previous RECENT days.
+const RECENT = 8;
+function repeats(group, key) {
+  const counts = new Map();
+  let lately = 0;
+  group.forEach((row, n) => {
+    const name = key(row);
+    if (group.slice(Math.max(0, n - RECENT), n).some((other) => key(other) === name)) lately++;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  });
+  const [top, most] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  return `${counts.size} / ${percent(most, group.length)} (${top}) / ${percent(lately, group.length)}`;
+}
+console.log(`\nRepetition (each piece's days in date order; seen lately = on one of its previous ${RECENT} days):\n`);
+console.log('| Piece · floor | Floors | Starts used | Lines: distinct / commonest / seen lately | King-floor shapes: distinct / commonest / seen lately |\n|---|---|---|---|---|');
+for (const piece of [...new Set(floorsOf.map((row) => row.piece))]) for (const f of [0, 1, 2]) {
+  const group = floorsOf.filter((row) => row.piece === piece && row.floor === f).sort((a, b) => a.date.localeCompare(b.date));
+  if (!group.length) continue;
+  const starts = {};
+  for (const row of group) starts[row.start] = (starts[row.start] ?? 0) + 1;
+  const used = Object.entries(starts).sort((a, b) => b[1] - a[1]).map(([square, n]) => `${square} ${n}`).join(', ');
+  console.log(`| ${piece} · floor ${f + 1} | ${group.length} | ${used} | ${repeats(group, (row) => row.route)} | ${f === 2 ? repeats(group, (row) => row.shape) : '–'} |`);
 }
 const hints = {};
 for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }

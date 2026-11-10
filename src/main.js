@@ -60,7 +60,7 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${composedDay ? 'composed:' : practice ? 'practice:' : 'daily:'}v11:${daily.date}`;
+const key = () => `${prefix}${composedDay ? preview.composedSaveTag(location.search) : practice ? 'practice:' : 'daily:'}v11:${daily.date}`;
 const practiceModeKey = () => `${prefix}practice:active:v11:${daily.date}`;
 function setPracticeMode(enabled) {
   practice = enabled;

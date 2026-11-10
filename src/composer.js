@@ -67,8 +67,30 @@ export const COMPOSED_TIER = 'fair';
  * clean puzzle on a clock, then the day turns up the pressure.
  */
 export const FLOOR_DECOYS = Object.freeze(['held', 'roam', 'roam']);
+/**
+ * Where a composed floor may start the player. Every published floor starts
+ * on e2 ('e2'); a composed floor may start on any square of `wide`, drawn
+ * afresh for each motif instance from the floor's seed, so the same pocket or
+ * bait comes with a different way in from day to day. COMPOSED_STARTS names
+ * the set the preview uses.
+ */
+const squareOf = (name) => Object.freeze({ x: 'abcdefgh'.indexOf(name[0]), y: 8 - Number(name[1]) });
+export const START_SETS = Object.freeze({
+  e2: Object.freeze(['e2'].map(squareOf)),
+  wide: Object.freeze(['b2', 'c2', 'd2', 'e2', 'f2', 'g2', 'd1', 'e1'].map(squareOf)),
+});
+export const COMPOSED_STARTS = 'wide';
+/** A start set by name, or a list of square names ('c2,d2,e2'). */
+export function startSquares(starts = COMPOSED_STARTS) {
+  if (Array.isArray(starts)) return starts;
+  if (Object.hasOwn(START_SETS, starts)) return START_SETS[starts];
+  const squares = String(starts).split(',').filter((name) => /^[a-h][1-8]$/.test(name)).map(squareOf);
+  if (!squares.length) throw new Error(`Unknown start set ${starts}.`);
+  return squares;
+}
 
-const START = Object.freeze({ x: 4, y: 6 });
+/** Every published floor starts the player on e2. */
+const HOME = Object.freeze({ x: 4, y: 6 });
 const EXIT = Object.freeze({ x: 4, y: 0 });
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -85,12 +107,12 @@ const shuffle = (list, rng) => list.map((item) => ({ item, order: rng() })).sort
 // The room taking shape: walls, monsters (cast 0 is the floor's target
 // species, 1 and 2 its decoy species), items, and squares that must stay open.
 class Plan {
-  constructor() { this.walls = new Set(); this.units = []; this.items = []; this.kept = new Set(); }
+  constructor(start = HOME) { this.start = start; this.walls = new Set(); this.units = []; this.items = []; this.kept = new Set(); }
   isWall(tile) { return !inside(tile) || this.walls.has(index(tile)); }
   unitAt(tile) { return this.units.find((unit) => same(unit, tile)); }
   free(tile) {
     return !this.isWall(tile) && !this.unitAt(tile) && !this.items.some((item) => same(item, tile))
-      && !this.kept.has(index(tile)) && !same(tile, START) && !same(tile, EXIT);
+      && !this.kept.has(index(tile)) && !same(tile, this.start) && !same(tile, EXIT);
   }
   keep(...tiles) { for (const tile of tiles) if (inside(tile)) this.kept.add(index(tile)); }
   /** A wall on `tile` unless it must stay open; true when `tile` is blocked afterwards. */
@@ -102,7 +124,7 @@ class Plan {
   }
   place(cast, role, tile) { this.units.push({ x: tile.x, y: tile.y, cast, role }); }
   clone() {
-    const copy = new Plan();
+    const copy = new Plan(this.start);
     copy.walls = new Set(this.walls); copy.units = this.units.map((unit) => ({ ...unit }));
     copy.items = this.items.map((item) => ({ ...item })); copy.kept = new Set(this.kept);
     return copy;
@@ -110,8 +132,10 @@ class Plan {
   map() {
     return Array.from({ length: 8 }, (_, y) => Array.from({ length: 8 }, (_, x) => (this.walls.has(y * 8 + x) ? '#' : '.')).join(''));
   }
+  // The room as src/rules.js reads it; `start` only where the player doesn't start on e2.
   room() {
-    return { map: this.map(), enemies: this.units.map(({ x, y, cast, held }) => ({ x, y, cast, ...(held && { held }) })), items: this.items.map((item) => ({ ...item })) };
+    return { map: this.map(), enemies: this.units.map(({ x, y, cast, held }) => ({ x, y, cast, ...(held && { held }) })), items: this.items.map((item) => ({ ...item })),
+      ...(!same(this.start, HOME) && { start: { ...this.start } }) };
   }
 }
 
@@ -202,9 +226,10 @@ export const FUNNEL_WALLS = 6;
  * the last word.
  */
 function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
+  const { start } = plan;
   const measure = () => {
-    const dist = routeDistances(plan, piece, mates), near = dist[index(START)];
-    return { near, routes: reach(plan, piece, START, false).filter((tile) => dist[index(tile)] === near - 1).length };
+    const dist = routeDistances(plan, piece, mates), near = dist[index(start)];
+    return { near, routes: reach(plan, piece, start, false).filter((tile) => dist[index(tile)] === near - 1).length };
   };
   const score = ({ near, routes }) => (near > most ? -1000 : 10 * Math.min(near, LINE_MOVES.min) - (near < LINE_MOVES.min ? routes : 0));
   let now = measure();
@@ -213,7 +238,7 @@ function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
     if (walls === FUNNEL_WALLS) return false;
     let best = null;
     for (const tile of shuffle(SQUARES, rng)) {
-      if (chebyshev(tile, START) < 2 || !plan.free(tile)) continue;
+      if (chebyshev(tile, start) < 2 || !plan.free(tile)) continue;
       plan.walls.add(index(tile));
       const after = measure();
       plan.walls.delete(index(tile));
@@ -231,13 +256,13 @@ function funnel(plan, piece, mates, rng, most = LINE_MOVES.max) {
 // squeeze, the `landing` squares the targets must step onto.
 const MOTIFS = {
   bait(context) {
-    const { piece, target, count, rng } = context;
-    const plan = new Plan();
+    const { piece, target, count, rng, start } = context;
+    const plan = new Plan(start);
     // Two targets wind up at the start square; a lone queen at the square the
     // first move reaches, so the line still takes three moves.
-    const bait = count === 2 ? START : shuffle(reachable(piece, START).filter((tile) => tile.y >= 2 && tile.y <= 5), rng)[0];
+    const bait = count === 2 ? start : shuffle(reachable(piece, start).filter((tile) => tile.y >= 2 && tile.y <= 5), rng)[0];
     if (!bait) return null;
-    plan.keep(START, bait);
+    plan.keep(start, bait);
     const perches = [];
     if (target === 'knight') {
       for (const [dx, dy] of KNIGHT) perches.push({ tile: at(bait.x + dx, bait.y + dy), lane: [], dir: `${dx},${dy}`, toward: bait });
@@ -255,8 +280,8 @@ const MOTIFS = {
       if (chosen.length === count) break;
       const { tile } = perch;
       // Perches may share the start's rank (a rook winds up along it), never sit behind it.
-      if (!inside(tile) || same(tile, START) || same(tile, EXIT) || tile.y > 6 || chebyshev(tile, START) < 2) continue;
-      if (count === 1 && (covers(target, tile, START) || reachable(target, tile).some((square) => same(square, START)))) continue;
+      if (!inside(tile) || same(tile, start) || same(tile, EXIT) || tile.y > 6 || chebyshev(tile, start) < 2) continue;
+      if (count === 1 && (covers(target, tile, start) || reachable(target, tile).some((square) => same(square, start)))) continue;
       if (chosen.some((other) => other.dir === perch.dir || chebyshev(other.tile, tile) < 2
         || other.lane.some((square) => same(square, tile)) || perch.lane.some((square) => same(square, other.tile)))) continue;
       chosen.push(perch);
@@ -266,17 +291,17 @@ const MOTIFS = {
     for (const perch of chosen) plan.place(0, target, perch.tile);
     for (const perch of chosen) if (!box(plan, target, perch.tile, perch.toward ? [perch.toward] : [])) return null;
     // A lone queen must not see the start square, or it winds up there first.
-    if (count === 1) for (const square of between(START, chosen[0].tile)) plan.wall(square);
+    if (count === 1) for (const square of between(start, chosen[0].tile)) plan.wall(square);
     // Guards (copies of the paper's other suspect) where a target could be
     // taken straight away, and now and then elsewhere for variety.
     for (const perch of chosen) {
-      const direct = reachable(piece, START, plan).some((square) => same(square, perch.tile));
+      const direct = reachable(piece, start, plan).some((square) => same(square, perch.tile));
       if (!direct && rng() < 0.5) continue;
       const guard = context.guards.shift();
       if (!guard) { if (direct) return null; continue; }
       const spots = shuffle(firstSteps('king', perch.tile).concat(KNIGHT.map(([dx, dy]) => at(perch.tile.x + dx, perch.tile.y + dy))).filter(inside), rng);
       const spot = spots.find((tile) => plan.free(tile) && covers(guard.role, tile, perch.tile) && !covers(guard.role, tile, bait)
-        && !covers(guard.role, tile, START));
+        && !covers(guard.role, tile, start));
       if (!spot) { context.guards.unshift(guard); if (direct) return null; continue; }
       plan.place(guard.cast, guard.role, spot);
     }
@@ -284,26 +309,26 @@ const MOTIFS = {
   },
 
   squeeze(context) {
-    const { piece, target, count, rng } = context;
+    const { piece, target, count, rng, start } = context;
     // A pocketed target must not see the player's squares, so only roles whose
     // lines differ from the player's (and no knight against a knight).
     if (!(piece === 'knight' ? ['rook', 'bishop', 'queen'] : ['rook', 'knight']).includes(target)) return null;
-    const plan = new Plan();
+    const plan = new Plan(start);
     // Two targets: the key square is the first move. A lone queen: the second.
-    const first = reachable(piece, START);
+    const first = reachable(piece, start);
     const keys = count === 2 ? first : [...new Set(first.flatMap((tile) => reachable(piece, tile)).map(index))].map((n) => at(n % 8, n >> 3))
-      .filter((tile) => !first.some((square) => same(square, tile)) && !same(tile, START));
+      .filter((tile) => !first.some((square) => same(square, tile)) && !same(tile, start));
     const key = shuffle(keys.filter((tile) => tile.y >= 1 && tile.y <= 5), rng)[0];
     if (!key) return null;
-    plan.keep(START, key);
-    const fromStart = reachable(piece, START);
-    const landings = shuffle(reachable(piece, key).filter((tile) => tile.y <= 5 && !same(tile, START) && !fromStart.some((square) => same(square, tile))), rng);
+    plan.keep(start, key);
+    const fromStart = reachable(piece, start);
+    const landings = shuffle(reachable(piece, key).filter((tile) => tile.y <= 5 && !same(tile, start) && !fromStart.some((square) => same(square, tile))), rng);
     const pockets = [];
     for (const landing of landings) {
       if (pockets.length === count) break;
       if (pockets.some((pocket) => chebyshev(pocket.landing, landing) < 3)) continue;
       const step = shuffle(firstSteps(target === 'queen' ? 'king' : target, landing), rng).find((tile) => tile.y <= 5
-        && !same(tile, START) && !same(tile, key) && !same(tile, EXIT) && !covers(target, tile, key)
+        && !same(tile, start) && !same(tile, key) && !same(tile, EXIT) && !covers(target, tile, key)
         && !reachable(piece, key).some((square) => same(square, tile)) && !fromStart.some((square) => same(square, tile))
         && !pockets.some((pocket) => chebyshev(pocket.landing, tile) < 2 || chebyshev(pocket.home, tile) < 2));
       if (step) pockets.push({ landing, home: step });
@@ -323,17 +348,17 @@ const MOTIFS = {
   },
 
   fork(context) {
-    const { piece, target, count, rng } = context;
+    const { piece, target, count, rng, start } = context;
     if (count !== 2 || !(piece === 'knight' ? ['rook', 'bishop'] : ['rook', 'knight']).includes(target)) return null;
-    const plan = new Plan();
-    const key = shuffle(reachable(piece, START).filter((tile) => tile.y >= 1 && tile.y <= 5), rng)[0];
+    const plan = new Plan(start);
+    const key = shuffle(reachable(piece, start).filter((tile) => tile.y >= 1 && tile.y <= 5), rng)[0];
     if (!key) return null;
-    plan.keep(START, key);
-    const fromStart = reachable(piece, START);
+    plan.keep(start, key);
+    const fromStart = reachable(piece, start);
     const spots = [];
     for (const tile of shuffle(reachable(piece, key), rng)) {
       if (spots.length === 2) break;
-      if (tile.y > 5 || same(tile, START) || same(tile, EXIT) || fromStart.some((square) => same(square, tile)) || covers(target, tile, key)) continue;
+      if (tile.y > 5 || same(tile, start) || same(tile, EXIT) || fromStart.some((square) => same(square, tile)) || covers(target, tile, key)) continue;
       if (spots.some((other) => chebyshev(other, tile) < 2)) continue;
       spots.push(tile);
     }
@@ -345,7 +370,7 @@ const MOTIFS = {
   },
 
   net(context) {
-    const { piece, rng } = context;
+    const { piece, rng, start } = context;
     const options = [];
     for (let y = 0; y <= 2; y++) for (let x = 0; x < 8; x++) {
       const home = at(x, y);
@@ -359,7 +384,7 @@ const MOTIFS = {
             if (inside(check) && KNIGHT.some(([ax, ay]) => check.x - other.x === ax && check.y - other.y === ay)
               && chebyshev(check, home) > 1 && chebyshev(check, other) > 1) options.push({ home, other, check, line: [] });
           }
-        } else if ((x + y) % 2 === (START.x + START.y) % 2) {
+        } else if ((x + y) % 2 === (start.x + start.y) % 2) {
           // A check along the pocket's diagonal covers both squares. The far
           // end (`other`) meets the board's edge or a wall. The check comes
           // from any square of the diagonal on the open side, down to the
@@ -368,15 +393,15 @@ const MOTIFS = {
           // past the check square ends the diagonal there.
           for (let k = 1; k < 8; k++) {
             const check = at(x - dx * k, y - dy * k);
-            if (!inside(check) || same(check, START) || same(check, EXIT)) break;
+            if (!inside(check) || same(check, start) || same(check, EXIT)) break;
             options.push({ home, other, check, line: between(check, home), cap: at(check.x - dx, check.y - dy) });
           }
         }
       }
     }
     for (const pick of piece === 'bishop' ? pocketOrder(options, context) : shuffle(options, rng).slice(0, 48)) {
-      const plan = new Plan();
-      plan.keep(START, pick.check, ...pick.line);
+      const plan = new Plan(start);
+      plan.keep(start, pick.check, ...pick.line);
       // A bishop's king starts deep in its pocket: two turns from the exit along the line.
       plan.place(0, 'king', piece === 'bishop' ? pick.other : pick.home);
       plan.keep(pick.home, pick.other);
@@ -405,7 +430,7 @@ const MOTIFS = {
         continue;
       }
       if (piece !== 'bishop') {
-        const far = () => { const table = distanceTable(plan.map(), piece); return table[index(START) * 64 + index(pick.check)] >= LINE_MOVES.min; };
+        const far = () => { const table = distanceTable(plan.map(), piece); return table[index(start) * 64 + index(pick.check)] >= LINE_MOVES.min; };
         if (!context.relaxed && !far()) continue;
       }
       // (A pocket that leaves the recruit no square fails its dressing; see dress.)
@@ -416,13 +441,13 @@ const MOTIFS = {
 
   // The fallback: targets two moves out in an open room, no planted idea.
   walk(context) {
-    const { piece, target, count, rng } = context;
-    const plan = new Plan();
-    plan.keep(START);
+    const { piece, target, count, rng, start } = context;
+    const plan = new Plan(start);
+    plan.keep(start);
     const table = distanceTable(Array(8).fill('........'), piece);
     const moves = (a, b) => table[index(a) * 64 + index(b)];
     const spots = shuffle(Array.from({ length: 40 }, (_, n) => at(n % 8, n >> 3)), rng)
-      .filter((tile) => !same(tile, EXIT) && moves(START, tile) === 2 && !covers(target, tile, START));
+      .filter((tile) => !same(tile, EXIT) && moves(start, tile) === 2 && !covers(target, tile, start));
     for (const tile of spots) {
       if (plan.units.length === count) break;
       if (plan.units.some((unit) => chebyshev(unit, tile) < 2) || !plan.free(tile)) continue;
@@ -436,13 +461,13 @@ const MOTIFS = {
 // plan's walls (monsters ignored), landing on no mate before the last move:
 // { moves, passed }, `passed` every square the route lands on or crosses.
 function bishopRoutes(plan, mates) {
-  const routes = [], mate = (tile) => mates.some((square) => same(square, tile));
-  for (const first of reach(plan, 'bishop', START, false)) {
+  const { start } = plan, routes = [], mate = (tile) => mates.some((square) => same(square, tile));
+  for (const first of reach(plan, 'bishop', start, false)) {
     if (mate(first)) continue;
     for (const second of reach(plan, 'bishop', first, false)) {
-      if (same(second, START) || mate(second)) continue;
+      if (same(second, start) || mate(second)) continue;
       for (const last of reach(plan, 'bishop', second, false).filter(mate)) {
-        routes.push({ moves: [first, second, last], passed: [first, second, last, ...between(START, first), ...between(first, second), ...between(second, last)] });
+        routes.push({ moves: [first, second, last], passed: [first, second, last, ...between(start, first), ...between(first, second), ...between(second, last)] });
       }
     }
   }
@@ -451,7 +476,7 @@ function bishopRoutes(plan, mates) {
 
 // Where the king floor's recruit may wait: one move from the start, too far
 // from the royal king `king` to step beside it within the line.
-const recruitSquares = (plan, piece, king) => reach(plan, piece, START).filter((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
+const recruitSquares = (plan, piece, king) => reach(plan, piece, plan.start).filter((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
 
 // The order a bishop's net tries its options in. Each day ranks the pockets
 // from its own seed: an attempt takes the first one it can build (some never
@@ -704,7 +729,8 @@ function forcedShare(states) {
 // plays out, never beside the start. Then the coins, the powerup and the
 // recruit go off the line, on squares the player can reach.
 function dress(plan, context, line, base, floor, rng) {
-  const lineSquares = [START, ...line.filter((action) => action.type === 'move')];
+  const { start } = plan;
+  const lineSquares = [start, ...line.filter((action) => action.type === 'move')];
   plan.keep(...lineSquares);
   const far = (tile, gap) => lineSquares.every((square) => chebyshev(square, tile) >= gap) && plan.units.every((unit) => chebyshev(unit, tile) >= 2);
   const squares = Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3));
@@ -714,7 +740,7 @@ function dress(plan, context, line, base, floor, rng) {
   for (const decoy of context.quiet) {
     const moves = distanceTable(plan.map(), decoy.role === 'pawn' ? 'king' : decoy.role);
     const reach = (tile) => Math.min(...lineSquares.map((square) => moves[index(tile) * 64 + index(square)]));
-    const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, START) >= 2 && !covers(decoy.role, tile, START)
+    const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, start) >= 2 && !covers(decoy.role, tile, start)
       && plan.units.every((unit) => chebyshev(unit, tile) >= 2));
     const spot = spots.find((tile) => reach(tile) >= near && reach(tile) <= away) ?? spots[0];
     if (!spot) return null;
@@ -722,7 +748,7 @@ function dress(plan, context, line, base, floor, rng) {
     if (held) plan.units.at(-1).held = line.length;
   }
   const table = distanceTable(plan.map(), context.piece);
-  const moves = (tile) => table[index(START) * 64 + index(tile)];
+  const moves = (tile) => table[index(start) * 64 + index(tile)];
   const safe = (tile) => plan.free(tile) && moves(tile) !== UNREACHABLE && !plan.units.some((unit) => covers(unit.role, unit, tile));
   const open = shuffle(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)), rng).filter(safe);
   const coinless = floor === 2;
@@ -734,7 +760,7 @@ function dress(plan, context, line, base, floor, rng) {
     // too far from the royal king to step beside it within the line. Every king
     // floor has one: a dressing whose decoys took its squares is tried again.
     const king = plan.units.find((unit) => unit.role === 'king' && unit.cast === 0);
-    const tile = shuffle(reach(plan, context.piece, START), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)));
+    const tile = shuffle(reach(plan, context.piece, start), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)));
     if (!tile) return null;
     plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
   } else {
@@ -769,7 +795,7 @@ function castFor(base, floor) {
  * kept, ms }: `tried` and `kept` count motif instances built and accepted per
  * motif (`replayed` those whose planted idea won within the line's length).
  */
-export function composeFloor(base, floor, { trace, carried = null } = {}) {
+export function composeFloor(base, floor, { trace, carried = null, starts = startSquares() } = {}) {
   const began = performance.now();
   const piece = base.playerPiece;
   const cast = castFor(base, floor);
@@ -781,7 +807,9 @@ export function composeFloor(base, floor, { trace, carried = null } = {}) {
     const attempts = motif === 'walk' ? MOTIF_ATTEMPTS * 4 : MOTIF_ATTEMPTS;
     for (let attempt = 0; attempt < attempts; attempt++) {
       const rng = random(hash(`${seed}:${motif}:${attempt}`));
-      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, guards: [...cast.suspects, cast.other] };
+      // The instance's start, from a stream of its own (with one start, the rest draws as before).
+      const square = starts.length === 1 ? starts[0] : starts[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * starts.length)];
+      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start: square, guards: [...cast.suspects, cast.other] };
       const built = motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[motif](context);
       if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
       tally.built++;
@@ -834,15 +862,17 @@ export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:$
  * A composed day for a canonical date: the raw daily with the date's tier, no
  * modifier, a composed room per floor and the planted lines as its
  * certificate, proved by verifyWinningRoute. `floors` describes each floor.
- * `daily` overrides the raw daily (tooling: synthetic casts).
+ * `daily` overrides the raw daily (tooling: synthetic casts); `starts` the
+ * start set (startSquares).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date) } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts } = {}) {
+  const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};
   for (const floor of [0, 1, 2]) {
-    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null }));
+    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
