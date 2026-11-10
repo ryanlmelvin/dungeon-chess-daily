@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Measure the phase-0 composer (src/composer.js) over every knight, bishop,
-// rook and queen date (or --pieces) whose first two floors have non-pawn
-// targets: per motif, how often a
+// Measure the phase-0 composer (src/composer.js) over every date of the
+// daily pieces it composes (src/composer.js COMPOSED_PIECES, or --pieces):
+// per motif, how often a
 // built instance's planted idea wins within the line's length (replay
 // acceptance), time per floor, and the human-like bot's runs from each floor's
 // start (src/human-bot.js playFloor, 40 seeded runs, steering its recruit as
 // par assumes). Par is the planted line plus one. A run misses when it fails
 // or takes more than par + 4 moves; a stalled move neither takes a target nor
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
-// is the royal king's square and the square the planted line mates from.
-// Read-only.
+// is the royal king's square and the square the planted line mates from; on a
+// pawn player's king floor, its mate is the queen's, both's or the king's
+// (src/composer.js PAWN_MATES). Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…]
 //     [--pawn-days] [--json path]
 // --pawn-days measures only the days whose floors 1–2 have pawn targets.
@@ -72,7 +73,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     rows.push({
       date, tier: daily.difficulty, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
-      walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null, start: begin, route,
+      walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null, start: begin, route, mate: floor.mate ?? null,
     });
   });
 }
@@ -179,6 +180,12 @@ for (const piece of [...new Set(floorsOf.map((row) => row.piece))]) for (const f
   for (const row of group) starts[row.start] = (starts[row.start] ?? 0) + 1;
   const used = Object.entries(starts).sort((a, b) => b[1] - a[1]).map(([square, n]) => `${square} ${n}`).join(', ');
   console.log(`| ${piece} · floor ${f + 1} | ${group.length} | ${used} | ${repeats(group, (row) => row.route)} | ${f === 2 ? repeats(group, (row) => row.shape) : '–'} |`);
+}
+const pawnKings = floorsOf.filter((row) => row.piece === 'pawn' && row.floor === 2);
+if (pawnKings.length) {
+  const kinds = {};
+  for (const row of pawnKings) kinds[row.mate ?? row.motif] = (kinds[row.mate ?? row.motif] ?? 0) + 1;
+  console.log(`\nPawn king floors, who mates: ${Object.entries(kinds).map(([kind, n]) => `${kind} ${n}`).join(', ')}.`);
 }
 const hints = {};
 for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }

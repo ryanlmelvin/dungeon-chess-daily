@@ -18,6 +18,10 @@
 //   both squares, so it can't step out: checkmate. A knight checks from one
 //   square; a bishop, rook or queen along the pocket's own line.
 //
+// A pawn player's line is mostly timing (PAWN_MATES): quiet moves bring the
+// pawn where each target steps or marches into a diagonal, or up to the last
+// rank, where the new queen finishes the floor or mates.
+//
 // Monsters are deterministic (seeded ties), so a floor is a one-player puzzle:
 // an exact search over the player's moves (shortestWins) finds its true
 // shortest wins. A motif instance is kept only when its shortest win takes
@@ -36,8 +40,8 @@ import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 
 export const COMPOSER_VERSION = 1;
-/** The player pieces the composer builds days for, whatever their targets (pawn players come later). */
-export const COMPOSED_PIECES = Object.freeze(['knight', 'bishop', 'rook', 'queen']);
+/** The player pieces the composer builds days for, whatever their targets: every daily piece. */
+export const COMPOSED_PIECES = Object.freeze(['knight', 'bishop', 'rook', 'queen', 'pawn']);
 /** A planted line takes this many player moves, waits included. */
 export const LINE_MOVES = Object.freeze({ min: 3, max: 4 });
 /** Motif instances tried per motif, and dressings per instance, before moving on. */
@@ -48,7 +52,7 @@ export const DRESS_ATTEMPTS = 6;
  * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
  * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
  */
-export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3 });
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3 });
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
@@ -94,6 +98,29 @@ export const COMPOSED_STARTS = 'wide';
  * (2026-11-10): longer, more forced lines, under more pressure.
  */
 export const PAWN_TARGETS = 2;
+/**
+ * Pawn players. Floors 1 and 2 mix two motifs (the user's choice after
+ * playing both, 2026-11-10). Most are 'tempo': the pawn starts on its second
+ * rank, and one or two quiet moves (a wait, a step or the double step) time
+ * its diagonal takes as each target steps, or marches, into one (two pawns
+ * may end in en passant). A tempo line that opens with a wait leaves no
+ * square to hint at, and its floor (about a quarter) is 'crown' instead: the
+ * pawn starts on its sixth or seventh rank, promotes within the line, and the
+ * new queen takes what is left. Crown lines are the more obvious, so they
+ * stay the fewer. The king floor mixes three mates too (the user's choice):
+ * - 'king': no promotion: the recruit king mates, the pawn's moves closing
+ *   the net (never a line of waiting); tried first, it builds on about half
+ *   the days;
+ * - 'both': the pawn promotes and mates with the recruit king's help (the
+ *   recruit guards the queen beside the king, or covers its way out);
+ * - 'queen': the pawn walks up, promotes and mates as a queen, needing no help.
+ * Where 'king' doesn't build, each day's seed orders the other two (pawnMates).
+ * Whichever is planted, the pawn's file is open to the last rank, so it can
+ * always promote (the user's rule).
+ */
+export const PAWN_MATES = Object.freeze(['king', 'both', 'queen']);
+// The order a pawn day's king floor tries its mates in: 'king', then the other two as its seed says.
+const pawnMates = (seed) => ['king', ...(hash(`${seed}:mates`) % 2 ? ['both', 'queen'] : ['queen', 'both'])];
 /** A start set by name, or a list of square names ('c2,d2,e2'). */
 export function startSquares(starts = COMPOSED_STARTS) {
   if (Array.isArray(starts)) return starts;
@@ -415,6 +442,7 @@ const MOTIFS = {
   },
 
   net(context) {
+    if (context.piece === 'pawn') return pawnNet(context);
     const { piece, rng, start } = context;
     const slider = Boolean(RAYS[piece]);
     const options = [];
@@ -486,6 +514,10 @@ const MOTIFS = {
     }
     return null;
   },
+
+  // A pawn player's floors 1 and 2 (see PAWN_MATES' note).
+  tempo: (context) => pawnLine(context, 'tempo'),
+  crown: (context) => pawnLine(context, 'crown'),
 
   // The fallback: targets two moves out in an open room, no planted idea.
   walk(context) {
@@ -568,6 +600,325 @@ function pawnSqueeze(context) {
   return { plan, motif: 'squeeze', key, landing: pockets.map((pocket) => pocket.landing) };
 }
 
+// Pawn players. A pawn moves only up its file and takes only diagonally, and
+// no monster ever steps onto its file (src/rules.js preservesPawnLane), so a
+// pawn's planted line is mostly timing: quiet moves bring it where each
+// target steps, or marches, into a diagonal just as it gets there.
+
+/** Draws a pawn motif makes per attempt before giving up: each is cheap, and most fail at the board's edge. */
+export const PAWN_TRIES = 24;
+/** Extra decoys a pawn's floor may add to box its pockets where its own run out (pawnLine). */
+export const PAWN_BOX_EXTRAS = 2;
+/**
+ * The board rows a pawn player starts on (6 is its second rank), by motif and
+ * by the king floor's mate. A promoting king floor starts on the sixth or
+ * fifth rank, and the queen mates on the move after promotion (a mate on it
+ * is a walk up the file).
+ */
+const PAWN_ROWS = Object.freeze({ tempo: [6], crown: [2, 1], queen: [3, 2], both: [3, 2], king: [6, 5, 4] });
+// A pawn's start squares: the start set's files on each of `rows`.
+function pawnStarts(squares, rows) {
+  const files = [...new Set(squares.map((tile) => tile.x))].sort((a, b) => a - b);
+  return rows.flatMap((y) => files.map((x) => at(x, y)));
+}
+/**
+ * A planted pawn line's shape, by motif and target count, one letter a move:
+ * 'Q' a quiet pawn move (a wait, a step, or the double step from its second
+ * rank), 'T' a diagonal take, 'E' a take en passant, 'Z' a step onto the last
+ * rank (promotion) and 'X' the new queen's take.
+ */
+const PAWN_WORDS = Object.freeze({
+  tempo: { 1: ['QQT', 'QQQT'], 2: ['QTT', 'QQTT', 'QTQT', 'QTE'] },
+  crown: { 1: ['QZX', 'QQZX'], 2: ['ZXX', 'QZXX', 'QTX'] },
+});
+
+// The pawn's planted path from `start` for `word` (PAWN_WORDS): one step per
+// letter, { action, to (the square after), passes (squares crossed), take,
+// en (en passant), piece (after the move) }. Null when the word doesn't fit:
+// off the board, a 'Z' short of the last rank, a pawn move after promotion.
+function pawnPath(start, word, rng) {
+  const steps = [];
+  let square = start, piece = 'pawn', moved = false, lane = null;
+  for (const letter of word) {
+    if ((letter === 'X') !== (piece === 'queen')) return null;
+    let to = square, passes = [], take = false, en = false;
+    if (letter === 'Q') {
+      const choices = ['wait', 'step', ...(!moved && square.y === 6 ? ['double'] : [])];
+      const choice = choices[Math.floor(rng() * choices.length)];
+      if (choice !== 'wait') to = at(square.x, square.y - (choice === 'double' ? 2 : 1));
+      if (choice === 'double') passes = [at(square.x, square.y - 1)];
+    } else if (letter === 'Z') {
+      to = at(square.x, square.y - 1);
+      if (to.y !== 0) return null;
+    } else if (letter === 'T') {
+      lane = square.x;
+      to = at(square.x + (rng() < 0.5 ? -1 : 1), square.y - 1);
+      take = true;
+    } else if (letter === 'E') {
+      // The target pawn on the file just left, held there by your pawn's lane,
+      // double-steps beside you once you take: you land on the square it skipped.
+      if (lane === null || square.y !== 3) return null;
+      to = at(lane, 2);
+      take = en = true;
+    } else {
+      const [dx, dy] = AROUND[Math.floor(rng() * AROUND.length)], k = 1 + Math.floor(rng() * 4);
+      to = at(square.x + dx * k, square.y + dy * k);
+      passes = between(square, to);
+      take = true;
+    }
+    if (!inside(to)) return null;
+    if (!same(to, square)) moved = true;
+    if (piece === 'pawn' && to.y === 0) piece = 'queen';
+    steps.push({ action: same(to, square) ? { type: 'wait' } : { type: 'move', x: to.x, y: to.y }, to, passes, take, en, piece });
+    square = to;
+  }
+  return steps;
+}
+
+// Wall a target in on `tile` (as box), but leave kept squares (your path, the
+// pockets) open: a slider's ray is walled just past them instead. Monsters
+// never step onto your pawn's file, which often closes what stays open; the
+// exact search has the last word. On a square your pawn may need to climb
+// to promote (`climb`), a held decoy (`boxer`) stands in for the wall: it
+// wakes once the line is played and must then step off your file. False
+// when no decoy is left for such a square.
+function pawnBox(plan, role, tile, open, climb = null, boxer = null) {
+  for (const step of firstSteps(role, tile)) {
+    if (open.some((square) => same(square, step))) continue;
+    const dx = step.x - tile.x, dy = step.y - tile.y;
+    let square = step;
+    while (inside(square) && (plan.kept.has(index(square)) || plan.unitAt(square) || same(square, plan.start))) {
+      // A sleeping decoy blocks the ray as a wall would.
+      if (!RAYS[role] || plan.unitAt(square)?.held) { square = null; break; }
+      square = at(square.x + dx, square.y + dy);
+    }
+    if (!square || !inside(square)) continue;
+    if (climb?.has(index(square))) { if (!boxer(square)) return false; } else plan.wall(square);
+  }
+  return true;
+}
+
+/**
+ * Floors 1 and 2 for a pawn player ('tempo' or 'crown'): a planted path
+ * (pawnPath), then each target placed to be on its take square just in time.
+ * A target pawn marches one square down its file each turn, except while your
+ * pawn stands on that file; it never starts on its second rank, where it
+ * could step two. Any other target paces a two-square pocket, one step each
+ * turn (none onto your pawn's file), and starts on the square that brings it
+ * onto its take square after the move before the take. No target starts on
+ * your square or where it would take you there at once. The hint's square
+ * comes from the line kept (pawnKey). Missing the line, your pawn can still
+ * walk up and promote (the user's rule): no wall stands on its file above
+ * the start, nor above a take it makes before the last (`climb`); a held
+ * decoy from the floor's own (or one more of the species the paper doesn't
+ * name) boxes a pocket there instead, and steps off the file once it wakes.
+ */
+function pawnLine(context, kind) {
+  // Each try draws a fresh path and pockets; most fail on the board's edge at once.
+  for (let tries = 0; tries < PAWN_TRIES; tries++) {
+    const built = pawnLineOnce(context, kind);
+    if (built) return built;
+  }
+  return null;
+}
+function pawnLineOnce(context, kind) {
+  const { target, count, rng, start } = context;
+  const words = PAWN_WORDS[kind][count].filter((word) => target === 'pawn' || !word.includes('E'));
+  const steps = pawnPath(start, words[Math.floor(rng() * words.length)], rng);
+  if (!steps || steps.filter((step) => step.take).length !== count || steps[0].take) return null;
+  const plan = new Plan(start);
+  plan.keep(start, ...steps.flatMap((step) => [step.to, ...step.passes]));
+  // Your pawn's file after each move (none once it has promoted): monsters never step there.
+  const lanes = steps.map((step) => (step.piece === 'pawn' ? step.to.x : null));
+  const takes = steps.map((step, n) => ({ ...step, move: n + 1 })).filter((step) => step.take);
+  // The squares your pawn may need to climb to promote: its file above the start, and above each take before the last.
+  const climb = new Set();
+  const up = (from) => { for (let y = from.y - 1; y >= 0; y--) climb.add(index(at(from.x, y))); };
+  up(start);
+  for (const take of takes.slice(0, -1)) if (take.piece === 'pawn') up(take.to);
+  // Box decoys come from the floor's own, never a pawn (it could never leave your file),
+  // then up to PAWN_BOX_EXTRAS more of the species the paper doesn't name, whose count
+  // gives nothing away.
+  const pool = [...context.guards], boxes = [];
+  let extras = context.unnamed && context.unnamed.role !== 'pawn' ? PAWN_BOX_EXTRAS : 0;
+  const boxer = (square) => {
+    if (same(square, EXIT)) return true;
+    if (!plan.free(square)) return false;
+    let n = pool.findIndex((guard) => guard.role !== 'pawn');
+    if (n < 0 && extras > 0) { extras--; pool.push({ ...context.unnamed }); n = pool.length - 1; }
+    if (n < 0) return false;
+    const [guard] = pool.splice(n, 1);
+    plan.place(guard.cast, guard.role, square);
+    plan.units.at(-1).held = steps.length;
+    boxes.push(square);
+    return true;
+  };
+  const pockets = [];
+  for (const take of takes) {
+    const { to, move } = take;
+    if (target === 'pawn') {
+      // The march, square by square, from home down to the take square (en passant: two at once, once let go).
+      let home;
+      if (take.en) home = at(to.x, 1);
+      else {
+        let y = to.y;
+        for (let t = move - 1; t >= 1; t--) if (lanes[t - 1] !== to.x) y--;
+        home = at(to.x, y);
+      }
+      if (home.y < 0 || (home.y === 1 && !take.en) || plan.isWall(home) || plan.unitAt(home) || same(home, start) || covers('pawn', home, start)) return null;
+      const march = Array.from({ length: (take.en ? to.y + 1 : to.y) - home.y + 1 }, (_, n) => at(to.x, home.y + n));
+      plan.keep(...march);
+      plan.place(0, 'pawn', home);
+      pockets.push({ role: 'pawn', file: to.x });
+      continue;
+    }
+    // A pocket {take square, other}; the target's steps alternate, but never onto your pawn's file.
+    const options = shuffle(firstSteps(target === 'queen' ? 'king' : target, to), rng).filter((tile) => !plan.kept.has(index(tile)) && !plan.unitAt(tile)
+      && !same(tile, EXIT) && !climb.has(index(tile)) && !pockets.some((pocket) => pocket.home && chebyshev(pocket.home, tile) < 2));
+    let placed = null;
+    for (const other of options) {
+      for (const first of [to, other]) {
+        // Never on your start square (a take square may be, once you have left it), nor striking it.
+        if (same(first, start) || covers(target, first, start)) continue;
+        let now = first;
+        for (let t = 1; t < move; t++) {
+          const next = same(now, to) ? other : to;
+          if (lanes[t - 1] !== next.x) now = next;
+        }
+        if (same(now, to)) { placed = { other, first }; break; }
+      }
+      if (placed) break;
+    }
+    if (!placed) return null;
+    plan.keep(to, placed.other);
+    plan.place(0, target, placed.first);
+    pockets.push({ role: target, home: placed.other, landing: to });
+  }
+  for (const pocket of pockets) {
+    if (pocket.role === 'pawn') { if (!barricade(plan, 'pawn', pocket.file)) return null; continue; }
+    if (!pawnBox(plan, pocket.role, pocket.landing, [pocket.home], climb, boxer) || !pawnBox(plan, pocket.role, pocket.home, [pocket.landing], climb, boxer)) return null;
+  }
+  context.guards = pool;
+  return { plan, motif: kind, pawnLine: true, landing: takes.map((take) => take.to), route: steps.map((step) => step.action), climb, boxes };
+}
+
+/**
+ * The king floor for a pawn player, by `mate` (PAWN_MATES). The recruit king
+ * waits one step up the pawn's file, so the line collects it at once, and the
+ * file stays open to the last rank: off the planted line, the pawn can always
+ * walk up and promote. For 'queen' and 'both' the pawn does promote; the king
+ * paces a two-square pocket along a queen line from the mating square, one
+ * queen move from the promotion square (on it too, for the relaxed
+ * fallback). 'queen' keeps the queen off the king's squares; 'both' lets it
+ * mate beside them, where only the recruit's guard keeps the king from
+ * taking it. For 'king' the recruit checks the king from the pocket's one
+ * open neighbour while your pawn's diagonal covers its way out; the line is
+ * found, not planted, and your pawn's moves must matter (usesIdea). The
+ * exact search, and the mate's kind (mateKind), decide.
+ */
+function pawnNet(context) {
+  for (let tries = 0; tries < PAWN_TRIES; tries++) {
+    const built = pawnNetOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function pawnNetOnce(context) {
+  const { rng, start, mate, relaxed } = context;
+  const plan = new Plan(start);
+  const recruit = at(start.x, start.y - 1);
+  if (!inside(recruit)) return null;
+  // Your pawn's file up to the last rank stays open (no walls, no monster starting there).
+  const path = Array.from({ length: start.y }, (_, n) => at(start.x, start.y - 1 - n));
+  plan.keep(start, ...path);
+  // The king starts on `other`, never beside your start square.
+  const pocketAt = (home, other, open) => {
+    if (![home, other].every((tile) => inside(tile) && plan.free(tile) && tile.x !== start.x) || covers('king', other, start)) return false;
+    plan.keep(home, other);
+    plan.place(0, 'king', other);
+    pawnBox(plan, 'king', home, [other, ...open]);
+    pawnBox(plan, 'king', other, [home]);
+    return true;
+  };
+  if (mate === 'king') {
+    // The king paces `home` and `other`; the recruit checks it on `home` from
+    // `post`, the one open square beside the pocket, out of reach of `other`,
+    // which only your pawn's diagonal covers, from `cover` up its file.
+    const side = rng() < 0.5 ? -1 : 1;
+    const other = at(start.x + side, Math.floor(rng() * 2)), cover = at(start.x, other.y + 1);
+    const [dx, dy] = AROUND[Math.floor(rng() * AROUND.length)];
+    const home = at(other.x + dx, other.y + dy);
+    const posts = AROUND.map(([px, py]) => at(home.x + px, home.y + py)).filter((tile) => inside(tile) && chebyshev(tile, other) > 1 && !same(tile, cover));
+    const post = posts[Math.floor(rng() * posts.length)];
+    if (!post || home.y > 2 || cover.y >= recruit.y || !inside(home) || home.x === start.x || chebyshev(post, recruit) > LINE_MOVES.max) return null;
+    plan.keep(post);
+    if (!pocketAt(home, other, [post])) return null;
+    plan.items.push({ x: recruit.x, y: recruit.y, type: 'companion', piece: 'king' });
+    return { plan, motif: 'net', mate, key: null, relaxed };
+  }
+  // The pawn promotes on its file's last square.
+  const promotion = path.at(-1);
+  // The queen mates on the move after promotion; the relaxed fallback may also mate on it.
+  const after = start.y + 1 <= LINE_MOVES.max + Number(Boolean(relaxed)) && (!relaxed || rng() < 0.5);
+  if (!after && start.y < LINE_MOVES.min) return null;
+  let check = promotion;
+  if (after) {
+    const [dx, dy] = AROUND[Math.floor(rng() * AROUND.length)], k = 1 + Math.floor(rng() * 6);
+    check = at(promotion.x + dx * k, promotion.y + dy * k);
+    if (!inside(check) || same(check, promotion)) return null;
+    plan.keep(check, ...between(promotion, check));
+  }
+  const [dx, dy] = AROUND[Math.floor(rng() * AROUND.length)];
+  const k = (mate === 'both' ? 1 : 2) + Math.floor(rng() * 4);
+  const home = at(check.x + dx * k, check.y + dy * k), other = at(home.x + dx, home.y + dy);
+  if (home.y > 3 || other.y > 3) return null;
+  const line = between(check, home);
+  plan.keep(...line);
+  if (!pocketAt(home, other, [...line, ...(k === 1 ? [check] : [])])) return null;
+  const cap = at(other.x + dx, other.y + dy);
+  if (inside(cap)) plan.wall(cap);
+  plan.items.push({ x: recruit.x, y: recruit.y, type: 'companion', piece: 'king' });
+  const route = [...path, ...(after ? [check] : [])].map((tile) => ({ type: 'move', x: tile.x, y: tile.y }));
+  return { plan, motif: 'net', mate, key: check, route, relaxed };
+}
+
+/**
+ * Who mates on a pawn player's king floor, from the line's positions:
+ * 'king' without promotion (the recruit king, or your pawn under its guard),
+ * 'queen' when the promoted queen's last move mates with no recruit beside
+ * it, 'both' when that same move mates only with the recruit's help.
+ */
+function mateKind(states, line) {
+  const before = states.at(-2), after = states.at(-1);
+  if (after.player.piece !== 'queen') return 'king';
+  if (!before.companion) return 'queen';
+  const alone = act({ ...before, companion: null }, line.at(-1));
+  return alone.exit.open && alone.hits === before.hits ? 'queen' : 'both';
+}
+
+// The squares a pawn on `start` can walk to without taking anything, over the
+// walls of `map`, as src/rules.js unreachablePickups counts them: up its file,
+// and once on the last rank, anywhere a queen reaches.
+function pawnPickups(map, start) {
+  const room = new Plan(start);
+  map.forEach((row, y) => [...row].forEach((cell, x) => { if (cell === '#') room.walls.add(y * 8 + x); }));
+  const squares = new Set([index(start)]);
+  for (let y = start.y - 1; y >= 0 && !room.isWall(at(start.x, y)); y--) {
+    squares.add(index(at(start.x, y)));
+    if (y === 0) routeDistances(room, 'queen', [at(start.x, 0)]).forEach((moves, n) => { if (moves !== UNREACHABLE) squares.add(n); });
+  }
+  return squares;
+}
+// A pawn line's hint square: its first quiet move's before the first take,
+// else the first take's where a pickup there can be reached, else none.
+function pawnKey(states, line) {
+  const first = line.findIndex((action, n) => states[n + 1].events.some((event) => event.type === 'capture'));
+  const quiet = line.slice(0, first).find((action) => action.type === 'move');
+  if (quiet) return { x: quiet.x, y: quiet.y };
+  const take = line[first];
+  return take && pawnPickups(states[0].map, states[0].player).has(index(take)) ? { x: take.x, y: take.y } : null;
+}
+
 // A slider's three-move routes from the start to any of `mates` over the
 // plan's walls (monsters ignored), landing on no mate before the last move:
 // { moves, passed }, `passed` every square the route lands on or crosses.
@@ -606,9 +957,14 @@ function pocketOrder(options, { seed, attempt, rng }) {
   return [...names.slice(turn), ...names.slice(0, turn)].flatMap((name) => shuffle(pockets.get(name), rng));
 }
 
-/** Which motifs fit a player piece and a floor's target role (the king floor always nets). */
+/**
+ * Which motifs fit a player piece and a floor's target role. The king floor
+ * always nets. A pawn's floors are tempo lines, but one that opens with a
+ * wait (no square to hint at) gives way to a crown line (composeFloor).
+ */
 export function motifsFor(piece, target, floor) {
   if (floor === 2) return ['net'];
+  if (piece === 'pawn') return ['tempo', 'crown'];
   return FLOOR_MOTIFS[floor].filter((motif) => motif !== 'net');
 }
 
@@ -616,7 +972,7 @@ export function motifsFor(piece, target, floor) {
 // stand-ins whose one target the player takes at once. Nothing that changes
 // play carries from floor to floor (a capture only scores), so a floor plays
 // the same here as in its day.
-const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4), rook: at(4, 4), queen: at(2, 4) };
+const FIRST_TAKE = { knight: at(3, 4), bishop: at(2, 4), rook: at(4, 4), queen: at(2, 4), pawn: at(3, 5) };
 const standIn = (piece) => ({ map: Array(8).fill('........'), enemies: [{ ...FIRST_TAKE[piece], cast: 0 }], items: [] });
 // `carried`: powers the earlier floors' hints hand on (a bone ward lasts the
 // whole run), for the checks that play as a person would.
@@ -648,7 +1004,9 @@ function actionsFrom(state) {
  * player's moves and waits, up to `maxDepth` moves: { depth, lines } (at most
  * `cap` lines, all `depth` moves long, each ending with the floor's challenge
  * complete), or null when nothing wins in time. Each step is a certificate
- * step (src/fairness.js routeTransition): never captured, no power used.
+ * step (src/fairness.js routeTransition): no power used, and never captured
+ * but on a pawn's day, whose route may be; there each capture costs a move,
+ * so `depth` counts scored moves and a captured line has fewer actions.
  */
 export function shortestWins(start, maxDepth, cap = 64) {
   for (let depth = 1; depth <= maxDepth; depth++) {
@@ -661,7 +1019,9 @@ export function shortestWins(start, maxDepth, cap = 64) {
         if (lines.length >= cap) return true;
         const next = routeTransition(state, action);
         if (!next) continue;
-        if (next.exit.open) { lines.push([...path, action]); won = true; } else if (left > 1 && search(next, left - 1, [...path, action])) won = true;
+        const cost = 1 + next.hits - state.hits;
+        if (cost > left) continue;
+        if (next.exit.open) { lines.push([...path, action]); won = true; } else if (left > cost && search(next, left - cost, [...path, action])) won = true;
       }
       if (!won) dead.add(key);
       return won;
@@ -674,7 +1034,8 @@ export function shortestWins(start, maxDepth, cap = 64) {
 
 // The walk's line: the certificate search's route (src/fairness.js), stairs dropped.
 function walkRoute(start) {
-  const found = findFloorRoute(start, { maxExpansions: 4000 });
+  // Never captured: a pawn's route may be, but a planted line never is.
+  const found = findFloorRoute(start, { maxExpansions: 4000, maxHits: 0 });
   if (found.status !== 'solved') return null;
   const line = found.actions.slice(0, -1);
   return { depth: line.length, lines: [line] };
@@ -702,6 +1063,7 @@ export function hastyScore(start, depth, from = floorScoredMoves(start)) {
 // The planted idea's key square: the sidestep a lunge punishes (bait), the
 // square covering the landing squares (squeeze) or the mating square (net).
 function ideaSquare(built, states, line) {
+  if (built.pawnLine) return pawnKey(states, line);
   if (built.motif === 'squeeze' || built.motif === 'net') return built.key;
   if (built.motif !== 'bait') return null;
   // A lunge lands on the square you left; a pawn's misses where it stands.
@@ -743,7 +1105,8 @@ function hinted(built, best, line, base, floor, rng, carried) {
       return { room, kind };
     }
     if (kind === 'held') {
-      const sleeper = room.enemies.find((foe) => foe.held);
+      // A sleeping decoy boxing a pawn's pocket stays where it is.
+      const sleeper = room.enemies.find((foe) => foe.held && !built.boxes?.some((tile) => same(tile, foe)));
       if (!sleeper) continue;
       Object.assign(sleeper, { x: square.x, y: square.y });
     } else room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
@@ -765,14 +1128,18 @@ export const BOT_GUARD = Object.freeze({ runs: HUMAN_RUNS, short: 2, slack: 4, m
 export function botGuard(start, base, floor, par) {
   let short = 0, missed = 0;
   // The verdict is settled at the first short run or the miss that tips the share, so the runs stop there.
+  // A run past par + 4 is a miss however it ends, so it stops there too.
   for (let run = 0; run < BOT_GUARD.runs && short === 0 && missed <= BOT_GUARD.missShare * BOT_GUARD.runs; run++) {
-    const result = playFloor(start, { seed: runSeed(base, floor, run) });
+    const result = playFloor(start, { seed: runSeed(base, floor, run), cap: par + BOT_GUARD.slack + 1 });
     if (result.won && result.moves <= BOT_GUARD.short) short++;
     if (!result.won || result.moves > par + BOT_GUARD.slack) missed++;
   }
   return { ok: short === 0 && missed <= BOT_GUARD.missShare * BOT_GUARD.runs, short, missed };
 }
 
+// The positions of a line (playLine) if the player is never captured along it
+// and the floor's challenge completes on its last move, as a certificate's, else null.
+const clean = (states) => (states && states.every((state, n) => state.hits === states[0].hits && (n === states.length - 1 || !state.exit.open)) ? states : null);
 // Each position along `line` from `start`, or null if a step fails.
 function playLine(start, line) {
   const states = [start];
@@ -789,6 +1156,21 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 function usesIdea(built, states, line) {
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
+  if (built.pawnLine) {
+    // A quiet first move, and every target taken on a planted take square.
+    return !states[1].events.some((event) => event.type === 'capture') && line.every((action, n) => action.type !== 'move'
+      || !states[n + 1].events.some((event) => event.type === 'capture' && isTarget(states[n], event.id)) || built.landing.some((tile) => same(tile, action)));
+  }
+  if (built.mate) {
+    // The mate this net plants (any, relaxed), on a move of yours, never one waited out.
+    if (line.at(-1).type !== 'move' || line.filter((action) => action.type === 'wait').length > 1 || !(built.relaxed || mateKind(states, line) === built.mate)) return false;
+    // Where the recruit king helps, your own moves must matter too: standing still once it
+    // joins ('king'), or once you promote ('both'), the recruit alone can't mate as soon.
+    const still = built.mate === 'king' ? 1 : states.findIndex((state) => state.player.piece === 'queen');
+    if (built.relaxed || built.mate === 'queen' || still >= line.length) return true;
+    const lazy = playLine(states[0], line.map((action, n) => (n < still ? action : { type: 'wait' })));
+    return !lazy?.some((state) => state.exit.open);
+  }
   if (built.motif === 'bait' && built.pawns) {
     // A target pawn strikes at the square the player just left, misses, and a target is taken next.
     return line.some((action, n) => n + 1 < line.length && action.type === 'move'
@@ -860,7 +1242,7 @@ function dress(plan, context, line, base, floor, rng) {
     const moves = distanceTable(plan.map(), decoy.role === 'pawn' ? 'king' : decoy.role);
     const reach = (tile) => Math.min(...lineSquares.map((square) => moves[index(tile) * 64 + index(square)]));
     const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, start) >= 2 && !covers(decoy.role, tile, start)
-      && plan.units.every((unit) => chebyshev(unit, tile) >= 2));
+      && plan.units.every((unit) => chebyshev(unit, tile) >= 2) && !(decoy.role === 'pawn' && context.climb?.has(index(tile))));
     const spot = spots.find((tile) => reach(tile) >= near && reach(tile) <= away) ?? spots[0];
     if (!spot) return null;
     plan.place(decoy.cast, decoy.role, spot);
@@ -868,13 +1250,17 @@ function dress(plan, context, line, base, floor, rng) {
   }
   const table = distanceTable(plan.map(), context.piece);
   const moves = (tile) => table[index(start) * 64 + index(tile)];
-  const safe = (tile) => plan.free(tile) && moves(tile) !== UNREACHABLE && !plan.units.some((unit) => covers(unit.role, unit, tile));
+  // A pawn picks things up only where it can walk without taking anything.
+  const walk = context.piece === 'pawn' ? pawnPickups(plan.map(), start) : null;
+  const safe = (tile) => plan.free(tile) && moves(tile) !== UNREACHABLE && !plan.units.some((unit) => covers(unit.role, unit, tile)) && (!walk || walk.has(index(tile)));
   const open = shuffle(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)), rng).filter(safe);
   const coinless = floor === 2;
   const coins = coinless ? [] : open.filter((tile) => far(tile, 1)).slice(0, 3);
   for (const tile of coins) plan.items.push({ x: tile.x, y: tile.y, type: 'coin' });
   // Floors 1 and 2 keep coins off the line as red herrings; the king floor has no hint and no items but its recruit.
-  if (floor === 2) {
+  if (floor === 2 && context.piece === 'pawn') {
+    // A pawn's net placed its recruit already, one step up its file (pawnNet).
+  } else if (floor === 2) {
     // The king floor's recruit, a king, waits one move from the start, as always,
     // too far from the royal king to step beside it within the line. Every king
     // floor has one: a dressing whose decoys took its squares is tried again.
@@ -905,7 +1291,8 @@ function castFor(base, floor) {
   const copies = Math.min(count, PIECE_COUNTS[species[suspectCast].piece]);
   const suspects = Array.from({ length: copies }, () => ({ cast: suspectCast, role: species[suspectCast].piece }));
   const other = { cast: otherCast, role: species[otherCast].piece };
-  return { target, count, suspects, other, matched: copies === count };
+  // The decoy species the paper doesn't name (`other`), whose copies give nothing away.
+  return { target, count, suspects, other, unnamed: other, matched: copies === count };
 }
 
 /**
@@ -920,27 +1307,46 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   const cast = castFor(base, floor);
   const seed = base.floorSeeds[floor];
   const stats = {};
-  const preferred = motifsFor(piece, cast.target, floor);
+  // A pawn's king floor nets each of its mates in turn ('net:king', …; PAWN_MATES).
+  const preferred = piece === 'pawn' && floor === 2 ? pawnMates(seed).map((mate) => `net:${mate}`) : motifsFor(piece, cast.target, floor);
+  // A pawn's unhinted tempo floor, kept until a crown floor takes its place.
+  let spare = null;
   for (const motif of [...preferred, 'walk']) {
+    if (motif === 'walk' && spare) return { ...spare, ms: performance.now() - began };
+    const [name, mate = null] = motif.split(':');
     const tally = (stats[motif] ??= { built: 0, replayed: 0, kept: 0 });
     const attempts = motif === 'walk' ? MOTIF_ATTEMPTS * 4 : MOTIF_ATTEMPTS;
+    // A pawn's fallback is no open walk but its own motif, relaxed: a tempo line, or on
+    // the king floor any mate after promotion, either up to a move longer.
+    const pawnFallback = piece === 'pawn' && motif === 'walk';
+    // Checks the open walk skips (the hasty check, a shorter win).
+    const loose = motif === 'walk' && !pawnFallback;
+    // A pawn starts on the start set's files, on its motif's rows (the king floor's, by its mate).
+    const pool = piece === 'pawn' ? pawnStarts(starts, PAWN_ROWS[floor === 2 ? (pawnFallback ? 'queen' : mate) : pawnFallback ? 'tempo' : motif]) : starts;
     for (let attempt = 0; attempt < attempts; attempt++) {
       const rng = random(hash(`${seed}:${motif}:${attempt}`));
       // The instance's start, from a stream of its own (with one start, the rest draws as before).
-      const square = starts.length === 1 ? starts[0] : starts[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * starts.length)];
-      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start: square, guards: [...cast.suspects, cast.other] };
-      const built = motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[motif](context);
+      const square = pool.length === 1 ? pool[0] : pool[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * pool.length)];
+      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start: square, guards: [...cast.suspects, cast.other], mate: pawnFallback ? 'queen' : mate,
+        ...(piece === 'pawn' && { unnamed: cast.unnamed }) };
+      const built = pawnFallback ? (floor === 2 ? pawnNet({ ...context, relaxed: true }) : pawnLine(context, 'tempo'))
+        : motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[name](context);
       if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
       tally.built++;
       // Decoys the motif didn't use as guards wait walled in.
       context.quiet = context.guards;
+      // A pawn decoy never waits where a pawn may need to climb to promote (it could never leave that file).
+      if (built.climb) context.climb = built.climb;
       const start = floorStart(base, floor, built.plan.room());
-      const found = motif === 'walk' ? (floor === 2 ? shortestWins(start, 6) : walkRoute(start)) : shortestWins(start, LINE_MOVES.max);
-      const shortest = motif === 'walk' ? 2 : LINE_MOVES.min;
+      const found = pawnFallback ? shortestWins(start, LINE_MOVES.max + 1) : motif === 'walk' ? (floor === 2 ? shortestWins(start, 6) : walkRoute(start)) : shortestWins(start, LINE_MOVES.max);
+      const shortest = loose ? 2 : LINE_MOVES.min;
       if (!found || found.depth < shortest) { trace?.({ motif, attempt, stage: 'search', depth: found?.depth ?? null, room: built.plan.room() }); continue; }
-      // A net's planted route is its line whenever the search finds it among the shortest.
-      const follows = (line) => Boolean(built.route) && line.length === built.route.length && line.every((action, n) => action.type === 'move' && same(action, built.route[n]));
-      const candidates = found.lines.map((line) => ({ line, states: playLine(start, line) })).filter(({ line, states }) => states && usesIdea(built, states, line));
+      // A planted route (a net's, a pawn's) is the line whenever the search finds it among the shortest.
+      const follows = (line) => Boolean(built.route) && line.length === built.route.length
+        && line.every((action, n) => action.type === (built.route[n].type ?? 'move') && (action.type !== 'move' || same(action, built.route[n])));
+      // Lines with every move scored and none a capture (a pawn's search counts captured lines too).
+      const candidates = found.lines.filter((line) => line.length === found.depth).map((line) => ({ line, states: playLine(start, line) }))
+        .filter(({ line, states }) => states && usesIdea(built, states, line));
       const planted = candidates.find(({ line }) => follows(line)) ?? candidates[0];
       if (!planted) { trace?.({ motif, attempt, stage: 'idea', depth: found.depth, lines: found.lines, room: built.plan.room() }); continue; }
       tally.replayed++;
@@ -950,24 +1356,43 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
         const room = plan.room();
         const dressed = floorStart(base, floor, room);
-        const states = playLine(dressed, planted.line);
+        // The line as dressed, never captured (a pawn's route may be, but not a planted line).
+        let { line } = planted, wins = found, states = clean(playLine(dressed, line));
+        // A pawn's line may change with the dressing: where decoys spoil it, the dressed
+        // room's own shortest win stands in, if it still uses the idea.
+        if (piece === 'pawn' && !(states && usesIdea(built, states, line))) {
+          const again = shortestWins(dressed, found.depth);
+          const fit = again?.depth >= shortest ? again.lines.filter((other) => other.length === again.depth).map((other) => ({ other, after: clean(playLine(dressed, other)) }))
+            .find(({ other, after }) => after && usesIdea(built, after, other)) : null;
+          if (fit) { line = fit.other; states = fit.after; wins = again; }
+        }
         // The search runs unpowered; the hasty check and bot guard start with what earlier hints carried in.
         const real = carried ? floorStart(base, floor, room, carried) : dressed;
-        const hasty = !states?.at(-1).exit.open || motif === 'walk' ? Infinity : hastyScore(real, BOT_GUARD.short);
-        const why = !states?.at(-1).exit.open ? 'line' : motif === 'walk' ? null : shortestWins(dressed, found.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
-        if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line: planted.line }); continue; }
-        const guard = botGuard(real, base, floor, planted.line.length + 1);
-        if (!guard.ok && motif !== 'walk') { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); continue; }
+        const hasty = !states?.at(-1).exit.open || loose ? Infinity : hastyScore(real, BOT_GUARD.short);
+        // A pawn's idea (its takes, its mate's kind) is checked again on the dressed room.
+        const idea = (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
+        const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
+        if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); continue; }
+        // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
+        // fallback is still a puzzle, judged until its last tries.
+        const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
+        const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
+        if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); continue; }
         const felt = pressure(states);
-        if (!best || felt > best.pressure) best = { room, states, hasty, pressure: felt };
+        if (!best || felt > best.pressure) best = { room, states, hasty, pressure: felt, line, wins };
       }
       if (best) {
         tally.kept++;
-        const { room, kind } = hinted(built, best, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
-        return {
-          room, hint: kind, line: planted.line, motif, depth: found.depth, firstMoves: new Set(found.lines.map((line) => JSON.stringify(line[0]))).size,
-          lines: found.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < planted.line.length, stats, ms: performance.now() - began,
+        const { line, wins } = best;
+        const { room, kind } = hinted(built, best, line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
+        const composed = {
+          room, hint: kind, line, motif: name, depth: wins.depth, firstMoves: new Set(wins.lines.map((other) => JSON.stringify(other[0]))).size,
+          ...(piece === 'pawn' && floor === 2 && { mate: mateKind(best.states, line) }),
+          lines: wins.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < line.length, stats, ms: performance.now() - began,
         };
+        // A pawn's tempo line with nothing to hint at (it opens with a wait) gives way to a crown line, if one composes.
+        if (piece === 'pawn' && motif === 'tempo' && !kind) { spare = composed; break; }
+        return composed;
       }
     }
   }

@@ -10,7 +10,8 @@ below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 Status: idea, written 2026-11-09, with lichess measurements added the same
 day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
 rules) are built. Phase 2 has begun in the preview: floors start on varied
-squares, rook and queen days compose, and so do floors with pawn targets.
+squares, rook and queen days compose, and so do floors with pawn targets and
+pawn players.
 
 ## What we measured
 
@@ -65,6 +66,9 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
 | Composed floors start on varied squares (b2–g2, d1 or e1), each floor its own | Built in the preview (2026-11-09): a player meets a king-floor route from their last 8 days of that piece on 10–18% of days, against 61–68% from e2 |
 | A pawn target on a composed floor is two pawns | Chosen after playing one and two (2026-11-10): the count rule allows at most two, and two gave longer, more forced lines |
+| Pawn players' floors 1–2: tempo lines (quiet moves time the diagonal takes), and crown lines (promote within the line) where a tempo line would leave nothing to hint at | Chosen after playing both (2026-11-10): crown is the more obvious, so it takes about a quarter of floors |
+| Pawn players' king floor: a mix of mates by the recruit king without promotion, by the promoted queen with the recruit's help, and by the queen alone; whichever is planted, the pawn can always walk up its file and promote | Chosen after playing each (2026-11-10): about 48%, 29% and 23% |
+| Pawn floors where a target pawn waits on your pawn's file (frozen there until you take elsewhere; it sets up en passant) | Kept (2026-11-10). On composed days a pawn walled in under such a pawn is cornered at once, since that pawn can never move away |
 
 ## Lichess puzzles
 
@@ -293,7 +297,19 @@ always brings the planted line back.
 A motif's level is how quiet the key move is: a capture or a threat is level
 1, a non-capturing move that sets up a capture two moves later is level 4 or
 more. The library needs an entry for each player piece and target role.
-Knight, bishop, rook and queen players are built; pawn players come next.
+Every daily piece is built in the preview. A pawn player's line is mostly
+timing: a wait, a step or the double step brings the pawn where a target
+steps (or marches) into its diagonal just in time. No monster steps onto the
+pawn's file, so the pawn's own file holds a target pawn still until the pawn
+takes elsewhere; that also sets up en passant. A crown floor starts the pawn
+on its sixth or seventh rank, and its new queen finishes the floor. A pawn
+that misses its line can still walk up and promote: no wall stands on its
+file (above the start, and above each take before the last), so where a
+pocket needs boxing there, a decoy sleeps in the wall's place and steps off
+the file once it wakes. On the king floor the whole file stays open. A
+target pawn may still wait on the file, frozen there until the pawn takes
+elsewhere; a pawn that walks up under it is cornered (composed days count
+that pawn as terrain, src/rules.js trapped).
 
 ### Identification and par
 
@@ -380,9 +396,10 @@ Each phase ends with a preview you play before anything long runs or ships.
 2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
    Breach days, recruits and powerup placement. Settle par here. Built so
    far: varied start squares, rook and queen players (bait, squeeze and the
-   king's net along the pocket's line), and pawn targets (two pawns that
+   king's net along the pocket's line), pawn targets (two pawns that
    march into a squeeze or wind up at a bait; a wall under each one's file
-   keeps it from crowning).
+   keeps it from crowning), and pawn players (tempo and crown floors; the
+   king floor mated by the recruit king, the queen, or both).
 3. **Switch.** Generate every edition with the composer, regenerate the
    archive (minutes), retire calibration, and update the README, the manual
    and `docs/generation.md`.

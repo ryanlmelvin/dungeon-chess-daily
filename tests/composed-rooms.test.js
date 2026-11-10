@@ -39,3 +39,47 @@ test('a held decoy stays asleep at the floor start, even beside the player', () 
   const asleep = day(4).enemies.find((foe) => foe.x === 5 && foe.y === 5);
   assert.deepEqual([asleep.phase, asleep.intent, asleep.target, asleep.pinned, asleep.held], ['ready', [], null, 4, true]);
 });
+
+// Pawn players (src/composer.js): floors 1–2 are tempo lines with a hint on
+// the key square, or crown lines where a tempo line would have none; the king
+// floor mixes three mates (PAWN_MATES), and whichever is planted, the pawn
+// can always walk up its file and promote there. On floors 1–2 no wall and no
+// decoy pawn stands on its file above the start: sleeping decoys box the
+// pockets there and step off once awake (a target pawn may wait there, held
+// by the pawn's own file until it takes elsewhere). No monster starts on the
+// player's square or takes it at once, and each day wins as played, never
+// captured.
+// 2026-11-28 has a crown floor and both's mate, 2026-12-15 a crown floor and
+// the recruit king's, 2026-12-21 a crown floor and the queen's.
+test('a pawn player composes days that mix tempo and crown floors and three mates', async () => {
+  const { composeDay } = await import('../src/composer.js');
+  const { act, closeAttacker } = await import('../src/rules.js');
+  const seen = { crown: 0, tempo: 0, mates: new Set() };
+  for (const date of ['2026-11-28', '2026-12-15', '2026-12-21']) {
+    assert.equal(getRawDaily(date).playerPiece, 'pawn');
+    const { daily, floors } = composeDay(date);
+    for (const floor of floors.slice(0, 2)) {
+      assert.ok(floor.motif === 'crown' || (floor.motif === 'tempo' && floor.hint), `${date}: a hinted tempo floor, or a crown one`);
+      seen[floor.motif]++;
+    }
+    assert.equal(floors[2].motif, 'net');
+    seen.mates.add(floors[2].mate);
+    for (const floor of floors) assert.ok(floor.line.length >= 3 && floor.line.length <= 4, `${date}: a 3–4 move line`);
+    let state = createGame(daily);
+    for (const floor of floors) {
+      assert.ok(!state.enemies.some((foe) => foe.x === state.player.x && foe.y === state.player.y) && !closeAttacker(state, state.player), `${date}: a safe start`);
+      const file = Array.from({ length: state.player.y }, (_, y) => ({ x: state.player.x, y }));
+      const standing = (tile) => state.enemies.find((foe) => foe.x === tile.x && foe.y === tile.y);
+      if (state.floor === 2) assert.ok(file.every((tile) => state.map[tile.y][tile.x] !== '#' && !standing(tile)), `${date}: the king floor's pawn can promote`);
+      else assert.ok(file.every((tile) => state.map[tile.y][tile.x] !== '#' && (standing(tile)?.role !== 'pawn' || standing(tile).role === state.objective.piece)), `${date}: floor ${state.floor + 1}'s file holds no wall and no decoy pawn`);
+      for (const action of [...floor.line, { type: 'descend' }]) {
+        const next = act(state, action);
+        assert.ok(next !== state && next.hits === state.hits, `${date}: never captured`);
+        state = next;
+      }
+    }
+    assert.equal(state.status, 'won');
+  }
+  assert.ok(seen.crown >= 2 && seen.tempo >= 2, 'both kinds of floor');
+  assert.deepEqual([...seen.mates].sort(), ['both', 'king', 'queen']);
+});
