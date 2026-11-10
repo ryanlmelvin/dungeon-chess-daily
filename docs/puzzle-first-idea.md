@@ -61,7 +61,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A clock on every floor (the ceiling holds par + 4 moves) | Maybe |
 | The weekly difficulty ramp | Dropped while we build the composer: each day climbs from floor 1 to the king floor instead |
 | Recruits traded away when they capture on a guarded square | Dropped: recruits are never lost |
-| Floors taken from lichess puzzles (CC0) | King floors at scale, with chess king rules (trying them in the phase-0 preview); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
+| Floors taken from lichess puzzles (CC0) | King floors at scale, with chess king rules (two agreed, 2026-11-10); floors 1 and 2 only for some themes (see [Lichess puzzles](#lichess-puzzles)) |
 | Kings never stand side by side (king rule 3) | Dropped after play (2026-11-09): it kept the recruit king from cornering a king that slipped its net, so the chase never ended |
 | One monster reply per turn, as in chess | Rejected: every piece on both sides moves every turn |
 | Composed floors start on varied squares (b2–g2, d1 or e1), each floor its own | Built in the preview (2026-11-09): a player meets a king-floor route from their last 8 days of that piece on 10–18% of days, against 61–68% from e2 |
@@ -69,6 +69,9 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Pawn players' floors 1–2: tempo lines (quiet moves time the diagonal takes), and crown lines (promote within the line) where a tempo line would leave nothing to hint at | Chosen after playing both (2026-11-10): crown is the more obvious, so it takes about a quarter of floors |
 | Pawn players' king floor: a mix of mates by the recruit king without promotion, by the promoted queen with the recruit's help, and by the queen alone; whichever is planted, the pawn can always walk up its file and promote | Chosen after playing each (2026-11-10): about 48%, 29% and 23% |
 | Pawn floors where a target pawn waits on your pawn's file (frozen there until you take elsewhere; it sets up en passant) | Kept (2026-11-10). On composed days a pawn walled in under such a pawn is cornered at once, since that pawn can never move away |
+| Par is the planted line + 1 | Agreed (2026-11-10), after playing composed floors with it |
+| One monster ruleset for every day: Fair | Agreed (2026-11-10). Practice would offer all five tiers |
+| King-floor rules: checkmate wins, and the king can't take a piece the recruit king guards | Agreed (2026-11-10), after playing them in the preview |
 
 ## Lichess puzzles
 
@@ -235,7 +238,7 @@ About three quarters are mates in 1 (par 1); nearly all the rest are mates
 in 2.
 
 **Before it could ship.**
-- **The three king rules** need agreeing (Open questions).
+- **The king rules:** two are agreed (2026-11-10), and the third was dropped.
 - **The cast has to fit.** The puzzle's guards must map onto the day's two
   decoy species. The composer's probe found 4,168 rook mates that fit.
 - **The player has to be able to know the guards' roles.** A mate in 1 often
@@ -318,11 +321,10 @@ that pawn as terrain, src/rules.js trapped).
   knights and bishops, one for a queen or king. On pawn floors, eight copies
   always name the target, so the paper can call them open-and-shut; composed
   floors use two pawns instead, so the rule holds there too.
-- **Par.** I suggest par equal to the planted line plus 1. That gives a
+- **Par** is the planted line plus 1 (agreed 2026-11-10). That gives a
   careful player who spots the idea a spare move: E means "found it", under
   par means "found the exact line" or a clever use of a powerup or recruit,
-  and over par means "searched for it". The bot's median is the alternative
-  if we would rather keep par human-measured.
+  and over par means "searched for it".
 
 ### Difficulty without calibration
 
@@ -401,21 +403,19 @@ Each phase ends with a preview you play before anything long runs or ships.
    keeps it from crowning), and pawn players (tempo and crown floors; the
    king floor mated by the recruit king, the queen, or both).
 3. **Switch.** Generate every edition with the composer, regenerate the
-   archive (minutes), retire calibration, and update the README, the manual
-   and `docs/generation.md`.
+   archive (minutes), retire calibration and the weekday tiers (every day
+   plays Fair, par is the planted line + 1, and the two king rules hold),
+   and update the README, the manual and `docs/generation.md`.
 4. **Maybe.** The floor clock, and a weekly ramp by motif level if one is ever
    wanted back.
 
 ## Open questions
 
-1. Par: the planted line + 1, or the bot's median?
-2. One monster ruleset for every day, or keep the five tiers? With no weekly
-   ramp, the tiers have little left to do.
-3. The floor clock: try it after phase 2?
-4. The king-floor rules (checkmate wins, the king can't take a protected
-   piece)? They let lichess mates seed king floors and keep every monster
-   moving. The third, kings never standing side by side, is dropped.
-5. King floors from lichess mates are 1 to 3 moves long. Is a mate in 1 too
+Par, the ruleset and the king rules were settled on 2026-11-10 (see
+[Decisions so far](#decisions-so-far)).
+
+1. The floor clock: try it after phase 2?
+2. King floors from lichess mates are 1 to 3 moves long. Is a mate in 1 too
    short for the day's last floor, and how does the player learn the guards'
    roles in time?
 
