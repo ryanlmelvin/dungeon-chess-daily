@@ -194,7 +194,9 @@ squeezes.
 threatened squares the way a chess king does. Three chess rules close the
 rest of the gap, and none of them changes who moves:
 1. **Checkmate wins.** A king that is attacked, with no safe square and no
-   guard that can block, is taken at once.
+   guard that can block, is taken at once. A mate of yours wins as your move
+   lands, before your recruit moves (no order to give); a mate the recruit's
+   move completes wins after that move.
 2. **The king can't take a protected piece.** It never captures a piece the
    recruit king guards. Today it does, in 381 of 2,000 mates.
 3. **Kings never stand side by side.** The recruit king can't step next to the

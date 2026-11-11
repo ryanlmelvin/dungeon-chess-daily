@@ -507,6 +507,10 @@ function guardedFromKing(state, foe, square) {
 }
 // K1: checkmate wins at once. The royal king is threatened, has no safe step,
 // and no guard can step to shield it: it is taken before the monsters move.
+// play() checks as your move or wait lands, with your recruit where it stands,
+// so a mate of yours wins before the recruit's phase: no order is asked for,
+// and Auto's step can't undo it. It checks again after the recruit's move, for
+// a mate the recruit completes.
 function checkmate(state) {
   if (!(state.composed && state.floor === 2) || state.objective.complete) return false;
   const king = state.enemies.find((foe) => foe.role === 'king');
@@ -1558,7 +1562,8 @@ class RecruitPhase {
  * or a wait, without an order), for Manual recruit control. Null when the turn
  * has no recruit phase: no recruit yet, castling (that was its move), a black
  * move the monsters' first move sends back for a new choice, a run-ending
- * capture, or a cleared floor (huntsAlone). Otherwise `board` is the
+ * capture, a cleared floor (huntsAlone), or a move or wait that mates on a
+ * composed king floor (checkmate: it wins first). Otherwise `board` is the
  * position as its phase begins (after your move, a close-range hit and, as
  * black, the monsters' first move; `board.events[phase]` is its
  * 'companion-phase'), and `moves` its legal squares, captures of any monster
@@ -1849,9 +1854,13 @@ function play(previous, action) {
     }
     // Waiting is the player's move, so it spends any en passant window.
     state.awaitingPlayer = false; state.turns++; state.enPassant = null; breakTactics(state); regainBalance(state);
-    if (!companionTurn(state, huntsAlone(state) ? undefined : action.recruit)) return previous;
-    settle(state);
-    if (state.playerColor === 'white' && !checkmate(state)) { enemyTurn(state); settle(state); }
+    // A mate standing as you wait wins before the recruit moves (K1, checkmate).
+    const mated = state.playerColor === 'white' && checkmate(state);
+    if (!mated) {
+      if (!companionTurn(state, huntsAlone(state) ? undefined : action.recruit)) return previous;
+      settle(state);
+      if (state.playerColor === 'white' && !checkmate(state)) { enemyTurn(state); settle(state); }
+    }
     collapseTick(state); settle(state);
     caveInTick(state, previous); settle(state);
     if (trapped(state)) restartRun(state, [], NO_MOVES);
@@ -1979,12 +1988,18 @@ function play(previous, action) {
   regainBalance(state);
   scoreTactics(state, { captured, pending: pendingFork, hit: Boolean(close), attacks: () => legalMoves(state) });
   settle(state);
-  // Castling was the recruit's move, so an order to move it again is no action.
-  // A cleared floor ignores orders: the recruit hunts on its own there.
-  const order = huntsAlone(state) ? undefined : action.recruit;
-  if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
-  if (!castle) settle(state);
-  if (state.playerColor === 'white' && (close || !checkmate(state))) { enemyTurn(state, Boolean(close)); settle(state); }
+  // A move that mates wins as it lands (K1, checkmate): the recruit and the
+  // monsters don't move, and an order the move carries is ignored, as on any
+  // cleared floor. A move that got you captured mates nothing.
+  const mated = state.playerColor === 'white' && !close && checkmate(state);
+  if (!mated) {
+    // Castling was the recruit's move, so an order to move it again is no action.
+    // A cleared floor ignores orders: the recruit hunts on its own there.
+    const order = huntsAlone(state) ? undefined : action.recruit;
+    if (castle ? squareOrder(order) : !companionTurn(state, order, joined)) return previous;
+    if (!castle) settle(state);
+    if (state.playerColor === 'white' && (close || !checkmate(state))) { enemyTurn(state, Boolean(close)); settle(state); }
+  }
   collapseTick(state); settle(state);
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
