@@ -1460,7 +1460,9 @@ function castFor(base, floor) {
 // It is proved like the other motifs, the recruit steered: the line wins,
 // never captured; nothing wins in fewer moves, whatever the recruit is told
 // (steeredWin, every order tried); a hasty player who takes a guarded twin
-// and absorbs the capture scores no better than par (steeredHasty); the
+// and absorbs the capture scores no better than par with the recruit
+// (steeredHasty) and worse than par without it (hastyScore: taken, step
+// away, and the other twin steps into the gap to be taken there); the
 // recruit can't take the second twin straight from the first one's square, so
 // every win in the line's three moves is the two of you (TANDEM_RECRUITS);
 // and the human-like bot, from the move that joins the recruit, finishes
@@ -1480,10 +1482,13 @@ export const TANDEM_MOVES = 3;
  * The targets a tandem can pair up, by player piece. Every step of a twin's
  * own is walled, so only a piece that moves another way reaches it: never a
  * rook against rooks, a bishop against bishops or a knight against knights. A
- * queen is alone and a pawn never guards the pawn that guards it, so neither
- * pairs up; a pawn player keeps its own lines.
+ * queen player pairs up only knights: from a rook's or bishop's square she
+ * takes its twin next move, so taking one captured and then the other would
+ * make par without the recruit. A queen target is alone and a pawn never
+ * guards the pawn that guards it, so neither pairs up; a pawn player keeps
+ * its own lines.
  */
-export const TANDEMS = Object.freeze({ knight: ['rook', 'bishop'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight'], queen: ['rook', 'bishop', 'knight'] });
+export const TANDEMS = Object.freeze({ knight: ['rook', 'bishop'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight'], queen: ['knight'] });
 /**
  * The recruits a tandem may post, by target role: each can take a twin, and
  * none takes the other straight from that twin's square (a queen or king
@@ -1529,6 +1534,9 @@ function tandemOnce(context) {
   const pair = recruit === 'bishop' && piece === 'bishop';
   const takes = (unit, from, to) => (unit === 'pawn' ? to.y === from.y - 1 && Math.abs(to.x - from.x) === 1 : reach(plan, unit, from).some((tile) => same(tile, to)));
   const open = (tile) => !plan.isWall(tile) && !plan.unitAt(tile);
+  // From the start you take neither twin: taking one at once, captured, would let you take
+  // the other as it steps into the gap, at par without the recruit.
+  if (twins.some((twin) => takes(piece, start, twin))) return null;
   // Where the recruit could be posted on the move it joins: a quiet move of its own. A
   // bishop joining your bishop hops to a side square instead (src/rules.js pairHop).
   const quiet = (from) => {
@@ -1699,17 +1707,19 @@ export function composeTandem(base, floor, { trace, starts = startSquares() } = 
     const bare = floorStart(base, floor, built.plan.room());
     const planted = shuffle(tandemLines(bare), rng)[0];
     if (!planted) { trace?.({ motif, attempt, stage: 'idea', room: built.plan.room() }); continue; }
-    // Before any decoy joins in, taking a guarded twin and absorbing the capture must score worse than the line.
-    if (steeredHasty(bare, planted.length - 1) <= planted.length) { trace?.({ motif, attempt, stage: 'hasty', room: built.plan.room(), line: planted }); continue; }
+    // Before any decoy joins in, taking a guarded twin and absorbing the capture must score worse
+    // than the line with the recruit, and worse than par without it.
+    if (steeredHasty(bare, planted.length - 1) <= planted.length || hastyScore(bare, planted.length) <= planted.length + 1) { trace?.({ motif, attempt, stage: 'hasty', room: built.plan.room(), line: planted }); continue; }
     tally.replayed++;
     // A dressed room's checks: a tandem line wins there (the planted one, else one of the
-    // room's own), nothing wins sooner, a hasty win scores worse than the line, and the
-    // bot's runs pass. { room, line, states, pressure }, or null.
+    // room's own), nothing wins sooner, a hasty win scores worse than the line (and without
+    // the recruit, worse than par), and the bot's runs pass. { room, line, states, pressure }, or null.
     const judge = (room) => {
       const dressed = floorStart(base, floor, room);
       let line = planted, states = clean(playLine(dressed, line, STEERED));
       if (!states) { [line] = tandemLines(dressed, 1); states = line ? clean(playLine(dressed, line, STEERED)) : null; }
-      const why = !states ? 'line' : steeredWin(dressed, line.length - 1) ? 'shorter' : steeredHasty(dressed, line.length - 1) <= line.length ? 'hasty' : null;
+      const why = !states ? 'line' : steeredWin(dressed, line.length - 1) ? 'shorter'
+        : steeredHasty(dressed, line.length - 1) <= line.length || hastyScore(dressed, line.length) <= line.length + 1 ? 'hasty' : null;
       if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
       const guard = partnerGuard(dressed, base, floor, line);
       if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }

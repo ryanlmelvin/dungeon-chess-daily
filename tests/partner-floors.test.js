@@ -5,7 +5,7 @@
 // floor is won by the recruit taking one on your order and you the other.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeDay, composeTandem, partnerFloors, shortestWins, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES } from '../src/composer.js';
+import { composeDay, composeTandem, partnerFloors, shortestWins, hastyScore, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES } from '../src/composer.js';
 import { proveComposed } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
 import { act, closeAttacker } from '../src/rules.js';
@@ -17,8 +17,8 @@ import { encodeRoute } from '../src/route-code.js';
 import { encodeRooms } from '../src/room-code.js';
 import { composedDayFor } from '../src/composed-preview.js';
 
-// A bishop against rooks (floor 1), a knight against bishops (floor 2), a queen against rooks (floor 2).
-const DAYS = ['2026-11-15', '2026-11-18', '2026-11-23'];
+// A bishop against rooks (floor 1), a knight against bishops (floor 2), a queen against knights (floor 2, a Breach day).
+const DAYS = ['2026-11-15', '2026-11-18', '2026-11-22'];
 // A bishop against pawns and a queen: no tandem.
 const NO_MATCHUP = '2026-11-12';
 const composed = new Map();
@@ -46,6 +46,7 @@ test('a day with no tandem matchup composes the same with the option on', () => 
 test('a tandem takes floor 1 or 2 where the piece and the target pair up, and never the mirror matchups', () => {
   for (const [piece, targets] of Object.entries(TANDEMS)) assert.ok(!targets.includes(piece) && !targets.includes('queen') && !targets.includes('pawn'));
   assert.equal(TANDEMS.pawn, undefined);
+  assert.deepEqual(TANDEMS.queen, ['knight']);
   for (const date of DAYS) {
     const raw = getRawDaily(date), { daily, floors } = day(date), floor = daily.generation.partner;
     assert.ok(partnerFloors(raw).includes(floor), `${date} floor`);
@@ -114,6 +115,8 @@ test('nothing wins sooner, alone you never win uncaptured, and a hasty capture s
     assert.equal(steeredWin(start, TANDEM_MOVES), true, `${date}: the line`);
     assert.equal(shortestWins(start, TANDEM_MOVES + 1), null, `${date}: a win without the recruit within par`);
     assert.ok(steeredHasty(start, TANDEM_MOVES - 1) > TANDEM_MOVES, `${date}: a hasty win as short as the line`);
+    // Without the recruit, even a player who absorbs a capture misses par.
+    assert.ok(hastyScore(start, TANDEM_MOVES) > TANDEM_MOVES + 1, `${date}: a hasty win at par without the recruit`);
   }
 });
 
