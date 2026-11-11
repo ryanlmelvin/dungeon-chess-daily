@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { EDITIONS, EDITIONS_RANGE } from '../src/editions.js';
 import { encodeRoute, decodeRoute } from '../src/route-code.js';
 import { encodeRooms, decodeRooms } from '../src/room-code.js';
+import { encodeMotifs } from '../src/motif-code.js';
 import { getDaily, generateDaily, borrowedDaily, composedSeeds } from '../src/generation.js';
 import { composeDay } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
@@ -47,10 +48,11 @@ test('a stored edition is exactly the day the composer composes', () => {
   // A few quick days; npm run audit:editions composes every one again.
   for (const date of ['2026-11-05', '2026-11-06', '2026-11-08']) {
     const { daily } = composeDay(date);
-    assert.deepEqual({ rooms: encodeRooms(daily.composed), route: encodeRoute(daily.generation.certificate.actions) }, EDITIONS[date], date);
+    assert.deepEqual({ rooms: encodeRooms(daily.composed), route: encodeRoute(daily.generation.certificate.actions), motifs: encodeMotifs(daily.generation.motifs) }, EDITIONS[date], date);
     const stored = getDaily(date);
     assert.deepEqual(stored.composed, daily.composed);
     assert.deepEqual(stored.generation.certificate.actions, daily.generation.certificate.actions);
+    assert.deepEqual(stored.generation.motifs, daily.generation.motifs);
     assert.deepEqual(stored.floorSeeds, composedSeeds(date));
     assert.equal(stored.difficulty, DAILY_TIER);
     assert.equal(stored.generation.source, 'composed');

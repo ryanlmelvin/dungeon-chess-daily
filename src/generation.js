@@ -17,6 +17,7 @@ import { DAILY_TIER } from './difficulty.js';
 import { EDITIONS } from './editions.js';
 import { decodeRoute } from './route-code.js';
 import { decodeRooms } from './room-code.js';
+import { decodeMotifs } from './motif-code.js';
 
 export const GENERATOR_VERSION = RULES_VERSION;
 /**
@@ -79,6 +80,9 @@ function storedDaily(raw, entry, composedFor = raw.date) {
     const proof = proveComposed(daily, daily.generation.certificate.actions);
     if (!proof.valid) return null;
     daily.generation.certificate.metrics = proof.metrics;
+    // The idea each floor was built around (src/motif-code.js), for the journal; a borrowed day takes its template's.
+    const motifs = decodeMotifs(entry.motifs);
+    if (motifs) daily.generation.motifs = motifs;
     return daily;
   } catch { return null; }
 }
