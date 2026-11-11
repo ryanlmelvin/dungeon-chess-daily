@@ -21,6 +21,7 @@ import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { pinUsable, captureGoal, shareDate, createGame as createComposedGame } from './rules.js';
 import { nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
+import { treasureMark, TREASURE_MARK } from './rules.js';
 import { drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
@@ -410,7 +411,9 @@ function parResult(game) {
   const par = runPars(game, daily)?.[game.floor];
   if (!Number.isInteger(par)) return '';
   const diff = floorScoredMoves(game) - par;
-  return diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`;
+  // The treasure mark rides beside par (src/rules.js treasureMark).
+  const mark = treasureMark(game, game.floor, par) ? ` ${TREASURE_MARK}` : '';
+  return `${diff === 0 ? 'even par' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} par`}${mark}`;
 }
 // Targets still on the board, drawn in the enemy's color inside a red-edged
 // frame under the objective.
@@ -947,15 +950,27 @@ function openTactic(kind) {
 // Kept outside the save prefix so backups never carry it.
 const tacticSeenKey = (kind) => `dchess-tactic-seen:${scope}:${kind}`;
 function tacticSeen(kind) { try { return localStorage.getItem(tacticSeenKey(kind)) === '1'; } catch { return false; } }
-// A brief "Fork!", "Combo!" or "Holy duo!" stamp over the board.
+// A brief "Fork!", "Combo!", "Holy duo!" or "Treasure!" stamp over the board.
 let calloutTimer;
+// The treasure mark is earned on the move that completes the floor's challenge
+// with its chest taken, at par or better (src/rules.js treasureMark).
+const treasureEarned = (events) => events.some((event) => event.type === 'capture' || event.type === 'companion-capture')
+  && state.objective.moves === state.turns - state.floorStart.turns && treasureMark(state, state.floor, parFor(state, daily));
 function showTacticCallout(events) {
   const won = events.find((event) => event.type === 'fork-won');
   const combo = events.find((event) => event.type === 'combo');
   const fork = events.find((event) => event.type === 'fork');
   const pair = events.some((event) => event.type === 'bishop-pair');
-  const parts = [pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱'].filter(Boolean);
+  const treasure = treasureEarned(events);
+  const parts = [pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱', treasure && `Treasure! ${TREASURE_MARK}`].filter(Boolean);
   if (!parts.length) return;
+  // Checkmate's own moment plays first (src/checkmate.js), then the stamp.
+  const mated = treasure && events.some((event) => event.type === 'checkmate');
+  const played = state;
+  if (mated) setTimeout(() => { if (state === played && screen === 'game') popCallout(parts, combo); }, 2700);
+  else popCallout(parts, combo);
+}
+function popCallout(parts, combo) {
   const callout = $('tactic-callout');
   callout.textContent = parts.join(' · ');
   callout.classList.toggle('combo', Boolean(combo));

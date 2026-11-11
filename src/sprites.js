@@ -670,6 +670,26 @@ export const SPRITES = Object.freeze({
     '................',
     '................',
   ]),
+  // The treasure chest (src/treasure.js): brass like a coin, so it never reads as a
+  // crate, under leather straps, with a bone-bright lock.
+  'item-chest': framed([
+    '................',
+    '................',
+    '...xxxxxxxxxx...',
+    '..xwwoyyyyoyyx..',
+    '.xwyyoyyyyoyyyx.',
+    '.xyyyoyyyyoyyyx.',
+    '.xyyyoyyyyoyyyx.',
+    '.xxxxxxwwxxxxxx.',
+    '.xyyyoxwwxoyyyx.',
+    '.xyyyoyxxyoyyyx.',
+    '.xyyyoyyyyoyyyx.',
+    '.xyyyoyyyyoyyyx.',
+    '.xoooooooooooox.',
+    '.xxxxxxxxxxxxxx.',
+    '................',
+    '................',
+  ]),
   // Shop tools: a brass tack, a brass knight, a bone arrow turning back, a heart potion.
   'power-pin': framed([
     '................',

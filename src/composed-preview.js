@@ -11,11 +11,14 @@ import { validateSave } from './rules.js';
 // The start set the page's query names (&starts=e2 or wide), else the composer's own.
 const startsFor = (search) => { const name = new URLSearchParams(search).get('starts'); return Object.hasOwn(START_SETS, name ?? '') ? name : COMPOSED_STARTS; };
 
+// The preview composes with treasure (src/treasure.js) unless the query says &treasure=0.
+const treasureFor = (search) => new URLSearchParams(search).get('treasure') !== '0';
+
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
   const date = new URLSearchParams(search).get('composed');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return null;
-  try { return composeDay(date, { starts: startsFor(search) }).daily; } catch (error) { console.error(error); return null; }
+  try { return composeDay(date, { starts: startsFor(search), treasure: treasureFor(search) }).daily; } catch (error) { console.error(error); return null; }
 }
 
 /** Each start set saves apart; e2 keeps the key earlier previews used. */

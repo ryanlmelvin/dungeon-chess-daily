@@ -506,15 +506,19 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     for (const item of items) {
       const power = item.type === 'powerup';
       const companion = item.type === 'companion';
-      const texture = companion ? spriteTexture(`piece-${item.piece}`, 'companion') : power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get('coin');
+      // The treasure chest (src/treasure.js): larger than a coin, with no tile mark of its own.
+      const chest = item.type === 'chest';
+      const texture = companion ? spriteTexture(`piece-${item.piece}`, 'companion') : power ? spriteTexture(`power-${item.power}`, item.power === 'freeze' ? 'ice' : null) : textures.get(chest ? 'item-chest' : 'coin');
       const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
       materials.add(material);
       const coin = new THREE.Sprite(material);
-      const size = companion ? 0.72 : power ? 0.55 : 0.3;
+      const size = companion ? 0.72 : power ? 0.55 : chest ? 0.62 : 0.3;
       coin.scale.set(size, size, 1);
-      coin.position.set(item.x, companion ? 0.24 : power ? 0.22 : 0.13, item.y);
+      coin.position.set(item.x, companion ? 0.24 : power || chest ? 0.22 : 0.13, item.y);
       collectibles.add(coin);
       if (power) tileMark(collectibles, item.x, item.y, 0.44, 0.44, basic(0x83c5bd, { transparent: true, opacity: 0.2, depthWrite: false }), 0.02);
+      // A faint brass glow under the chest tells it from a crate (a wall).
+      if (chest) tileMark(collectibles, item.x, item.y, 0.56, 0.56, basic(0xd4b781, { transparent: true, opacity: 0.22, depthWrite: false }), 0.02);
       if (companion) {
         recruitSprites.push(coin);
         tileRing(collectibles, item.x, item.y, 0.29, 0.36, MINT, 0.65);
