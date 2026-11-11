@@ -140,8 +140,10 @@ export function takesTreasure(start, line, par) {
  * chest's square, `line` (a win within par that takes it, never shown to the
  * player), `through` (how many par wins pass through its square), `wins`
  * (every par win), `squares` (how many qualified) and `steps`. A floor with no
- * qualifying square, or whose search was cut short, comes back as
- * { treasure: null } and keeps its room. `seed` is the floor's; `start(room)`
+ * chest comes back as { treasure: null, treasureMiss } and keeps its room;
+ * `treasureMiss` says why: 'none' (no square qualifies), 'cut' (the search
+ * passed its budget), 'proof' (no qualifying square's line took the chest as
+ * played) or 'line' (the planted line doesn't play). `seed` is the floor's; `start(room)`
  * gives the floor's starting position with `room` there (the composer's
  * floorStart) and `actionsFrom` a route's actions (the composer's).
  */
@@ -151,9 +153,9 @@ export function placeTreasure(composed, { seed, start, actionsFrom, budget = TRE
   const plain = { ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) };
   const begin = start(plain);
   const states = positions(begin, line);
-  if (!states) return { treasure: null };
+  if (!states) return { treasure: null, treasureMiss: 'line' };
   const found = parWins(begin, par, { actionsFrom, budget });
-  if (found.cut) return { treasure: null };
+  if (found.cut) return { treasure: null, treasureMiss: 'cut' };
   const blocked = taken(room, line, states);
   const rng = random(hash(`${seed}:treasure`));
   // Fewest par wins through it first; a seeded draw of the chest's own settles ties.
@@ -167,5 +169,5 @@ export function placeTreasure(composed, { seed, start, actionsFrom, budget = TRE
     if (!proof || !takesTreasure(start(dressed), proof, par)) continue;
     return { room: dressed, treasure: { x: chest.x, y: chest.y, line: proof, through, wins: found.wins, squares: squares.length, steps: found.steps } };
   }
-  return { treasure: null };
+  return { treasure: null, treasureMiss: squares.length ? 'proof' : 'none' };
 }
