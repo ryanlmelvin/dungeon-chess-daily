@@ -3,12 +3,13 @@
    the one-line cue on the shop and the results paper, and the page that flies
    into it when a find is new. */
 
-/* The menu's Journal button shares Archive's row, so the menu grows no taller. */
-#menu-home .menu-actions { grid-template-columns: 1fr 1fr; }
-#menu-home .menu-actions > * { grid-column: 1 / -1; }
-#menu-home .menu-actions > #archive-button, #menu-home .menu-actions > #journal-button { grid-column: auto; }
-#journal-button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-#journal-progress { font-size: 18px; color: #bdb1bf; }
+/* The menu's Journal button joins Stats and Archive on their row (src/stats.css), three
+   across, so the menu grows no taller. */
+#menu-home .menu-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#menu-home .menu-actions > button { grid-column: 1 / -1; }
+#menu-home .menu-actions > #stats-button, #menu-home .menu-actions > #archive-button, #menu-home .menu-actions > #journal-button { grid-column: auto; }
+/* Pages found of pages there are, beside the journal's title. */
+#journal-progress { margin: 0 auto 0 0; align-self: flex-end; padding-bottom: 3px; font-size: 18px; line-height: 1; color: #bdb1bf; }
 
 /* A lesson page: a clipping of the paper's own stock, its diagram framed in ink. */
 #journal-dialog { max-width: 420px; }

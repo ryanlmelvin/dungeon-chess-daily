@@ -44,8 +44,11 @@ function bookIcon() {
  * clearedFloor(state, daily) as the shop opens, wonRun(state, daily) as the
  * results paper shows, restored() after a backup merge, and open(id).
  */
-export function initJournal({ prefix, storage = localStorage }) {
+export function initJournal({ prefix }) {
   const $ = (id) => document.getElementById(id);
+  // A browser that refuses storage still plays: the journal then starts empty every visit.
+  let storage = null;
+  try { storage = globalThis.localStorage; } catch {}
   const storageKey = `${prefix}${JOURNAL_KEY}`;
   let filled = false;
 
@@ -80,13 +83,15 @@ export function initJournal({ prefix, storage = localStorage }) {
     store(backfill(journal, runs, getDaily));
   }
 
-  // The menu's button shares Archive's row (journal.css), with pages found of pages there are.
+  // The menu's button joins Stats and Archive on their row (journal.css); the dialog's
+  // heading says how many pages are found of the pages there are.
   const progress = el('span', { id: 'journal-progress' });
-  const menuButton = el('button', { id: 'journal-button', type: 'button' }, 'Journal ', progress);
+  const menuButton = el('button', { id: 'journal-button', type: 'button', textContent: 'Journal' });
   $('archive-button').after(menuButton);
   function renderProgress() {
     const { found, total } = journalProgress(read());
-    progress.textContent = `${found}/${total}`;
+    progress.textContent = `${found} of ${total}`;
+    progress.setAttribute('aria-label', `${found} of ${total} pages found`);
     menuButton.setAttribute('aria-label', `Journal: ${found} of ${total} pages found`);
   }
 
@@ -107,7 +112,7 @@ export function initJournal({ prefix, storage = localStorage }) {
   const close = el('button', { type: 'button', className: 'icon-button', textContent: '✕' });
   close.setAttribute('aria-label', 'Close journal');
   const dialog = el('dialog', { id: 'journal-dialog' },
-    el('div', { className: 'dialog-heading' }, el('h2', { id: 'journal-title', textContent: 'Journal' }), close),
+    el('div', { className: 'dialog-heading' }, el('h2', { id: 'journal-title', textContent: 'Journal' }), progress, close),
     page,
     el('div', { className: 'hint-pager journal-pager' }, back, count, forward));
   dialog.setAttribute('aria-labelledby', 'journal-title');
@@ -165,6 +170,7 @@ export function initJournal({ prefix, storage = localStorage }) {
     const at = PAGES.findIndex((lesson) => lesson.id === id);
     if (at >= 0) index = at;
     if (!dialog.open) dialog.showModal();
+    renderProgress();
     render();
     close.focus({ preventScroll: true });
   }
