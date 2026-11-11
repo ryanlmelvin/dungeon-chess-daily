@@ -1461,10 +1461,16 @@ function castFor(base, floor) {
 // never captured; nothing wins in fewer moves, whatever the recruit is told
 // (steeredWin, every order tried); a hasty player who takes a guarded twin
 // and absorbs the capture scores no better than par (steeredHasty); the
-// recruit alone can't take both twins within par (tandem's move table check);
+// recruit can't take the second twin straight from the first one's square, so
+// every win in the line's three moves is the two of you (TANDEM_RECRUITS);
 // and the human-like bot, from the move that joins the recruit, finishes
 // within par + 4 in two runs of three (partnerGuard). Decoys roam as on any
 // floor, and the hint is a coin on your post.
+//
+// At par, a move later, the recruit can also do it alone: once it steps off
+// the first twin's square, the other has that one square to step to, and
+// must, where the recruit takes it. Only a pawn recruit, which never comes
+// back, can't.
 
 /** The partner motif, by the name the journal shows: Tandem. */
 export const PARTNER_MOTIF = 'tandem';
@@ -1480,11 +1486,12 @@ export const TANDEM_MOVES = 3;
 export const TANDEMS = Object.freeze({ knight: ['rook', 'bishop'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight'], queen: ['rook', 'bishop', 'knight'] });
 /**
  * The recruits a tandem may post, by target role: each can take a twin, and
- * from that twin's square takes the other in no fewer than three moves, if
- * ever (tandem checks it on the room's own walls), so within par the second
- * twin is yours to take. A queen or king recruit would take both in turn.
+ * none takes the other straight from that twin's square (a queen or king
+ * beside rooks or bishops would, a knight a jump from a knight), so no win in
+ * the line's three moves is the recruit's alone. Never a queen: it has too
+ * many posts to make a puzzle of.
  */
-export const TANDEM_RECRUITS = Object.freeze({ rook: ['bishop', 'knight', 'pawn'], bishop: ['rook', 'knight'], knight: ['bishop', 'pawn'] });
+export const TANDEM_RECRUITS = Object.freeze({ rook: ['bishop', 'knight', 'pawn'], bishop: ['rook', 'knight'], knight: ['bishop', 'rook', 'king', 'pawn'] });
 const STEERED = Object.freeze({ recruit: 'steer' });
 
 /** Draws a tandem makes per attempt before giving up: each is cheap, and most fail on a wall it can't lay or a twin out of reach. */
@@ -1515,18 +1522,9 @@ function tandemOnce(context) {
   plan.place(0, target, b);
   if (!box(plan, target, a) || !box(plan, target, b)) return null;
   const recruit = TANDEM_RECRUITS[target][Math.floor(rng() * TANDEM_RECRUITS[target].length)];
-  if (target === 'bishop') {
-    // Bishop twins: the two squares beside both are walled, so a rook that took one goes the
-    // long way round to the other; for a knight recruit, the two squares a jump from both.
-    const beside = [at(b.x, a.y), at(a.x, b.y)];
-    const jumps = recruit === 'knight' ? KNIGHT.map(([dx, dy]) => at(a.x + dx, a.y + dy)).filter((tile) => inside(tile) && covers('knight', tile, b)) : [];
-    if (![...beside, ...jumps].every((tile) => plan.wall(tile))) return null;
-  }
-  // The recruit alone never clears the floor within par: having taken one twin on the
-  // line's second move, it needs three more moves to take the other, or never can.
+  // The recruit never takes one twin straight from the other's square (TANDEM_RECRUITS), on this room's walls too.
   const table = distanceTable(plan.map(), recruit);
-  const alone = (from, to) => table[index(from) * 64 + index(to)];
-  if (Math.min(alone(a, b), alone(b, a)) < TANDEM_MOVES) return null;
+  if (Math.min(table[index(a) * 64 + index(b)], table[index(b) * 64 + index(a)]) < 2) return null;
   const twins = [a, b];
   const pair = recruit === 'bishop' && piece === 'bishop';
   const takes = (unit, from, to) => (unit === 'pawn' ? to.y === from.y - 1 && Math.abs(to.x - from.x) === 1 : reach(plan, unit, from).some((tile) => same(tile, to)));
@@ -1562,13 +1560,15 @@ function partnerMoves(state) {
 // bishop pair's hop) and each square the recruit may move to. With `taking`,
 // only the orders that take a target, which is all a floor's last move can
 // use. `action` alone when the turn has no recruit phase (no recruit yet, or
-// your move cleared the floor).
-function ordersFor(state, action, taking = false) {
+// your move cleared the floor). `posts` (tooling): of the recruit's quiet
+// moves, only those to squares that pass it.
+function ordersFor(state, action, taking = false, posts = null) {
   const choice = recruitChoice(state, action);
   if (!choice) return [action];
   const orders = taking || choice.hop ? [] : [{ ...action, recruit: 'hold' }];
   for (const move of choice.moves) {
     if (taking && !(move.capture && isTarget(choice.board, choice.board.enemies.find((foe) => same(foe, move))?.id))) continue;
+    if (posts && !move.capture && !posts(move, choice.board)) continue;
     orders.push({ ...action, recruit: { x: move.x, y: move.y } });
   }
   return orders.length || taking ? orders : [action];
@@ -1577,10 +1577,12 @@ function ordersFor(state, action, taking = false) {
  * Every way to play one move from `state` with the recruit steered, as a
  * player on Manual recruit control may: each move or wait (partnerMoves) with
  * each order (ordersFor). `last`: the floor's last move, where only an order
- * that takes a target can matter.
+ * that takes a target can matter. `posts(square, board)` (tooling, for
+ * searches too deep to try every order): the quiet squares worth posting the
+ * recruit on.
  */
-export function partnerActions(state, last = false) {
-  return partnerMoves(state).flatMap((move) => ordersFor(state, move, last));
+export function partnerActions(state, last = false, posts = null) {
+  return partnerMoves(state).flatMap((move) => ordersFor(state, move, last, posts));
 }
 
 /**

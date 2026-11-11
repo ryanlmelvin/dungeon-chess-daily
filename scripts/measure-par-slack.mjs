@@ -21,15 +21,20 @@
 // A floor whose search passes --budget steps is left out of the exact
 // figures (counted as "search cut short"). Read-only.
 //   node scripts/measure-par-slack.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…]
-//     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N]
+//     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N] [--partner]
 // --jobs splits the dates over that many processes.
+// --partner composes each day with its partner floor (src/composer.js
+// composeDay's `partner`), where its matchup has one. That floor's search
+// steers the recruit, as its line does (searchPartner): a first action is
+// still a move or wait of yours, kept when some order of the recruit keeps it.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { composeDay, actionsFrom, usesIdea, COMPOSED_PIECES } from '../src/composer.js';
+import { composeDay, actionsFrom, partnerActions, usesIdea, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { routeTransition, positionKey } from '../src/fairness.js';
 import { certifiedFloors, playFloor, runSeed, HUMAN_RUNS } from '../src/human-bot.js';
+import { distanceTable } from '../src/move-tables.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); return at > 0 ? process.argv[at + 1] : fallback; };
@@ -37,8 +42,12 @@ const start = arg('start', '2026-11-01'), end = arg('end', '2028-11-08'), runs =
 const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 const jobs = Number(arg('jobs', 1)), budget = Number(arg('budget', 600_000)), most = Number(arg('lines', 3000)), examples = Number(arg('examples', 6));
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
+const partner = process.argv.includes('--partner');
+/** A steered search tries each move with several orders, so a partner floor gets this many times --budget. */
+const PARTNER_BUDGET = 10;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
-const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
+// A recruit's order follows its move: "e3+c5" (to c5), "e3+hold".
+const spell = (line) => line.map((action) => `${action.type === 'move' ? square(action) : action.type}${action.recruit === undefined ? '' : `+${action.recruit === 'hold' ? 'hold' : square(action.recruit)}`}`).join(' ');
 
 /** The exact figures of one floor from `begin`, for the motif instance `built` and its planted line of `length` moves. */
 function searchFloor(begin, built, length) {
@@ -103,6 +112,89 @@ function searchFloor(begin, built, length) {
   };
 }
 
+/**
+ * searchFloor for a partner floor, whose line the recruit plays a part in:
+ * each move or wait is tried with the recruit's orders (partnerActions), each
+ * step a certificate step with the recruit steered. Every order would be
+ * twenty times the search, so the recruit's quiet moves are tried only to
+ * squares from which it could still take a target in the moves left, over the
+ * room's walls (and it may always hold, or take); on the last move only an
+ * order that takes a target. That is exact while the targets stand still, as
+ * a tandem's twins do, but for a quiet move that would only block a decoy. A
+ * first action is a move or wait of yours: it keeps the line or par when one
+ * of its orders does (the orders that keep the line are found first; where
+ * none does, the first found to keep par settles it). The wins within par are
+ * counted under the orders so found.
+ */
+function searchPartner(begin, built, length) {
+  const par = length + 1, memo = new Map(), limit = budget * PARTNER_BUDGET, steered = { recruit: 'steer' };
+  let steps = 0, cut = false;
+  const step = (state, action) => { steps++; return routeTransition(state, action, steered); };
+  const posts = (left) => (tile, board) => {
+    const table = distanceTable(board.map, board.companion.piece);
+    return board.enemies.some((foe) => foe.role === board.objective.piece && table[(tile.y * 8 + tile.x) * 64 + foe.y * 8 + foe.x] <= left - 1);
+  };
+  const tries = (state, left) => partnerActions(state, left === 1, posts(left));
+  const canWin = (state, left) => {
+    if (left <= 0 || cut) return false;
+    const key = `${left}|${positionKey(state)}`;
+    if (memo.has(key)) return memo.get(key);
+    if (steps > limit) { cut = true; return false; }
+    let won = false;
+    for (const action of tries(state, left)) {
+      const next = step(state, action);
+      if (!next) continue;
+      const cost = 1 + next.hits - state.hits;
+      if (cost <= left && (next.exit.open || canWin(next, left - cost))) { won = true; break; }
+    }
+    if (!cut) memo.set(key, won);
+    return won;
+  };
+  const groups = new Map();
+  for (const action of tries(begin, par)) {
+    const own = `${action.type}:${action.x ?? ''}:${action.y ?? ''}`;
+    groups.set(own, [...(groups.get(own) ?? []), action]);
+  }
+  const firsts = [...groups.values()].map((actions) => {
+    const tried = actions.map((action) => ({ action, next: step(begin, action) })).filter((entry) => entry.next).map((entry) => ({ ...entry, cost: 1 + entry.next.hits - begin.hits }));
+    const within = (entry, total) => entry.cost <= total && (entry.next.exit.open || canWin(entry.next, total - entry.cost));
+    const line = tried.filter((entry) => within(entry, length));
+    const kept = line.length ? line : [tried.find((entry) => within(entry, par))].filter(Boolean);
+    return { line: line.length > 0, par: kept.length > 0, kept };
+  });
+  const starts = firsts.flatMap((first) => first.kept);
+  const share = Math.max(1, Math.ceil(most / Math.max(1, starts.length)));
+  const tally = { lines: 0, plain: 0, lineLong: 0, plainLong: 0, capped: false, example: null };
+  for (const first of starts) {
+    let found = 0;
+    const win = (line, states, cost) => {
+      found++; tally.lines++;
+      const longer = cost > length;
+      if (longer) tally.lineLong++;
+      let idea = false;
+      try { idea = usesIdea(built, states, line); } catch { idea = false; }
+      if (!idea) { tally.plain++; if (longer) tally.plainLong++; if (!tally.example || line.length < tally.example.length) tally.example = line; }
+    };
+    const walk = (state, left, line, states, spent) => {
+      for (const action of tries(state, left)) {
+        if (found >= share) { tally.capped = true; return; }
+        const next = step(state, action);
+        if (!next) continue;
+        const cost = 1 + next.hits - state.hits;
+        if (cost > left) continue;
+        if (next.exit.open) win([...line, action], [...states, next], spent + cost);
+        else if (canWin(next, left - cost)) walk(next, left - cost, [...line, action], [...states, next], spent + cost);
+      }
+    };
+    if (first.next.exit.open) win([first.action], [begin, first.next], first.cost);
+    else walk(first.next, par - first.cost, [first.action], [begin, first.next], first.cost);
+  }
+  return {
+    cut, steps, firsts: firsts.length, keepLine: firsts.filter((first) => first.line).length, keepPar: firsts.filter((first) => first.par).length,
+    ...tally, example: tally.example ? spell(tally.example) : null,
+  };
+}
+
 function measure() {
   const rows = [];
   let n = 0;
@@ -112,14 +204,14 @@ function measure() {
     if (shard && n++ % shard[1] !== shard[0]) continue;
     const builts = [];
     let composed;
-    try { composed = composeDay(date, { trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+    try { composed = composeDay(date, { partner, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
     const { daily, floors } = composed;
     // The search runs on the twin without hint powerups (src/generation.js proveComposed), the bot on the day as played.
     const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
     const plain = certifiedFloors(twin), played = certifiedFloors(daily);
     floors.forEach((floor, f) => {
       const built = builts[f], length = floor.line.length, par = length + 1;
-      const exact = searchFloor(plain.starts[f], built, length);
+      const exact = daily.generation.partner === f ? searchPartner(plain.starts[f], built, length) : searchFloor(plain.starts[f], built, length);
       const outcomes = Array.from({ length: runs }, (_, run) => {
         const result = playFloor(played.starts[f], { seed: runSeed(daily, f, run), frames: true, cap: par + 5 });
         let idea = null;
