@@ -37,7 +37,7 @@
 // coins, the powerup and the recruit lie off the line. Failures reroll the
 // instance (and the dressing) from their own seeded streams, then try the
 // next motif, then a plain walk to walled-in targets, which always composes.
-import { createGame, act, legalMoves, closeAttacker, floorScoredMoves, paperSuspects, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
+import { createGame, act, legalMoves, closeAttacker, floorScoredMoves, matchedDecoy, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
 import { getRawDaily } from './edition.js';
 import { tierForDate } from './difficulty.js';
 import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from './fairness.js';
@@ -99,9 +99,9 @@ export const START_SETS = Object.freeze({
 export const COMPOSED_STARTS = 'wide';
 /**
  * How many pawns make a floor's target: two. A chess army's eight is far too
- * many for a planted line of 3 or 4 moves, and the count rule (the paper's
- * other suspect shows as many copies as the target) allows at most two, the
- * most any other piece has. The user chose two over one after playing both
+ * many for a planted line of 3 or 4 moves, and the count rule (one decoy
+ * species has as many copies as the target) allows at most two, the most
+ * any other piece has. The user chose two over one after playing both
  * (2026-11-10): longer, more forced lines, under more pressure.
  */
 export const PAWN_TARGETS = 2;
@@ -370,7 +370,7 @@ const MOTIFS = {
     for (const perch of chosen) if (!box(plan, target, perch.tile, perch.toward ? [perch.toward] : [])) return null;
     // A lone queen must not see the start square, or it winds up there first.
     if (count === 1) for (const square of between(start, chosen[0].tile)) plan.wall(square);
-    // Guards (copies of the paper's other suspect) where a target could be
+    // Guards (copies of the matched decoy species) where a target could be
     // taken straight away, and now and then elsewhere for variety.
     for (const perch of chosen) {
       const direct = reachable(piece, start, plan).some((square) => same(square, perch.tile));
@@ -717,8 +717,8 @@ function pawnBox(plan, role, tile, open, climb = null, boxer = null) {
  * comes from the line kept (pawnKey). Missing the line, your pawn can still
  * walk up and promote (the user's rule): no wall stands on its file above
  * the start, nor above a take it makes before the last (`climb`); a held
- * decoy from the floor's own (or one more of the species the paper doesn't
- * name) boxes a pocket there instead, and steps off the file once it wakes.
+ * decoy from the floor's own (or one more of the other decoy species) boxes a
+ * pocket there instead, and steps off the file once it wakes.
  */
 function pawnLine(context, kind) {
   // Each try draws a fresh path and pockets; most fail on the board's edge at once.
@@ -744,8 +744,8 @@ function pawnLineOnce(context, kind) {
   up(start);
   for (const take of takes.slice(0, -1)) if (take.piece === 'pawn') up(take.to);
   // Box decoys come from the floor's own, never a pawn (it could never leave your file),
-  // then up to PAWN_BOX_EXTRAS more of the species the paper doesn't name, whose count
-  // gives nothing away.
+  // then up to PAWN_BOX_EXTRAS more of the other decoy species, whose count the
+  // count rule leaves free.
   const pool = [...context.guards], boxes = [];
   let extras = context.unnamed && context.unnamed.role !== 'pawn' ? PAWN_BOX_EXTRAS : 0;
   const boxer = (square) => {
@@ -1378,19 +1378,19 @@ function dress(plan, context, line, base, floor, rng) {
 }
 
 // The floor's cast: its target role and copies, the guards the motif may use
-// (copies of the paper's other suspect, as many as the target has) and the
+// (copies of the matched decoy species, as many as the target has) and the
 // rest, which wait walled in. On the king floor every decoy waits.
 function castFor(base, floor) {
   const target = base.targets[floor];
   const count = target === 'pawn' ? PAWN_TARGETS : PIECE_COUNTS[target];
   const species = [base.species[floor], base.species[3 + floor * 2], base.species[4 + floor * 2]];
-  const suspect = paperSuspects(base, floor).find((entry) => entry.id !== species[0].id) ?? species[1];
+  const suspect = matchedDecoy(base, floor) ?? species[1];
   const suspectCast = species[1].id === suspect.id ? 1 : 2;
   const otherCast = 3 - suspectCast;
   const copies = Math.min(count, PIECE_COUNTS[species[suspectCast].piece]);
   const suspects = Array.from({ length: copies }, () => ({ cast: suspectCast, role: species[suspectCast].piece }));
   const other = { cast: otherCast, role: species[otherCast].piece };
-  // The decoy species the paper doesn't name (`other`), whose copies give nothing away.
+  // The other decoy species (`other`), whose count the count rule leaves free.
   return { target, count, suspects, other, unnamed: other, matched: copies === count };
 }
 

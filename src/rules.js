@@ -1478,20 +1478,19 @@ export function floorLineup(state, floor = state.floor) {
 }
 
 /**
- * The newspaper's two suspects for `floor`: its target and one other species
- * that can appear there, picked from the date on the paper's own hash stream
- * (never gameplay's). A decoy standing in the room from the start comes before
- * a collapse arrival, which would leave the target the only suspect in sight.
- * A floor with no other species shows its target alone. Ordered by name, so
- * the target comes first only by alphabet.
+ * The decoy species a composed `floor` casts with as many copies as its target
+ * (the count rule, composer.js castFor), or null on a floor with no other
+ * species. Picked from the date on its own hash stream (never gameplay's); a
+ * decoy standing in the room from the start comes before a collapse arrival.
+ * The key dates from when the paper printed this species beside the target:
+ * changing it would move every composed room.
  */
-export function paperSuspects(state, floor = state.floor) {
+export function matchedDecoy(state, floor = state.floor) {
   const target = state.species[floor];
   const others = (cast) => distinct(cast).filter((species) => species.id !== target.id);
   const residents = others(floorDecoys(state, floor));
   const pool = residents.length ? residents : others(floorLineup(state, floor));
-  if (!pool.length) return [target];
-  return [target, pool[hash(`paper-suspects:${state.date}:${floor}`) % pool.length]].sort(byName);
+  return pool.length ? pool[hash(`paper-suspects:${state.date}:${floor}`) % pool.length] : null;
 }
 
 /**

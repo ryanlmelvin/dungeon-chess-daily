@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor } from '../src/game.js';
 import { getRawDaily, headlineFor } from '../src/edition.js';
-import { floorLineup, floorDecoys, paperSuspects, nextHint, hintCards, closeRangeSquares, closeAttacker, targetLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
+import { floorLineup, floorDecoys, matchedDecoy, nextHint, hintCards, closeRangeSquares, closeAttacker, targetLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
 import { reinforcementOptions } from '../src/modifiers.js';
 import { floorPars } from '../src/par.js';
 import { botRun, playerRun } from '../src/bot.js';
@@ -80,39 +80,31 @@ test('each floor\'s full cast is exactly the species that can stand there, order
   assert.ok(!sizes.has(1) && sizes.has(2) && sizes.has(3), 'no one-species floors; two- and three-species casts both occur');
 });
 
-// The paper no longer prints paperSuspects; the composer still casts the other
-// species with as many copies as the target (composer.js castFor).
-test('paperSuspects pairs the target with one other species from the floor, stable per date, by name', () => {
-  const firsts = new Set();
+// A composed floor casts this species with as many copies as its target
+// (composer.js castFor).
+test('matchedDecoy picks one other species from the floor, a resident first, stable per date', () => {
   let arrivalsOnly = 0, alone = 0, firstDecoy = 0, secondDecoy = 0;
   for (let offset = 0; offset < 120; offset++) {
     const issue = getDaily(day(offset));
     const pristine = structuredClone(issue);
     for (let floor = 0; floor < 3; floor++) {
-      const cast = floorLineup(issue, floor);
-      const shown = paperSuspects(issue, floor);
-      const target = issue.species[floor];
+      const picked = matchedDecoy(issue, floor);
       const label = `${issue.date} floor ${floor + 1}`;
-      assert.equal(shown.length, Math.min(2, cast.length), label);
-      assert.ok(shown.some((species) => species.id === target.id), `${label}: the target is always a suspect`);
-      assert.ok(shown.every((species) => cast.some((entry) => entry.id === species.id)), `${label}: suspects can appear there`);
-      assert.deepEqual(shown.map((species) => species.name), shown.map((species) => species.name).sort(), `${label}: ordered by name`);
+      if (!picked) { alone++; continue; }
+      assert.notEqual(picked.id, issue.species[floor].id, `${label}: never the target`);
+      assert.ok(floorLineup(issue, floor).some((species) => species.id === picked.id), `${label}: it can appear there`);
       // A decoy already in the room comes before a collapse arrival.
-      const other = shown.find((species) => species.id !== target.id);
       const decoys = [...new Map(floorDecoys(issue, floor).map((species) => [species.id, species])).values()];
-      if (other && decoys.length) assert.ok(decoys.some((species) => species.id === other.id), `${label}: the other suspect is a decoy`);
-      if (other && !decoys.length) arrivalsOnly++;
-      if (!other) alone++;
-      if (decoys.length === 2) other.id === decoys[0].id ? firstDecoy++ : secondDecoy++;
-      // Stable: the same date always picks the same pair, whatever ran before.
-      assert.deepEqual(paperSuspects(getDaily(issue.date), floor), shown, `${label}: stable`);
-      firsts.add(shown[0].id === target.id);
+      if (decoys.length) assert.ok(decoys.some((species) => species.id === picked.id), `${label}: a decoy in the room`);
+      else arrivalsOnly++;
+      if (decoys.length === 2) picked.id === decoys[0].id ? firstDecoy++ : secondDecoy++;
+      // Stable: the same date always picks the same species, whatever ran before.
+      assert.deepEqual(matchedDecoy(getDaily(issue.date), floor), picked, `${label}: stable`);
     }
     // It draws from its own hash stream: the edition and its dungeon are untouched.
     assert.deepEqual(issue, pristine);
     assert.deepEqual(createGame(issue), createGame(pristine));
   }
-  assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
   assert.ok(firstDecoy > 0 && secondDecoy > 0, 'either decoy species can be the one picked');
   // With a decoy on every floor, there is always another species, and it is always in the room.
   assert.equal(alone, 0, 'no floor of targets alone');

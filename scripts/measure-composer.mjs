@@ -220,7 +220,7 @@ if (pawnKings.length) {
 const hints = {};
 for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }
 console.log(`\nHint on the key square: ${Object.entries(hints).sort().map(([key, n]) => `${key} ${n}`).join(', ')}.`);
-console.log(`\nCount rule (the paper's other suspect has the target's copies): met on ${percent(floorsOf.filter((row) => row.matched).length, floorsOf.length)} of floors.`);
+console.log(`\nCount rule (a decoy species has the target's copies): met on ${percent(floorsOf.filter((row) => row.matched).length, floorsOf.length)} of floors.`);
 const failed = rows.filter((row) => row.failed);
 if (failed.length) console.log(`Failed: ${failed.map((row) => `${row.date} (${row.failed})`).join('; ')}`);
 const json = arg('json', null);
