@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import { validateSave, RULES_VERSION } from './game.js';
+import { LEDGER_KEY, planLedgerMerge } from './stats.js';
 
 // Official runs: `daily:vN:DATE` for rules version N (3 to the current one), or `daily:DATE` from before versions.
 const SAVE_KEY = /^daily:(?:(v[1-9]\d*):)?(\d{4}-\d{2}-\d{2})$/;
@@ -43,6 +44,8 @@ export function planBackupMerge(currentMap, data) {
       if (!isSound(value)) throw new Error('This backup contains an invalid sound preference.');
       return { key, value };
     }
+    // The streak ledger (src/stats.js) merges as a union of days; null when the device's already holds them all.
+    if (key === LEDGER_KEY) return { key, value: planLedgerMerge(currentMap.get(key) ?? null, value) };
     const entry = readRun(key, value);
     if (!entry) throw new Error('This backup contains an unreadable save.');
     return { key, value, ...entry };
@@ -54,6 +57,10 @@ export function planBackupMerge(currentMap, data) {
   for (const { key, value, run, archived: olderRules } of incoming) {
     if (key === 'sound') {
       if (!isSound(currentMap.get(key))) writes.set(key, value);
+      continue;
+    }
+    if (key === LEDGER_KEY) {
+      if (value !== null) writes.set(key, value);
       continue;
     }
     archived ||= olderRules;
