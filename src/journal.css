@@ -1,0 +1,79 @@
+/* Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only */
+/* The journal (src/journal-ui.js): its menu button, its dialog of lesson pages,
+   the one-line cue on the shop and the results paper, and the page that flies
+   into it when a find is new. */
+
+/* The menu's Journal button shares Archive's row, so the menu grows no taller. */
+#menu-home .menu-actions { grid-template-columns: 1fr 1fr; }
+#menu-home .menu-actions > * { grid-column: 1 / -1; }
+#menu-home .menu-actions > #archive-button, #menu-home .menu-actions > #journal-button { grid-column: auto; }
+#journal-button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#journal-progress { font-size: 18px; color: #bdb1bf; }
+
+/* A lesson page: a clipping of the paper's own stock, its diagram framed in ink. */
+#journal-dialog { max-width: 420px; }
+.journal-page { --paper: #c9c9c7; --ink: #252525; color: var(--ink); background: var(--paper); padding: 12px 14px 10px; box-shadow: 4px 4px 0 var(--menu-shadow); touch-action: pan-y; }
+.journal-art-box { position: relative; width: min(100%, 200px, 28svh); aspect-ratio: 1; margin: 0 auto 8px; }
+.journal-art { display: block; width: 100%; height: 100%; image-rendering: pixelated; border: 2px solid var(--ink); background: #1c1921; }
+.journal-page h3 { margin: 0 0 4px; font: 400 32px/1 'Jacquard 24', 'VT323', monospace; color: var(--ink); }
+dialog .journal-page p { margin: 0; font-size: 20px; line-height: 1.15; }
+/* Every page keeps the height of three lines of text, so ‹ › stay put while paging. */
+dialog .journal-page .journal-text { min-height: 3.45em; }
+dialog .journal-page .journal-pieces { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #747474; font-size: 18px; line-height: 1; color: #55505a; }
+.journal-pieces span { margin-right: 2px; }
+.journal-pieces canvas { width: 20px; height: 20px; image-rendering: pixelated; }
+.journal-pieces canvas.missing { opacity: .28; }
+/* Not found yet: where the diagram starts, in the dark, under a question mark. */
+.journal-page.unfound .journal-art { filter: grayscale(1) brightness(.4); }
+.journal-page.unfound .journal-art-box::after { content: '?'; position: absolute; inset: 0; display: grid; place-content: center; font: 400 112px/1 'Jacquard 24', 'VT323', monospace; color: var(--paper); opacity: .85; pointer-events: none; }
+.journal-page.unfound h3, dialog .journal-page.unfound .journal-text { color: #6a646e; }
+.journal-page.from-right { animation: journal-in-right .18s ease-out; }
+.journal-page.from-left { animation: journal-in-left .18s ease-out; }
+@keyframes journal-in-right { from { transform: translateX(24px); opacity: 0; } }
+@keyframes journal-in-left { from { transform: translateX(-24px); opacity: 0; } }
+.journal-pager { margin-top: 12px; }
+.journal-count { min-width: 6ch; text-align: center; font-size: 20px; color: #bdb1bf; }
+@media (max-height: 600px) {
+  #journal-dialog .dialog-heading { margin-bottom: 8px; padding-bottom: 6px; }
+  .journal-page { padding: 8px 12px; }
+  dialog .journal-page p { font-size: 18px; }
+  .journal-pager { margin-top: 8px; }
+}
+/* A phone on its side: the diagram beside its text. */
+@media (max-height: 500px) and (min-width: 560px) {
+  #journal-dialog { max-width: 640px; }
+  .journal-page { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-content: center; }
+  .journal-art-box { grid-row: 1 / span 3; width: min(200px, 44svh); margin: 0; }
+}
+
+/* The cue: a quiet line with the journal's book, on the shop and on the results paper. */
+.journal-cue, dialog .journal-cue { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; margin: -4px 0 10px; padding: 2px 0; border: 0; background: none; box-shadow: none; text-align: left; font: 400 20px/1.1 'VT323', 'Courier New', monospace; color: #bdb1bf; }
+.journal-cue[hidden] { display: none; }
+dialog .journal-cue:hover:not(:disabled), .journal-cue:hover { background: none; color: var(--paper); }
+dialog .journal-cue:active:not(:disabled) { transform: none; }
+.journal-cue.new { color: var(--gold); }
+.journal-cue.new::after { content: '›'; margin-left: auto; font-size: 24px; line-height: .8; }
+.journal-book { flex: none; width: 24px; height: 24px; image-rendering: pixelated; }
+.journal-cue.landed .journal-book { animation: journal-landed .5s ease-out; }
+@keyframes journal-landed { 0% { transform: scale(1); } 35% { transform: scale(1.5) rotate(-8deg); } 100% { transform: none; } }
+.result-paper .journal-cue { margin: -4px 0 8px; color: #55505a; }
+.result-paper .journal-cue:hover { color: var(--ink); }
+.result-paper .journal-cue.new { color: #8a3743; }
+/* A cornered run's page has no result to file. */
+.result-paper:has(#result-actions[hidden]) .journal-cue { display: none; }
+@media (max-height: 720px) {
+  dialog .journal-cue { min-height: 28px; margin: -4px 0 6px; font-size: 18px; }
+  /* The results paper has no line to spare on a short phone (402×680, an iPhone SE):
+     there the cue takes the summary line's place, to the pixel, so the paper grows no taller. */
+  .result-paper:not(:has(#result-actions[hidden])):has(> .journal-cue:not([hidden])) > #result-summary { display: none; }
+  .result-paper .journal-cue { min-height: 0; height: 1.2em; margin: 0 0 10px; padding: 0; font-size: 19px; }
+  .result-paper .journal-book { width: 16px; height: 16px; }
+}
+
+/* The moment: a new page, small, over the screen's heading; it takes no taps and is gone in a few seconds. */
+.journal-flyer { --paper: #c9c9c7; --ink: #252525; position: fixed; z-index: 30; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; align-items: center; width: min(340px, calc(100vw - 24px)); padding: 8px 10px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); box-shadow: 4px 4px 0 #050505; font-family: 'VT323', 'Courier New', monospace; pointer-events: none; will-change: transform, opacity; }
+.journal-flyer canvas { display: block; width: 84px; height: 84px; image-rendering: pixelated; border: 2px solid var(--ink); background: #1c1921; }
+.journal-flyer small { display: block; font-size: 14px; line-height: 1; letter-spacing: 1.5px; text-transform: uppercase; color: #8a3743; }
+.journal-flyer b, dialog .journal-flyer b { display: block; margin: 1px 0 3px; font: 400 26px/1 'Jacquard 24', 'VT323', monospace; color: var(--ink); }
+.journal-flyer span { display: block; font-size: 17px; line-height: 1.05; }
+@media (prefers-reduced-motion: reduce) { .journal-flyer { display: none; } }

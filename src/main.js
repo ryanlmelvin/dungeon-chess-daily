@@ -29,6 +29,7 @@ import { caveInLabel, caveInLoss, caveInRunning, cavedIn, goldAtRisk } from './c
 import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 import { celebrateCheckmate } from './checkmate.js';
+import { initJournal } from './journal-ui.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -105,6 +106,8 @@ function syncMusic() {
 }
 for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => music.unlock(), { capture: true, passive: true });
 const guide = initGuide();
+// The journal of lesson pages (src/journal-ui.js): its menu button, dialog and cues are its own.
+const journal = initJournal({ prefix });
 // Decided before anything is saved this visit: entering the dungeon creates a save.
 let guidePending = false;
 try { guidePending = isFirstVisit(localStorage, { prefix, scope }); } catch {}
@@ -1164,6 +1167,8 @@ function takeStairs() {
   renderShop();
   $('shop-dialog').showModal();
   $('shop-descend').focus();
+  // The journal files what this floor found and cues it in the shop.
+  if (!composedDay) journal.clearedFloor(state, daily);
 }
 $('descend-button').addEventListener('click', takeStairs);
 $('shop-descend').addEventListener('click', () => { $('shop-dialog').close(); takeAction({type:'descend'}); });
@@ -1200,6 +1205,7 @@ function showResult() {
   $('share-preview').textContent=shareable ? `${stats.holdStreak(hold(title, ' · '))}\n${hold(floors, '  ')}` : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
+  if (!composedDay) journal.wonRun(state, daily);
   $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
   $(shareable || composedDay ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
@@ -1527,7 +1533,7 @@ $('import-file').addEventListener('change',async(event)=>{
       localStorage.setItem(`${prefix}${name}`,value); written++;
     }
     stats.adopt(data.saves);
-    reloadProgress();$('menu-dialog').close();
+    reloadProgress();journal.restored();$('menu-dialog').close();
     notify(unreadable.length
       ? `${written ? 'Backup merged. ' : ''}${unreadable.length} unreadable local ${unreadable.length===1?'save was':'saves were'} kept unchanged; matching backup entries were skipped.`
       : archived ? 'Backup merged. Earlier ruleset runs remain in backups.' : 'Backup merged.', unreadable.length > 0);
