@@ -42,18 +42,22 @@ const cache = new Map();
  * powerup); picking a hint up changes no monster's move, so the real day must
  * then win as played, hints collected, never captured. With `saves` (the
  * build and the composer) every position along the way must also be a valid
- * save, as a player's run would be. Returns { valid: true, metrics } or
- * { valid: false, reason }.
+ * save, as a player's run would be. `partner` names a partner floor (dev
+ * preview, src/composer.js): its line is played with that floor's recruit on
+ * orders, so the day is proved with the recruit steered, and the recruit may
+ * join and take orders on that floor alone. Returns { valid: true, metrics }
+ * or { valid: false, reason }.
  */
-export function proveComposed(daily, actions, { saves = false } = {}) {
+export function proveComposed(daily, actions, { saves = false, partner = null } = {}) {
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  const proof = verifyWinningRoute(createGame(twin), actions);
+  const proof = verifyWinningRoute(createGame(twin), actions, partner === null ? undefined : { recruit: 'steer' });
   if (!proof.valid) return proof;
   let played = createGame(daily);
   if (saves && !validateSave(played, daily.date, daily)) return { valid: false, reason: 'The day\'s start is not a valid save.' };
   for (const [n, action] of actions.entries()) {
     const next = act(played, action);
     if (next === played || next.hits > played.hits) return { valid: false, reason: 'The line fails as played, hints collected.' };
+    if (partner !== null && played.floor !== partner && (action.recruit !== undefined || (played.floor < 2 && next.events.some((event) => event.type === 'companion-recruit')))) return { valid: false, reason: 'A recruit helps off the partner floor.' };
     if (saves && !validateSave(next, daily.date, daily)) return { valid: false, reason: `The save after the line's action ${n + 1} is not valid.` };
     played = next;
   }

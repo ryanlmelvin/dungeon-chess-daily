@@ -49,6 +49,8 @@ import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 import { ICE_TILES } from './modifiers.js';
 import { placeTreasure } from './treasure.js';
+// Partner floors steer the recruit (see "Partner floors" below).
+import { recruitChoice } from './rules.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -63,7 +65,7 @@ export const DRESS_ATTEMPTS = 6;
  * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
  * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
  */
-export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3 });
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3 });
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
@@ -1197,11 +1199,11 @@ export function botGuard(start, base, floor, par) {
 // The positions of a line (playLine) if the player is never captured along it
 // and the floor's challenge completes on its last move, as a certificate's, else null.
 const clean = (states) => (states && states.every((state, n) => state.hits === states[0].hits && (n === states.length - 1 || !state.exit.open)) ? states : null);
-/** Each position along `line` from `start`, or null if a step fails. */
-export function playLine(start, line) {
+/** Each position along `line` from `start`, or null if a step fails. `options`: the recruit mode (src/fairness.js), for a partner floor's line. */
+export function playLine(start, line, options) {
   const states = [start];
   for (const action of line) {
-    const next = routeTransition(states.at(-1), action);
+    const next = routeTransition(states.at(-1), action, options);
     if (!next) return null;
     states.push(next);
   }
@@ -1213,6 +1215,7 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 export function usesIdea(built, states, line) {
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
+  if (built.motif === PARTNER_MOTIF) return tandemIdea(states);
   if (built.pawnLine) {
     // A quiet first move, and every target taken on a planted take square.
     return !states[1].events.some((event) => event.type === 'capture') && line.every((action, n) => action.type !== 'move'
@@ -1404,9 +1407,9 @@ function dress(plan, context, line, base, floor, rng) {
     const tile = shuffle(reach(plan, context.piece, start), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)));
     if (!tile) return null;
     plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
-  } else {
+  } else if (!plan.items.some((item) => item.type === 'companion')) {
     // Floors 1 and 2 recruit any piece, three or more moves away, so it can't
-    // take part within the line.
+    // take part within the line (a partner floor placed its own already).
     const piece = PIECES[hash(`${base.date}:composer-recruit:${floor}`) % PIECES.length];
     const tile = open.find((square) => plan.free(square) && moves(square) >= 3 && far(square, 3));
     if (tile) plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece });
@@ -1429,6 +1432,332 @@ function castFor(base, floor) {
   const other = { cast: otherCast, role: species[otherCast].piece };
   // The other decoy species (`other`), whose count the count rule leaves free.
   return { target, count, suspects, other, unnamed: other, matched: copies === count };
+}
+
+// ── Partner floors ──────────────────────────────────────────────────────────
+// A partner floor (composeDay's `partner` option; no stored edition has one)
+// is won by your piece and the floor's recruit together. Its motif:
+//
+// - Tandem: the floor's two targets stand walled in a step of their own apart
+//   (rooks side by side, bishops corner to corner, knights a jump apart), so
+//   each guards the other's square: whichever you take, the other takes you at
+//   once. A recruit is never taken. It waits one move from the start: step
+//   onto it and post it (it takes nothing on the move it joins), step to your
+//   own post while it takes its twin, then take yours, no longer guarded.
+//
+// Every monster moves every turn, but the recruit moves right after you and
+// before any of them, so the two of you act as one. Both twins are the
+// floor's target, whose moves the paper gives away, so the line depends on no
+// decoy's hidden role. The twins have no step and see no square you can stand
+// on, so they never wind up: alone, you can never take one uncaptured.
+//
+// The recruit takes a target, which it does only on an order (on Auto it
+// never takes one, src/rules.js recruitMayTake). So a tandem's planted line
+// carries recruit orders, a player on Manual recruit control can follow it and
+// one on Auto can't, and its day is proved with the recruit steered on that
+// floor alone (src/generation.js proveComposed, `partner`).
+//
+// It is proved like the other motifs, the recruit steered: the line wins,
+// never captured; nothing wins in fewer moves, whatever the recruit is told
+// (steeredWin, every order tried); a hasty player who takes a guarded twin
+// and absorbs the capture scores no better than par (steeredHasty); the
+// recruit alone can't take both twins within par (tandem's move table check);
+// and the human-like bot, from the move that joins the recruit, finishes
+// within par + 4 in two runs of three (partnerGuard). Decoys roam as on any
+// floor, and the hint is a coin on your post.
+
+/** The partner motif, by the name the journal shows: Tandem. */
+export const PARTNER_MOTIF = 'tandem';
+/** A tandem's line: join the recruit and post it, step to your own post as it takes its twin, take yours. */
+export const TANDEM_MOVES = 3;
+/**
+ * The targets a tandem can pair up, by player piece. Every step of a twin's
+ * own is walled, so only a piece that moves another way reaches it: never a
+ * rook against rooks, a bishop against bishops or a knight against knights. A
+ * queen is alone and a pawn never guards the pawn that guards it, so neither
+ * pairs up; a pawn player keeps its own lines.
+ */
+export const TANDEMS = Object.freeze({ knight: ['rook', 'bishop'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight'], queen: ['rook', 'bishop', 'knight'] });
+/**
+ * The recruits a tandem may post, by target role: each can take a twin, and
+ * from that twin's square takes the other in no fewer than three moves, if
+ * ever (tandem checks it on the room's own walls), so within par the second
+ * twin is yours to take. A queen or king recruit would take both in turn.
+ */
+export const TANDEM_RECRUITS = Object.freeze({ rook: ['bishop', 'knight', 'pawn'], bishop: ['rook', 'knight'], knight: ['bishop', 'pawn'] });
+const STEERED = Object.freeze({ recruit: 'steer' });
+
+/** Draws a tandem makes per attempt before giving up: each is cheap, and most fail on a wall it can't lay or a twin out of reach. */
+export const TANDEM_TRIES = 24;
+// The motif: the twins, their walls, and the recruit on a square your first
+// move reaches, from which it can be posted (or already stands) to take one
+// twin while a move of yours brings you to where you take the other, which
+// you can't take from the recruit's square itself (taking it at once, and
+// absorbing the capture as the recruit takes its own, would tie the line).
+function tandem(context) {
+  if (context.count !== 2 || !TANDEMS[context.piece]?.includes(context.target)) return null;
+  for (let tries = 0; tries < TANDEM_TRIES; tries++) {
+    const built = tandemOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function tandemOnce(context) {
+  const { piece, target, rng, start } = context;
+  const steps = target === 'knight' ? KNIGHT : RAYS[target];
+  const fits = (tile) => inside(tile) && tile.y >= 1 && tile.y <= 5 && chebyshev(tile, start) >= 2;
+  const pairs = SQUARES.filter(fits).flatMap((a) => steps.map(([dx, dy]) => [a, at(a.x + dx, a.y + dy)])).filter(([, b]) => fits(b));
+  if (!pairs.length) return null;
+  const [a, b] = pairs[Math.floor(rng() * pairs.length)];
+  const plan = new Plan(start);
+  plan.keep(start);
+  plan.place(0, target, a);
+  plan.place(0, target, b);
+  if (!box(plan, target, a) || !box(plan, target, b)) return null;
+  const recruit = TANDEM_RECRUITS[target][Math.floor(rng() * TANDEM_RECRUITS[target].length)];
+  if (target === 'bishop') {
+    // Bishop twins: the two squares beside both are walled, so a rook that took one goes the
+    // long way round to the other; for a knight recruit, the two squares a jump from both.
+    const beside = [at(b.x, a.y), at(a.x, b.y)];
+    const jumps = recruit === 'knight' ? KNIGHT.map(([dx, dy]) => at(a.x + dx, a.y + dy)).filter((tile) => inside(tile) && covers('knight', tile, b)) : [];
+    if (![...beside, ...jumps].every((tile) => plan.wall(tile))) return null;
+  }
+  // The recruit alone never clears the floor within par: having taken one twin on the
+  // line's second move, it needs three more moves to take the other, or never can.
+  const table = distanceTable(plan.map(), recruit);
+  const alone = (from, to) => table[index(from) * 64 + index(to)];
+  if (Math.min(alone(a, b), alone(b, a)) < TANDEM_MOVES) return null;
+  const twins = [a, b];
+  const pair = recruit === 'bishop' && piece === 'bishop';
+  const takes = (unit, from, to) => (unit === 'pawn' ? to.y === from.y - 1 && Math.abs(to.x - from.x) === 1 : reach(plan, unit, from).some((tile) => same(tile, to)));
+  const open = (tile) => !plan.isWall(tile) && !plan.unitAt(tile);
+  // Where the recruit could be posted on the move it joins: a quiet move of its own. A
+  // bishop joining your bishop hops to a side square instead (src/rules.js pairHop).
+  const quiet = (from) => {
+    if (pair) return ORTHOGONAL.map(([dx, dy]) => at(from.x + dx, from.y + dy)).filter(open);
+    if (recruit !== 'pawn') return reach(plan, recruit, from).filter(open);
+    const up = at(from.x, from.y - 1), two = at(from.x, from.y - 2);
+    return open(up) ? [up, ...(from.y === 6 && open(two) ? [two] : [])] : [];
+  };
+  const posted = (from, twin) => [...(pair ? [] : [from]), ...quiet(from)].some((post) => takes(recruit, post, twin));
+  const yours = (from, twin) => reach(plan, piece, from).some((post) => open(post) && takes(piece, post, twin));
+  const ready = (tile, mine, its) => !takes(piece, tile, mine) && posted(tile, its) && yours(tile, mine);
+  const square = shuffle(reach(plan, piece, start), rng).find((tile) => plan.free(tile) && (ready(tile, a, b) || ready(tile, b, a)));
+  if (!square) return null;
+  plan.items.push({ x: square.x, y: square.y, type: 'companion', piece: recruit });
+  return { plan, motif: PARTNER_MOTIF, twins, recruit };
+}
+
+// A partner floor's moves from `state`: waiting, and every legal move but onto
+// a powerup that is no hint. The recruit's square is one of them.
+function partnerMoves(state) {
+  const actions = [{ type: 'wait' }];
+  for (const move of legalMoves(state)) {
+    if (state.items.some((item) => item.type === 'powerup' && !item.hint && item.x === move.x && item.y === move.y)) continue;
+    actions.push({ type: 'move', x: move.x, y: move.y });
+  }
+  return actions;
+}
+// `action` with every order its recruit phase takes: 'hold' (no hold on the
+// bishop pair's hop) and each square the recruit may move to. With `taking`,
+// only the orders that take a target, which is all a floor's last move can
+// use. `action` alone when the turn has no recruit phase (no recruit yet, or
+// your move cleared the floor).
+function ordersFor(state, action, taking = false) {
+  const choice = recruitChoice(state, action);
+  if (!choice) return [action];
+  const orders = taking || choice.hop ? [] : [{ ...action, recruit: 'hold' }];
+  for (const move of choice.moves) {
+    if (taking && !(move.capture && isTarget(choice.board, choice.board.enemies.find((foe) => same(foe, move))?.id))) continue;
+    orders.push({ ...action, recruit: { x: move.x, y: move.y } });
+  }
+  return orders.length || taking ? orders : [action];
+}
+/**
+ * Every way to play one move from `state` with the recruit steered, as a
+ * player on Manual recruit control may: each move or wait (partnerMoves) with
+ * each order (ordersFor). `last`: the floor's last move, where only an order
+ * that takes a target can matter.
+ */
+export function partnerActions(state, last = false) {
+  return partnerMoves(state).flatMap((move) => ordersFor(state, move, last));
+}
+
+/**
+ * Can the floor be won from `state` within `moves` moves, never captured,
+ * whatever the recruit is told? Exact: every move and every order is tried,
+ * each step a certificate step with the recruit steered (src/fairness.js
+ * routeTransition).
+ */
+export function steeredWin(state, moves) {
+  for (const action of partnerActions(state, moves === 1)) {
+    const next = routeTransition(state, action, STEERED);
+    if (next && (next.exit.open || (moves > 1 && steeredWin(next, moves - 1)))) return true;
+  }
+  return false;
+}
+/**
+ * hastyScore for a partner floor: the lowest score of a win within `moves`
+ * moves, the recruit steered, by a player who may be captured (each capture
+ * one more scored move). Infinity when nothing wins in time.
+ */
+export function steeredHasty(state, moves, from = floorScoredMoves(state)) {
+  let best = Infinity;
+  for (const action of partnerActions(state, moves === 1)) {
+    const next = act(state, action);
+    if (next === state || next.status !== 'playing' || next.events.some((event) => event.type === 'restart') || next.floor !== state.floor) continue;
+    if (next.exit.open) best = Math.min(best, floorScoredMoves(next) - from);
+    else if (moves > 1) best = Math.min(best, steeredHasty(next, moves - 1, from));
+  }
+  return best;
+}
+
+// A tandem's idea in a line's positions: the recruit takes a target, and you take one.
+function tandemIdea(states) {
+  const took = (type) => states.some((state, n) => n > 0 && state.events.some((event) => event.type === type && isTarget(states[n - 1], event.id)));
+  return took('companion-capture') && took('capture');
+}
+/**
+ * Every tandem line of a floor from `start` (at most `cap`): the move onto
+ * the recruit with an order that posts it, a move or wait on which the
+ * recruit takes a target, and your own take of the last one, never captured.
+ * No other shape clears a tandem's floor in three moves: the recruit takes
+ * nothing on the move it joins, and a twin taken while the other stands
+ * takes you back.
+ */
+function tandemLines(start, cap = 64) {
+  const lines = [];
+  const item = start.items.find((entry) => entry.type === 'companion');
+  if (!item || start.companion) return lines;
+  const target = (state, tile) => isTarget(state, state.enemies.find((foe) => same(foe, tile))?.id);
+  for (const first of ordersFor(start, { type: 'move', x: item.x, y: item.y })) {
+    const joined = routeTransition(start, first, STEERED);
+    if (!joined || joined.exit.open) continue;
+    for (const second of partnerActions(joined, true)) {
+      if (second.recruit === undefined) continue;
+      const broken = routeTransition(joined, second, STEERED);
+      if (!broken || broken.exit.open) continue;
+      for (const move of legalMoves(broken)) {
+        if (!target(broken, move)) continue;
+        const third = { type: 'move', x: move.x, y: move.y };
+        if (!routeTransition(broken, third, STEERED)?.exit.open) continue;
+        lines.push([first, second, third]);
+        if (lines.length >= cap) return lines;
+      }
+    }
+  }
+  return lines;
+}
+// The squares a tandem line needs clear at the start, besides those you move to: the
+// recruit's post and the lines you and it move along.
+function tandemLanes(start, [first, second, third]) {
+  const post = first.recruit === 'hold' ? first : first.recruit;
+  return [post, ...between(start, first), ...between(first, post), ...between(post, second.recruit), ...(second.type === 'move' ? [...between(first, second), ...between(second, third)] : between(first, third))];
+}
+
+/**
+ * The bot guard for a partner floor. The human-like bot knows no ideas, and
+ * from the floor's start it seldom thinks of the recruit first, so its runs
+ * start from the move that joins it, as planted: a floor fails when more than
+ * a third of them fail or take more than par + 4 moves in all (BOT_GUARD), a
+ * sign that the decoys spoil the partnership. The exact search already rules
+ * out a shorter win.
+ */
+export function partnerGuard(start, base, floor, line) {
+  const joined = act(start, line[0]), par = line.length + 1;
+  let missed = 0;
+  for (let run = 0; run < BOT_GUARD.runs && missed <= BOT_GUARD.missShare * BOT_GUARD.runs; run++) {
+    const result = playFloor(joined, { seed: runSeed(base, floor, run), cap: par + BOT_GUARD.slack + 1 });
+    if (!result.won || result.moves > par + BOT_GUARD.slack) missed++;
+  }
+  return { ok: missed <= BOT_GUARD.missShare * BOT_GUARD.runs, missed };
+}
+
+/**
+ * Compose `floor` of `base` as a tandem floor, or null when its matchup has
+ * none (TANDEMS) or no instance passes. Returns what composeFloor does, with
+ * `recruit` the recruit's piece; `firstMoves` and `lines` count the floor's
+ * tandem lines (tandemLines), whose first move is always the recruit's
+ * square, by the orders that post it.
+ */
+export function composeTandem(base, floor, { trace, starts = startSquares() } = {}) {
+  const began = performance.now();
+  const piece = base.playerPiece, cast = castFor(base, floor), seed = base.floorSeeds[floor], motif = PARTNER_MOTIF;
+  if (floor > 1 || cast.count !== 2 || !TANDEMS[piece]?.includes(cast.target)) return null;
+  const tally = { built: 0, replayed: 0, kept: 0 }, stats = { [motif]: tally };
+  for (let attempt = 0; attempt < MOTIF_ATTEMPTS; attempt++) {
+    const rng = random(hash(`${seed}:${motif}:${attempt}`));
+    const start = starts.length === 1 ? starts[0] : starts[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * starts.length)];
+    const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start, guards: [...cast.suspects, cast.other], unnamed: cast.unnamed };
+    const built = tandem(context);
+    if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
+    tally.built++;
+    // Every decoy roams: the idea uses none.
+    context.quiet = context.guards;
+    const bare = floorStart(base, floor, built.plan.room());
+    const planted = shuffle(tandemLines(bare), rng)[0];
+    if (!planted) { trace?.({ motif, attempt, stage: 'idea', room: built.plan.room() }); continue; }
+    // Before any decoy joins in, taking a guarded twin and absorbing the capture must score worse than the line.
+    if (steeredHasty(bare, planted.length - 1) <= planted.length) { trace?.({ motif, attempt, stage: 'hasty', room: built.plan.room(), line: planted }); continue; }
+    tally.replayed++;
+    // A dressed room's checks: a tandem line wins there (the planted one, else one of the
+    // room's own), nothing wins sooner, a hasty win scores worse than the line, and the
+    // bot's runs pass. { room, line, states, pressure }, or null.
+    const judge = (room) => {
+      const dressed = floorStart(base, floor, room);
+      let line = planted, states = clean(playLine(dressed, line, STEERED));
+      if (!states) { [line] = tandemLines(dressed, 1); states = line ? clean(playLine(dressed, line, STEERED)) : null; }
+      const why = !states ? 'line' : steeredWin(dressed, line.length - 1) ? 'shorter' : steeredHasty(dressed, line.length - 1) <= line.length ? 'hasty' : null;
+      if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
+      const guard = partnerGuard(dressed, base, floor, line);
+      if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
+      return { room, line, states, pressure: pressure(states) };
+    };
+    let best = null;
+    for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
+      const core = built.plan.clone();
+      core.keep(...tandemLanes(start, planted));
+      const plan = dress(core, context, planted, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
+      if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
+      let passed = judge(plan.room());
+      // On an Ice day the room's ice lies off the line (iceVariants, 'off'), and the iced room is judged again.
+      if (passed && base.modifier === 'ice') {
+        const iced = iceVariants(passed.room, passed.line, passed.states, built, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}:ice`))).find((variant) => variant.kind === 'off');
+        passed = iced ? judge(iced.room) : null;
+        if (passed) passed.ice = 'off';
+      }
+      if (passed && (!best || passed.pressure > best.pressure)) best = passed;
+    }
+    if (!best) continue;
+    tally.kept++;
+    trace?.({ motif, attempt, stage: 'kept', built });
+    const { line, states } = best;
+    // The hint: a coin on your post, the square you stand on as the recruit takes its twin.
+    const room = structuredClone(best.room), post = { x: states[2].player.x, y: states[2].player.y };
+    const coin = room.items.find((item) => item.type === 'coin');
+    if (coin) Object.assign(coin, { ...post, hint: true }); else room.items.push({ ...post, type: 'coin', hint: true });
+    const lines = tandemLines(floorStart(base, floor, room));
+    return {
+      room, hint: 'coin', line, motif, depth: line.length, firstMoves: new Set(lines.map((other) => JSON.stringify(other[0]))).size, lines: lines.length,
+      forced: forcedShare(states), pressure: best.pressure, matched: cast.matched, lifeTrade: false, ...(best.ice && { ice: best.ice }),
+      recruit: built.recruit, stats, ms: performance.now() - began,
+    };
+  }
+  return null;
+}
+
+/** The floors of a day a partner floor could take (floors 1 and 2 whose target pairs up for the day's piece), the day's own pick first. */
+export function partnerFloors(base) {
+  const fits = [0, 1].filter((floor) => TANDEMS[base.playerPiece]?.includes(base.targets[floor]));
+  return hash(`${base.date}:partner`) % 2 ? fits.reverse() : fits;
+}
+// The day's partner floor, composed: { floor, composed }, or null on a day with none.
+function partnerFloor(base, { starts, trace }) {
+  for (const floor of partnerFloors(base)) {
+    const composed = composeTandem(base, floor, { starts, ...(trace && { trace: (event) => trace({ floor, ...event }) }) });
+    if (composed) return { floor, composed };
+  }
+  return null;
 }
 
 /**
@@ -1573,16 +1902,21 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * with its `floor` (tooling). `treasure` (a dev preview, off unless asked for)
  * adds a chest off each floor's line where one qualifies (src/treasure.js):
  * such a floor gains `treasure` (its square and proving line), and the day's
- * generation lists each floor's proving line, or null.
+ * generation lists each floor's proving line, or null. `partner` (a dev
+ * preview too, off for every stored edition) gives floor 1 or 2 to a partner
+ * floor on the days whose matchup has one (partnerFloors):
+ * `generation.partner` is then that floor, whose line carries recruit orders
+ * (and which gets no chest: a chest's line is searched without the recruit).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false, partner = false } = {}) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
+  const partnered = partner ? partnerFloor(base, { starts: squares, trace }) : null;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};
   for (const floor of [0, 1, 2]) {
-    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
+    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
@@ -1596,9 +1930,11 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   const daily = { ...base, composed: floors.map((floor) => floor.room) };
   // Proved as every edition is when it loads (on its twin without hint powerups, then as played),
   // every position along the way a valid save.
-  const proof = proveComposed(daily, actions, { saves: true });
+  const proof = proveComposed(daily, actions, { saves: true, ...(partnered && { partner: partnered.floor }) });
+  // A partner floor that spoils the day's proof gives the day back to its own motifs.
+  if (!proof.valid && partnered) return composeDay(date, { tier, daily: raw, starts, trace, treasure });
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
-  daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
+  daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), ...(partnered && { partner: partnered.floor }), certificate: { actions, metrics: proof.metrics } };
   if (treasure) daily.generation.treasure = floors.map((floor) => floor.treasure?.line ?? null);
   return { daily, floors };
 }
