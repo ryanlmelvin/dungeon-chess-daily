@@ -2,15 +2,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, closeAttacker, createGame, legalMoves } from '../src/rules.js';
-import { getRawDaily } from '../src/edition.js';
 import { monsterSmarts } from '../src/monster-ai.js';
 import { TIER_IDS } from '../src/difficulty.js';
+import { withRooms } from './fixtures/rooms.js';
 
 // Tiny white rooms on floor 1 (no royal rules) under a given tier. The player
 // waits, so every monster takes one turn; the board is judged right after.
 const unit = (id, piece, x, y) => ({ id, species: 'bat', palette: 'ice', name: id, piece, role: piece, x, y, moved: true, phase: 'ready', intent: [], target: null });
 function room(tier, [piece, px, py], enemies, { target = 'pawn', walls = [], leap = 0, companion = null } = {}) {
-  const s = createGame(getRawDaily('2026-11-10'));
+  const s = createGame(withRooms('2026-11-10'));
   const map = Array(8).fill('........');
   for (const [x, y] of walls) map[y] = `${map[y].slice(0, x)}#${map[y].slice(x + 1)}`;
   Object.assign(s, { difficulty: tier, playerColor: 'white', awaitingPlayer: false, floor: 0, map, items: [], companion, enemies });
@@ -189,6 +189,6 @@ test('classic monsters play Gentle on every tier', () => {
   s.classicMonsters = true;
   const { bishop } = afterWait(s);
   assert.deepEqual([...at(bishop), bishop.phase], [2, 4, 'aim']);
-  assert.equal(createGame({ ...getRawDaily('2026-11-14'), difficulty: 'fiendish', classicMonsters: true }).classicMonsters, true);
-  assert.equal('classicMonsters' in createGame({ ...getRawDaily('2026-11-14'), difficulty: 'fiendish' }), false);
+  assert.equal(createGame({ ...withRooms('2026-11-14'), difficulty: 'fiendish', classicMonsters: true }).classicMonsters, true);
+  assert.equal('classicMonsters' in createGame({ ...withRooms('2026-11-14'), difficulty: 'fiendish' }), false);
 });

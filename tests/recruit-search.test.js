@@ -10,10 +10,13 @@ import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, recruitChoice } from '../src/rules.js';
 import { findFloorRoute, verifyWinningRoute, routeTransition, safeTransition } from '../src/fairness.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
+import { getDaily } from '../src/generation.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const dayAfter = (start, day) => new Date(Date.parse(`${start}T00:00:00Z`) + day * 86_400_000).toISOString().slice(0, 10);
-const candidate = (date, attempt = 0) => randomRoomDaily(date, { attempt });
+// A stored edition's twin without its hint powerups, as its certificate is proved (src/generation.js proveComposed).
+const twinOf = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
+const edition = (date) => twinOf(getDaily(date));
 // A whole run's route, floor by floor (findFloorRoute), or null.
 function wholeRoute(game, options) {
   let state = game;
@@ -39,7 +42,7 @@ const wall = (state, x, y) => { state.map[y] = state.map[y].slice(0, x) + '#' + 
 // walled in on (0,1). That square is the other colour, so the bishop can never
 // take it, and the knight can neither move nor strike.
 function unreachableTarget(recruitPiece) {
-  const state = createGame(dailyFor('bishop'));
+  const state = createGame(withRooms(dailyFor('bishop')));
   state.map = Array(8).fill('........'); state.props = [];
   for (const [x, y] of [[1, 3], [2, 2], [2, 0]]) wall(state, x, y);
   state.enemies = [{ id: 'f0-0', species: 'bat', palette: 'ice', name: 'Ice bat', piece: 'knight', role: 'knight', x: 0, y: 1, moved: false, phase: 'ready', intent: [], target: null }];
@@ -58,7 +61,7 @@ const captures = (state, actions) => {
 };
 
 test('the default stays Auto: the same search, budget for budget, and no recruit metrics', () => {
-  const game = createGame(candidate('2027-03-04'));
+  const game = createGame(edition('2027-03-04'));
   const plain = findFloorRoute(game);
   assert.deepEqual(findFloorRoute(game, { recruit: 'auto' }), plain);
   assert.deepEqual(findFloorRoute(game, { recruit: 'auto', everyRecruit: false }), plain);
@@ -72,7 +75,7 @@ test('the default stays Auto: the same search, budget for budget, and no recruit
 });
 
 test('recruit modes are checked', () => {
-  const game = createGame(candidate('2027-03-04'));
+  const game = createGame(edition('2027-03-04'));
   for (const options of [{ recruit: 'manual' }, { recruit: 'Auto' }, { recruit: null }, { everyRecruit: 'yes' }, { recruit: 'steer', everyRecruit: 1 }]) {
     assert.throws(() => findFloorRoute(game, options), RangeError, JSON.stringify(options));
     assert.throws(() => verifyWinningRoute(game, [], options), RangeError, JSON.stringify(options));
@@ -120,7 +123,7 @@ test('the bishop pair: a steered search picks the hop square, then takes the tar
 test('a steered route verifies only as steered, and reports what its recruit did', () => {
   let found = null;
   for (let day = 0; day < 40 && !found; day++) {
-    const daily = candidate(dayAfter('2031-03-01', day));
+    const daily = edition(dayAfter('2027-03-01', day));
     const route = wholeRoute(createGame(daily), { recruit: 'steer' });
     if (route?.status === 'solved' && route.actions.some((action) => action.recruit !== undefined)) found = { daily, route };
   }

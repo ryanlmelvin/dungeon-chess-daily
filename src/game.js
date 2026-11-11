@@ -8,7 +8,7 @@ import { TIER_IDS } from './difficulty.js';
 export { getDaily, GENERATOR_VERSION } from './generation.js';
 export { DIFFICULTY_TIERS, TIER_IDS, DAILY_TIER } from './difficulty.js';
 export { PLAYABLE_PIECES };
-export { act, resetFloor, retryLostRun, hopelessFloor, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, scoredMoves, floorScoredMoves, coinlessFloor, frozen, PIECES, PIECE_COUNTS, POWERUPS, SHOP_ITEMS, PIN_MOVES, borrowedPiece, takebackTarget, shopOffers, COMPANIONS, RULES_VERSION } from './rules.js';
+export { act, resetFloor, retryLostRun, hopelessFloor, legalMoves, dangerTiles, unreachablePickups, walkable, enemyAt, getShareText, scoredMoves, floorScoredMoves, coinlessFloor, frozen, PIECES, PIECE_COUNTS, POWERUPS, SHOP_ITEMS, PIN_MOVES, borrowedPiece, takebackTarget, shopOffers, RULES_VERSION } from './rules.js';
 // Manual recruit control: the recruit's squares for the order a move or wait may carry.
 export { recruitChoice } from './rules.js';
 

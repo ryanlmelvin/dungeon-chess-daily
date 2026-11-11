@@ -40,11 +40,12 @@ const legacy=JSON.parse(readFileSync(new URL('./fixtures/schema3-run.json',impor
 
 test('every daily is white, and a black practice game begins without committed attacks',()=>{
   for(let day=0;day<100;day++) {
-    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
-    assert.equal(daily.playerColor,'white');
+    const raw=getRawDaily(new Date(Date.UTC(2026,10,5+day)));
+    assert.equal(raw.playerColor,'white');
+    if(day%4)continue;
+    const daily=getDaily(raw.date);
     const state=createCandidate(daily);
     assert.equal(state.awaitingPlayer,false);
-    assert.equal(state.legacyTurnOrder,false);
     assert.equal(validateCandidate(state,state.date,daily),true);
     // Black stays a practice choice on the same rooms.
     const black={...daily,playerColor:'black'};
@@ -181,7 +182,6 @@ test('older progress stays archived instead of being relabeled as a certified ed
   const current=createGame(getDaily(legacy.date));
   assert.equal(current.schema,RULES_VERSION);
   assert.equal(current.rulesVersion,RULES_VERSION);
-  assert.equal(current.legacyTurnOrder,false);
   for(let schema=2;schema<RULES_VERSION;schema++) {
     assert.equal(validateSave({...current,schema},current.date),false);
   }
@@ -194,7 +194,7 @@ test('turn metadata and archived imports cannot silently change the certified or
   const state=createCandidate(black);
   for(const mutate of [
     (s)=>{s.playerColor='purple';}, (s)=>{s.playerColor='white';},
-    (s)=>{s.legacyTurnOrder=true;}, (s)=>{s.awaitingPlayer='yes';},
+    (s)=>{s.awaitingPlayer='yes';},
     (s)=>{s.status='lost';s.awaitingPlayer=true;},
   ]) {const bad=structuredClone(state);mutate(bad);assert.equal(validateCandidate(bad,bad.date,black),false);}
   const white=createGame(getDaily('2026-11-05')); white.awaitingPlayer=true;

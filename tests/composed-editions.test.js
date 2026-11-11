@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Every edition is composed (src/generation.js): the rules that once held on
 // composed preview days hold on every room, saves of composed rooms validate
-// (their own census of targets and residents, held decoys, a mate's save), and
-// no stored room stacks two monsters on a square.
+// (their own census of targets and residents, held decoys, a mate's save, and
+// saves made while random rooms still shipped), and no stored room stacks two
+// monsters on a square.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, floorCensus, legalMoves, validateSave } from '../src/rules.js';
 import { getDaily } from '../src/generation.js';
 import { EDITIONS } from '../src/editions.js';
 import { decodeRooms } from '../src/room-code.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const key = (tile) => `${tile.x},${tile.y}`;
@@ -86,12 +87,37 @@ test('a held decoy\'s sleep validates, even past a pin\'s three moves', () => {
   assert.equal(checked, 3, 'three days with a decoy asleep for four moves');
 });
 
-test('the king rules hold on every room: a random room\'s king floor mates too, and its king spares a guarded piece', () => {
-  // A random room (no composed rooms), on its king floor, emptied: the royal king in the a8 corner.
-  const state = createGame(randomRoomDaily('2026-11-16'));
+// Saves made before random rooms were retired carry their layout fields and an
+// empty recruit-order ledger (src/rules.js validateSave). Nothing reads them.
+const RETIRED = { dungeonSeed: 0, obstacleBase: 7, decoys: 2, scatter: 0, guards: 0, screens: 0, legacyTurnOrder: false, openFiles: 2, companionOrders: [] };
+const withRetired = (state) => ({ ...state, ...structuredClone(RETIRED), dungeonSeed: state.seed, ...(state.floorSnapshot && { floorSnapshot: withRetired(state.floorSnapshot) }) });
+const withoutRetired = (state) => {
+  const rest = Object.fromEntries(Object.entries(state).filter(([field]) => !Object.hasOwn(RETIRED, field)));
+  return { ...rest, ...(state.floorSnapshot && { floorSnapshot: withoutRetired(state.floorSnapshot) }) };
+};
+
+test('a save made before random rooms were retired still loads and plays on the same; a recruit order no longer can', () => {
+  for (const date of ['2026-11-12', '2027-03-21']) {
+    const daily = getDaily(date);
+    let state = createGame(daily);
+    for (const action of daily.generation.certificate.actions) {
+      const saved = JSON.parse(JSON.stringify(withRetired(state)));
+      assert.equal(validateSave(saved, date, daily), true, `${date} turn ${state.turns}`);
+      const next = act(state, action);
+      assert.deepEqual(withoutRetired(act(saved, action)), next, `${date} turn ${state.turns}`);
+      state = next;
+    }
+    assert.equal(state.status, 'won');
+    const ordered = { ...withRetired(createGame(daily)), companionOrders: [{ floor: 1, piece: 'rook' }] };
+    assert.equal(validateSave(ordered, date, daily), false, 'recruits are never sold, so no order waits');
+  }
+});
+
+test('the king rules hold on any king floor: a mate wins as it lands, and the king spares a guarded piece', () => {
+  // A king floor set up by hand on an open room: the royal king in the a8 corner.
+  const state = createGame(withRooms('2026-11-16'));
   const king = { id: 'king', piece: 'king', role: 'king', species: 'bat', palette: 'ice', name: 'Ice bat', x: 0, y: 0, moved: true, phase: 'ready', target: null, intent: [] };
-  Object.assign(state, { floor: 2, props: [], items: [], enemies: [king], awaitingPlayer: false, composed: undefined });
-  delete state.composed;
+  Object.assign(state, { floor: 2, props: [], items: [], enemies: [king], awaitingPlayer: false });
   state.map = Array(8).fill('........'); state.map[1] = '##......';
   state.objective = { piece: 'king', complete: false }; state.exit = { x: 4, y: 0, open: false };
   state.companion = { piece: 'king', basePiece: 'king', x: 3, y: 1, moved: true, sharing: false };

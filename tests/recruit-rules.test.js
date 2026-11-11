@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The recruit rules the recruit study led to (docs/generation.md, "Measuring
-// the recruits"): the king floor always recruits a king; a recruit captures
-// nothing on the turn it joins, on Manual or Auto; and a pawn recruit waits
-// only on a file open to the far rank.
+// The recruit rules the recruit study led to: the king floor always recruits
+// a king, and a recruit captures nothing on the turn it joins, on Manual or Auto.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, legalMoves, recruitChoice, PIECES } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
-import { hash, random } from '../src/random.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
+import { composedSeeds } from '../src/generation.js';
+import { EDITIONS } from '../src/editions.js';
+import { decodeRooms } from '../src/room-code.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y, recruit) => (recruit === undefined ? { type: 'move', x, y } : { type: 'move', x, y, recruit });
 const wait = (recruit) => (recruit === undefined ? { type: 'wait' } : { type: 'wait', recruit });
@@ -24,7 +24,7 @@ function dailyFor(piece) {
 }
 // An empty room on a plain day, monsters frozen. Kings are no longer a daily piece; a king borrows a rook day.
 function scenario(piece = 'rook', { x = 4, y = 6 } = {}) {
-  const state = createGame(dailyFor(piece === 'king' ? 'rook' : piece));
+  const state = createGame(withRooms(dailyFor(piece === 'king' ? 'rook' : piece)));
   state.awaitingPlayer = false;
   Object.assign(state.player, { x, y, moved: true });
   if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; }
@@ -121,9 +121,9 @@ test('castling is untouched: the joining move may set up a castle, and you castl
   assert.deepEqual(done.feats, [{ floor: 0, kind: 'castle' }]);
 });
 
-// Every floor of a candidate layout, from its start (the floors before cleared at once).
-function* floorsOf(candidate) {
-  let state = createGame(candidate);
+// Every floor of a stored edition, from its start (the floors before cleared at once).
+function* floorsOf(daily) {
+  let state = createGame(daily);
   for (let floor = 0; floor < 3; floor++) {
     yield state;
     const cleared = structuredClone(state);
@@ -132,65 +132,20 @@ function* floorsOf(candidate) {
     state = act(cleared, { type: 'descend' });
   }
 }
-const openFile = (state, tile) => Array.from({ length: tile.y }, (_, y) => state.map[y][tile.x]).every((cell) => cell !== '#');
-const COINS = [{ x: 4, y: 4 }, { x: 2, y: 4 }, { x: 6, y: 4 }];
-// The squares the recruit is drawn from, in the rules' order: one move from the
-// start for the floor's piece, never a monster's, the door's or an item's (the
-// king floor's coins are dropped after the recruit is placed).
-function recruitTiles(start) {
-  return legalMoves(start).filter((tile) => !tile.capture && !tile.castle && !tile.borrowed && !same(tile, start.exit)
-    && !(start.floor === 2 && COINS.some((coin) => same(coin, tile)))
-    && !start.items.some((item) => item.type !== 'companion' && same(item, tile))).map(({ x, y }) => ({ x, y }));
-}
 
-test('the king floor always recruits a king, on the square its draw always gave; floors 1 and 2 keep any piece', () => {
+// The composer places every recruit (src/composer.js): on the king floor a king,
+// one move from the start; on floors 1 and 2, now and then, any piece.
+test('every stored king floor waits with a king recruit one move from its start; floors 1 and 2 recruit any piece', () => {
   const early = new Set();
-  let kings = 0;
-  for (let day = 0; day < 120; day++) {
-    const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
-    const candidate = randomRoomDaily(raw.date, { attempt: day % 4 });
-    for (const start of floorsOf(candidate)) {
-      const recruit = start.items.find((item) => item.type === 'companion');
-      if (start.floor < 2) { early.add(recruit.piece); continue; }
-      assert.equal(recruit.piece, 'king', raw.date);
-      kings++;
-      // The recruit's stream still spends its first draw on the piece, so the square is the one it always was
-      // (unless nothing one move from the start is free, as on the launch edition's walled-in pawn file).
-      const tiles = recruitTiles(start);
-      if (!tiles.length) continue;
-      const rng = random(hash(`${start.dungeonSeed ?? start.seed}:companion:2`)); rng();
-      assert.deepEqual(at(recruit), at(tiles[Math.floor(rng() * tiles.length)]), raw.date);
+  for (const [date, entry] of Object.entries(EDITIONS)) {
+    const daily = { ...getRawDaily(date), difficulty: 'fair', floorSeeds: composedSeeds(date), composed: decodeRooms(entry.rooms) };
+    for (const start of floorsOf(daily)) {
+      const recruits = start.items.filter((item) => item.type === 'companion');
+      assert.ok(recruits.length <= 1, `${date} floor ${start.floor + 1}`);
+      if (start.floor < 2) { for (const recruit of recruits) early.add(recruit.piece); continue; }
+      assert.deepEqual(recruits.map((recruit) => recruit.piece), ['king'], date);
+      assert.ok(legalMoves(start).some((tile) => same(tile, recruits[0])), `${date}: one move from the start`);
     }
   }
-  assert.equal(kings, 120);
   assert.deepEqual([...early].sort(), [...PIECES].sort());
-});
-
-test('a pawn recruit waits only on a file open to the far rank, drawn from its own stream; with no such square it is another piece', () => {
-  const others = PIECES.filter((piece) => piece !== 'pawn');
-  let pawns = 0, moved = 0, redrawn = 0;
-  for (let day = 0; day < 240; day++) {
-    const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
-    const candidate = randomRoomDaily(raw.date, { attempt: day % 4 });
-    // The same layout twice: placement is deterministic.
-    assert.deepEqual(createGame(candidate).items, createGame(candidate).items);
-    for (const start of floorsOf(candidate)) {
-      if (start.floor === 2) continue;
-      const recruit = start.items.find((item) => item.type === 'companion');
-      const label = `${raw.date} floor ${start.floor + 1}`;
-      if (recruit.piece === 'pawn') { pawns++; assert.ok(openFile(start, recruit), `${label}: ${JSON.stringify(recruit)}`); }
-      // Replay the recruit's own stream: its piece, its square and, for a pawn on a walled file, one more draw.
-      const tiles = recruitTiles(start);
-      if (!tiles.length) continue;
-      const rng = random(hash(`${start.dungeonSeed ?? start.seed}:companion:${start.floor}`));
-      let piece = PIECES[Math.floor(rng() * PIECES.length)];
-      let tile = tiles[Math.floor(rng() * tiles.length)];
-      if (piece === 'pawn' && !openFile(start, tile)) {
-        const lanes = tiles.filter((entry) => openFile(start, entry)), roll = rng();
-        if (lanes.length) { tile = lanes[Math.floor(roll * lanes.length)]; moved++; } else { piece = others[Math.floor(roll * others.length)]; redrawn++; }
-      }
-      assert.deepEqual({ piece: recruit.piece, x: recruit.x, y: recruit.y }, { piece, x: tile.x, y: tile.y }, label);
-    }
-  }
-  assert.ok(pawns > 20 && moved > 5 && redrawn > 0, `${pawns} pawn recruits, ${moved} moved to an open file, ${redrawn} redrawn`);
 });

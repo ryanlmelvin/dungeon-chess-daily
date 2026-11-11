@@ -8,6 +8,7 @@ import { DIFFICULTY_TIERS, TIER_IDS } from '../src/difficulty.js';
 import { monsterSmarts } from '../src/monster-ai.js';
 import { CAVE_IN_MOVES, caveInMoves } from '../src/cave-in.js';
 import { distanceTable, UNREACHABLE } from '../src/move-tables.js';
+import { room as composedRoom, withRooms } from './fixtures/rooms.js';
 
 const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
 const move = (x, y) => ({ type: 'move', x, y });
@@ -99,10 +100,13 @@ test('a practice room fits its piece without changing or certifying the official
 });
 
 test('a practice piece walled in at its start gets the walls on its first moves cleared', () => {
-  // 2027-01-04's random room, a Gentle rook day with the knobs it had when this
-  // was found: every jump from a knight's start is a wall in that room.
-  const knobs = { obstacleBase: 10, decoys: 2, scatter: 1, guards: 2, screens: 3 };
-  const official = { ...getRawDaily('2027-01-04'), difficulty: 'gentle', ...knobs };
+  // The room where this was found, laid as a composed room: 2027-01-04's floor 1
+  // as a Gentle rook day once played it, where every jump from a knight's start is a wall.
+  const official = withRooms({ ...getRawDaily('2027-01-04'), difficulty: 'gentle' }, composedRoom({
+    map: ['........', '#...#...', '......#.', '........', '...#.#..', '..#...#.', '........', '#.#...#.'],
+    enemies: [{ x: 7, y: 2, cast: 0 }, { x: 2, y: 1, cast: 0 }, { x: 7, y: 3, cast: 1 }, { x: 2, y: 2, cast: 2 }],
+    items: [{ x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' }, { x: 1, y: 5, type: 'powerup', power: 'freeze' }, { type: 'companion', piece: 'bishop', x: 0, y: 6 }],
+  }));
   const room = createRawGame(official);
   const jumps = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]]
     .map(([dx, dy]) => [room.player.x + dx, room.player.y + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < 8 && y < 8);
@@ -195,7 +199,7 @@ test('save validation rejects forged practice metadata while accepting older off
   for (const mutate of [
     (state) => { delete state.practice; }, (state) => { delete state.layoutPiece; },
     (state) => { state.layoutPiece = 'queen'; }, (state) => { state.startingPiece = 'dragon'; },
-    (state) => { state.playerColor = 'red'; }, (state) => { state.dungeonSeed++; },
+    (state) => { state.playerColor = 'red'; }, (state) => { state.floorSeeds[0]++; },
   ]) {
     const forged = structuredClone(practice); mutate(forged);
     assert.equal(validateSave(forged, daily.date, { practice: true }), false);

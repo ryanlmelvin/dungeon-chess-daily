@@ -10,6 +10,7 @@ import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
 import { autoRecruit, certifiedFloors, defaultRecruit, humanGap, humanPar, observe, playFloor, runSeed } from '../src/human-bot.js';
 import { steerRecruit } from '../src/recruit-policy.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const dates = Array.from({ length: 6 }, (_, day) => new Date(Date.UTC(2026, 10, 7 + day)).toISOString().slice(0, 10));
 
@@ -43,7 +44,7 @@ function pawnRoom() {
     const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
     if (daily.playerPiece === 'pawn') raw = daily;
   }
-  const state = createGame(raw);
+  const state = createGame(withRooms(raw));
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.companion = null;
   delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
   state.objective = { piece: 'rook', complete: false };

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createGame, act } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { spendableHits, routeTransition, safeTransition } from '../src/fairness.js';
+import { withRooms } from './fixtures/rooms.js';
 
 function dailyFor(piece) {
   const start = Date.parse('2026-11-05T00:00:00Z');
@@ -20,13 +21,12 @@ function dailyFor(piece) {
 // can make); an aimed bat far away on row 5 has that square in its lane.
 // `hits`: the captures the run has taken so far.
 function position(piece, hits) {
-  const state = createGame(dailyFor(piece));
+  const state = createGame(withRooms(dailyFor(piece)));
   state.map = Array(8).fill('........');
   state.items = [];
   state.props = [];
   state.companion = null;
   state.companions = [];
-  state.companionOrders = [];
   state.objective = { piece: 'king', complete: false };
   for (const key of Object.keys(state.powers)) state.powers[key] = 0;
   state.player.x = 4;

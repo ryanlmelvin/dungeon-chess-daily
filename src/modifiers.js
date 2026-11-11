@@ -19,7 +19,7 @@ import { hash, random } from './random.js';
 import { PIECE_COUNTS } from './pieces.js';
 
 // The floor's own seed (src/rules.js floorSeed, which this module can't import).
-const roomSeed = (state) => state.floorSeeds?.[state.floor] ?? state.dungeonSeed ?? state.seed;
+const roomSeed = (state) => state.floorSeeds?.[state.floor] ?? state.seed;
 
 export const MODIFIERS = Object.freeze({
   none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),

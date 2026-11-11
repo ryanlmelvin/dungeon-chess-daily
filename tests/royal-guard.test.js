@@ -54,7 +54,7 @@ test('an unthreatened king that can safely threaten the player aims', () => {
 
 // The pre-royal monster step: approach the player, tie-broken by the turn hash.
 function originalKingStep(s, player) {
-  const seed = s.dungeonSeed ?? s.seed, turn = s.turns + 1, foe = s.enemies[0];
+  const seed = s.seed, turn = s.turns + 1, foe = s.enemies[0];
   const d = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   const squares = [];
   for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) squares.push({ x: foe.x + dx, y: foe.y + dy });

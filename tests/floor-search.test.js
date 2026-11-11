@@ -5,16 +5,16 @@
 // and ranks them by wall-aware move distances.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getRawDaily } from '../src/edition.js';
 import { createGame } from '../src/rules.js';
 import { findFloorRoute, positionKey, targetDistance } from '../src/fairness.js';
 import { distanceTable } from '../src/move-tables.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const descend = { type: 'descend' };
 
 test('a cleared floor’s only action is its stairs: the search takes them without spending budget', () => {
   // A floor-3 position with its king already taken: the route is the stairs alone.
-  const state = createGame(getRawDaily('2026-11-09'));
+  const state = createGame(withRooms('2026-11-09'));
   state.floor = 2; state.enemies = []; state.objective = { piece: state.targets[2], complete: true, moves: 1 }; state.exit.open = true;
   state.records = [{ floor: 0, turns: 1 }, { floor: 1, turns: 1 }];
   const found = findFloorRoute(state, { maxExpansions: 0 });
@@ -23,7 +23,11 @@ test('a cleared floor’s only action is its stairs: the search takes them witho
 });
 
 test('search identity keeps the floor’s own clock and drops the run’s, gold and coins', () => {
-  const state = createGame(getRawDaily('2026-11-09'));
+  // A room with its target, a decoy, two coins and a powerup.
+  const state = createGame(withRooms('2026-11-09', room({
+    enemies: [{ x: 3, y: 1, cast: 0 }, { x: 0, y: 0, cast: 1 }],
+    items: [{ x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' }, { x: 5, y: 3, type: 'powerup', power: 'shield' }],
+  })));
   const key = positionKey(state);
   const later = structuredClone(state);
   // The same floor position, reached after a longer run with more gold and fewer coins on the floor.
@@ -47,7 +51,7 @@ test('search identity keeps the floor’s own clock and drops the run’s, gold 
 });
 
 test('the search ranks positions by wall-aware move distances, not coordinates', () => {
-  const state = createGame(getRawDaily('2026-11-09'));
+  const state = createGame(withRooms('2026-11-09'));
   state.map = Array(8).fill('........');
   state.player = { ...state.player, piece: 'rook', x: 4, y: 6 };
   const target = { x: 4, y: 2 };

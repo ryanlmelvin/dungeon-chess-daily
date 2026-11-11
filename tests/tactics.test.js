@@ -6,6 +6,7 @@ import { getRawDaily } from '../src/edition.js';
 import { getDaily } from '../src/game.js';
 import { botRun } from '../src/bot.js';
 import { COMBO_START, TACTIC_GOLD, tacticGold } from '../src/tactics.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -18,7 +19,7 @@ function findDaily(match, label) {
 }
 // Monsters stay frozen so each test sees only the player's tactics.
 function scenario(piece, x, y, enemies, walls = []) {
-  const state = createGame(findDaily((d) => d.playerPiece === piece, piece));
+  const state = createGame(withRooms(findDaily((d) => d.playerPiece === piece, piece)));
   Object.assign(state.player, { x, y, moved: true });
   state.map = Array.from({ length: 8 }, (_, row) => [...'........'].map((c, col) => walls.some(([wx, wy]) => wx === col && wy === row) ? '#' : c).join(''));
   state.props = []; state.items = []; state.companion = null; state.awaitingPlayer = false;

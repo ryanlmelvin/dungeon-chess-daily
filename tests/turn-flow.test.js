@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, closeAttacker, createGame, dangerTiles, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -18,7 +19,7 @@ function dailyFor(piece) {
   throw Error(`No ${piece} edition found`);
 }
 function scenario({ piece = 'rook', color = 'white', at = [4, 6], floor = 0 } = {}) {
-  const state = createGame({ ...dailyFor(piece === 'king' ? 'rook' : piece), playerColor: color });
+  const state = createGame(withRooms({ ...dailyFor(piece === 'king' ? 'rook' : piece), playerColor: color }));
   Object.assign(state, { floor, map: Array(8).fill('........'), props: [], items: [], enemies: [], companion: null, awaitingPlayer: false });
   state.objective = { piece: 'king', complete: false };
   state.exit = { x: 4, y: 0, open: false };
@@ -231,7 +232,8 @@ test('a Take-back returns to the off-balance position', () => {
 });
 
 test('saves keep the off-balance flag and reject a malformed one', () => {
-  const daily = dailyFor('rook');
+  // A room with its target and a decoy in the far corners, neither winding up at the start.
+  const daily = withRooms(dailyFor('rook'), room({ enemies: [{ x: 0, y: 0, cast: 0 }, { x: 7, y: 0, cast: 1 }] }));
   const state = createGame(daily);
   const index = state.enemies.findIndex((entry) => entry.phase === 'ready');
   state.enemies[index].offBalance = true;

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const wait = { type: 'wait' };
 function dailyFor(piece, color) {
@@ -17,7 +18,7 @@ function dailyFor(piece, color) {
   throw Error(`No ${color} ${piece} edition found`);
 }
 function scenario(piece = 'rook', color = 'white', x = 4, y = 6) {
-  const state = createGame(dailyFor(piece, color));
+  const state = createGame(withRooms(dailyFor(piece, color)));
   Object.assign(state.player, { x, y });
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = [];
   state.objective = { piece: 'king', complete: false }; state.companion = null;
@@ -79,7 +80,8 @@ test('only terrain that leaves no move at all still restarts the run', () => {
 });
 
 test('waiting keeps the save valid', () => {
-  const daily = dailyFor('rook', 'white');
+  // A room whose target waits in the far corner.
+  const daily = withRooms(dailyFor('rook', 'white'), room({ enemies: [{ x: 0, y: 0, cast: 0 }] }));
   const next = act(createGame(daily), wait);
   assert.equal(validateSave(next, daily.date, daily), true);
 });

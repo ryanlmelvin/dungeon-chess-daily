@@ -214,18 +214,30 @@ their gold and grade the floor as they should, and a sleeping decoy may sleep
 as long as its room says.
 
 Bump `RULES_VERSION` for any change that alters play, then rebuild every
-edition with `--full`. `COMPOSER_VERSION` salts the composer's seeds; bumping
+edition with `--full`. A change to the save's shape that alters no play keeps
+the version as long as the saves already made still validate: retiring the
+random rooms (below) kept version 12. `COMPOSER_VERSION` salts the composer's seeds; bumping
 it re-rolls every room, so it changes only on purpose. `HUMAN_BOT_VERSION`
 marks the bot's own play, which the composer's guard reads, so a change to the
 bot calls for a full rebuild as well.
 
-## Random rooms
+## Rooms in tests
 
-A game created without composed rooms still builds the seeded random room
-every edition used before the switch (`setFloor` in `src/rules.js`): a chess
-army's count of targets, decoys, walls under layout knobs, barricades under
-monster pawns, a powerup and a recruit one move from the start. No edition
-uses it; engine tests keep it as a fixture (`tests/fixtures/random-room.js`).
+Every game is built from three composed rooms: `createGame` in
+`src/rules.js` refuses a day without them, and a floor begins exactly as its
+room lays it out. Editions carry the composer's rooms; engine tests lay their
+own from a map, monsters and items (`tests/fixtures/rooms.js`), or start from
+open, empty rooms and set up the board by hand.
+
+The seeded random room every edition used before the switch stayed on as a
+test fixture until it was retired the same day, with what only it used: its
+layout knobs, promotion barricades, pawn formations, powerup and recruit
+draws, the launch editions' legacy layouts, and the ledger of recruits once
+sold ahead of a floor (only the random room delivered them, and none has
+been sold since rules version 5). Saves made before then still carry the
+room's layout fields (`dungeonSeed`, `obstacleBase`, `decoys`, `scatter`,
+`guards`, `screens`, `openFiles`, `legacyTurnOrder`) and an empty
+`companionOrders`; nothing reads them, and they load and play on unchanged.
 
 ## Probing with the human-like bot
 

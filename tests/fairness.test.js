@@ -6,6 +6,7 @@ import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, ro
 import { findFloorRoute, spendableHits, verifyWinningRoute } from '../src/fairness.js';
 import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
 import { DAILY_TIER } from '../src/difficulty.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const dates = new Map();
@@ -28,7 +29,7 @@ function scenario(piece = 'rook', color = 'white') {
   // Kings are no longer a daily piece; engine tests borrow a rook day.
   // Black borrows a white day, as practice does.
   const raw = getRawDaily(dates.get(`${piece === 'king' ? 'rook' : piece}:white`));
-  const state = createGame({ ...raw, playerPiece: piece, playerColor: color });
+  const state = createGame(withRooms({ ...raw, playerPiece: piece, playerColor: color }));
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = [];
   state.objective = { piece: 'king', complete: false };
   return state;
@@ -57,7 +58,6 @@ function replay(edition) {
     if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
     else assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
-    assert.deepEqual(next.companionOrders, []);
     assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'player-captured' && !spendableHits(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
@@ -152,15 +152,13 @@ test('active companions and companion pickups cannot support a no-powerup certif
   assert.equal(verifyWinningRoute(state, [action]).valid, false);
 });
 
-test('certified saves reject edited turn order, legacy mode and earlier rules versions', () => {
+test('certified saves reject an edited turn order and earlier rules versions', () => {
   // A black edition, as practice builds one from a white day.
-  const daily = { ...getRawDaily(dates.get('rook:white')), playerColor: 'black' };
+  const daily = { ...getDaily(dates.get('rook:white')), playerColor: 'black' };
   const initial = createGame(daily);
   assert.equal(validateSave(initial, daily.date, daily), true);
   for (const mutate of [
     (state) => { state.playerColor = 'white'; },
-    (state) => { state.legacyTurnOrder = true; },
-    (state) => { state.playerColor = 'white'; state.legacyTurnOrder = true; },
     (state) => { state.schema = 4; },
     (state) => { state.rulesVersion = 4; },
   ]) {

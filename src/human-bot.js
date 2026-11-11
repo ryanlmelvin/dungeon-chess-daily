@@ -462,7 +462,7 @@ export function certifiedFloors(daily) {
  * the floor and the run number, never the move count. So a floor's runs are
  * the same wherever it is played from its standard start.
  */
-export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.floorSeeds?.[floor] ?? daily.dungeonSeed ?? daily.seed}:${floor}:${run}`);
+export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.floorSeeds?.[floor] ?? daily.seed}:${floor}:${run}`);
 
 /**
  * The bot's par for a certified edition (a probe: the day's own par is its

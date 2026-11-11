@@ -28,11 +28,7 @@ function recruitMode({ recruit = 'auto', everyRecruit = recruit === 'steer' } = 
 }
 const AUTO = Object.freeze({ steer: false, every: false, ally: royalRules });
 const hasPowers = (state, mode = AUTO) => Object.values(state.powers).some((value) => value !== 0)
-  || (Boolean(state.companion) && !mode.ally(state)) || (state.companions?.length ?? 0) > 0
-  // An undelivered order is already bought assistance. Older schema-5 states
-  // omit the ledger; only an absent ledger or an empty array is unpowered.
-  || (state.companionOrders !== undefined
-    && (!Array.isArray(state.companionOrders) || state.companionOrders.length > 0));
+  || (Boolean(state.companion) && !mode.ally(state)) || (state.companions?.length ?? 0) > 0;
 const hurt = (state) => state.events.some((event) => event.type === 'player-captured' || event.type === 'restart');
 const relicAt = (state, tile, mode = AUTO) => state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !mode.ally(state))) && same(item, tile));
 const powered = (state, mode = AUTO) => hasPowers(state, mode) || state.events.some((event) =>

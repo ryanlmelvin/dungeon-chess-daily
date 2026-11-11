@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, closeAttacker, createGame, frozen } from '../src/rules.js';
-import { getRawDaily } from '../src/edition.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
 // An empty room on `floor` with the player's rook in the corner; floor 3 (index 2) is the king floor.
 function room(floor) {
-  const state = createGame(getRawDaily('2026-11-13'));
+  const state = createGame(withRooms('2026-11-13'));
   Object.assign(state, { floor, map: Array(8).fill('........'), props: [], items: [], enemies: [], companion: null, awaitingPlayer: false });
   state.objective = { piece: floor === 2 ? 'king' : 'pawn', complete: false };
   state.exit = { x: 4, y: 0, open: false };

@@ -5,11 +5,11 @@ import { act, createGame, floorScoredMoves, legalMoves, resetFloor, scoredMoves,
 import { getRawDaily } from '../src/edition.js';
 import { getDaily } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
 import { playFloor } from '../src/human-bot.js';
 import { tacticGold } from '../src/tactics.js';
 import { modifierStatus } from '../src/modifiers.js';
 import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInRunning, caveInLabel, caveInLoss, cavedIn, goldAtRisk } from '../src/cave-in.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -24,7 +24,7 @@ const shuffle = (state, n) => (n % 2 ? wait : state.player.x === 3 ? move(5, 5) 
 // An open, plain room: a knight on (4,6) opens the door by taking the king on
 // (3,4). Monsters stay frozen unless a test thaws them.
 function room({ difficulty = 'tricky', floor = 0, piece = 'knight', enemies = [], items = [], freeze = 9 } = {}) {
-  const state = createGame(getRawDaily('2026-11-09'));
+  const state = createGame(withRooms('2026-11-09'));
   for (const key of ['modifier', 'ice', 'reinforcements', 'reinforcementsSkipped']) delete state[key];
   Object.assign(state, { difficulty, floor, startingPiece: piece, playerColor: 'white', awaitingPlayer: false, enPassant: null, companion: null });
   state.player = { piece, x: 4, y: 6, moved: true };
@@ -48,12 +48,14 @@ function safeStep(state) {
   return null;
 }
 
-// A real cave-in, built rather than stored: a real edition's floor 1 (a raw
-// candidate layout, no certificate involved) cleared by the human-like bot,
-// then played on past the clear (coins first, never another pickup, never
-// captured) until the ceiling caves in, with gold at risk and the room's
-// powerup still lying there. Certified routes never get this far: they take
-// the stairs right after the clear.
+// A real cave-in, built rather than stored: a stored edition's floor 2 (where
+// a room's hint may be a powerup; floor 1's are coins), reached by its planted
+// line and cleared by the human-like bot, then played on past the clear
+// (coins first, never another pickup, never captured) until the ceiling caves
+// in, with gold at risk and the room's powerup still lying there. `frames`
+// and `actions` run from the dungeon's start. Certified routes never get this
+// far: they take the stairs right after the clear.
+const powerup = (item) => item.type === 'powerup';
 let built;
 function realCaveIn() {
   if (built) return built;
@@ -61,18 +63,23 @@ function realCaveIn() {
     const date = new Date(Date.UTC(2027, 6, 2 + day)).toISOString().slice(0, 10);
     const raw = getRawDaily(date);
     if (raw.modifier !== 'none') continue;
-    const daily = randomRoomDaily(date);
+    const daily = getDaily(date);
+    const line = daily.generation.certificate.actions;
+    const opening = line.slice(0, line.findIndex((action) => action.type === 'descend') + 1);
+    const reached = [createGame(daily)];
+    for (const action of opening) reached.push(act(reached.at(-1), action));
+    if (!reached.at(-1).items.some(powerup)) continue;
     for (let seed = 0; seed < 3; seed++) {
-      const run = playFloor(createGame(daily), { seed, frames: true });
+      const run = playFloor(reached.at(-1), { seed, frames: true });
       if (!run.won) continue;
-      const frames = [...run.frames], actions = [...run.actions];
+      const frames = [...reached, ...run.frames.slice(1)], actions = [...opening, ...run.actions];
       for (let state = frames.at(-1); state && !cavedIn(state);) {
         const step = safeStep(state);
         state = step?.next;
         if (step) { frames.push(step.next); actions.push(step.action); }
       }
       const before = frames.at(-2);
-      if (cavedIn(frames.at(-1)) && goldAtRisk(before) > 0 && before.items.some((item) => item.type === 'powerup')) return (built = { date, daily, frames, actions });
+      if (cavedIn(frames.at(-1)) && goldAtRisk(before) > 0 && before.items.some(powerup)) return (built = { date, daily, frames, actions });
     }
   }
   throw new Error('No real cave-in among the scanned dates.');
@@ -293,7 +300,7 @@ test('a real floor plays on past its clear into a cave-in, and every frame is a 
   for (const frame of frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), date, daily), true, `${date} turn ${frame.turns}`);
   // Down the stairs: the floor's record counts only the moves until the clear.
   const below = act(caved, descend);
-  assert.equal(below.floor, 1); assert.equal(below.records[0].scored, opened.objective.moves);
+  assert.equal(below.floor, caved.floor + 1); assert.equal(below.records[caved.floor].scored, opened.objective.moves);
   assert.equal(validateSave(JSON.parse(JSON.stringify(below)), date, daily), true);
 });
 
@@ -302,12 +309,12 @@ test('Restart this floor during the countdown or after a cave-in returns to the 
   const caved = frames.find((frame) => caveEvent(frame));
   const counting = frames.find((frame) => frame.caveIn?.moves > 0 && frame.caveIn.moves < caveInMoves(frame));
   for (const frame of [counting, caved]) {
-    assert.equal(frame.floor, 0);
+    assert.equal(frame.floor, 1);
     const reset = resetFloor(frame);
     assert.equal(reset.caveIn, undefined); assert.equal(reset.dropped, undefined);
     assert.equal(reset.gold, frame.floorSnapshot.gold); assert.equal(reset.exit.open, false);
-    // Only the moves until the challenge was complete carry over as the floor's score.
-    assert.equal(reset.restartedMoves, frame.objective.moves);
+    // Only the moves until the challenge was complete (and any capture of you) carry over as the floor's score.
+    assert.equal(reset.restartedMoves, frame.objective.moves + frame.hits - frame.floorStart.hits);
     assert.equal(validateSave(JSON.parse(JSON.stringify(reset)), date, daily), true);
   }
 });
@@ -323,7 +330,7 @@ test('practice runs cave in by the same rules, and their saves validate', () => 
     assert.equal(validateSave(JSON.parse(JSON.stringify(state)), date, practice), true, `turn ${state.turns}`);
   }
   assert.equal(caved, 1); assert.equal(cavedIn(state), true); assert.equal(state.practice, true);
-  assert.equal(act(state, descend).floor, 1);
+  assert.equal(act(state, descend).floor, state.floor + 1);
 });
 
 test('countdown and cave-in saves validate; forged cave-in fields do not', () => {

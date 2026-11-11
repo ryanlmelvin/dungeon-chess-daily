@@ -8,6 +8,7 @@ import { createGame as createRawGame } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { autoExplainer } from '../src/explainers.js';
 import { hash } from '../src/random.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x, y, recruit) => (recruit === undefined ? { type: 'move', x, y } : { type: 'move', x, y, recruit });
 const at = (unit) => [unit.x, unit.y];
@@ -25,7 +26,7 @@ function dailyFor(piece) {
 // An empty room on a plain day: your piece at (x, y), a bishop recruit waiting at
 // `recruit`, and monsters frozen so nothing but the rule under test moves.
 function scenario({ piece = 'bishop', recruit = [3, 3], from = [4, 4], recruitPiece = 'bishop', color = 'white' } = {}) {
-  const state = createRawGame(dailyFor(piece === 'king' ? 'rook' : piece));
+  const state = createRawGame(withRooms(dailyFor(piece === 'king' ? 'rook' : piece)));
   state.playerColor = color; state.awaitingPlayer = false;
   Object.assign(state.player, { x: from[0], y: from[1], moved: true });
   state.map = Array(8).fill('........'); state.props = []; state.enemies = []; state.companion = null;
@@ -49,7 +50,7 @@ function reach(state, tile) {
   }
   return squares;
 }
-const tie = (state, tile) => hash(`${state.dungeonSeed ?? state.seed}:bishop-pair:${state.floor}:${tile.x},${tile.y}`);
+const tie = (state, tile) => hash(`${state.floorSeeds?.[state.floor] ?? state.seed}:bishop-pair:${state.floor}:${tile.x},${tile.y}`);
 
 test('recruiting a bishop with your bishop offers only its free side squares, all on the other colour', () => {
   const state = scenario();
@@ -123,7 +124,7 @@ test('a tie in reach goes by the day’s seed, the same way every time', () => {
   const picks = new Set();
   for (const seed of [11, 12, 13, 14, 15, 16]) {
     const state = scenario();
-    state.dungeonSeed = seed;
+    state.floorSeeds = [seed, seed, seed];
     const best = [{ x: 4, y: 3 }, { x: 3, y: 4 }].sort((a, b) => tie(state, a) - tie(state, b))[0];
     const next = act(state, move(3, 3));
     assert.deepEqual(at(next.companion), at(best), `seed ${seed}`);
@@ -154,7 +155,7 @@ test('with all four side squares blocked, Auto takes the nearest free square of 
   const picks = new Set();
   for (const seed of [21, 22, 23, 24, 25, 26, 27, 28]) {
     const state = scenario();
-    state.dungeonSeed = seed;
+    state.floorSeeds = [seed, seed, seed];
     wall(state, 3, 2); wall(state, 4, 3);
     state.enemies = [foe('w', 'bishop', 2, 3), foe('s', 'knight', 3, 4), foe('far', 'king', 7, 7)];
     // Nothing of the other colour lies one king step away, so eight squares two steps away tie.

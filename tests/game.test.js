@@ -7,16 +7,16 @@ import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { royalRules, floorCensus, createGame as createRoom, validateSave as validateRoomSave } from '../src/rules.js';
 import { PAWN_TARGETS } from '../src/composer.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
 const hasMove = (state, x, y) => legalMoves(state).some((tile) => tile.x === x && tile.y === y);
 // A composed day's twin without its hint powerups, as certificates are proved (src/generation.js proveComposed).
 const twinOf = (day) => ({ ...day, composed: day.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
-// The engine on its own: a random room (tests/fixtures/random-room.js), emptied.
+// The engine on its own: an open, empty room (tests/fixtures/rooms.js).
 function scenario(piece = 'rook', x = 4, y = 6) {
-  const state = createRoom(randomRoomDaily('2026-11-05'));
+  const state = createRoom(withRooms('2026-11-05'));
   state.player = { piece, x, y, moved: false };
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = []; state.objective = {piece: 'king', complete: false};
   return state;
@@ -311,7 +311,6 @@ test('100 consecutive certified dates win without powers, never captured, preser
       // Only the king floor's own recruit (a king) may help, under royal rules.
       if (royalRules(state)) assert.ok(state.companion === null || state.companion.basePiece === 'king');
       else assert.equal(state.companion, null);
-      assert.deepEqual(state.companionOrders, []);
       assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
       assert.deepEqual(state.purchases, []);
     }
@@ -373,8 +372,6 @@ test('walls block sliding, pawn double steps and attack lanes, while knights jum
   state.player.piece = 'knight';
   assert.equal(hasMove(state, 3, 4), true);
   state.player.piece = 'king'; state.enemies = [monster('rook', 'rook', 4, 0)];
-  // The rook's step is a seeded tie-break: pin the seed, not whichever candidate the day certifies.
-  state.dungeonSeed = state.seed;
   assert.deepEqual(dangerTiles(act(state, move(3, 6))), []);
 });
 
@@ -445,8 +442,10 @@ test('a cornered piece restarts the same deterministic edition', () => {
 
 
 test('capture-all requires all eight identical pawns, including promoted members, before showing stairs', () => {
-  const state = scenario('rook',0,6); state.objective.piece='pawn'; state.powers.freeze=20;
-  state.enemies = Array.from({length:8},(_,x) => ({...monster(`pawn-${x}`,'pawn',x,4), palette:'ice'}));
+  // 2026-11-05's floor 1 asks for pawns: here a room of eight of them along one row, its only residents.
+  const state = createRoom(withRooms('2026-11-05', room({ enemies: Array.from({ length: 8 }, (_, x) => ({ x, y: 4, cast: 0 })) })));
+  assert.equal(state.objective.piece, 'pawn');
+  state.player = { piece: 'rook', x: 0, y: 6, moved: false }; state.powers.freeze = 20;
   state.enemies[5].piece='queen'; state.enemies[5].promoted=true;
   let current=state;
   for (let x=0;x<8;x++) {
@@ -466,8 +465,8 @@ test('capture-all requires all eight identical pawns, including promoted members
 test('the public API ignores edited daily metadata and binds saves to the day\'s own monsters', () => {
   const expected = createGame(daily);
   const edited = structuredClone(daily);
-  edited.seed = 0; edited.dungeonSeed = 0; edited.playerPiece = 'king'; edited.playerColor = 'black';
-  edited.targets = ['king', 'king', 'king']; edited.legacyTurnOrder = true;
+  edited.seed = 0; edited.playerPiece = 'king'; edited.playerColor = 'black';
+  edited.targets = ['king', 'king', 'king'];
   edited.difficulty = 'gentle'; edited.composed = []; edited.floorSeeds = [1, 2, 3];
   assert.deepEqual(createGame(edited), expected);
   // Every daily plays Fair; a run under other monsters is practice, never the official run.
@@ -581,18 +580,19 @@ test('an in-progress save from the old every-capture rule keeps its gold and sta
 });
 
 test('running out of legal moves restarts the dungeon and counts another try, like losing every life', () => {
-  const state = scenario('pawn');
-  state.playerColor = 'white'; state.awaitingPlayer = false; state.player.moved = true;
-  state.map = ['........', '........', '........', '........', '....#...', '........', '........', '........'];
-  state.enemies = [monster('far', 'king', 0, 0)]; state.powers.freeze = 5;
+  // A room whose target waits in the far corner, walled ahead of the pawn's first step.
+  const day = withRooms('2026-11-05', room({ walls: [[4, 4]], enemies: [{ x: 0, y: 0, cast: 0 }] }));
+  const state = createRoom(day);
+  assert.deepEqual([state.player.piece, state.playerColor], ['pawn', 'white']);
+  state.player.moved = true; state.powers.freeze = 5;
   const trapped = act(state, move(4, 5));
   assert.equal(trapped.status, 'playing');
   assert.deepEqual(trapped.events.map((event) => event.type), ['restart']);
   assert.match(trapped.message, /No legal moves/);
   assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
-  // The scenario's random room is the edition this save belongs to.
-  assert.equal(validateRoomSave(trapped, trapped.date, randomRoomDaily('2026-11-05')), true);
+  // The fresh try is the day's own room again: a valid save of it.
+  assert.equal(validateRoomSave(trapped, trapped.date, day), true);
   assert.equal(getShareText(trapped).split('\n')[1], '🟥 ·');
 });
 

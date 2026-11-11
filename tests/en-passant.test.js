@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const wait = { type: 'wait' };
@@ -17,7 +18,7 @@ function findDaily(match, label) {
 // Every daily is white; black engine tests borrow a white day, as practice does.
 const dailyFor = (piece, color) => color === 'black' ? { ...dailyFor(piece, 'white'), playerColor: 'black' } : piece === 'king' ? { ...dailyFor('rook', color), playerPiece: 'king' } : findDaily((d) => d.playerPiece === piece && d.playerColor === color, `${color} ${piece}`);
 function scenario(piece = 'pawn', color = 'white', x = 4, y = 6) {
-  const state = createGame(dailyFor(piece, color));
+  const state = createGame(withRooms(dailyFor(piece, color)));
   Object.assign(state.player, { x, y, moved: y !== 6 });
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = [];
   state.objective = { piece: 'king', complete: false }; state.companion = null;
@@ -163,7 +164,8 @@ test('black: a double step newly exposed to en passant earns a fresh choice', ()
 });
 
 test('saves with an en passant window validate and survive JSON; malformed ones do not', () => {
-  const daily = findDaily((d) => d.targets[0] === 'pawn', 'pawn-target');
+  // A floor of target pawns, one of them on the fifth rank as if it had just double-stepped there.
+  const daily = withRooms(findDaily((d) => d.targets[0] === 'pawn', 'pawn-target'), room({ enemies: [{ x: 3, y: 3, cast: 0 }, { x: 6, y: 1, cast: 0 }] }));
   const base = createGame(daily);
   assert.equal(base.enPassant, null);
   assert.equal(validateSave(base, daily.date, daily), true);

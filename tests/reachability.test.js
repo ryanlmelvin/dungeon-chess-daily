@@ -6,9 +6,10 @@ import { act, createGame, unreachablePickups } from '../src/rules.js';
 import { getDaily } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { EDITIONS } from '../src/editions.js';
+import { withRooms } from './fixtures/rooms.js';
 
 function scenario(piece, x = 4, y = 6) {
-  const state = createGame(getRawDaily('2026-11-05'));
+  const state = createGame(withRooms('2026-11-05'));
   state.startingPiece = piece;
   Object.assign(state.player, { piece, x, y, moved: false });
   state.map = Array(8).fill('........');

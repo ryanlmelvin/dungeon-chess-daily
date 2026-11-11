@@ -109,7 +109,7 @@ const decoyStart = (role, tile, crown = DECOY_PAWN_CROWN) => role !== 'pawn' || 
  * Where a composed floor may start the player: any square of `wide`, drawn
  * afresh for each motif instance from the floor's seed, so the same pocket or
  * bait comes with a different way in from day to day. COMPOSED_STARTS names
- * the set every edition uses; 'e2' (where random rooms start) is for
+ * the set every edition uses; 'e2' (a room's default start) is for
  * comparisons in the preview.
  */
 const squareOf = (name) => Object.freeze({ x: 'abcdefgh'.indexOf(name[0]), y: 8 - Number(name[1]) });
@@ -582,8 +582,7 @@ const MOTIFS = {
 // it: a missed lunge stays put and a capture doesn't move them, so their one
 // choice is a diagonal strike at you. A wall on the promotion rank under a
 // target pawn's file stops it a square short, so a composed floor's pawns
-// never crown (random rooms wall most of that rank instead; src/rules.js
-// promotionBarricades). On a bishop floor the stop square must be on the
+// never crown. On a bishop floor the stop square must be on the
 // bishop's colour, or a pawn stopped there could never be taken, so where
 // the second rank's square is off it the wall stands there instead.
 function barricade(plan, piece, file) {

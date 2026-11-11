@@ -73,9 +73,11 @@ two years past the build date; the app decodes and proves them as they load and 
 carries the composer. Every build composes new dates incrementally. A date past the
 window borrows a stored day of its own piece and modifier (`borrowedDaily`).
 
-**Random rooms (tests only).** A game created without composed rooms builds the old
-seeded random room (`setFloor` in `src/rules.js`); no edition uses it, and tests keep it
-as a fixture (`tests/fixtures/random-room.js`).
+**Rooms in tests.** `createGame` needs a day's three composed rooms; a floor begins
+exactly as its room lays it out (`setFloor` in `src/rules.js`). Engine tests lay their own
+rooms from a map, monsters and items with `tests/fixtures/rooms.js` (`room`, `withRooms`),
+or start from open, empty ones and set up the board by hand. The old seeded random room is
+retired; saves made before then still carry its inert layout fields.
 
 **UI.** `src/main.js` owns input, the newspaper, saves, archive, sharing and dialogs;
 `src/renderer.js` is the pixelated Three.js board; `src/sprites.js`, `*-art.js`

@@ -388,7 +388,10 @@ Retired with the switch (2026-11-11): the knob table and calibration scripts
 `scripts/calibration-search.mjs`), the weekday tiers and their targets, the
 capped-gap targeting, floor assembly across candidates, the whole-run route
 search and the fallback bank. A full rebuild of every edition takes about
-five minutes on seven threads.
+five minutes on seven threads. Retired after it, the same day: the random
+rooms engine tests had kept as fixtures, with their layout rules and the
+recruit-order ledger only they delivered (see "Rooms in tests" in
+[generation.md](generation.md)).
 
 ## Agreed rule changes
 

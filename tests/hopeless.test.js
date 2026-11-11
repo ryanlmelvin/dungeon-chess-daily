@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { act, createGame, hopelessFloor, legalMoves, getDaily } from '../src/game.js';
 import { createGame as createRawGame } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
-import { hash } from '../src/random.js';
 import { EDITIONS } from '../src/editions.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 function pawn(id, x, y) {
   return { id, piece: 'pawn', role: 'pawn', species: 'bat', palette: 'ice', name: 'Ice bat', x, y, moved: true, phase: 'ready', intent: [], target: null };
@@ -17,13 +17,16 @@ function decoy(id, piece, x, y) {
 // Edition 2026-11-07, floor 2 (pawn targets, bishop player): the playtest position.
 // Three target pawns sit on dark squares with a wall in front of each, and a
 // Borrowed move has already put the bishop on light squares. The room is the
-// random room played that day (the second candidate under generator version 6,
-// built with that day's knobs), reached by skipping floor 1, so it stays put
-// whatever the editions become.
+// one played that day (its walls, coins, powerup and recruit, laid here as a
+// composed room), reached by skipping floor 1, so it stays put whatever the
+// editions become.
+const PLAYTEST_ROOM = room({
+  map: ['.#.#....', '#.#.#...', '.#......', '#.......', '........', '#.#...#.', '.......#', '#.#.#.#.'],
+  items: [{ x: 4, y: 4, type: 'coin' }, { x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' }, { x: 1, y: 3, type: 'powerup', power: 'freeze' }, { type: 'companion', piece: 'bishop', x: 5, y: 5 }],
+});
 function stuckBishop() {
-  const knobs = { obstacleBase: 10, decoys: 3, scatter: 1, guards: 3, screens: 0 };
   const raw = getRawDaily('2026-11-07');
-  let state = createRawGame({ ...raw, difficulty: 'fiendish', ...knobs, dungeonSeed: hash(`6:${raw.seed}:1`) });
+  let state = createRawGame(withRooms({ ...raw, difficulty: 'fiendish' }, room(), PLAYTEST_ROOM));
   state.objective.complete = true; state.exit.open = true;
   state = act(state, { type: 'descend' });
   assert.equal(state.floor, 1);

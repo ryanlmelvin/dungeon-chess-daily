@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, closeAttacker, createGame, legalMoves } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const move = (x,y) => ({type:'move',x,y});
 function dailyFor(piece,color) {
@@ -17,7 +18,7 @@ function dailyFor(piece,color) {
   throw Error(`No ${color} ${piece} edition found`);
 }
 function scenario(piece='rook',color='white',x=4,y=6) {
-  const state=createGame(dailyFor(piece,color));
+  const state=createGame(withRooms(dailyFor(piece,color)));
   Object.assign(state.player,{x,y});
   state.map=Array(8).fill('........'); state.props=[]; state.items=[]; state.enemies=[];
   state.objective={piece:'king',complete:false}; state.companion=null;

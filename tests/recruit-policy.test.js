@@ -7,10 +7,10 @@ import { getRawDaily } from '../src/edition.js';
 import { act, createGame, recruitChoice } from '../src/rules.js';
 import { humanPlayer, observe } from '../src/human-bot.js';
 import { steerRecruit } from '../src/recruit-policy.js';
-import { randomRoomDaily } from './fixtures/random-room.js';
+import { getDaily } from '../src/generation.js';
+import { withRooms } from './fixtures/rooms.js';
 
 const dayAfter = (start, day) => new Date(Date.parse(`${start}T00:00:00Z`) + day * 86_400_000).toISOString().slice(0, 10);
-const candidate = (date) => randomRoomDaily(date);
 // The next floor's start, as if this one were cleared at once.
 function nextFloor(state) {
   const cleared = structuredClone(state);
@@ -22,7 +22,7 @@ function nextFloor(state) {
 test('the bot’s steering policy only gives orders the rules accept, and only where the turn takes one', () => {
   let orders = 0, captures = 0;
   for (let day = 0; day < 6; day++) {
-    const daily = candidate(dayAfter('2031-03-01', day));
+    const daily = getDaily(dayAfter('2027-03-01', day));
     let start = createGame(daily);
     for (let floor = 0; floor < 3 && start.status === 'playing'; floor++, start = nextFloor(start)) {
       const player = humanPlayer(start, { seed: 11 + day * 3 + floor, recruit: steerRecruit });
@@ -47,7 +47,7 @@ test('the bot’s steering policy only gives orders the rules accept, and only w
 
 test('the policy reads no hidden role: which monsters are targets comes from the view', () => {
   // A recruit beside two monsters, one of them the target species: it takes the target.
-  const state = createGame(candidate('2031-03-02'));
+  const state = createGame(withRooms('2031-03-02'));
   state.map = Array(8).fill('........'); state.props = []; state.items = [];
   Object.assign(state.player, { x: 7, y: 7, moved: true });
   state.companion = { piece: 'queen', basePiece: 'queen', x: 3, y: 4, moved: true, sharing: false };
@@ -65,7 +65,7 @@ test('the policy reads no hidden role: which monsters are targets comes from the
 // A bare room on floor 1 of a rook day with your rook at (7, 7), monsters frozen.
 function room() {
   const date = Array.from({ length: 30 }, (_, day) => dayAfter('2031-03-01', day)).find((day) => getRawDaily(day).playerPiece === 'rook');
-  const state = createGame(candidate(date));
+  const state = createGame(withRooms(date));
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.companion = null;
   delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
   Object.assign(state.player, { x: 7, y: 7, moved: true });

@@ -40,6 +40,31 @@ test('each shop offers three items drawn from its stock, the same for everyone, 
   assert.ok(new Set(dates.map((date) => shopStock(date, 0).join())).size > 5, 'offers change from day to day');
 });
 
+// Gold buys from the between-floor shop and nothing else, so the last floor has no use for it.
+test('the last floor holds no coins or coin magnet, and the shop before it sells no magnet (from 2026-11-06)', () => {
+  for (let offset = 0; offset < 30; offset++) {
+    const date = new Date(Date.UTC(2026, 10, 6 + offset)).toISOString().slice(0, 10);
+    const daily = getDaily(date);
+    let state = createGame(daily);
+    for (const action of daily.generation.certificate.actions) {
+      if (action.type === 'descend' && state.floor === 1) {
+        const shopper = { ...structuredClone(state), gold: 20 };
+        assert.equal(act(shopper, { type: 'buy', id: 'magnet' }), shopper, `${date}: magnet sold before the last floor`);
+        assert.notEqual(act(shopper, { type: 'buy', id: 'shield' }), shopper, `${date}: shop closed before the last floor`);
+      }
+      if (action.type === 'descend' && state.floor === 0) {
+        const shopper = { ...structuredClone(state), gold: 20 };
+        assert.equal(act(shopper, { type: 'buy', id: 'magnet' }) !== shopper, daily.shops[0].includes('magnet'), `${date}: magnet sold before floor 2 exactly when stocked`);
+      }
+      state = act(state, action);
+      if (action.type !== 'descend' || state.status !== 'playing') continue;
+      const coins = state.items.filter((item) => item.type === 'coin').length;
+      assert.ok(state.floor === 2 ? coins === 0 : coins <= 3, `${date} floor ${state.floor}: ${coins} coins`);
+      if (state.floor === 2) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${date}: magnet on the last floor`);
+    }
+  }
+});
+
 test('the shop sells the three tools beside the ward and magnet, but no hourglass or extra life, and only what it stocks', () => {
   assert.deepEqual(SHOP_ITEMS.map((item) => item.id), ['shield', 'pin', 'leap', 'takeback', 'magnet']);
   for (const id of ['pin', 'leap', 'takeback']) {
@@ -53,6 +78,27 @@ test('the shop sells the three tools beside the ward and magnet, but no hourglas
     const bought = act(cleared, { type: 'buy', id });
     assert.equal(bought.powers[id], 1, id);
     assert.equal(act(bought, { type: 'buy', id }), bought, `${id}: one held at a time`);
+  }
+});
+
+test('the shop opens only between floors and sells only today’s offers: never a recruit or an unknown item', () => {
+  const day = getDaily('2026-11-12');
+  const actions = day.generation.certificate.actions;
+  let state = createGame(day);
+  // Floor 1 played by its line up to the stairs: the shop is open.
+  for (const action of actions.slice(0, actions.findIndex((action) => action.type === 'descend'))) state = act(state, action);
+  assert.equal(state.exit.open, true);
+  const rich = { ...structuredClone(state), gold: 20 };
+  const [offer] = shopOffers(rich);
+  assert.notEqual(act(rich, { type: 'buy', id: offer }), rich, 'a stocked offer sells');
+  const unstocked = SHOP_ITEMS.map((item) => item.id).filter((id) => !shopOffers(rich).includes(id));
+  for (const id of ['companion-rook', 'companion-king', 'life', 'freeze', 'dragon', ...unstocked]) assert.equal(act(rich, { type: 'buy', id }), rich, id);
+  // Not before the floor is cleared, not on the last floor, not once the run is over.
+  const shut = { ...createGame(day), gold: 20 };
+  assert.equal(act(shut, { type: 'buy', id: offer }), shut);
+  for (const change of [{ floor: 2 }, { status: 'won' }, { status: 'lost' }]) {
+    const closed = { ...structuredClone(rich), ...change };
+    assert.equal(act(closed, { type: 'buy', id: offer }), closed, JSON.stringify(change));
   }
 });
 

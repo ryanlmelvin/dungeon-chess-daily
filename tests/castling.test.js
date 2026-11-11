@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { room, withRooms } from './fixtures/rooms.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 function findDaily(match, label) {
@@ -16,7 +17,7 @@ function findDaily(match, label) {
 // Every daily is white; black engine tests borrow a white day, as practice does.
 const dailyFor = (piece, color) => color === 'black' ? { ...dailyFor(piece, 'white'), playerColor: 'black' } : piece === 'king' ? { ...dailyFor('rook', color), playerPiece: 'king' } : findDaily((d) => d.playerPiece === piece && d.playerColor === color, `${color} ${piece}`);
 function scenario(piece = 'king', color = 'white', x = 4, y = 6) {
-  const state = createGame(dailyFor(piece, color));
+  const state = createGame(withRooms(dailyFor(piece, color)));
   Object.assign(state.player, { x, y, moved: true });
   state.map = Array(8).fill('........'); state.props = []; state.items = [];
   state.enemies = [monster('far', 'king', 0, 0)];
@@ -166,7 +167,8 @@ test('feats record the player\'s en passant and castle, never being captured en 
 });
 
 test('saves with feats and castle events validate; malformed feats do not; old saves still do', () => {
-  const daily = dailyFor('king', 'white');
+  // A room whose target waits in the far corner.
+  const daily = withRooms(dailyFor('king', 'white'), room({ enemies: [{ x: 0, y: 0, cast: 0 }] }));
   const base = createGame(daily);
   assert.deepEqual(base.feats, []);
   assert.equal(validateSave(base, daily.date, daily), true);

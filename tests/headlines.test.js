@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildTheme, getRawDaily, headlineFor, HEADLINE_SUBJECTS } from '../src/edition.js';
 import { createGame, validateSave } from '../src/rules.js';
+import { getDaily } from '../src/generation.js';
 
 const roles = ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king'];
 function creature(piece, palette = 'violet') {
@@ -68,9 +69,9 @@ test('display variety preserves legacy edition metadata and valid saved runs', (
   assert.deepEqual(daily.theme, buildTheme(legacy.species.map(renamed)));
   assert.equal(daily.theme.headline, legacy.theme.headline.replace('Ember imps', 'Ember cats'));
   const before = structuredClone(daily);
-  const saved = createGame(daily);
-  const serialized = JSON.stringify(saved);
+  const edition = getDaily(daily.date);
+  const serialized = JSON.stringify(createGame(edition));
   for (const date of dates) for (const [floor, target] of daily.species.slice(0, 3).entries()) headlineFor(target, date, floor);
   assert.deepEqual(daily, before);
-  assert.equal(validateSave(JSON.parse(serialized), daily.date, getRawDaily(daily.date)), true);
+  assert.equal(validateSave(JSON.parse(serialized), daily.date, edition), true);
 });

@@ -3,17 +3,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {act,createGame,getDaily,legalMoves,validateSave,PIECES} from '../src/game.js';
 import {getRawDaily} from '../src/edition.js';
-import {createGame as createCandidate,validateSave as validateCandidate} from '../src/rules.js';
-import {randomRoomDaily} from './fixtures/random-room.js';
+import {createGame as createCandidate} from '../src/rules.js';
+import {room,withRooms} from './fixtures/rooms.js';
 const move=(x,y)=>({type:'move',x,y});
-function scenario(piece='king',color='white',x=4,y=6) {
+// An open, empty room; the floors below are `rooms` (tests/fixtures/rooms.js), open and empty unless a test lays them.
+function scenario(piece='king',color='white',x=4,y=6,rooms=[]) {
   let daily;
   // Kings are no longer a daily piece; engine tests borrow a rook day.
   const wanted=piece==='king'?'rook':piece;
   for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor==='white'){daily=candidate;break;}}
-  // Every daily is white; black engine tests flip the color, as practice does. A random room
-  // (tests/fixtures/random-room.js), so every floor below waits with a recruit.
-  const state=createCandidate(daily);state.playerColor=color;Object.assign(state.player,{x,y});
+  // Every daily is white; black engine tests flip the color, as practice does.
+  const state=createCandidate(withRooms(daily,...rooms));state.playerColor=color;Object.assign(state.player,{x,y});
   if(piece==='king'){state.startingPiece="king";state.player.piece="king";}
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
   // Knights are the challenge here, so the kings and queens below are fair game for a recruit.
@@ -23,51 +23,11 @@ const foe=(id,piece,x,y)=>({id,piece,role:piece,species:'bat',palette:'ice',name
 const ally=(piece,x,y)=>({piece,basePiece:piece,x,y,moved:false,sharing:false});
 
 const recruitsOn=(state)=>state.items.filter((item)=>item.type==='companion');
-// Clears the room in place so the stairs can be taken without replaying a route.
-function descend(state) {
-  const cleared=structuredClone(state);
-  cleared.enemies=cleared.enemies.filter((foe)=>foe.role!==cleared.objective.piece);
-  cleared.objective.complete=true;cleared.exit.open=true;
-  return act(cleared,{type:'descend'});
-}
 
-// A random room's floors one and two recruit any piece, on a square one move
-// from the start; a pawn only where its file is open to the far rank.
-function earlyRecruit(state,label,seen) {
-  const [recruit,...extra]=recruitsOn(state);
-  assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.ok(PIECES.includes(recruit.piece),label);seen?.add(recruit.piece);
-  assert.equal(state.map[recruit.y][recruit.x],'.');
-  assert.ok(!state.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
-  if(recruit.piece==='pawn') for(let y=0;y<recruit.y;y++) assert.equal(state.map[y][recruit.x],'.',`${label}: a pawn recruit's file is open`);
-  return recruit;
-}
-
-test('floors one and two recruit any piece while the final floor always recruits a king',()=>{
-  const finalTypes=new Set(),earlyTypes=new Set();
-  for(let d=0;d<60;d++) {
-    const daily=getRawDaily(new Date(Date.UTC(2026,10,5+d)));
-    const state=createCandidate(daily);
-    assert.equal(state.floor,0);earlyRecruit(state,`${daily.date}: floor 1`,earlyTypes);
-    assert.equal(state.companion,null);
-    assert.equal(validateCandidate(state,state.date,daily),true);
-    assert.deepEqual(createCandidate(daily).items,state.items);
-    const second=descend(state);
-    assert.equal(second.floor,1);earlyRecruit(second,`${daily.date}: floor 2`,earlyTypes);assert.equal(second.companion,null);
-    const last=descend(second);
-    assert.equal(last.floor,2);
-    const [recruit,...extra]=recruitsOn(last);
-    assert.ok(recruit,`${daily.date}: final recruit`);assert.equal(extra.length,0);
-    assert.equal(recruit.piece,'king',`${daily.date}: ${recruit.piece}`);finalTypes.add(recruit.piece);
-    if(last.startingPiece==='pawn') assert.ok(recruit.y<6,'pawn recruits must be ahead of the player, not behind the entrance');
-    assert.ok(last.items.every((item)=>item.x!==last.exit.x||item.y!==last.exit.y),'pickups must remain clickable after stairs appear');
-    assert.ok(!last.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y));
-    assert.equal(last.map[recruit.y][recruit.x],'.');
-    assert.equal(last.companion,null);
-  }
-  assert.deepEqual([...finalTypes],['king']);
-  assert.deepEqual([...earlyTypes].sort(),[...PIECES].sort());
-  // A composed floor one or two may wait with a recruit, any piece, three or more moves out
-  // (off its planted line); the king floor always waits with a king.
+// A stored floor one or two may wait with a recruit, any piece, three or more moves
+// out (off its planted line); the king floor always waits with a king
+// (tests/recruit-rules.test.js checks every stored edition's).
+test('recruits wait on the board until they join, one at most, and the king floor\'s is a king',()=>{
   for(const date of ['2026-11-12','2026-11-13','2026-11-14','2026-11-15']) {
     const daily=getDaily(date);let state=createGame(daily);
     assert.equal(validateSave(state,date),true);
@@ -81,34 +41,6 @@ test('floors one and two recruit any piece while the final floor always recruits
       if(state.status!=='playing')break;
     }
   }
-});
-
-test('saves from before the change keep their floor-one recruit, on the board or recruited',()=>{
-  // Saves of a random room (as every edition was then) against that room's rules.
-  const daily=randomRoomDaily('2026-11-13');const fresh=createCandidate(daily);
-  const validateSave=(value,date)=>validateCandidate(value,date,daily);
-  const state=structuredClone(fresh);state.items=state.items.filter((item)=>item.type!=='companion');
-  state.floorSnapshot.items=state.floorSnapshot.items.filter((item)=>item.type!=='companion');
-  // Saves from the brief era with no recruit on floors one and two still validate.
-  assert.equal(validateSave(state,state.date),true);
-  // The validator accepts exactly the recruit the old rules placed (or today's
-  // king on that square), and nothing else.
-  const king=fresh.items.find((item)=>item.type==='companion');
-  const accepted=[];
-  for(const piece of PIECES) for(let y=0;y<8;y++) for(let x=0;x<8;x++) {
-    const old=structuredClone(state);old.items.push({type:'companion',piece,x,y});
-    if(validateSave(old,old.date)) accepted.push(old);
-  }
-  assert.ok(accepted.every((old)=>{const item=old.items.at(-1);return item.x===king.x&&item.y===king.y;}));
-  assert.ok(accepted.some((old)=>old.items.at(-1).piece==='king'));
-  assert.ok(accepted.length<=2);
-  const old=accepted.find((entry)=>entry.items.at(-1).piece!=='king')??accepted[0];const pickup=old.items.find((item)=>item.type==='companion');
-  assert.ok(legalMoves(old).some((tile)=>tile.x===pickup.x&&tile.y===pickup.y));
-  const recruited=act(old,move(pickup.x,pickup.y));
-  assert.equal(recruited.companion.basePiece,pickup.piece);assert.deepEqual(recruitsOn(recruited),[]);
-  assert.equal(validateSave(JSON.parse(JSON.stringify(recruited)),recruited.date),true);
-  const forged=structuredClone(recruited);forged.companion.basePiece=forged.companion.piece=pickup.piece==='rook'?'queen':'rook';
-  assert.equal(validateSave(forged,forged.date),false);
 });
 
 test('a white recruit moves after its player, captures a guard for gold, then enemies respond',()=>{
@@ -212,7 +144,8 @@ test('an immobile recruit may share its recruitment square until the player leav
 });
 
 test('floor changes and a cornered run clear the active companion',()=>{
-  const state=scenario('queen');state.objective={piece:'king',complete:false};state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
+  // Floor 2 waits with a knight recruit.
+  const state=scenario('queen','white',4,6,[room(),room({items:[{type:'companion',piece:'knight',x:4,y:5}]})]);state.objective={piece:'king',complete:false};state.companion=ally('rook',0,0);state.enemies=[foe('last','king',4,2)];
   const cleared=act(state,move(4,2));const downstairs=act(cleared,{type:'descend'});
   assert.equal(downstairs.floor,1);assert.equal(downstairs.companion,null);
   assert.equal(downstairs.items.filter((item)=>item.type==='companion').length,1);

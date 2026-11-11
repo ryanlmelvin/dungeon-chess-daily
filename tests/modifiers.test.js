@@ -9,6 +9,7 @@ import {
   modifierFor, iceSlide, modifierStatus, collapseTick, arrivalSquare,
 } from '../src/modifiers.js';
 import { hash } from '../src/random.js';
+import { room as composedRoom, withRooms } from './fixtures/rooms.js';
 
 const day = (offset, start = '2026-11-06') => new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
 // The first date (from the modifier launch) that draws each modifier.
@@ -23,7 +24,7 @@ const firstDate = (modifier, piece) => {
 
 // An open, empty room for one rule at a time.
 function room(modifier, piece = 'rook', x = 4, y = 6) {
-  const state = createGame({ ...getRawDaily(firstDate('none')), modifier });
+  const state = createGame(withRooms({ ...getRawDaily(firstDate('none')), modifier }));
   state.startingPiece = piece;
   Object.assign(state.player, { piece, x, y, moved: false });
   state.map = Array(8).fill('........');
@@ -65,12 +66,17 @@ test('the modifier is a pure function of the date, about one plain day in two', 
   const raw = getRawDaily('2026-12-01');
   assert.equal(raw.seed, getRawDaily('2026-12-01').seed);
   // Plain days carry no modifier field at all.
-  assert.equal('modifier' in createGame(getRawDaily(firstDate('none'))), false);
-  assert.equal(createGame(getRawDaily(firstDate('ice'))).modifier, 'ice');
+  assert.equal('modifier' in createGame(withRooms(firstDate('none'))), false);
+  assert.equal(createGame(withRooms(firstDate('ice'))).modifier, 'ice');
 });
 
 test('ice tiles avoid walls, monsters, pickups, the start and the exit, and are fixed per floor', () => {
-  const daily = getRawDaily(firstDate('ice'));
+  // A room that lays no ice of its own gets the day's seeded draw.
+  const daily = withRooms(firstDate('ice'), composedRoom({
+    walls: [[0, 2], [3, 3], [5, 3], [2, 5], [6, 5], [1, 7], [7, 1]],
+    enemies: [{ x: 4, y: 2, cast: 0 }, { x: 0, y: 0, cast: 1 }, { x: 7, y: 0, cast: 2 }],
+    items: [{ x: 2, y: 4, type: 'coin' }, { x: 6, y: 4, type: 'coin' }, { x: 3, y: 5, type: 'powerup', power: 'shield' }],
+  }));
   const state = createGame(daily);
   assert.equal(state.ice.length, ICE_TILES);
   for (const tile of state.ice) {
@@ -152,7 +158,7 @@ test('a pawn moving straight slides on ice and may promote, but a diagonal captu
 
 test('monsters are sure-footed: ice never changes how they move', () => {
   const date = firstDate('ice', 'knight');
-  const daily = getRawDaily(date);
+  const daily = getDaily(date);
   let iced = createGame(daily);
   let plain = createGame({ ...daily, modifier: 'none' });
   for (let turn = 0; turn < 8 && iced.status === 'playing'; turn++) {
@@ -162,9 +168,11 @@ test('monsters are sure-footed: ice never changes how they move', () => {
   }
 });
 
+// The first collapse day with a room of its target and two decoys, so its decoy roles have room to take arrivals.
+const collapseRoom = () => createGame(withRooms(firstDate('collapse'), composedRoom({ enemies: [{ x: 4, y: 2, cast: 0 }, { x: 0, y: 0, cast: 1 }, { x: 7, y: 0, cast: 2 }] })));
+
 test('collapse sends a decoy in at the door every ten moves on a floor, up to the cap', () => {
-  const date = firstDate('collapse');
-  let state = createGame(getRawDaily(date));
+  let state = collapseRoom();
   assert.equal(state.reinforcements, 0);
   // Keep the residents still and the player safe while counting moves.
   state.powers.freeze = 1000;
@@ -200,7 +208,7 @@ test('collapse sends a decoy in at the door every ten moves on a floor, up to th
 
 // An empty room on the first collapse day, one move short of its first arrival.
 function doorRoom() {
-  const state = createGame(getRawDaily(firstDate('collapse')));
+  const state = createGame(withRooms(firstDate('collapse')));
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
   Object.assign(state.player, { x: 4, y: 6, moved: true });
   state.powers.freeze = 1000;
@@ -212,7 +220,7 @@ const waitHolding = (state) => act(state, { type: 'wait', recruit: 'hold' });
 function expectedArrival(state, n = 0) {
   const door = state.exit;
   if (emptySquares(state).some((tile) => tile.x === door.x && tile.y === door.y)) return { x: door.x, y: door.y };
-  const tie = (tile) => hash(`${state.dungeonSeed ?? state.seed}:arrival:${state.floor}:${n}:${tile.x},${tile.y}`);
+  const tie = (tile) => hash(`${state.floorSeeds?.[state.floor] ?? state.seed}:arrival:${state.floor}:${n}:${tile.x},${tile.y}`);
   return emptySquares(state).sort((a, b) => kingSteps(a, door) - kingSteps(b, door) || tie(a) - tie(b))[0];
 }
 
@@ -251,7 +259,7 @@ test('with the door’s neighbours full too it comes in further away, and the da
   const picks = new Set();
   for (const seed of [101, 102, 103, 104, 105, 106]) {
     const state = doorRoom();
-    state.dungeonSeed = seed;
+    state.floorSeeds = [seed, seed, seed];
     Object.assign(state.player, { x: 4, y: 0 });
     // Walls, two monsters and the recruit fill every square one king step from the door.
     wall(state, 3, 0); wall(state, 5, 1);
@@ -360,13 +368,13 @@ test('saves stay valid when an arrival drops in beside a blocked door', () => {
 });
 
 test('collapse stops once the stairs open and other modifiers never reinforce', () => {
-  let state = createGame(getRawDaily(firstDate('collapse')));
+  let state = collapseRoom();
   state.powers.freeze = 1000;
   state.exit.open = true; state.objective.complete = true;
   for (let turn = 0; turn < COLLAPSE_EVERY * 2; turn++) state = act(state, { type: 'wait' });
   assert.equal(state.reinforcements, 0);
   for (const modifier of ['none', 'ice']) {
-    let other = createGame({ ...getRawDaily(firstDate('collapse')), modifier });
+    let other = createGame({ ...withRooms(firstDate('collapse'), composedRoom({ enemies: [{ x: 4, y: 2, cast: 0 }, { x: 0, y: 0, cast: 1 }, { x: 7, y: 0, cast: 2 }] })), modifier });
     other.powers.freeze = 1000;
     for (let turn = 0; turn < COLLAPSE_EVERY * 2; turn++) other = act(other, { type: 'wait' });
     assert.equal(other.reinforcements, undefined, modifier);
@@ -444,7 +452,8 @@ test('collapse never puts a second king or queen (or a third of any other role) 
     const raw = getRawDaily(other);
     if (raw.modifier !== 'collapse') continue;
     if ([raw.species[3].piece, raw.species[4].piece].some((piece) => piece === 'king' || piece === 'queen')) royal++;
-    waitOut(createGame(raw), other, null, other);
+    const edition = getDaily(other);
+    waitOut(createGame(edition), other, edition, other);
     floors++;
   }
   assert.ok(royal > 0, 'some first floor has a king or queen decoy');

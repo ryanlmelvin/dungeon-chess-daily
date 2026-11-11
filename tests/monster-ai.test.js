@@ -2,14 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame } from '../src/rules.js';
-import { getRawDaily } from '../src/edition.js';
+import { withRooms } from './fixtures/rooms.js';
 
 // Tiny white rooms on floor 1 (no royal rules). The player waits, so every
 // monster takes one ordinary step. Each habit is checked on several turn
 // numbers, because the seeded tie-break hashes the turn.
 const unit = (id, piece, x, y, moved = true) => ({ id, species: 'bat', palette: 'ice', name: id, piece, role: piece, x, y, moved, phase: 'ready', intent: [], target: null });
 function room([piece, px, py], enemies) {
-  const s = createGame(getRawDaily('2026-11-10'));
+  const s = createGame(withRooms('2026-11-10'));
   Object.assign(s, { playerColor: 'white', awaitingPlayer: false, floor: 0, map: Array(8).fill('........'), items: [], companion: null, enemies });
   s.objective = { piece: 'king', complete: false };
   s.exit = { x: 4, y: 0, open: false };
