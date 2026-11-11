@@ -17,9 +17,14 @@ test('a waiting recruit never opens its explainer by itself', () => {
   assert.equal(autoExplainer([{ type: 'companion-recruit', x: 4, y: 4 }], unseen), null, 'nor on recruiting it');
 });
 
-test('your en passant and castling always open their explainers; the first fork and combo once', () => {
-  assert.equal(autoExplainer([{ type: 'en-passant' }], () => true), 'en-passant');
-  assert.equal(autoExplainer([{ type: 'castle' }], () => true), 'castle');
+test('your first en passant, castle, fork and combo each open their explainer once per device', () => {
+  assert.equal(autoExplainer([{ type: 'en-passant' }], unseen), 'en-passant');
+  assert.equal(autoExplainer([{ type: 'castle' }], unseen), 'castle');
+  assert.equal(autoExplainer([{ type: 'en-passant' }], (kind) => kind === 'en-passant'), null, 'en passant once per device');
+  assert.equal(autoExplainer([{ type: 'castle' }], (kind) => kind === 'castle'), null, 'castling once per device');
+  // Seen moves step aside for one not yet explained on the same move.
+  assert.equal(autoExplainer([{ type: 'en-passant' }, { type: 'combo' }], (kind) => kind === 'en-passant'), 'combo');
+  assert.equal(autoExplainer([{ type: 'en-passant' }, { type: 'castle' }], () => true), null);
   assert.equal(autoExplainer([{ type: 'fork-won' }, { type: 'combo' }], unseen), 'fork');
   assert.equal(autoExplainer([{ type: 'combo' }], unseen), 'combo');
   assert.equal(autoExplainer([{ type: 'fork-won' }], (kind) => kind === 'fork'), null, 'once per device');

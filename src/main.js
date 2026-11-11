@@ -348,6 +348,10 @@ function showGameFeedback() {
   // So does a missed lunge, which leaves its monster off-balance (rules.js).
   const lunged = state.events?.some((event) => event.type === 'miss');
   const pairHop = state.events?.some(event => event.type === 'bishop-pair');
+  // The player's own en passant and castle open their explainers once per device
+  // (src/explainers.js); their lines keep a What? button until the next action.
+  const ownPassant = state.events?.some(event => event.type === 'en-passant');
+  const castled = state.events?.some(event => event.type === 'castle');
   // So does the ceiling's crack, which starts the cave-in countdown (src/cave-in.js).
   const cracked = state.events?.some((event) => event.type === 'cave-crack');
   const what = (label, open) => {
@@ -367,6 +371,8 @@ function showGameFeedback() {
     const fresh = entry.action === latest;
     if (lunged && fresh && /off-balance/.test(entry.text)) line.append(' ', what('What does off-balance mean?', () => openSpecialMove('off-balance')));
     if (enPassantHit && fresh && /en passant/i.test(entry.text)) line.append(' ', what('What is en passant?', () => openSpecialMove('en-passant', 'enemy')));
+    if (ownPassant && fresh && /En passant!/.test(entry.text)) line.append(' ', what('What is en passant?', () => openSpecialMove('en-passant', 'player')));
+    if (castled && fresh && /Castled!/.test(entry.text)) line.append(' ', what('What is castling?', () => openSpecialMove('castle')));
     // The recruit line keeps its explainer while that recruit still waits.
     if (entry.recruit && fresh && waitingRecruit(state)) line.append(' ', what('What is a recruit?', () => openSpecialMove('recruit')));
     // The bishop pair's "Holy duo!" line keeps its explainer until the next action.
@@ -900,12 +906,15 @@ const CASTLE = {
 };
 let specialMoveFrame = 0;
 // Explains a special chess move: en passant ('player' after the player's own
-// capture, 'enemy' after a monster pawn's) or castling.
+// capture, 'enemy' after a monster pawn's) or castling. The player's own opens
+// by itself once per device, then from its line's What? button.
 function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
   if (TACTIC_COPY[kind] || kind === 'recruit' || kind === 'bishop-pair') return openTactic(kind);
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
+  // Your own en passant or castle has now been explained on this device (a monster's en passant is another story).
+  if (castle || mode === 'player') try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -1039,7 +1048,7 @@ function takeAction(action) {
   // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
   const explainAt = special === 'cave-in' ? 1100 : animationTime;
   if (!shopping) setTimeout(()=>{turnLocked=false;},animationTime);
-  // Congratulate the player's own en passant or castle once the move has settled,
+  // Congratulate the player's first en passant or castle on this device once the move has settled,
   // unless another action, a death, a result or the bot replay has taken over since.
   if (special) {
     const played = state;
