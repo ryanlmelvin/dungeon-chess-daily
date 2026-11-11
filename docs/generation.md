@@ -118,8 +118,13 @@ and never on a pawn player's file.
 through two years past the build date and ships its rooms and lines in
 `src/editions.js` (`scripts/build-editions.mjs`). Each entry holds the day's
 three rooms as a room code (`src/room-code.js`: walls, start, monsters with
-their casts and sleep, items, ice; about 100 characters a day) and its lines
-as a route code (`src/route-code.js`). The build is incremental: entries that
+their casts and sleep, items, ice; about 100 characters a day), its lines
+as a route code (`src/route-code.js`), and the motif each floor was built
+around (`src/motif-code.js`: a letter a floor, `b,s,n`; a motif the code has
+no letter for is stored by name). The motifs load as
+`daily.generation.motifs`, a borrowed day taking its template's, and only the
+journal reads them (`src/journal.js`): they never change play, and an entry
+without them counts as stale, so the next build composes it again. The build is incremental: entries that
 still prove are kept, and only missing or stale dates are composed, about two
 seconds a day (the slowest take a couple of minutes), so each build rolls the
 window forward cheaply. After a change to the rules, the monsters, the

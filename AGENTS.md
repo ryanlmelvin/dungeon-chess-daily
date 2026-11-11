@@ -69,7 +69,8 @@ composer's guard. Authoritative description: `docs/generation.md`; history, deci
 and measurements: `docs/puzzle-first-idea.md`.
 
 **Shipped editions.** `src/editions.js` (generated, committed) stores each day's rooms
-(`src/room-code.js`) and lines (`src/route-code.js`) from launch (2026-11-01) through
+(`src/room-code.js`), lines (`src/route-code.js`) and the motif each floor was built around
+(`src/motif-code.js`, loaded as `daily.generation.motifs`) from launch (2026-11-01) through
 two years past the build date; the app decodes and proves them as they load and never
 carries the composer. Every build composes new dates incrementally. A date past the
 window borrows a stored day of its own piece and modifier (`borrowedDaily`).
@@ -95,6 +96,19 @@ backups and merged as a union (`planBackupMerge`). It also holds the streak arit
 the Stats page's numbers and the share card's streak (`shareStreak`, title line only,
 from a streak of 2). `src/stats-page.js` + `src/stats.css` draw the menu's Stats page
 and the paper's streak; `main.js` notes today's run in `save()`.
+
+**Journal.** `src/journal.js` is the book: `PAGES` (one entry per lesson page: a motif's
+or feat's id, name, text, `draw`/`still`, the pieces that can find it), what a floor found
+(`floorFinds`: its motif when cleared at par or better, plus the special moves in
+`state.feats`; official piece only, never practice), and the record of finds per page and
+piece, stored under `<prefix>journal`, independent of `RULES_VERSION`, back-filled once
+from the device's saves and merged in backups as a union. A motif or feat with no page is
+filed by name and shown nowhere; `walk` is never filed. `src/journal-art.js` draws the
+ideas' diagrams; `src/journal-ui.js` + `src/journal.css` build the menu button, the Journal
+dialog, the one-line cue in the shop and on the results paper, and the page that flies
+into it when a find is new (it never takes a tap or opens a dialog). `main.js` only calls
+it: `clearedFloor` as the shop opens, `wonRun` on the results paper, `restored` after a
+backup merge. Adding an idea's page is adding one `PAGES` entry and its art function.
 
 ## Changing rules, AI, the composer or the bot
 
