@@ -10,6 +10,8 @@ import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
 import { DIFFICULTY_TIERS, TIER_IDS } from './difficulty.js';
 import { archiveMonth, dailySaveKey, isArchiveDate, shiftMonth, STATUS_LABELS } from './archive.js';
+import { initStats } from './stats-page.js';
+import './stats.css';
 import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialRun, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers, RULES_VERSION } from './game.js';
 import { recruitChoice } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
@@ -143,6 +145,7 @@ function save() {
     const serialized = JSON.stringify(state);
     localStorage.setItem(key(), serialized);
     lastSaved = serialized;
+    noteRun();
     return true;
   } catch {
     notify('Progress could not be saved. Keep this tab open or download a backup from the menu.', true);
@@ -171,6 +174,11 @@ function renderIncomingProgress() {
 }
 state = load();
 if (practice && !state) { setPracticeMode(false); state = load(); }
+// Streak and stats (src/stats.js): today's official run, entered and won on its
+// own UTC day, goes in the ledger. Past editions and practice never do.
+const stats = initStats(prefix);
+function noteRun() { if (!practice && !archiveMode && !composedDay) stats.note(state, daily); }
+noteRun();
 function switchScreen(next) {
   if (replay && next !== 'game') endReplay();
   screen = next;
@@ -186,6 +194,7 @@ function renderPaper() {
   $('paper-date').textContent = paperDate(daily.date);
   // The edition's number, e.g. "EDITION NO. 14" (No. 1 is the launch date): no clue about the dungeon itself.
   $('paper-tier').textContent = `${composedDay ? 'COMPOSED PREVIEW · ' : ''}EDITION NO. ${daily.edition}`;
+  stats.paper($('paper-streak'), !archiveMode && !composedDay);
   // Each story pictures one floor's target, and its headline says how it moves
   // without naming it: crack the headline and you know that monster's piece.
   $('headline').textContent = headlineFor(daily.species[0], daily.date, 0);
@@ -1154,7 +1163,7 @@ function playSound(events=[]) {
 }
 // Archive and practice runs are labeled so a shared line never passes as today's.
 const runLabel = () => [composedDay && 'COMPOSED', archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
-function shareText(){if (!isOfficialRun(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : text;}
+function shareText(){if (!isOfficialRun(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : stats.card(text, daily.date);}
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -1173,7 +1182,7 @@ function showResult() {
   // parts or between floors: no-break spaces hold each part and each floor together.
   const hold = (line, gap) => line.split(gap).map(part => part.replaceAll(' ', '\u00A0')).join(gap);
   const [title, floors] = shareable ? shareText().split('\n') : [];
-  $('share-preview').textContent=shareable ? `${hold(title, ' · ')}\n${hold(floors, '  ')}` : '';
+  $('share-preview').textContent=shareable ? `${stats.holdStreak(hold(title, ' · '))}\n${hold(floors, '  ')}` : '';
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
   $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
@@ -1502,6 +1511,7 @@ $('import-file').addEventListener('change',async(event)=>{
       }
       localStorage.setItem(`${prefix}${name}`,value); written++;
     }
+    stats.adopt(data.saves);
     reloadProgress();$('menu-dialog').close();
     notify(unreadable.length
       ? `${written ? 'Backup merged. ' : ''}${unreadable.length} unreadable local ${unreadable.length===1?'save was':'saves were'} kept unchanged; matching backup entries were skipped.`

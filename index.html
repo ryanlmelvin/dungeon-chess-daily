@@ -24,7 +24,7 @@
       <article id="newspaper" class="newspaper arriving">
         <div class="paper-dateline"><time id="paper-date"></time></div>
         <h1>Dungeon Chess Daily</h1>
-        <div class="paper-rule"><span id="paper-tier">THE UNDERGROUND EDITION</span><span>3 FLOORS · ABOUT 3 MINUTES</span></div>
+        <div class="paper-rule"><span id="paper-tier">THE UNDERGROUND EDITION</span><span id="paper-streak" role="img" hidden></span><span>3 FLOORS · ABOUT 3 MINUTES</span></div>
         <p id="modifier-bulletin" class="modifier-bulletin" hidden><span id="modifier-emoji" class="modifier-emoji" aria-hidden="true"></span><b id="modifier-kicker"></b> <span id="modifier-headline"></span></p>
         <div class="lead-story">
           <div class="lead-copy"><h2 id="headline"></h2><p id="deck" class="deck" aria-hidden="true"></p></div>
@@ -92,6 +92,7 @@
     <div class="menu-actions">
     <button id="news-button" hidden>Read today’s paper</button>
     <button id="today-button" hidden>Back to today’s edition</button>
+    <button id="stats-button">Stats</button>
     <button id="archive-button">Archive</button>
     <button id="change-piece-button" hidden>Change piece</button>
     <button id="daily-button" hidden>Return to daily challenge</button>
@@ -270,6 +271,14 @@
       <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, so floor 3 may be impossible: only your recruit can capture it, and not on Auto.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>
+  </dialog>
+  <dialog id="stats-dialog" aria-labelledby="stats-title">
+    <div class="dialog-heading"><h2 id="stats-title">Stats</h2><button class="icon-button" data-close aria-label="Close stats">✕</button></div>
+    <dl id="stats-totals" class="stats-totals"></dl>
+    <h3 id="stats-par-title" class="stats-heading">Floors vs par</h3>
+    <ol id="stats-par" class="stats-par" aria-labelledby="stats-par-title"></ol>
+    <h3 id="stats-pieces-title" class="stats-heading">Wins by piece</h3>
+    <ul id="stats-pieces" class="stats-pieces" aria-labelledby="stats-pieces-title"></ul>
   </dialog>
   <dialog id="hint-dialog" aria-labelledby="hint-title">
     <div class="dialog-heading"><h2 id="hint-title">Hint</h2><button class="icon-button" data-close aria-label="Close hint">✕</button></div>

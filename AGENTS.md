@@ -87,6 +87,15 @@ are onboarding; `src/pwa.js` + `scripts/build-sw.mjs` handle the fingerprinted,
 integrity-verified offline cache; `src/archive.js`, `src/backups.js`,
 `src/storage.js` handle past days and saves.
 
+**Streak and stats.** `src/stats.js` keeps the ledger: the editions entered and won on
+their own UTC day with the official piece (never archive back-play or practice), each
+win with its floors' scores against par. It is stored under `<prefix>ledger`,
+independent of `RULES_VERSION`, back-filled once from the device's saves, carried by
+backups and merged as a union (`planBackupMerge`). It also holds the streak arithmetic,
+the Stats page's numbers and the share card's streak (`shareStreak`, title line only,
+from a streak of 2). `src/stats-page.js` + `src/stats.css` draw the menu's Stats page
+and the paper's streak; `main.js` notes today's run in `save()`.
+
 ## Changing rules, AI, the composer or the bot
 
 Anything that alters gameplay, monster AI, modifiers, the composer or the human bot

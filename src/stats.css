@@ -1,0 +1,23 @@
+/* Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only */
+/* Streak and stats (src/stats.js, src/stats-page.js): the menu's Stats page.
+   Numbers over words, and it fits a phone (down to an iPhone SE) without scrolling. */
+#stats-dialog { max-width: 420px; }
+.stats-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; text-align: center; }
+.stats-totals div { display: flex; flex-direction: column-reverse; }
+.stats-totals dd { margin: 0; font-size: 44px; line-height: 1; color: var(--paper); font-variant-numeric: tabular-nums; }
+.stats-totals dt { font-size: 18px; line-height: 1.1; color: #bdb1bf; }
+.stats-heading { margin: 14px 0 8px; padding-top: 12px; border-top: 2px solid #51424f; font: 400 18px/1 'VT323', monospace; letter-spacing: 1px; text-transform: uppercase; color: #bdb1bf; }
+.stats-par, .stats-pieces { list-style: none; margin: 0; padding: 0; }
+.stats-par { display: grid; gap: 4px; font-size: 22px; line-height: 1; }
+.stats-par li { display: grid; grid-template-columns: 3ch minmax(0, 1fr); align-items: center; gap: 10px; }
+.stats-par abbr { text-align: right; text-decoration: none; color: var(--paper); }
+.stats-bar { box-sizing: border-box; width: calc(var(--share, 0) * 100%); min-width: 3ch; padding: 2px 6px; text-align: right; font-variant-numeric: tabular-nums; color: var(--menu-shadow); background: #9b899c; }
+.is-par .stats-bar { background: var(--gold); }
+.stats-bar.is-empty { color: #bdb1bf; background: #302a35; }
+.stats-pieces { display: flex; justify-content: space-between; gap: 6px; font-size: 24px; line-height: 1; color: var(--paper); font-variant-numeric: tabular-nums; }
+.stats-pieces span { color: var(--gold); }
+@media (forced-colors: active) { .stats-bar { border: 1px solid CanvasText; } }
+/* Stats shares Archive's row, so the menu is no taller than it was. */
+#menu-home .menu-actions { grid-template-columns: 1fr 1fr; }
+#menu-home .menu-actions button { grid-column: 1 / -1; }
+#menu-home .menu-actions #stats-button, #menu-home .menu-actions #archive-button { grid-column: auto; }

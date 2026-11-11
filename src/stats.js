@@ -143,8 +143,13 @@ export function summarize(ledger, today) {
   return { played: days.length, won: wins.length, streak: currentStreak(ledger, today), best: bestStreak(ledger), par, pieces };
 }
 
-/** How a streak is written, on the paper and the share card: nothing below 2. */
-export const streakMark = (streak) => (Number.isInteger(streak) && streak >= 2 ? `🔥${streak}` : '');
+const FLAME = '🔥';
+/**
+ * How a streak is written, on the paper and the share card: nothing below 2.
+ * A line may break between an emoji and a number, so an invisible word joiner
+ * (U+2060) holds the flame to its count wherever the card is pasted.
+ */
+export const streakMark = (streak) => (Number.isInteger(streak) && streak >= 2 ? `${FLAME}\u2060${streak}` : '');
 
 /** A share card with the streak closing its title line; unchanged below a streak of 2. */
 export function shareStreak(card, streak) {
@@ -153,6 +158,9 @@ export function shareStreak(card, streak) {
   const [title, ...rest] = card.split('\n');
   return [`${title} · ${mark}`, ...rest].join('\n');
 }
+
+/** For the result paper's preview: should the title wrap, the streak stays on the date's line. */
+export const holdStreak = (title) => title.replace(` · ${FLAME}`, `\u00A0·\u00A0${FLAME}`);
 
 /**
  * The stored ledger after restoring a backup that carries one (`incomingRaw`),
@@ -184,7 +192,7 @@ export function openLedger(storage, prefix, { today = utcDay } = {}) {
     try { storage.setItem(name, raw); } catch { cached.unsaved = true; }
     return ledger;
   };
-  function saves() {
+  function deviceSaves() {
     const found = [];
     for (let index = 0; index < storage.length; index++) {
       const key = storage.key(index);
@@ -198,17 +206,19 @@ export function openLedger(storage, prefix, { today = utcDay } = {}) {
       if (raw === cached.raw ? raw !== null : raw === null && cached.unsaved) return cached.ledger;
       const stored = parseLedger(raw);
       if (stored) { cached = { raw, ledger: stored, unsaved: false }; return stored; }
-      const filled = backfillLedger(saves(), today());
+      const filled = backfillLedger(deviceSaves(), today());
       return Object.keys(filled.days).length ? keep(filled) : filled;
     } catch { return cached.ledger; }
   }
   return {
     read,
-    /** Record today's official run: entered, or won, on its own UTC day. */
+    /** Record today's official run: entered, or won, on its own UTC day. It runs inside every save, so it never throws. */
     note(state, daily) {
-      const ledger = read();
-      const next = noteRun(ledger, state, daily, today());
-      if (next !== ledger) keep(next);
+      try {
+        const ledger = read();
+        const next = noteRun(ledger, state, daily, today());
+        if (next !== ledger) keep(next);
+      } catch {}
     },
     /** After restoring a backup from before the ledger: its saves stand in for one. */
     adopt(saves) {

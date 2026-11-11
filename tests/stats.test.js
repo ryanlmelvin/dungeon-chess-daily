@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-  LEDGER_KEY, backfillLedger, bestStreak, currentStreak, emptyLedger, mergeLedgers, noteRun, openLedger, parseLedger,
+  LEDGER_KEY, backfillLedger, bestStreak, currentStreak, emptyLedger, holdStreak, mergeLedgers, noteRun, openLedger, parseLedger,
   planLedgerMerge, runScore, serializeLedger, shareStreak, streakMark, streakThrough, summarize, utcDay,
 } from '../src/stats.js';
 import { planBackupMerge } from '../src/backups.js';
@@ -362,20 +363,43 @@ test('restoring a backup from before the ledger counts its saves, and one with a
   assert.equal(storage.writes, 1);
 });
 
+test('the page carries what the Stats page and the paper’s streak are drawn into', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  for (const id of ['stats-button', 'stats-dialog', 'stats-totals', 'stats-par', 'stats-pieces', 'paper-streak']) {
+    assert.equal(html.split(`id="${id}"`).length, 2, `one #${id}`);
+  }
+  // The streak sits in the dateline rule beside the edition number, hidden until there is one to show.
+  assert.match(html, /id="paper-tier">[^<]*<\/span><span id="paper-streak" role="img" hidden><\/span>/);
+  assert.equal(ledgerNeverThrows(), true);
+});
+function ledgerNeverThrows() {
+  const ledger = openLedger(null, prefix, { today: () => '2026-11-05' });
+  ledger.note(fifth.won, fifth.daily);
+  ledger.note({ status: 'won' }, null);
+  ledger.adopt({ [saveKey('2026-11-04', 9)]: oldSave('2026-11-04') });
+  return ledger.streak() === 2 && ledger.summary().won === 2;
+}
+
 test('the share card closes its title line with a streak of 2 or more, and nothing else changes', () => {
   const now = new Date(Date.UTC(2026, 10, 5));
   const card = getShareText(fifth.won, floorPars(fifth.daily), { now });
   const [title, floors, link] = card.split('\n');
   assert.match(title, /^Dungeon Chess Daily · Nov 5 \S+$/u);
-  assert.equal(shareStreak(card, 12), `${title} · 🔥12\n${floors}\n${link}`);
-  assert.equal(shareStreak(card, 2).split('\n')[0], `${title} · 🔥2`);
+  // The flame and its count, held together by a word joiner so no line breaks between them.
+  const mark = (streak) => `🔥\u2060${streak}`;
+  assert.equal(shareStreak(card, 12), `${title} · ${mark(12)}\n${floors}\n${link}`);
+  assert.equal(shareStreak(card, 12).replace('\u2060', ''), `${title} · 🔥12\n${floors}\n${link}`);
+  assert.equal(shareStreak(card, 2).split('\n')[0], `${title} · ${mark(2)}`);
   assert.equal(shareStreak(card, 365).split('\n').length, 3, 'never a new line');
   for (const none of [0, 1, -3, undefined, null, 2.5, '12']) assert.equal(shareStreak(card, none), card, String(none));
   assert.equal(streakMark(1), '');
-  assert.equal(streakMark(2), '🔥2');
+  assert.equal(streakMark(2), mark(2));
+  // The result paper's preview keeps the streak on the date's line, should the title wrap.
+  assert.equal(holdStreak(`Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝ · ${mark(12)}`), `Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝\u00A0·\u00A0${mark(12)}`);
+  assert.equal(holdStreak('Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝'), 'Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝');
   // The streak on a card is the one that ended on the card's own day, so a card whose day isn't in the ledger has none.
   const ledger = wins('2026-11-03', '2026-11-04', '2026-11-05');
-  assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-05')).split('\n')[0], `${title} · 🔥3`);
+  assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-05')).split('\n')[0], `${title} · ${mark(3)}`);
   assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-06')), card);
   assert.equal(shareStreak(card, streakThrough(wins('2026-11-05'), '2026-11-05')), card, 'a streak of 1 shows nothing');
 });
