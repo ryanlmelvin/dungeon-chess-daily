@@ -145,22 +145,31 @@ export function summarize(ledger, today) {
 
 const FLAME = '🔥';
 /**
- * How a streak is written, on the paper and the share card: nothing below 2.
+ * How a streak is written beside the paper's edition number: nothing below 2.
  * A line may break between an emoji and a number, so an invisible word joiner
- * (U+2060) holds the flame to its count wherever the card is pasted.
+ * (U+2060) holds the flame to its count wherever it is shown or pasted.
  */
 export const streakMark = (streak) => (Number.isInteger(streak) && streak >= 2 ? `${FLAME}\u2060${streak}` : '');
+/** The share card spells the streak out, so the line reads on its own: "🔥12-day streak". */
+export const cardStreak = (streak) => (streakMark(streak) ? `${streakMark(streak)}-day streak` : '');
 
 /** A share card with the streak closing its title line; unchanged below a streak of 2. */
 export function shareStreak(card, streak) {
-  const mark = streakMark(streak);
+  const mark = cardStreak(streak);
   if (!mark) return card;
   const [title, ...rest] = card.split('\n');
   return [`${title} · ${mark}`, ...rest].join('\n');
 }
 
-/** For the result paper's preview: should the title wrap, the streak stays on the date's line. */
-export const holdStreak = (title) => title.replace(` · ${FLAME}`, `\u00A0·\u00A0${FLAME}`);
+/**
+ * For the result paper's preview: should the title wrap, the streak stays whole
+ * and on the date's line (a no-break hyphen in "12-day"; the card itself keeps
+ * a plain one).
+ */
+export const holdStreak = (title) => {
+  const at = title.indexOf(` · ${FLAME}`);
+  return at < 0 ? title : `${title.slice(0, at)}\u00A0·\u00A0${title.slice(at + 3).replaceAll(' ', '\u00A0').replace('-day', '\u2011day')}`;
+};
 
 /**
  * The stored ledger after restoring a backup that carries one (`incomingRaw`),

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   LEDGER_KEY, backfillLedger, bestStreak, currentStreak, emptyLedger, holdStreak, mergeLedgers, noteRun, openLedger, parseLedger,
-  planLedgerMerge, runScore, serializeLedger, shareStreak, streakMark, streakThrough, summarize, utcDay,
+  planLedgerMerge, runScore, serializeLedger, shareStreak, streakMark, cardStreak, streakThrough, summarize, utcDay,
 } from '../src/stats.js';
 import { planBackupMerge } from '../src/backups.js';
 import { act, createGame, createPracticeGame, getDaily, getShareText, PLAYABLE_PIECES, RULES_VERSION } from '../src/game.js';
@@ -387,19 +387,25 @@ test('the share card closes its title line with a streak of 2 or more, and nothi
   assert.match(title, /^Dungeon Chess Daily · Nov 5 \S+$/u);
   // The flame and its count, held together by a word joiner so no line breaks between them.
   const mark = (streak) => `🔥\u2060${streak}`;
-  assert.equal(shareStreak(card, 12), `${title} · ${mark(12)}\n${floors}\n${link}`);
-  assert.equal(shareStreak(card, 12).replace('\u2060', ''), `${title} · 🔥12\n${floors}\n${link}`);
-  assert.equal(shareStreak(card, 2).split('\n')[0], `${title} · ${mark(2)}`);
+  // The card spells it out: "🔥12-day streak".
+  const spelled = (streak) => `${mark(streak)}-day streak`;
+  assert.equal(shareStreak(card, 12), `${title} · ${spelled(12)}\n${floors}\n${link}`);
+  assert.equal(shareStreak(card, 12).replace('\u2060', ''), `${title} · 🔥12-day streak\n${floors}\n${link}`);
+  assert.equal(shareStreak(card, 2).split('\n')[0], `${title} · ${spelled(2)}`);
+  assert.equal(cardStreak(12), spelled(12));
+  assert.equal(cardStreak(1), '');
   assert.equal(shareStreak(card, 365).split('\n').length, 3, 'never a new line');
   for (const none of [0, 1, -3, undefined, null, 2.5, '12']) assert.equal(shareStreak(card, none), card, String(none));
   assert.equal(streakMark(1), '');
   assert.equal(streakMark(2), mark(2));
   // The result paper's preview keeps the streak on the date's line, should the title wrap.
-  assert.equal(holdStreak(`Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝ · ${mark(12)}`), `Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝\u00A0·\u00A0${mark(12)}`);
+  // "12-day streak" stays whole there too: a no-break space and a no-break hyphen.
+  assert.equal(holdStreak(`Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝ · ${mark(12)}-day\u00A0streak`), `Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝\u00A0·\u00A0${mark(12)}\u2011day\u00A0streak`);
+  assert.equal(holdStreak(`Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝ · ${spelled(12)}`), `Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝\u00A0·\u00A0${mark(12)}\u2011day\u00A0streak`);
   assert.equal(holdStreak('Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝'), 'Dungeon\u00A0Chess\u00A0Daily · Nov\u00A05\u00A0♝');
   // The streak on a card is the one that ended on the card's own day, so a card whose day isn't in the ledger has none.
   const ledger = wins('2026-11-03', '2026-11-04', '2026-11-05');
-  assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-05')).split('\n')[0], `${title} · ${mark(3)}`);
+  assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-05')).split('\n')[0], `${title} · ${spelled(3)}`);
   assert.equal(shareStreak(card, streakThrough(ledger, '2026-11-06')), card);
   assert.equal(shareStreak(card, streakThrough(wins('2026-11-05'), '2026-11-05')), card, 'a streak of 1 shows nothing');
 });
