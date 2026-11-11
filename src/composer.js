@@ -1037,7 +1037,7 @@ function floorStart(base, floor, room, carried = null) {
 
 // A route's actions from `state`: waiting, and every legal move that picks up
 // nothing a certificate may not (powerups, and recruits before the king floor).
-function actionsFrom(state) {
+export function actionsFrom(state) {
   const actions = [{ type: 'wait' }];
   for (const move of legalMoves(state)) {
     const item = state.items.find((entry) => entry.x === move.x && entry.y === move.y);
@@ -1196,8 +1196,8 @@ export function botGuard(start, base, floor, par) {
 // The positions of a line (playLine) if the player is never captured along it
 // and the floor's challenge completes on its last move, as a certificate's, else null.
 const clean = (states) => (states && states.every((state, n) => state.hits === states[0].hits && (n === states.length - 1 || !state.exit.open)) ? states : null);
-// Each position along `line` from `start`, or null if a step fails.
-function playLine(start, line) {
+/** Each position along `line` from `start`, or null if a step fails. */
+export function playLine(start, line) {
   const states = [start];
   for (const action of line) {
     const next = routeTransition(states.at(-1), action);
@@ -1208,8 +1208,8 @@ function playLine(start, line) {
 }
 const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.role ?? null) === state.objective.piece;
 
-// Does a winning line use the planted idea?
-function usesIdea(built, states, line) {
+/** Does a winning line use the planted idea? `built` is the motif instance (composeFloor's trace hands it over at stage 'kept'). */
+export function usesIdea(built, states, line) {
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
   if (built.pawnLine) {
@@ -1544,6 +1544,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
       }
       if (best) {
         tally.kept++;
+        trace?.({ motif, attempt, stage: 'kept', built });
         const { line, wins } = best;
         const { room, kind } = hinted(built, best, line, base, floor, random(hash(`${seed}:${motif}:${attempt}:hint`)), carried);
         const composed = {
@@ -1567,16 +1568,17 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * certificate, proved by src/generation.js proveComposed. `floors` describes
  * each floor. `tier` composes under other monsters, and `daily` overrides the
  * raw daily (tooling: synthetic casts, or another modifier); `starts` the
- * start set (startSquares).
+ * start set (startSquares); `trace` hears each floor's composeFloor events,
+ * with its `floor` (tooling).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace } = {}) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};
   for (const floor of [0, 1, 2]) {
-    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares }));
+    floors.push(composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }

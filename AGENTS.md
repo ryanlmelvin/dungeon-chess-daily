@@ -30,6 +30,7 @@ npm run audit:dungeons -- 2026-11-01 365    # replay a year of dailies, validati
 npm run build:editions [-- --full]          # compose missing or stale dates; --full composes every date (~5 min)
 node scripts/measure-composer.mjs           # composer report: motifs, times, lines, the bot's runs
 node scripts/measure-human-par.mjs          # the human-like bot over the stored editions, against par
+node scripts/measure-par-slack.mjs --jobs 8 # room around each floor's idea: first moves that keep par, par wins off the idea
 ```
 
 Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to play
