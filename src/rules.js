@@ -1132,6 +1132,8 @@ function captureEnemy(state, captured, companion = false) {
     state.exit.open = state.objective.complete;
     // The move count stops here: gathering gold afterwards is free, though a capture still adds a move.
     if (state.objective.complete) state.objective.moves = state.turns - state.floorStart.turns;
+    // Moves stop counting here, so a chest not yet taken is gone (takeChest).
+    if (state.objective.complete) state.items = state.items.filter((item) => item.type !== 'chest');
     const moves = floorScoredMoves(state);
     // The ✓ echoes the paused move counter; the UI adds par where the run has one.
     // A recruit already at your side hunts on its own from here (huntsAlone).
@@ -1446,7 +1448,7 @@ function nextState(previous) {
   // Saves from before the shop tools have no count for them.
   for (const power of POWERUPS) state.powers[power.id] ??= 0;
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
-  state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - tacticGold(state.feats);
+  state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - featGold(state.feats);
   // Older saves only recorded exhaustion in the last action's events.
   if (previous.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
   return state;
@@ -1666,6 +1668,8 @@ function play(previous, action) {
     state.items = state.items.filter((item) => item !== coin); state.treasure++; state.gold++;
     state.events.push({ type: 'pickup', x: coin.x, y: coin.y });
   }
+  // The chest (takeChest): only your own piece landing on it takes it, never the magnet.
+  takeChest(state);
   // Ending a move in close range of a monster is captured at once: no warning
   // turn. At most one hit per move, so white's enemy phase then captures no one.
   // A double step can instead be taken en passant by a pawn beside it.
@@ -1702,6 +1706,52 @@ function play(previous, action) {
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartRun(state, [], NO_MOVES);
   return state;
+}
+
+// The chest (a dev preview, src/treasure.js): a composed room may hold one
+// item of type 'chest', off its planted line, as a second goal on the same
+// room. Only the player's own piece takes it, by ending a move on its square
+// while the door is still shut (a move that completes the challenge by its
+// own capture comes too late); monsters and the recruit ignore it, as they do
+// a coin, and the coin magnet never draws it in. It pays CHEST_GOLD and is
+// recorded as a 'chest' feat, so the gold ledger stays exact (featGold) and
+// validateSave can check it (validChests). When the challenge completes an
+// untaken chest is gone: moves stop counting there.
+/** Gold the chest pays. */
+export const CHEST_GOLD = 3;
+/** The treasure mark on the share card and beside par. */
+export const TREASURE_MARK = '💎';
+// Gold the run's feats have paid: forks and combos (src/tactics.js), and chests.
+const featGold = (feats) => tacticGold(feats) + CHEST_GOLD * (Array.isArray(feats) ? feats.filter((feat) => feat?.kind === 'chest').length : 0);
+function takeChest(state) {
+  const chest = state.exit.open ? null : state.items.find((item) => item.type === 'chest' && same(item, state.player));
+  if (!chest) return;
+  state.items = state.items.filter((item) => item !== chest);
+  state.gold += CHEST_GOLD;
+  state.feats.push({ floor: state.floor, kind: 'chest' });
+  state.events.push({ type: 'pickup', x: chest.x, y: chest.y, chest: true });
+}
+/** Did the player take floor `floor`'s chest? */
+export const chestTaken = (state, floor = state?.floor) => (state?.feats ?? []).some((feat) => feat.kind === 'chest' && feat.floor === floor);
+/**
+ * The treasure mark: the player took floor `floor`'s chest and finished the
+ * floor at `par` or better by the floor's own score (scoredMoves: moves until
+ * the challenge was complete, captures and paid hints included). On the floor
+ * in progress it holds once the challenge is complete, by the score so far.
+ */
+export function treasureMark(state, floor, par) {
+  if (!Number.isInteger(par) || !chestTaken(state, floor)) return false;
+  const record = state.records.find((entry) => entry.floor === floor);
+  if (record) return scoredMoves(record) <= par;
+  return floor === state.floor && state.objective?.complete === true && floorScoredMoves(state) <= par;
+}
+// A save's chests: a 'chest' feat only on a floor whose room holds a chest, once;
+// on the floor in progress the chest lies there until it is taken or the door opens.
+function validChests(value, daily) {
+  const holds = (floor) => (daily.composed?.[floor]?.items ?? []).some((item) => item.type === 'chest');
+  const taken = (floor) => (value.feats ?? []).filter((feat) => feat?.kind === 'chest' && feat.floor === floor).length;
+  if ([0, 1, 2].some((floor) => taken(floor) > (holds(floor) ? 1 : 0))) return false;
+  return !holds(value.floor) || value.items.some((item) => item.type === 'chest') === (!taken(value.floor) && !value.exit.open);
 }
 
 // A spoiler-free result card, golf-style:
@@ -1750,7 +1800,8 @@ export function getShareText(state, pars = null, { url = 'https://ryanlmelvin.gi
     const record = state.records.find((entry) => entry.floor === floor);
     const diff = Number.isInteger(scoredMoves(record)) && Number.isInteger(pars?.[floor]) ? scoredMoves(record) - pars[floor] : null;
     const score = diff === null ? '·' : diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `\u2212${-diff}`;
-    const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind && feat.floor === floor)).map(([, mark]) => mark).join('');
+    const feats = FEAT_MARKS.filter(([kind]) => (state.feats ?? []).some((feat) => feat.kind === kind && feat.floor === floor)).map(([, mark]) => mark).join('')
+      + (treasureMark(state, floor, pars?.[floor]) ? TREASURE_MARK : '');
     floors.push([FLOOR_MARKERS[floor], score, feats].filter(Boolean).join(' '));
   }
   return [`Dungeon Chess Daily · ${cardDate(state.date, now)} ${PIECE_MARKS[state.startingPiece]}`, floors.join('  '), url].filter(Boolean).join('\n');
@@ -1790,7 +1841,7 @@ export function validateSave(value, date, daily) {
     const reinforced = value.reinforcements ?? 0;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     // Each capture may also pay a fork and a combo bonus (tactics.js).
-    const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1);
+    const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1) + 3 * CHEST_GOLD;
     // A turn holds at most two captures of the player: the monsters' phase before a black move, then the move's own square.
     if (!integer(value.floor, 0, 2) || !integer(value.turns, 0, Number.MAX_SAFE_INTEGER) || !integer(value.captures, 0, totalPopulation) || !integer(value.hits, 0, 2 * value.turns) || !integer(value.treasure, 0, 9) || !integer(value.gold, 0, maxGold)) return false;
     if (!value.player || !walkable(value, value.player.x, value.player.y) || !Array.isArray(value.purchases) || typeof value.player.moved !== 'boolean') return false;
@@ -1806,14 +1857,14 @@ export function validateSave(value, date, daily) {
     if (!Array.isArray(value.records) || !Array.isArray(value.enemies) || !Array.isArray(value.species)) return false;
     // Gold comes from coins and optional captures. Runs of the 2026-11-05 and 11-06 editions began
     // under the old rule that paid every capture, so they may hold up to one gold per capture.
-    const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent - tacticGold(value.feats) : value.paidCaptures;
+    const paid = value.paidCaptures === undefined ? value.gold - value.treasure + spent - featGold(value.feats) : value.paidCaptures;
     const bonus = bonusCaptures(value);
     // Gold dropped in cave-ins (src/cave-in.js) leaves the ledger too.
-    if (!integer(paid, bonus, value.date >= '2026-11-05' && value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + tacticGold(value.feats) - spent - (value.dropped ?? 0)) return false;
+    if (!integer(paid, bonus, value.date >= '2026-11-05' && value.date <= '2026-11-06' ? value.captures : bonus) || value.gold !== value.treasure + paid + featGold(value.feats) - spent - (value.dropped ?? 0)) return false;
     // Special moves the player made: absent in older saves.
     // Forks and combos are bounded by captures (validTactics), the rest by 30.
     if (value.feats !== undefined && !(Array.isArray(value.feats) && value.feats.filter((feat) => !TACTIC_KINDS.includes(feat?.kind)).length <= 30 && value.feats.every((feat) => feat && typeof feat === 'object'
-      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle', 'bishop-pair', ...TACTIC_KINDS].includes(feat.kind)))) return false;
+      && equal(Object.keys(feat).sort(), ['floor', 'kind']) && integer(feat.floor, 0, value.floor) && ['en-passant', 'castle', 'bishop-pair', 'chest', ...TACTIC_KINDS].includes(feat.kind)))) return false;
     const template = createGame(daily); template.floor = value.floor;
     // Layout depends only on the edition and original piece, never on promotion.
     setFloor(template);
@@ -1848,6 +1899,7 @@ export function validateSave(value, date, daily) {
     // Saves from before scored moves have no count; a present one belongs to a complete challenge.
     if (value.objective.moves !== undefined && !(value.objective.complete && integer(value.objective.moves, 1, value.turns - value.floorStart.turns))) return false;
     if (!value.items.every((item) => template.items.some((original) => equal(original, item))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
+    if (!validChests(value, daily)) return false;
     const recruit = template.items.find((item)=>item.type==='companion');
     if (value.companion !== null) {
       const ally=value.companion;
