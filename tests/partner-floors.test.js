@@ -149,8 +149,17 @@ test('composeTandem composes only its matchups', () => {
 });
 
 test('the dev preview composes partner floors unless told partner=0', () => {
-  const on = composedDayFor(`?composed=${DAYS[0]}`), off = composedDayFor(`?composed=${DAYS[0]}&partner=0`);
+  // Treasure (the preview's other option) off, to see the partner floor alone.
+  const on = composedDayFor(`?composed=${DAYS[0]}&treasure=0`), off = composedDayFor(`?composed=${DAYS[0]}&treasure=0&partner=0`);
   assert.deepEqual(on, day(DAYS[0]).daily);
   assert.equal(off.generation.partner, undefined);
   assert.equal(encodeRooms(off.composed), EDITIONS[DAYS[0]].rooms);
+});
+
+test('with treasure on too, a partner floor keeps its room and gets no chest', () => {
+  const { daily, floors } = composeDay(DAYS[0], { partner: true, treasure: true }), floor = daily.generation.partner;
+  assert.equal(floors[floor].motif, PARTNER_MOTIF);
+  assert.deepEqual(daily.composed[floor], day(DAYS[0]).daily.composed[floor]);
+  assert.equal(daily.generation.treasure[floor], null);
+  assert.ok(!daily.composed[floor].items.some((item) => item.type === 'chest'));
 });
