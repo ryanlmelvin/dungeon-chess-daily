@@ -15,8 +15,9 @@
 // - Pawns advance in a chain, preferring a square another monster pawn guards.
 // - Any role the player threatens, unguarded, retreats behind a defender.
 //
-// Monsters grow smarter with the day's tier (src/difficulty.js). Each tier
-// keeps the ones before it; unknown or legacy tiers play like Gentle:
+// Monsters grow smarter with the tier (src/difficulty.js): every daily plays
+// Fair, and practice may choose any. Each tier keeps the ones before it;
+// unknown or legacy tiers play like Gentle:
 //
 // - Gentle: the habits above. Brave monsters, good for learning.
 // - Fair: every role avoids squares where it can be taken (exposed): squares

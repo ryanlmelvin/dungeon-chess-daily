@@ -1,13 +1,14 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// Phases 0 and 2 of docs/puzzle-first-idea.md: a prototype composer that builds
-// each floor around a planted solution instead of searching a random room. It is
-// tooling and a dev-only preview (src/main.js ?composed=), never part of a
-// published edition: production generation (src/generation.js) is unchanged.
+// The composer (docs/puzzle-first-idea.md): it builds each floor around a
+// planted solution instead of searching a random room. Every published
+// edition is composed by it at build time (scripts/build-editions.mjs, stored
+// in src/editions.js); the player's app never carries it, and the dev server
+// composes a date afresh with ?composed=YYYY-MM-DD (src/composed-preview.js).
 //
 // Every floor is a small room shaped by its motif, for a knight, bishop, rook
 // or queen player starting on one of a few home-rank squares (START_SETS),
-// under today's rules (every monster moves every turn):
+// under the rules (every monster moves every turn):
 //
 // - Bait: targets wind up at you from walled perches; step aside, a lunge
 //   lands on the square you left, off-balance, and you take it there.
@@ -32,21 +33,23 @@
 // an exact search over the player's moves (shortestWins) finds its true
 // shortest wins. A motif instance is kept only when its shortest win takes
 // 3 or 4 moves and uses the planted idea; that line is the floor's
-// certificate, and the whole day is proved once more by verifyWinningRoute.
+// certificate, and the whole day is proved once more (src/generation.js
+// proveComposed), as every edition is again when it loads.
 // Other decoys sit walled in, away from the line, so they never join in;
 // coins, the powerup and the recruit lie off the line. Failures reroll the
 // instance (and the dressing) from their own seeded streams, then try the
 // next motif, then a plain walk to walled-in targets, which always composes.
 import { createGame, act, legalMoves, closeAttacker, floorScoredMoves, matchedDecoy, PIECES, PIECE_COUNTS, POWERUPS } from './rules.js';
 import { getRawDaily } from './edition.js';
-import { tierForDate } from './difficulty.js';
-import { verifyWinningRoute, routeTransition, positionKey, findFloorRoute } from './fairness.js';
+import { DAILY_TIER } from './difficulty.js';
+import { routeTransition, positionKey, findFloorRoute } from './fairness.js';
+import { composedSeeds, proveComposed, GENERATOR_VERSION } from './generation.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 import { ICE_TILES } from './modifiers.js';
 
-export const COMPOSER_VERSION = 1;
+export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
 export const COMPOSED_PIECES = Object.freeze(['knight', 'bishop', 'rook', 'queen', 'pawn']);
 /** A planted line takes this many player moves, waits included. */
@@ -69,13 +72,12 @@ export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 
  */
 export const FLOOR_MOTIFS = Object.freeze([['bait', 'squeeze'], ['squeeze', 'bait'], ['net']]);
 /**
- * One monster ruleset for every composed day, a placeholder while the plan's
- * open question (one ruleset or five tiers) is settled: Fair, where every
- * monster just avoids squares you could take it on. Measured as the single
- * ruleset, Fair kept the most bait instances and the walk fallback stayed
- * short; squeeze, fork and net floors play alike on every tier.
+ * The monsters every composed day plays: the daily's one ruleset, Fair
+ * (src/difficulty.js DAILY_TIER). Measured as the single ruleset, Fair kept
+ * the most bait instances and the walk fallback stayed short; squeeze, fork
+ * and net floors play alike on every tier.
  */
-export const COMPOSED_TIER = 'fair';
+export const COMPOSED_TIER = DAILY_TIER;
 /**
  * How each floor's spare decoys (those not in the planted trick) behave:
  * 'held' stand still and harmless for as many moves as the planted line
@@ -104,11 +106,11 @@ const crownMoves = (tile) => 7 - tile.y - (tile.y === 1 ? 1 : 0);
 // May a decoy of `role` start on `tile`? A pawn only `crown` moves or more from crowning.
 const decoyStart = (role, tile, crown = DECOY_PAWN_CROWN) => role !== 'pawn' || crownMoves(tile) >= crown;
 /**
- * Where a composed floor may start the player. Every published floor starts
- * on e2 ('e2'); a composed floor may start on any square of `wide`, drawn
+ * Where a composed floor may start the player: any square of `wide`, drawn
  * afresh for each motif instance from the floor's seed, so the same pocket or
  * bait comes with a different way in from day to day. COMPOSED_STARTS names
- * the set the preview uses.
+ * the set every edition uses; 'e2' (where random rooms start) is for
+ * comparisons in the preview.
  */
 const squareOf = (name) => Object.freeze({ x: 'abcdefgh'.indexOf(name[0]), y: 8 - Number(name[1]) });
 export const START_SETS = Object.freeze({
@@ -156,7 +158,7 @@ export function startSquares(starts = COMPOSED_STARTS) {
   return squares;
 }
 
-/** Every published floor starts the player on e2. */
+/** A room with no start of its own starts the player on e2. */
 const HOME = Object.freeze({ x: 4, y: 6 });
 const EXIT = Object.freeze({ x: 4, y: 0 });
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -580,7 +582,7 @@ const MOTIFS = {
 // it: a missed lunge stays put and a capture doesn't move them, so their one
 // choice is a diagonal strike at you. A wall on the promotion rank under a
 // target pawn's file stops it a square short, so a composed floor's pawns
-// never crown (production walls most of that rank; src/rules.js
+// never crown (random rooms wall most of that rank instead; src/rules.js
 // promotionBarricades). On a bishop floor the stop square must be on the
 // bishop's colour, or a pawn stopped there could never be taken, so where
 // the second rank's square is off it the wall stands there instead.
@@ -1161,7 +1163,8 @@ function hinted(built, best, line, base, floor, rng, carried) {
       // moves no nearer crowning than it may start (DECOY_PAWN_CROWN).
       const roles = [base.species[floor], base.species[3 + floor * 2], base.species[4 + floor * 2]].map((species) => species.piece);
       const sleeper = room.enemies.find((foe) => foe.held && !built.boxes?.some((tile) => same(tile, foe)) && decoyStart(roles[foe.cast], square));
-      if (!sleeper) continue;
+      // It stands there alone: never on a monster already there.
+      if (!sleeper || room.enemies.some((foe) => foe !== sleeper && same(foe, square))) continue;
       Object.assign(sleeper, { x: square.x, y: square.y });
     } else room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
     const start = floorStart(base, floor, room, carried);
@@ -1559,19 +1562,17 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   throw new Error(`No floor composed for ${base.date} floor ${floor + 1}.`);
 }
 
-/** The composed day's seeds: one per floor, its own stream. */
-export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:${COMPOSER_VERSION}:${date}:${floor}`));
-
 /**
- * A composed day for a canonical date: the raw daily with the date's tier and
- * modifier, a composed room per floor and the planted lines as its
- * certificate, proved by verifyWinningRoute. `floors` describes each floor.
- * `daily` overrides the raw daily (tooling: synthetic casts, or another
- * modifier); `starts` the start set (startSquares).
+ * A composed day for a canonical date: the raw daily with the Fair monsters
+ * and its modifier, a composed room per floor and the planted lines as its
+ * certificate, proved by src/generation.js proveComposed. `floors` describes
+ * each floor. `tier` composes under other monsters, and `daily` overrides the
+ * raw daily (tooling: synthetic casts, or another modifier); `starts` the
+ * start set (startSquares).
  */
 export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts } = {}) {
   const squares = startSquares(starts);
-  const base = { ...raw, difficulty: tier ?? COMPOSED_TIER ?? tierForDate(raw.date), modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
+  const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};
@@ -1582,21 +1583,10 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts 
   }
   const actions = floors.flatMap((floor) => [...floor.line, { type: 'descend' }]);
   const daily = { ...base, composed: floors.map((floor) => floor.room) };
-  // The proof runs on the day's twin without its hint powerups (a certified
-  // route collects none); picking one up changes no monster's move, so the
-  // real day is then replayed as played, hints collected, never captured.
-  const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  const proof = verifyWinningRoute(createGame(twin), actions);
+  // Proved as every edition is when it loads (on its twin without hint powerups, then as played),
+  // every position along the way a valid save.
+  const proof = proveComposed(daily, actions, { saves: true });
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
-  let played = createGame(daily);
-  for (const action of actions) {
-    const next = act(played, action);
-    if (next === played || next.hits > played.hits) throw new Error(`Composed day ${raw.date} failed as played.`);
-    played = next;
-  }
-  if (played.status !== 'won') throw new Error(`Composed day ${raw.date} failed as played.`);
-  daily.generation = { version: COMPOSER_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
-  // Par on a composed day: the planted line plus one (src/par.js floorPars).
-  daily.composedPar = floors.map((floor) => floor.line.length + 1);
+  daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
   return { daily, floors };
 }

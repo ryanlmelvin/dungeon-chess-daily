@@ -6,16 +6,13 @@
   "license": "GPL-3.0-only",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "node scripts/build-fallbacks.mjs --verify && node scripts/build-editions.mjs && vite build && node scripts/build-sw.mjs",
+    "build": "node scripts/build-editions.mjs && vite build && node scripts/build-sw.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
-    "verify:fallbacks": "node scripts/build-fallbacks.mjs --verify",
     "audit:dungeons": "node scripts/audit-dungeons.mjs",
-    "calibrate:difficulty": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs",
-    "calibrate:shortlist": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs --fast",
-    "calibrate:confirm": "node --max-old-space-size=8192 scripts/calibrate-difficulty.mjs --confirm scripts/calibration-shortlist.json",
     "build:editions": "node scripts/build-editions.mjs",
-    "verify:editions": "node scripts/build-editions.mjs --verify"
+    "verify:editions": "node scripts/build-editions.mjs --verify",
+    "audit:editions": "node scripts/build-editions.mjs --audit"
   },
   "dependencies": {
     "three": "^0.181.1"

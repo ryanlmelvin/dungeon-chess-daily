@@ -124,14 +124,16 @@ test('a new floor starts without a combo or a fork', () => {
 test('real runs with forks and combos save, resume and validate', () => {
   let forkFrame = null;
   let seen = 0;
-  for (const date of ['2026-11-05', '2026-11-06', '2026-11-07']) {
+  // Planted lines win a fork or a combo now and then (2026-11-04 is the first).
+  for (const date of ['2026-11-01', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07']) {
     const daily = getDaily(date);
     const run = botRun(daily);
     for (const frame of run.frames) {
       const saved = JSON.parse(JSON.stringify(frame));
       assert.equal(validateSave(saved, date, daily), true, `${date} turn ${frame.turns}`);
       assert.equal(saved.gold, frame.gold);
-      if (frame.fork && frame.status === 'playing' && !forkFrame) forkFrame = { saved, date, daily };
+      // A pending fork after a capture: one more fork won would be in bounds (validTactics).
+      if (frame.fork && frame.status === 'playing' && frame.captures > 0 && !forkFrame) forkFrame = { saved, date, daily };
     }
     seen += run.frames.at(-1).feats.filter((feat) => ['fork', 'combo'].includes(feat.kind)).length;
   }

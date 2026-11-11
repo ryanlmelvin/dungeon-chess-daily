@@ -1,11 +1,13 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
 // The archive lists past editions and what this device has saved for each.
 // Editions are deterministic, so any past date can be rebuilt and played.
+import { RULES_VERSION } from './rules.js';
+
 const DAY = 86_400_000;
 const STATUSES = new Set(['playing', 'won', 'lost']);
 
-/** Official v11 save key for a date, relative to the app's storage prefix. */
-export const dailySaveKey = (date) => `daily:v11:${date}`;
+/** The official save key for a date under the current rules, relative to the app's storage prefix. */
+export const dailySaveKey = (date) => `daily:v${RULES_VERSION}:${date}`;
 
 /** True when `date` is a past edition that the archive offers. */
 export function isArchiveDate(date, today, first) {

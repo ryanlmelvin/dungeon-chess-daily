@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Measure the phase-0 composer (src/composer.js) over every date of the
+// Measure the composer (src/composer.js) over every date of the
 // daily pieces it composes (src/composer.js COMPOSED_PIECES, or --pieces):
 // per motif, how often a
 // built instance's planted idea wins within the line's length (replay
 // acceptance), time per floor, and the human-like bot's runs from each floor's
 // start (src/human-bot.js playFloor, 40 seeded runs, steering its recruit as
-// par assumes). Par is the planted line plus one. A run misses when it fails
+// a Manual player would). Par is the planted line plus one. A run misses when it fails
 // or takes more than par + 4 moves; a stalled move neither takes a target nor
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from; on a
@@ -21,7 +21,7 @@
 import { writeFileSync } from 'node:fs';
 import { composeDay, MOTIF_LEVELS, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
-import { tierForDate, DIFFICULTY_TIERS } from '../src/difficulty.js';
+import { DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { certifiedFloors, playFloor, runSeed, medianRun, HUMAN_RUNS } from '../src/human-bot.js';
 import { targetDistance } from '../src/fairness.js';
 import { floorScoredMoves } from '../src/rules.js';

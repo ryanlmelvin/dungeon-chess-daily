@@ -8,9 +8,9 @@ import { TACTIC_COPY, RECRUIT_COPY, BISHOP_PAIR_COPY } from './tactics-art.js';
 import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
-import { tierLabel, DIFFICULTY_TIERS, TIER_IDS } from './difficulty.js';
+import { DIFFICULTY_TIERS, TIER_IDS } from './difficulty.js';
 import { archiveMonth, dailySaveKey, isArchiveDate, shiftMonth, STATUS_LABELS } from './archive.js';
-import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialRun, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers } from './game.js';
+import { getDaily, createGame, createPracticeGame, canChoosePiece, isOfficialRun, act, resetFloor, hopelessFloor, dangerTiles, legalMoves, getShareText, scoredMoves, floorScoredMoves, retryLostRun, validateSave, coinlessFloor, SHOP_ITEMS, PIECES, borrowedPiece, takebackTarget, shopOffers, RULES_VERSION } from './game.js';
 import { recruitChoice } from './game.js';
 import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
@@ -25,6 +25,7 @@ import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { caveInLabel, caveInLoss, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
 import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
+import { celebrateCheckmate } from './checkmate.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -33,8 +34,9 @@ const prefix = `dchess:${scope}:`;
 // and is never swapped for today's edition until the player chooses to return.
 const archiveSessionKey = `${prefix}archive:open`;
 let archiveMode = false;
-// Dev only, stripped from builds: ?composed=YYYY-MM-DD plays that date's
-// composed day (src/composed-preview.js), saved apart from every real run.
+// Dev only, stripped from builds: ?composed=YYYY-MM-DD composes that date
+// afresh with the composer as it is now (src/composed-preview.js), saved apart
+// from every real run.
 const preview = import.meta.env.DEV && new URLSearchParams(location.search).has('composed') ? await import('./composed-preview.js') : null;
 const composedDay = preview?.composedDayFor(location.search) ?? null;
 let daily = composedDay ?? getDaily();
@@ -43,7 +45,7 @@ try {
   if (isArchiveDate(opened, daily.date, FIRST_EDITION_DATE)) { daily = getDaily(opened); archiveMode = true; }
 } catch {}
 const newGame = () => (composedDay ? createComposedGame(composedDay) : createGame(daily));
-// Practice replays the official room, so the composed preview has none.
+// Practice replays the stored edition's rooms, so the composer preview has none.
 if (composedDay) $('practice-button').hidden = true;
 let state = null;
 // Set while watching the bot's certified route; the saved run is untouched.
@@ -60,8 +62,8 @@ let noticeTimer;
 let sound = true;
 let audio;
 // Different rulesets never overwrite each other's runs, including in older tabs.
-const key = () => `${prefix}${composedDay ? preview.composedSaveTag(location.search) : practice ? 'practice:' : 'daily:'}v11:${daily.date}`;
-const practiceModeKey = () => `${prefix}practice:active:v11:${daily.date}`;
+const key = () => `${prefix}${composedDay ? preview.composedSaveTag(location.search) : practice ? 'practice:' : 'daily:'}v${RULES_VERSION}:${daily.date}`;
+const practiceModeKey = () => `${prefix}practice:active:v${RULES_VERSION}:${daily.date}`;
 function setPracticeMode(enabled) {
   practice = enabled;
   try {
@@ -182,8 +184,8 @@ function switchScreen(next) {
 function renderPaper() {
   $('paper-date').dateTime = daily.date;
   $('paper-date').textContent = paperDate(daily.date);
-  // The weekday's difficulty tier, e.g. "DIFFICULTY: TOUGH": no clue about the dungeon itself.
-  $('paper-tier').textContent = `${composedDay ? 'COMPOSED PREVIEW · ' : ''}${Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION'}`;
+  // The edition's number, e.g. "EDITION NO. 14" (No. 1 is the launch date): no clue about the dungeon itself.
+  $('paper-tier').textContent = `${composedDay ? 'COMPOSED PREVIEW · ' : ''}EDITION NO. ${daily.edition}`;
   // Each story pictures one floor's target, and its headline says how it moves
   // without naming it: crack the headline and you know that monster's piece.
   $('headline').textContent = headlineFor(daily.species[0], daily.date, 0);
@@ -384,8 +386,8 @@ function fitMessageLog() {
   placeMessageLog();
   box.scrollTop = box.scrollHeight;
 }
-// Par: the certified route's moves for this floor. Only the number shows, and
-// only for the official piece and color the route was certified for.
+// Par: the floor's planted line plus one (src/par.js). Only the number shows,
+// and only for the official piece, color and monsters.
 function renderPar() {
   const par = parFor(state, daily);
   $('par-status').hidden = par === null;
@@ -991,8 +993,8 @@ function takeAction(action) {
   const pending = pendingOrder();
   const next = act(state, action);
   if (next === state) return false;
-  // Composed king floors (dev preview): checkmate gets its moment.
-  if (preview && next.events.some((event) => event.type === 'checkmate')) { setTimeout(() => preview.celebrateCheckmate(), 380); playSound([{ type: 'win' }]); }
+  // A mate on the king floor wins at once: checkmate gets its moment.
+  if (next.events.some((event) => event.type === 'checkmate')) { setTimeout(() => celebrateCheckmate(), 380); playSound([{ type: 'win' }]); }
   turnLocked=!shopping;
   ordering = null;
   // The preview already played this turn up to the recruit's phase; the board animates the rest.
@@ -1460,7 +1462,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice)saves[`daily:v11:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice&&!composedDay)saves[`daily:v${RULES_VERSION}:${daily.date}`]=JSON.stringify(state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);progressStatus('Backup download requested.');
 });
@@ -1536,11 +1538,9 @@ getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`
 
 // WordleBot-style comparison: after beating the daily run with the official
 // piece, set the player's moves beside the Dungeon Bot's (src/bot.js): the
-// human-like bot when it cleared every floor, else the certified route.
-// Practice wins never reveal it, so it cannot spoil a daily run still in play.
+// line each floor was built around. Practice wins never reveal it, so it
+// cannot spoil a daily run still in play.
 const BOT_NOTES = {
-  human: 'This bot plays like a careful player: it sees only what you see, steers its recruit, and never goes out of its way for a powerup. Its moves on each floor set that floor’s par.',
-  certified: 'Today the careful bot couldn’t clear every floor, so this is the route that proved the dungeon can be won: no powerups, never captured (pawn days at most four times), no ally but the floor 3 recruit.',
   planted: 'This is the line each floor was built around: a shortest win, never captured. Par is one move more.',
 };
 let botCache = null;

@@ -31,7 +31,7 @@
 //
 // This module imports nothing from rules.js.
 
-/** Moves from the door opening to the cave-in, by the day's difficulty tier (src/difficulty.js). */
+/** Moves from the door opening to the cave-in, by the monsters' tier (src/difficulty.js; every daily plays Fair). */
 export const CAVE_IN_MOVES = Object.freeze({ gentle: 7, fair: 6, tricky: 5, tough: 4, fiendish: 4 });
 /** Editions from before tiers (difficulty 'standard') or any other value. */
 export const CAVE_IN_DEFAULT_MOVES = 5;

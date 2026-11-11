@@ -4,12 +4,22 @@ import assert from 'node:assert/strict';
 import { act, createGame, unreachablePickups, coinlessFloor } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { getDaily } from '../src/generation.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
-test('powerups never sit on or beside the start square, and stay reachable (from 2026-11-06)', () => {
+// Each floor of a random room as it begins, the one before cleared in place.
+const nextFloor = (state) => {
+  const cleared = structuredClone(state);
+  cleared.enemies = cleared.enemies.filter((foe) => foe.role !== cleared.objective.piece);
+  cleared.objective.complete = true; cleared.exit.open = true;
+  return act(cleared, { type: 'descend' });
+};
+
+// A random room (tests/fixtures/random-room.js) lays a powerup on every floor;
+// a composed one only as floor 1 or 2's hint (tests/reachability.test.js).
+test('a random room\'s powerups never sit on or beside the start square, and stay reachable (from 2026-11-06)', () => {
   for (let offset = 0; offset < 30; offset++) {
     const date = new Date(Date.UTC(2026, 10, 6 + offset)).toISOString().slice(0, 10);
-    const daily = getDaily(date);
-    let state = createGame(daily);
+    let state = createGame(randomRoomDaily(date));
     const check = () => {
       const power = state.items.find((item) => item.type === 'powerup');
       assert.ok(power, `${date} floor ${state.floor}: no powerup`);
@@ -18,15 +28,11 @@ test('powerups never sit on or beside the start square, and stay reachable (from
       assert.ok(!unreachablePickups(state).includes(power), `${date} floor ${state.floor}: powerup unreachable`);
     };
     check();
-    for (const action of daily.generation.certificate.actions) {
-      state = act(state, action);
-      if (action.type === 'descend' && state.status === 'playing') check();
-    }
+    for (let floor = 1; floor < 3; floor++) { state = nextFloor(state); check(); }
   }
 });
 
-// Keyed by the launch seed (LEGACY_LAYOUT_SEEDS). The public 2026-11-05 edition is
-// now regenerated under its weekday tier, so these check the seed's own layout.
+// Keyed by the launch seed (LEGACY_LAYOUT_SEEDS): the seed's own random room.
 test('editions before the rule keep their published powerup square', () => {
   const state = createGame(getRawDaily('2026-11-05'));
   const power = state.items.find((item) => item.type === 'powerup');
@@ -53,7 +59,7 @@ test('the last floor holds no coins or coin magnet, and the shop before it sells
       state = act(state, action);
       if (action.type !== 'descend' || state.status !== 'playing') continue;
       const coins = state.items.filter((item) => item.type === 'coin').length;
-      assert.equal(coins, state.floor === 2 ? 0 : 3, `${date} floor ${state.floor}`);
+      assert.ok(state.floor === 2 ? coins === 0 : coins <= 3, `${date} floor ${state.floor}: ${coins} coins`);
       if (state.floor === 2) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${date}: magnet on the last floor`);
     }
   }

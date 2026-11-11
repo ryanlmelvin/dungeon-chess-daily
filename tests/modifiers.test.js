@@ -3,10 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, legalMoves, validateSave } from '../src/rules.js';
-import { generateDaily, getDaily, fallbackKey } from '../src/generation.js';
-import { TIER_IDS } from '../src/difficulty.js';
-import { verifyWinningRoute } from '../src/fairness.js';
-import { FALLBACKS } from '../src/fallbacks.js';
+import { getDaily, proveComposed } from '../src/generation.js';
 import {
   MODIFIERS, ICE_TILES, COLLAPSE_EVERY, COLLAPSE_CAP,
   modifierFor, iceSlide, modifierStatus, collapseTick, arrivalSquare,
@@ -329,9 +326,23 @@ test('on a board with no empty square left the arrival is called off and still c
   assert.match(state.message, /The door rattles, but nothing comes through\./);
 });
 
+// A Breach edition whose floor 1 takes an arrival after ten frozen waits (composed
+// floors often start with the door quiet: every role an arrival could take is full).
+function arrivalDay() {
+  for (let offset = 0; offset < 200; offset++) {
+    const date = day(offset, '2026-11-07');
+    if (getRawDaily(date).modifier !== 'collapse') continue;
+    const daily = getDaily(date);
+    let state = createGame(daily);
+    state.powers.freeze = 1000;
+    for (let turn = 0; turn < COLLAPSE_EVERY; turn++) state = waitHolding(state);
+    if (state.reinforcements === 1 && state.enemies.some((entry) => entry.id === 'f0-r0')) return { date, daily };
+  }
+  throw new Error('No Breach day takes an arrival on floor 1.');
+}
+
 test('saves stay valid when an arrival drops in beside a blocked door', () => {
-  const date = firstDate('collapse');
-  const daily = getDaily(date);
+  const { date, daily } = arrivalDay();
   for (const blocker of ['player', 'monster']) {
     let state = createGame(daily);
     state.powers.freeze = 1000;
@@ -363,24 +374,22 @@ test('collapse stops once the stairs open and other modifiers never reinforce', 
   }
 });
 
-test('collapse saves validate through a certified route, and bad counts are rejected', () => {
-  let checked = false;
-  for (let offset = 0; offset < 120 && !checked; offset++) {
-    const date = day(offset, '2026-11-07');
-    if (getRawDaily(date).modifier !== 'collapse') continue;
-    const daily = getDaily(date);
-    let state = createGame(daily);
-    for (const action of daily.generation.certificate.actions) {
-      state = act(state, action);
-      assert.equal(validateSave(state, date, daily), true, `${date}: ${JSON.stringify(action)}`);
-      if (state.reinforcements > 0 && state.status === 'playing') {
-        checked = true;
-        assert.equal(validateSave({ ...state, reinforcements: state.reinforcements + COLLAPSE_CAP }, date, daily), false);
-        assert.equal(validateSave({ ...state, reinforcements: undefined }, date, daily), false);
-      }
-    }
+test('collapse saves validate as arrivals come in, and bad counts are rejected', () => {
+  // Planted lines open the stairs long before the tenth move, so only a slower run meets an arrival.
+  const { date, daily } = arrivalDay();
+  let state = createGame(daily);
+  for (const action of daily.generation.certificate.actions) {
+    state = act(state, action);
+    assert.ok(!(state.reinforcements > 0), `${date}: the planted line meets no arrival`);
   }
-  assert.ok(checked, 'some certified collapse route meets a reinforcement');
+  state = createGame(daily);
+  for (let turn = 0; turn < COLLAPSE_EVERY; turn++) {
+    state = waitHolding(state);
+    assert.equal(validateSave(JSON.parse(JSON.stringify(state)), date, daily), true, `${date}: wait ${turn + 1}`);
+  }
+  assert.ok(state.reinforcements > 0 && state.status === 'playing', `${date}: an arrival came in`);
+  assert.equal(validateSave({ ...state, reinforcements: state.reinforcements + COLLAPSE_CAP }, date, daily), false);
+  assert.equal(validateSave({ ...state, reinforcements: undefined }, date, daily), false);
 });
 
 test('collapse never puts a second king or queen (or a third of any other role) on the board', () => {
@@ -463,31 +472,16 @@ test('dark is retired: its draws are plain days, and dark saves no longer load',
   assert.equal(validateSave({ ...createGame(daily), modifier: 'dark' }, date, daily), false);
 });
 
-test('every modifier certifies: generated and forced-fallback editions replay under it', () => {
+test('every modifier certifies: its stored editions prove under it', () => {
   for (const modifier of Object.keys(MODIFIERS)) {
     const date = firstDate(modifier);
     const daily = getDaily(date);
     assert.equal(daily.modifier, modifier);
     const initial = createGame(daily);
     assert.equal(initial.modifier, modifier === 'none' ? undefined : modifier);
-    const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
+    const proof = proveComposed(daily, daily.generation.certificate.actions, { saves: true });
     assert.equal(proof.valid, true, `${modifier}: ${proof.reason}`);
-    // The same route need not survive another modifier; the fallback is keyed to it.
-    const forced = generateDaily(date, { maxAttempts: 0 });
-    assert.equal(forced.generation.source, 'fallback');
-    assert.equal(forced.modifier, modifier);
-    assert.ok(FALLBACKS[fallbackKey(forced.difficulty, forced.playerPiece, forced.playerColor, modifier)]);
-    assert.equal(verifyWinningRoute(createGame(forced), forced.generation.certificate.actions).valid, true, modifier);
-  }
-});
-
-test('the fallback bank covers every piece and difficulty under each rule-changing modifier', () => {
-  for (const modifier of ['ice', 'collapse']) {
-    for (const difficulty of TIER_IDS) {
-      for (const piece of ['pawn', 'knight', 'bishop', 'rook', 'queen']) {
-        const entry = FALLBACKS[fallbackKey(difficulty, piece, 'white', modifier)];
-        assert.ok(entry, `${difficulty}:${piece}:${modifier}`);
-      }
-    }
+    // An Ice day's rooms lay their own ice around the line.
+    if (modifier === 'ice') assert.ok(daily.composed.every((room) => room.ice?.length === ICE_TILES), 'every Ice room lays its own tiles');
   }
 });

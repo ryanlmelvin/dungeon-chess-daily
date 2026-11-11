@@ -3,11 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialRun, legalMoves, PIECES, unreachablePickups, validateSave } from '../src/game.js';
 import { createGame as createRawGame } from '../src/rules.js';
-import { candidateFor } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
 import { DIFFICULTY_TIERS, TIER_IDS } from '../src/difficulty.js';
 import { monsterSmarts } from '../src/monster-ai.js';
 import { CAVE_IN_MOVES, caveInMoves } from '../src/cave-in.js';
+import { distanceTable, UNREACHABLE } from '../src/move-tables.js';
 
 const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
 const move = (x, y) => ({ type: 'move', x, y });
@@ -55,11 +55,15 @@ test('all twelve choices keep every official room across all floors, fitted to t
         // The day's own piece, and a pawn, play the official room as it is.
         if (piece === daily.playerPiece || piece === 'pawn') assert.deepEqual(layout(practice), layout(floors[floor]), label);
         else {
-          // Another piece keeps its monsters and pickups, may lose walls, and reaches every pickup.
+          // Another piece keeps its monsters and pickups and may lose walls. The rooms are
+          // built around the day's piece, so it may find some out of reach, but it is never
+          // boxed in at its start: some square it reaches lies two or more steps away.
           assert.deepEqual(kept(practice), kept(floors[floor]), label);
           assert.ok(walls(practice).every((wall) => walls(floors[floor]).includes(wall)), `${label}: practice only clears walls`);
           assert.deepEqual(pickups(practice), pickups(floors[floor]), label);
-          assert.deepEqual(unreachablePickups(practice), [], label);
+          const table = distanceTable(practice.map, piece), from = practice.player.y * 8 + practice.player.x;
+          assert.ok(Array.from({ length: 64 }, (_, to) => to).some((to) => table[from * 64 + to] !== UNREACHABLE
+            && Math.max(Math.abs((to % 8) - practice.player.x), Math.abs(Math.floor(to / 8) - practice.player.y)) > 1), `${label}: boxed in`);
         }
         assert.equal(practice.startingPiece, piece); assert.equal(practice.playerColor, color);
         assert.equal(practice.hits, 0);
@@ -77,11 +81,16 @@ test('all twelve choices keep every official room across all floors, fitted to t
 test('a practice room fits its piece without changing or certifying the official room', () => {
   const daily = getDaily('2026-11-05');
   const before = structuredClone(daily);
-  const practice = createPracticeGame(daily, { piece: 'bishop', color: 'black' });
-  // The official pawn room's power-up and recruit sit off a bishop's colour; practice moves them.
+  const practice = createPracticeGame(daily, { piece: 'knight', color: 'black' });
+  // The official pawn room's recruit waits far off; practice brings it to one of the knight's first moves.
   assert.deepEqual(unreachablePickups(practice), []);
   const recruit = practice.items.find((item) => item.type === 'companion');
   assert.ok(legalMoves(practice).some((move) => move.x === recruit.x && move.y === recruit.y), 'the recruit waits one move away');
+  // A practice bishop boxed into three squares on a knight's room (2026-11-08) gets the walls on its lines cleared.
+  const boxed = createPracticeGame(getDaily('2026-11-08'), { piece: 'bishop' });
+  const official = createGame(getDaily('2026-11-08'));
+  assert.deepEqual(walls(official).filter((wall) => !walls(boxed).includes(wall)), ['4,5', '6,5']);
+  assert.ok(legalMoves(boxed).length > 2);
   assert.deepEqual(getDaily(daily.date), before);
   assert.deepEqual(daily, before);
   for (const options of [{ piece: 'dragon' }, { color: 'red' }, { piece: null }, { color: null }]) {
@@ -90,10 +99,10 @@ test('a practice room fits its piece without changing or certifying the official
 });
 
 test('a practice piece walled in at its start gets the walls on its first moves cleared', () => {
-  // 2027-01-04, a Gentle rook day, with the knobs it had when this was found:
-  // every jump from a knight's start is a wall in the official room.
+  // 2027-01-04's random room, a Gentle rook day with the knobs it had when this
+  // was found: every jump from a knight's start is a wall in that room.
   const knobs = { obstacleBase: 10, decoys: 2, scatter: 1, guards: 2, screens: 3 };
-  const official = candidateFor(getRawDaily('2027-01-04'), 'gentle', knobs);
+  const official = { ...getRawDaily('2027-01-04'), difficulty: 'gentle', ...knobs };
   const room = createRawGame(official);
   const jumps = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]]
     .map(([dx, dy]) => [room.player.x + dx, room.player.y + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < 8 && y < 8);

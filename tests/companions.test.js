@@ -4,14 +4,16 @@ import assert from 'node:assert/strict';
 import {act,createGame,getDaily,legalMoves,validateSave,PIECES} from '../src/game.js';
 import {getRawDaily} from '../src/edition.js';
 import {createGame as createCandidate,validateSave as validateCandidate} from '../src/rules.js';
+import {randomRoomDaily} from './fixtures/random-room.js';
 const move=(x,y)=>({type:'move',x,y});
 function scenario(piece='king',color='white',x=4,y=6) {
   let daily;
   // Kings are no longer a daily piece; engine tests borrow a rook day.
   const wanted=piece==='king'?'rook':piece;
   for(let d=0;d<365;d++) {const candidate=getRawDaily(new Date(Date.UTC(2026,10,5+d)));if(candidate.playerPiece===wanted&&candidate.playerColor==='white'){daily=candidate;break;}}
-  // Every daily is white; black engine tests flip the color, as practice does.
-  const state=createGame(daily);state.playerColor=color;Object.assign(state.player,{x,y});
+  // Every daily is white; black engine tests flip the color, as practice does. A random room
+  // (tests/fixtures/random-room.js), so every floor below waits with a recruit.
+  const state=createCandidate(daily);state.playerColor=color;Object.assign(state.player,{x,y});
   if(piece==='king'){state.startingPiece="king";state.player.piece="king";}
   state.map=Array(8).fill('........');state.props=[];state.items=[];state.enemies=[];state.companion=null;
   // Knights are the challenge here, so the kings and queens below are fair game for a recruit.
@@ -29,8 +31,8 @@ function descend(state) {
   return act(cleared,{type:'descend'});
 }
 
-// Floors one and two recruit any piece, on a square one move from the start;
-// a pawn only where its file is open to the far rank.
+// A random room's floors one and two recruit any piece, on a square one move
+// from the start; a pawn only where its file is open to the far rank.
 function earlyRecruit(state,label,seen) {
   const [recruit,...extra]=recruitsOn(state);
   assert.ok(recruit,`${label}: recruit`);assert.equal(extra.length,0);assert.ok(PIECES.includes(recruit.piece),label);seen?.add(recruit.piece);
@@ -64,16 +66,27 @@ test('floors one and two recruit any piece while the final floor always recruits
   }
   assert.deepEqual([...finalTypes],['king']);
   assert.deepEqual([...earlyTypes].sort(),[...PIECES].sort());
-  for(const date of ['2026-11-12','2026-11-13']) {
-    const daily=getDaily(date), state=createGame(daily);
-    earlyRecruit(state,date);
+  // A composed floor one or two may wait with a recruit, any piece, three or more moves out
+  // (off its planted line); the king floor always waits with a king.
+  for(const date of ['2026-11-12','2026-11-13','2026-11-14','2026-11-15']) {
+    const daily=getDaily(date);let state=createGame(daily);
     assert.equal(validateSave(state,date),true);
     assert.deepEqual(createGame(daily).items,state.items);
+    for(const action of daily.generation.certificate.actions) {
+      const recruits=recruitsOn(state);
+      assert.ok(recruits.length<=1,date);
+      if(state.floor===2)assert.deepEqual([...recruits.map((item)=>item.piece),...(state.companion?[state.companion.basePiece]:[])],['king'],date);
+      for(const recruit of recruits) assert.ok(PIECES.includes(recruit.piece)&&state.map[recruit.y][recruit.x]==='.'&&!state.enemies.some((enemy)=>enemy.x===recruit.x&&enemy.y===recruit.y),date);
+      state=act(state,action);
+      if(state.status!=='playing')break;
+    }
   }
 });
 
 test('saves from before the change keep their floor-one recruit, on the board or recruited',()=>{
-  const daily=getDaily('2026-11-13');const fresh=createGame(daily);
+  // Saves of a random room (as every edition was then) against that room's rules.
+  const daily=randomRoomDaily('2026-11-13');const fresh=createCandidate(daily);
+  const validateSave=(value,date)=>validateCandidate(value,date,daily);
   const state=structuredClone(fresh);state.items=state.items.filter((item)=>item.type!=='companion');
   state.floorSnapshot.items=state.floorSnapshot.items.filter((item)=>item.type!=='companion');
   // Saves from the brief era with no recruit on floors one and two still validate.

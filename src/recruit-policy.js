@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // How the human-like bot (src/human-bot.js) steers its recruit, as a player
 // on Manual recruit control (the default) does. It is the bot's default
-// recruit policy, so par, the result card's Dungeon Bot and the human gap all
-// assume a steered recruit; scripts/measure-recruits.mjs prices it against
-// Auto (autoRecruit in src/human-bot.js).
+// recruit policy, so its runs, its par and the human gap all assume a steered
+// recruit (autoRecruit in src/human-bot.js leaves it on Auto instead).
 //
 // It decides from what a player sees once the move is on the board, like the
 // Manual green dots (recruitChoice in src/rules.js): squares, red lanes, and
@@ -15,7 +14,7 @@
 // rules a player's orders keep: no capture on the turn the recruit joins, and
 // no orders once a floor is cleared (the recruit hunts on its own).
 // It is deterministic: the same position and move give the same order, so a
-// run replayed from its seed (humanRun) gives the same orders again.
+// run replayed from its seed gives the same orders again.
 import { recruitChoice } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 

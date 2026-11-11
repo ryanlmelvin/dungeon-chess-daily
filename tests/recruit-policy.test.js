@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // How the human-like bot steers its recruit (src/recruit-policy.js), its
-// default: par assumes a steered recruit.
+// default, as a person on Manual recruit control would.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, recruitChoice } from '../src/rules.js';
-import { candidateFor } from '../src/generation.js';
-import { knobsFor, tierForDate } from '../src/difficulty.js';
 import { humanPlayer, observe } from '../src/human-bot.js';
 import { steerRecruit } from '../src/recruit-policy.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
 const dayAfter = (start, day) => new Date(Date.parse(`${start}T00:00:00Z`) + day * 86_400_000).toISOString().slice(0, 10);
-const candidate = (date) => {
-  const raw = getRawDaily(date), tier = tierForDate(date);
-  return candidateFor(raw, tier, knobsFor(tier, raw.playerPiece), 0);
-};
+const candidate = (date) => randomRoomDaily(date);
 // The next floor's start, as if this one were cleared at once.
 function nextFloor(state) {
   const cleared = structuredClone(state);

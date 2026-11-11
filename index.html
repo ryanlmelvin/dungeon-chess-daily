@@ -134,7 +134,7 @@
            player reads only those; the game explains the rest as it comes up. -->
       <article class="guide-page" data-section="quick" data-title="The goal" hidden>
         <canvas class="guide-wide" data-guide-art="goal" width="400" height="128" role="img" aria-label="Capture every target to open the exit door onto the stairs."></canvas>
-        <p>Clear <b>3 floors.</b> On each, capture every target to open the door, then take the stairs. The last floor’s target is the king.</p>
+        <p>Clear <b>3 floors.</b> On each, capture every target to open the door, then take the stairs. The last floor’s target is the king: capture or checkmate it.</p>
         <p>The fewer moves, the better.</p>
       </article>
       <article class="guide-page" data-section="quick" data-title="Monsters" hidden>
@@ -186,6 +186,7 @@
         <canvas class="hint-art" data-guide-art="recruit" width="200" height="200" role="img" aria-label="Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line."></canvas>
         <p>Each floor’s recruit waits in a green ring. Step onto it and it joins you.</p>
         <p>After each move, tap a green square to move it, or tap it to stay put. It can capture targets too, except on <b>Auto</b> (in the menu), where it moves itself.</p>
+        <p>On floor 3 it’s a king, and the enemy king can’t take what it guards.</p>
       </article>
       <article class="guide-page" data-section="special" data-title="En passant" hidden>
         <div class="guide-pair">
@@ -220,8 +221,8 @@
       </article>
       <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
         <p>The paper shows each floor’s target, and its headline says how it moves. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
-        <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target, though a capture still adds one.</p>
-        <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece, against any monsters.</p>
+        <p>Each floor is built around a short winning line. <b>Par</b> is one move more. Your count stops at the last target, though a capture still adds one.</p>
+        <p>After you win, watch the bot play those lines. Win or lose, you can then practice with any piece, against any monsters.</p>
       </article>
       <nav id="guide-pagination" aria-label="Guide pages" hidden><button id="guide-previous">← Back</button><span id="guide-count" hidden></span><button id="guide-toc">Contents</button><button id="guide-next">Next →</button></nav>
     </section>

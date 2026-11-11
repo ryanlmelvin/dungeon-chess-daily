@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame } from '../src/rules.js';
-import { getDaily } from '../src/generation.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
 const STRAIGHT = [[0, 1], [1, 0], [-1, 0], [0, -1]];
@@ -13,11 +13,13 @@ function opening({ x, y, piece }) {
   return deltas.map(([dx, dy]) => [x + dx, y + dy]).filter(([tx, ty]) => tx >= 0 && ty >= 0 && tx < 8 && ty < 8);
 }
 
-test('no wall stands on a monster opening move on any floor (Ice crab, 2026-11-06)', () => {
-  // Twenty public editions cover every weekday tier and its calibrated knobs.
+// Random rooms (tests/fixtures/random-room.js) keep every monster's opening
+// moves open. Composed rooms wall their decoys and pockets in on purpose.
+test('no wall stands on a monster opening move on any floor of a random room (Ice crab, 2026-11-06)', () => {
   for (let offset = 1; offset <= 20; offset++) {
     const date = new Date(Date.UTC(2026, 10, 5 + offset)).toISOString().slice(0, 10);
-    const daily = getDaily(date);
+    const tier = ['gentle', 'fair', 'tricky', 'tough', 'fiendish'][offset % 5];
+    const daily = randomRoomDaily(date, { tier });
     const difficulty = daily.difficulty;
     let state = createGame(daily);
     const check = () => {
@@ -26,9 +28,13 @@ test('no wall stands on a monster opening move on any floor (Ice crab, 2026-11-0
       }
     };
     check();
-    for (const action of daily.generation.certificate.actions) {
-      state = act(state, action);
-      if (action.type === 'descend' && state.status === 'playing') check();
+    // Each floor as it begins, the one before cleared in place.
+    for (let floor = 1; floor < 3; floor++) {
+      const cleared = structuredClone(state);
+      cleared.enemies = cleared.enemies.filter((foe) => foe.role !== cleared.objective.piece);
+      cleared.objective.complete = true; cleared.exit.open = true;
+      state = act(cleared, { type: 'descend' });
+      check();
     }
   }
 });

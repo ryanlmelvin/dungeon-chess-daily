@@ -3,8 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getDaily } from '../src/game.js';
 import { botRun, dungeonBot, playerRun, verdict } from '../src/bot.js';
-import { humanSummary } from '../src/par.js';
-import { EDITIONS } from '../src/editions.js';
+import { floorPars } from '../src/par.js';
 import { composeDay } from '../src/composer.js';
 
 test('the bot replays the certified route to a win with per-floor move counts', () => {
@@ -42,33 +41,25 @@ test('playerRun and verdict compare move totals', () => {
   assert.equal(verdict({ moves: 21 }, { moves: 20 }), 'The bot found a route 1 move shorter.');
 });
 
-test('the result card shows the human-like bot when it cleared every floor, else the certified route', () => {
-  // The first edition whose bot run cleared every floor and would have survived as one run.
-  const date = Object.keys(EDITIONS).find((day) => EDITIONS[day].runs.every((run) => run !== null) && dungeonBot(getDaily(day)).kind === 'human');
-  const daily = getDaily(date);
-  const summary = humanSummary(daily);
-  const human = dungeonBot(daily);
-  assert.equal(human.kind, 'human');
-  assert.deepEqual(human.floors, summary.par, 'its floors are the pars');
-  assert.equal(human.moves, summary.par.reduce((a, b) => a + b, 0));
-  assert.equal(human.frames[0].turns, 0);
-  assert.equal(human.frames.at(-1).status, 'won');
-  assert.ok(Number.isInteger(human.hits) && human.hits >= 0);
-  const certified = dungeonBot(daily, { ...summary, runs: [summary.runs[0], null, summary.runs[2]] });
-  assert.equal(certified.kind, 'certified');
-  assert.deepEqual(certified.floors, botRun(daily).floors);
-  assert.equal(certified.frames.length, daily.generation.certificate.actions.length + 1);
-  assert.equal(dungeonBot({ ...daily, generation: undefined }), null);
-  const failed = Object.keys(EDITIONS).find((date) => EDITIONS[date].runs.includes(null));
-  assert.equal(dungeonBot(getDaily(failed)).kind, 'certified', failed);
+test('the result card\'s bot plays each floor\'s planted line, one move under par', () => {
+  for (const date of ['2026-11-01', '2026-11-05', '2026-11-11', '2027-03-21']) {
+    const daily = getDaily(date);
+    const run = dungeonBot(daily);
+    assert.equal(run.kind, 'planted');
+    assert.deepEqual(run.floors.map((moves) => moves + 1), floorPars(daily), `${date}: par is one more`);
+    assert.equal(run.frames.length, daily.generation.certificate.actions.length + 1);
+    assert.equal(run.frames.at(-1).status, 'won');
+    assert.equal(run.hits, 0, 'a planted line is never captured');
+  }
+  assert.equal(dungeonBot({ ...getDaily('2026-11-05'), generation: undefined }), null);
 });
 
-test('a composed day (the dev preview) replays its planted lines', () => {
+test('a composed day of the dev preview replays its planted lines too', () => {
   const { daily, floors } = composeDay('2026-11-16');
   const run = dungeonBot(daily);
   assert.equal(run.kind, 'planted');
   assert.deepEqual(run.floors, floors.map((floor) => floor.line.length), 'each floor scores its planted line');
-  assert.deepEqual(run.floors.map((moves) => moves + 1), daily.composedPar, 'par is one more');
+  assert.deepEqual(run.floors.map((moves) => moves + 1), floorPars(daily), 'par is one more');
   assert.equal(run.frames.length, daily.generation.certificate.actions.length + 1);
   assert.equal(run.frames.at(-1).status, 'won');
 });

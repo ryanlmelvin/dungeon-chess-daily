@@ -2,10 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planBackupMerge } from '../src/backups.js';
-import { act, createGame, getDaily, validateSave } from '../src/game.js';
+import { act, createGame, getDaily, validateSave, RULES_VERSION } from '../src/game.js';
 
 const date = '2026-11-05';
-const key = `daily:v11:${date}`;
+const key = `daily:v${RULES_VERSION}:${date}`;
 const daily = getDaily(date);
 let state = createGame(daily);
 const initial = JSON.stringify(state);
@@ -38,7 +38,7 @@ test('merge adds missing dates while retaining local-only and unknown data witho
   assert.deepEqual(data, beforeBackup);
 });
 
-test('completed valid v11 runs beat unfinished runs in both directions', () => {
+test('completed valid current-rules runs beat unfinished runs in both directions', () => {
   const restoreWin = planBackupMerge(new Map([[key, initial]]), backup({ [key]: won }));
   assert.equal(restoreWin.writes.get(key), won);
   const keepWin = planBackupMerge(new Map([[key, won]]), backup({ [key]: initial }));
@@ -108,7 +108,7 @@ test('invalid envelopes and entries reject the whole plan without inspecting loc
   const badEntries = [
     { sound: 'sometimes' },
     { unknown: 'value' },
-    { [`practice:v11:${date}`]: initial },
+    { [`practice:v${RULES_VERSION}:${date}`]: initial },
     { [key]: JSON.parse(initial) },
     { [key]: '{broken' },
     { [key]: invalidRun },

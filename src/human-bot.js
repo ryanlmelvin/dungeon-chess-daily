@@ -1,9 +1,10 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// A bot that plays like a careful person, for par. The certificate search
-// (src/fairness.js) proves a day can be won, but its route leans on things no
-// player sees, so par comes from this bot instead (src/par.js), and the gap
-// between the two says how hard a day is to figure out (src/difficulty.js).
+// A bot that plays like a careful person: a probe of how a person might fare
+// on a floor. Par is no longer its job (each floor's par is its planted line
+// plus one, src/par.js); the composer runs it as a guard on every floor it
+// builds (src/composer.js botGuard), and scripts/measure-human-par.mjs and
+// scripts/measure-composer.mjs report what it finds.
 //
 // It knows what a player knows: the board, the items, the red wind-up lanes,
 // the floor's target role and which species is the target (as if the
@@ -21,32 +22,28 @@
 // the recruit when it's about on the way; take a decoy when that costs
 // nothing; otherwise wait, since monsters often walk into range. It steers
 // its recruit as a player on Manual recruit control (the default) would
-// (src/recruit-policy.js), so par assumes a steered recruit. No shopping, and
+// (src/recruit-policy.js). No shopping, and
 // it never goes out of its way for a powerup: it steps on one only when it
 // stands on its pawn's file ahead, the pawn's one way forward.
 //
 // Each floor is played from its standard start, the position the certified
-// route reaches there, so one floor's par never depends on another's.
+// route reaches there, so one floor's runs never depend on another's.
 import { createGame, act, legalMoves, floorScoredMoves, scoredMoves } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
-import { HUMAN_MOVE_CAP } from './difficulty.js';
 import { hash, random } from './random.js';
 import { steerRecruit } from './recruit-policy.js';
 
-/** Bump when the bot's play or its runs change, so remembered pars are recomputed. */
+/** Bump when the bot's play or its runs change. */
 export const HUMAN_BOT_VERSION = 4;
 /**
- * Seeded runs per floor; par is the median of the ones that succeed. Forty,
- * not five: a five-run reading of the capped human gap a day is aimed with
- * (src/generation.js) scattered by 1.2 to 2.2 on the same edition, nearly a
- * whole day's step; forty runs cut that to about a third (docs/generation.md).
+ * Seeded runs per floor; its par is the median of the ones that succeed.
+ * Forty, not five: five runs of the same floor scattered too much to judge
+ * it by (docs/generation.md).
  */
 export const HUMAN_RUNS = 40;
-// A run that hasn't completed its floor in HUMAN_MOVE_CAP moves gives up. It
-// lives in difficulty.js, beside humanGap, so that difficulty.js imports no
-// game module: the monsters (src/monster-ai.js) read its tiers as they load.
-export { HUMAN_MOVE_CAP };
-/** Par on a floor every run failed: the certified route's moves plus 25%, rounded up. */
+/** A run that hasn't completed its floor in this many moves gives up. */
+export const HUMAN_MOVE_CAP = 40;
+/** The bot's par on a floor every run failed: the certified route's moves plus 25%, rounded up. */
 export const failedFloorPar = (certified) => Math.ceil(certified * 1.25);
 
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -302,8 +299,8 @@ function tableApproach(view, from, piece, gone) {
 export const autoRecruit = () => undefined;
 /**
  * The bot's recruit policy unless told otherwise: it steers the recruit like
- * a Manual player (src/recruit-policy.js). Par, the result card's run and the
- * human gap all come from it.
+ * a Manual player (src/recruit-policy.js). Its runs, its par and the human gap
+ * all come from it.
  */
 export const defaultRecruit = steerRecruit;
 
@@ -462,20 +459,21 @@ export function certifiedFloors(daily) {
 
 /**
  * The seed of a run: the date, the floor's own seed (src/rules.js floorSeed),
- * the floor and the run number, never the move count. So a floor's runs are the
- * same in any day assembled with it.
+ * the floor and the run number, never the move count. So a floor's runs are
+ * the same wherever it is played from its standard start.
  */
 export const runSeed = (daily, floor, run) => hash(`human:${daily.date}:${daily.floorSeeds?.[floor] ?? daily.dungeonSeed ?? daily.seed}:${floor}:${run}`);
 
 /**
- * Par for a certified edition from `runs` seeded runs per floor, each from the
- * floor's standard start, steering the recruit (`recruit`, defaultRecruit):
- * par assumes Manual recruit control. A floor's par is the lower median of the scored
- * moves of its successful runs, and `runs[floor]` names a run with exactly
- * that count (medianRun; the one the result card replays). A floor no run
- * completes gets failedFloorPar() of the certified route's moves and a null
- * run. `certified` holds the route's own moves per floor; `results` every
- * run's outcome (for measurement). Null without a replayable certificate.
+ * The bot's par for a certified edition (a probe: the day's own par is its
+ * planted line plus one, src/par.js), from `runs` seeded runs per floor, each
+ * from the floor's standard start, steering the recruit (`recruit`,
+ * defaultRecruit) as on Manual recruit control. A floor's par is the lower
+ * median of the scored moves of its successful runs, and `runs[floor]` names
+ * a run with exactly that count (medianRun). A floor no run completes gets
+ * failedFloorPar() of the certified route's moves and a null run.
+ * `certified` holds the route's own moves per floor; `results` every run's
+ * outcome. Null without a replayable certificate.
  */
 export function humanPar(daily, { runs = HUMAN_RUNS, recruit = defaultRecruit } = {}) {
   const certified = certifiedFloors(daily);
@@ -509,29 +507,18 @@ export function medianRun(outcomes, certified) {
 }
 
 /**
- * The human-like bot's whole dungeon for the result card: on each floor the
- * run `runs[floor]` played from that floor's standard start, stitched into
- * one list of frames (each floor opens on its standard start; the last frame
- * takes the stairs out). Same shape as botRun(), plus `hits`, the times it
- * was captured. Null if any floor has no run or a run doesn't complete its
- * floor. Each run is played again from its seed with the same recruit policy as
- * humanPar, which is deterministic, so its recruit orders come out the same
- * and nothing but the run numbers needs storing.
+ * How much harder a day is for the bot than its certificate: per floor, the
+ * bot's expected moves there (humanPar's runs, a failed run counting as the
+ * whole move cap) minus the certified route's moves. Returns those per floor
+ * (`floors`), the share of runs that failed per floor (`failed`) and their
+ * sum (`total`), rounded to tenths. Higher is harder.
  */
-export function humanRun(daily, runs, { recruit = defaultRecruit } = {}) {
-  if (!Array.isArray(runs) || runs.length !== 3 || !runs.every((run) => Number.isInteger(run) && run >= 0)) return null;
-  const certified = certifiedFloors(daily);
-  if (!certified) return null;
-  const frames = [], floors = [];
-  let hits = 0, turns = 0;
-  for (let floor = 0; floor < 3; floor++) {
-    const result = playFloor(certified.starts[floor], { seed: runSeed(daily, floor, runs[floor]), recruit, frames: true });
-    if (!result.won) return null;
-    frames.push(...result.frames);
-    floors.push(result.moves); hits += result.hits; turns += result.actions.length;
-  }
-  const out = act(frames.at(-1), { type: 'descend' });
-  if (out.status !== 'won') return null;
-  frames.push(out);
-  return { frames, turns, moves: floors.reduce((sum, moves) => sum + moves, 0), floors, hits };
+export function humanGap({ results, certified }, cap = HUMAN_MOVE_CAP) {
+  const round = (value) => Math.round(value * 10) / 10;
+  const floors = results.map((runs, floor) => runs.reduce((sum, run) => sum + (run.won ? run.moves : cap), 0) / runs.length - certified[floor]);
+  return {
+    floors: floors.map(round),
+    failed: results.map((runs) => round(runs.filter((run) => !run.won).length / runs.length)),
+    total: round(floors.reduce((sum, gap) => sum + gap, 0)),
+  };
 }

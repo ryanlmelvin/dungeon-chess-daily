@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable, RULES_VERSION } from '../src/rules.js';
-import { findWinningRoute, spendableHits, verifyWinningRoute } from '../src/fairness.js';
+import { findFloorRoute, spendableHits, verifyWinningRoute } from '../src/fairness.js';
 import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
-import { TIER_IDS, knobsFor } from '../src/difficulty.js';
+import { DAILY_TIER } from '../src/difficulty.js';
 
 const move = (x, y) => ({ type: 'move', x, y });
 const dates = new Map();
@@ -33,7 +33,11 @@ function scenario(piece = 'rook', color = 'white') {
   state.objective = { piece: 'king', complete: false };
   return state;
 }
-function replay(daily) {
+// A composed day's twin without its hint powerups: what the certificate is proved on
+// (src/generation.js proveComposed), since a certified route collects no powerup.
+const twinOf = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
+function replay(edition) {
+  const daily = twinOf(edition);
   const initial = createGame(daily);
   let state = initial, promoted = false, revertedPromotion = false, threatenedDecisions = 0;
   for (const action of daily.generation.certificate.actions) {
@@ -71,42 +75,51 @@ function replay(daily) {
   return { initial, state, promoted, revertedPromotion };
 }
 
-test('forced fallbacks certify every piece and difficulty with the production rules', () => {
-  for (const difficulty of TIER_IDS) {
-    for (const [identity, date] of dates) {
-      const daily = generateDaily(date, { difficulty, maxAttempts: 0 });
-      const profile = knobsFor(difficulty, daily.playerPiece);
-      assert.equal(`${daily.playerPiece}:${daily.playerColor}`, identity);
-      assert.equal(daily.generation.version, GENERATOR_VERSION);
-      assert.equal(daily.generation.source, 'fallback');
-      assert.equal(daily.generation.attempt, 0);
-      for (const knob of ['obstacleBase', 'decoys', 'scatter', 'guards', 'screens']) assert.equal(daily[knob], profile[knob], knob);
-      assert.ok(daily.generation.certificate.metrics.threatenedDecisions >= profile.minThreatenedDecisions);
-      const { initial } = replay(daily);
-      assert.equal(initial.schema, RULES_VERSION);
-      assert.equal(initial.rulesVersion, RULES_VERSION);
-      const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
-      assert.equal(proof.valid, true, `${difficulty}:${identity}: ${proof.reason}`);
-      assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);
-    }
+test('stored editions of every daily piece and modifier certify with the production rules', () => {
+  const seen = new Set();
+  for (let day = 0; seen.size < PIECES.length * 3 && day < 400; day++) {
+    const raw = getRawDaily(new Date(Date.UTC(2026, 10, 1 + day)));
+    const kind = `${raw.playerPiece}:${raw.modifier ?? 'none'}`;
+    if (seen.has(kind)) continue;
+    seen.add(kind);
+    const daily = getDaily(raw.date);
+    assert.equal(daily.generation.version, GENERATOR_VERSION);
+    assert.equal(daily.generation.source, 'composed');
+    assert.equal(daily.difficulty, DAILY_TIER);
+    const { initial } = replay(daily);
+    assert.equal(initial.schema, RULES_VERSION);
+    assert.equal(initial.rulesVersion, RULES_VERSION);
+    const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
+    assert.equal(proof.valid, true, `${kind}: ${proof.reason}`);
+    assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);
+    assert.equal(proof.metrics.hits, 0, `${kind}: planted lines are never captured`);
   }
+  assert.equal(seen.size, PIECES.length * 3, 'every piece on plain, Ice and Breach days');
 });
 
 test('the full certificate permits promotion and the promoted pawn reverts between rooms', () => {
-  for (const color of ['white']) {
-    const daily = generateDaily(dates.get(`pawn:${color}`), { maxAttempts: 0 });
-    const result = replay(daily);
-    assert.equal(result.promoted, true);
-    assert.equal(result.revertedPromotion, true);
-    assert.equal(daily.generation.certificate.metrics.promotion, true);
+  // A pawn day whose planted lines crown on floor 1 or 2 (a crown line).
+  let daily = null;
+  for (let day = 0; !daily && day < 400; day++) {
+    const raw = getRawDaily(new Date(Date.UTC(2026, 10, 1 + day)));
+    if (raw.playerPiece !== 'pawn') continue;
+    const edition = getDaily(raw.date);
+    const crowned = (() => { let state = createGame(twinOf(edition)); for (const action of edition.generation.certificate.actions) { const next = act(state, action); if (next.floor === state.floor && next.floor < 2 && next.events.some((event) => event.type === 'promotion')) return true; state = next; } return false; })();
+    if (crowned) daily = edition;
   }
+  assert.ok(daily, 'some pawn day crowns before the king floor');
+  const result = replay(daily);
+  assert.equal(result.promoted, true);
+  assert.equal(result.revertedPromotion, true);
+  assert.equal(daily.generation.certificate.metrics.promotion, true);
 });
 
 test('certificates reject tampered moves, omitted extraction, extra actions, purchases and automatic relics', () => {
-  const daily = generateDaily(dates.get('rook:white'), { maxAttempts: 0 });
+  const daily = twinOf(getDaily(dates.get('rook:white')));
   const initial = createGame(daily);
   const actions = daily.generation.certificate.actions;
   assert.equal(actions.at(-1).type, 'descend');
+  assert.equal(verifyWinningRoute(initial, actions).valid, true);
   for (const tampered of [
     [], actions.slice(0, -1), actions.slice(1),
     [move(-1, 4), ...actions], [{ type: 'descend' }, ...actions],
@@ -130,7 +143,7 @@ test('active companions and companion pickups cannot support a no-powerup certif
   const action = move(4, 5);
   state.companion = { piece: 'queen', basePiece: 'queen', x: 3, y: 6, moved: false, sharing: false };
   assert.equal(verifyWinningRoute(state, [action]).valid, false);
-  assert.deepEqual(findWinningRoute(state), { status: 'unknown', explored: 0 });
+  assert.deepEqual(findFloorRoute(state), { status: 'unknown', explored: 0 });
   state.companion = null;
   state.items = [{ type: 'companion', piece: 'queen', x: action.x, y: action.y }];
   const recruited = act(state, action);
@@ -200,7 +213,7 @@ test('connected geometry is insufficient when an enemy-first attack makes every 
     const next = act(state, { ...action, type: 'move' });
     assert.ok(next.events.some((event) => event.type === 'player-captured'));
   }
-  const result = findWinningRoute(state, { maxExpansions: 100, beamWidth: 4 });
+  const result = findFloorRoute(state, { maxExpansions: 100, beamWidth: 4 });
   assert.equal(result.status, 'unknown', 'bounded failure must never be called a proof of impossibility');
   assert.ok(result.explored <= 100);
 });
@@ -226,13 +239,13 @@ test('enemy-first re-selection advances enemy state once without spending a play
 test('deterministic bounded search reports unknown on exhaustion and does not mutate its input', () => {
   const state = scenario();
   const before = structuredClone(state);
-  assert.deepEqual(findWinningRoute(state, { maxExpansions: 0 }), { status: 'unknown', explored: 0 });
-  const first = findWinningRoute(state, { maxExpansions: 50, beamWidth: 4 });
-  assert.deepEqual(findWinningRoute(state, { maxExpansions: 50, beamWidth: 4 }), first);
+  assert.deepEqual(findFloorRoute(state, { maxExpansions: 0 }), { status: 'unknown', explored: 0 });
+  const first = findFloorRoute(state, { maxExpansions: 50, beamWidth: 4 });
+  assert.deepEqual(findFloorRoute(state, { maxExpansions: 50, beamWidth: 4 }), first);
   assert.ok(first.explored <= 50);
   assert.deepEqual(state, before);
-  assert.throws(() => findWinningRoute(state, { maxExpansions: -1 }), RangeError);
-  assert.throws(() => findWinningRoute(state, { beamWidth: 0 }), RangeError);
+  assert.throws(() => findFloorRoute(state, { maxExpansions: -1 }), RangeError);
+  assert.throws(() => findFloorRoute(state, { beamWidth: 0 }), RangeError);
 });
 
 test('daily certificates use UTC, are deterministic and cannot be corrupted through the cache', () => {
@@ -247,18 +260,17 @@ test('daily certificates use UTC, are deterministic and cannot be corrupted thro
   daily.generation.certificate.metrics.turns = -1;
   assert.deepEqual(getDaily(date), pristine);
   assert.throws(() => getDaily('2026-02-31'), /Invalid daily date/);
-  assert.throws(() => generateDaily(date, { difficulty: 'invalid' }), RangeError);
-  assert.throws(() => generateDaily(date, { maxAttempts: -1 }), RangeError);
 });
 
 
-test('mutating a returned fallback certificate cannot poison later forced generations', () => {
+test('mutating a returned edition cannot poison a later one of the same date', () => {
   const date = dates.get('rook:white');
-  const daily = generateDaily(date, { maxAttempts: 0 });
+  const daily = generateDaily(date);
   const pristine = structuredClone(daily);
   daily.generation.certificate.actions[0].x = -1;
   daily.generation.certificate.actions.pop();
   daily.generation.certificate.metrics.turns = -1;
+  daily.composed[0].enemies.pop();
   daily.targets[0] = 'invalid';
-  assert.deepEqual(generateDaily(date, { maxAttempts: 0 }), pristine);
+  assert.deepEqual(generateDaily(date), pristine);
 });

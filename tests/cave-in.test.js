@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, floorScoredMoves, legalMoves, resetFloor, scoredMoves, takebackTarget, validateSave } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
-import { candidateFor } from '../src/generation.js';
-import { knobsFor, tierForDate } from '../src/difficulty.js';
-import { findWinningRoute, verifyWinningRoute } from '../src/fairness.js';
+import { getDaily } from '../src/generation.js';
+import { verifyWinningRoute } from '../src/fairness.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 import { playFloor } from '../src/human-bot.js';
 import { tacticGold } from '../src/tactics.js';
 import { modifierStatus } from '../src/modifiers.js';
@@ -59,9 +59,9 @@ function realCaveIn() {
   if (built) return built;
   for (let day = 0; day < 120; day++) {
     const date = new Date(Date.UTC(2027, 6, 2 + day)).toISOString().slice(0, 10);
-    const raw = getRawDaily(date), tier = tierForDate(date);
+    const raw = getRawDaily(date);
     if (raw.modifier !== 'none') continue;
-    const daily = candidateFor(raw, tier, knobsFor(tier, raw.playerPiece));
+    const daily = randomRoomDaily(date);
     for (let seed = 0; seed < 3; seed++) {
       const run = playFloor(createGame(daily), { seed, frames: true });
       if (!run.won) continue;
@@ -364,15 +364,11 @@ test('countdown and cave-in saves validate; forged cave-in fields do not', () =>
 });
 
 test('certified routes take the stairs right after each clear, so they never meet a cave-in', () => {
-  let checked = 0;
-  for (let day = 0; checked < 2 && day < 30; day++) {
-    const date = new Date(Date.UTC(2027, 6, 5 + day)).toISOString().slice(0, 10);
-    const raw = getRawDaily(date), tier = tierForDate(date);
-    const candidate = candidateFor(raw, tier, knobsFor(tier, raw.playerPiece));
-    const route = findWinningRoute(createGame(candidate));
-    if (route.status !== 'solved') continue;
-    // The certificate as the Dungeon Bot replays it (src/bot.js botRun, here on the raw candidate).
-    const frames = [createGame(candidate)];
+  for (const date of ['2027-07-05', '2027-07-06']) {
+    const daily = getDaily(date);
+    const route = daily.generation.certificate;
+    // The certificate as the Dungeon Bot replays it (src/bot.js botRun).
+    const frames = [createGame(daily)];
     for (const action of route.actions) frames.push(act(frames.at(-1), action));
     assert.equal(frames.at(-1).status, 'won');
     frames.slice(0, -1).forEach((frame, index) => {
@@ -382,16 +378,15 @@ test('certified routes take the stairs right after each clear, so they never mee
       assert.ok(!(frame.caveIn?.moves < caveInMoves(frame)), `${date}: the countdown never runs`);
     });
     assert.ok(!frames.some(caveEvent)); assert.equal(frames.at(-1).dropped, undefined);
-    assert.deepEqual(verifyWinningRoute(createGame(candidate), route.actions).metrics.floorMoves, frames.at(-1).records.map(scoredMoves));
-    for (const frame of frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), date, candidate), true, `${date} turn ${frame.turns}`);
-    // A route that lingers after a clear is no certificate.
+    assert.deepEqual(route.metrics.floorMoves, frames.at(-1).records.map(scoredMoves));
+    for (const frame of frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), date, daily), true, `${date} turn ${frame.turns}`);
+    // A route that lingers after a clear is no certificate (proved on the day's twin without hint powerups).
+    const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
     const clear = frames.findIndex((frame) => frame.exit.open);
     const lingering = [...route.actions.slice(0, clear), wait, ...route.actions.slice(clear)];
-    const proof = verifyWinningRoute(createGame(candidate), lingering);
+    const proof = verifyWinningRoute(createGame(twin), lingering);
     assert.equal(proof.valid, false); assert.match(proof.reason, /keeps moving after a floor/);
-    checked++;
   }
-  assert.equal(checked, 2, 'two searched routes checked');
 });
 
 test('the shop’s cave-in news says what was lost, and nothing when nothing was', () => {

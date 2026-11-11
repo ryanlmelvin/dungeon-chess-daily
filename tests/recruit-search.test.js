@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The certificate search's recruit modes (src/fairness.js RECRUIT_MODES).
+// The route search's and verifier's recruit modes (src/fairness.js RECRUIT_MODES).
 // Every shipped certificate is 'auto': no recruit orders, and only the king
 // floor's recruit may join. 'steer' (tooling) plays the recruit like a Manual
 // player: every floor's recruit may join and each move or wait may carry an
@@ -9,15 +9,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, recruitChoice } from '../src/rules.js';
-import { findFloorRoute, findWinningRoute, verifyWinningRoute, routeTransition, safeTransition } from '../src/fairness.js';
-import { SEARCH_BUDGET, candidateFor, searchCandidate } from '../src/generation.js';
-import { knobsFor, tierForDate } from '../src/difficulty.js';
+import { findFloorRoute, verifyWinningRoute, routeTransition, safeTransition } from '../src/fairness.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
 const dayAfter = (start, day) => new Date(Date.parse(`${start}T00:00:00Z`) + day * 86_400_000).toISOString().slice(0, 10);
-const candidate = (date, attempt = 0) => {
-  const raw = getRawDaily(date), tier = tierForDate(date);
-  return candidateFor(raw, tier, knobsFor(tier, raw.playerPiece), attempt);
-};
+const candidate = (date, attempt = 0) => randomRoomDaily(date, { attempt });
+// A whole run's route, floor by floor (findFloorRoute), or null.
+function wholeRoute(game, options) {
+  let state = game;
+  const actions = [];
+  for (let floor = 0; floor < 3; floor++) {
+    const found = findFloorRoute(state, options);
+    if (found.status !== 'solved') return null;
+    actions.push(...found.actions);
+    state = found.state;
+  }
+  return state.status === 'won' ? { status: 'solved', actions } : null;
+}
 function dailyFor(piece) {
   for (let day = 0; day < 365; day++) {
     const daily = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
@@ -51,19 +59,21 @@ const captures = (state, actions) => {
 
 test('the default stays Auto: the same search, budget for budget, and no recruit metrics', () => {
   const game = createGame(candidate('2027-03-04'));
-  const plain = findWinningRoute(game);
-  assert.deepEqual(findWinningRoute(game, { recruit: 'auto' }), plain);
-  assert.deepEqual(findWinningRoute(game, { recruit: 'auto', everyRecruit: false }), plain);
-  const found = searchCandidate(candidate('2027-03-04'));
-  assert.deepEqual(searchCandidate(candidate('2027-03-04'), SEARCH_BUDGET, { recruit: 'auto' }), found);
-  assert.equal(found.metrics.recruit, undefined);
-  assert.ok(found.actions.every((action) => action.recruit === undefined));
+  const plain = findFloorRoute(game);
+  assert.deepEqual(findFloorRoute(game, { recruit: 'auto' }), plain);
+  assert.deepEqual(findFloorRoute(game, { recruit: 'auto', everyRecruit: false }), plain);
+  assert.equal(plain.status, 'solved');
+  assert.ok(plain.actions.every((action) => action.recruit === undefined));
+  const route = wholeRoute(game);
+  assert.ok(route, 'a whole run on Auto');
+  const proof = verifyWinningRoute(game, route.actions);
+  assert.equal(proof.valid, true, proof.reason);
+  assert.equal(proof.metrics.recruit, undefined);
 });
 
 test('recruit modes are checked', () => {
   const game = createGame(candidate('2027-03-04'));
   for (const options of [{ recruit: 'manual' }, { recruit: 'Auto' }, { recruit: null }, { everyRecruit: 'yes' }, { recruit: 'steer', everyRecruit: 1 }]) {
-    assert.throws(() => findWinningRoute(game, options), RangeError, JSON.stringify(options));
     assert.throws(() => findFloorRoute(game, options), RangeError, JSON.stringify(options));
     assert.throws(() => verifyWinningRoute(game, [], options), RangeError, JSON.stringify(options));
     assert.throws(() => routeTransition(game, { type: 'wait' }, options), RangeError, JSON.stringify(options));
@@ -111,8 +121,8 @@ test('a steered route verifies only as steered, and reports what its recruit did
   let found = null;
   for (let day = 0; day < 40 && !found; day++) {
     const daily = candidate(dayAfter('2031-03-01', day));
-    const route = findWinningRoute(createGame(daily), { recruit: 'steer' });
-    if (route.status === 'solved' && route.actions.some((action) => action.recruit !== undefined)) found = { daily, route };
+    const route = wholeRoute(createGame(daily), { recruit: 'steer' });
+    if (route?.status === 'solved' && route.actions.some((action) => action.recruit !== undefined)) found = { daily, route };
   }
   assert.ok(found, 'a steered route with orders');
   const { daily, route } = found;

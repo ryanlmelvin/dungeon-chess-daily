@@ -1,35 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Measure the human-like bot (src/human-bot.js) over the precomputed editions:
-// by tier and piece, how often its runs clear each floor, its par against the
-// certified route's moves per floor (medians), the raw and capped human gap
-// (src/difficulty.js humanGap and cappedGap, the tiers' measure; means) and the
-// certificate's difficultyScore (mean) beside them. The
-// bot steers its recruit, as par assumes; --auto leaves the recruit on Auto.
-// Prints Markdown tables. Read-only: it never writes src/editions.js.
+// Probe the stored editions with the human-like bot (src/human-bot.js): by
+// piece and floor, how often its runs clear the floor, how often they miss
+// par + 4 (par being the planted line plus one, src/par.js; a failed run
+// misses), its median moves against par, and the raw human gap (the bot's
+// mean moves over the planted line's; humanGap). The bot steers its recruit
+// as a Manual player would; --auto leaves the recruit on Auto. Prints
+// Markdown tables. Read-only: it never writes src/editions.js.
 //   node scripts/measure-human-par.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--auto]
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { EDITIONS_RANGE } from '../src/editions.js';
-import { generateDaily } from '../src/generation.js';
-import { humanPar, autoRecruit } from '../src/human-bot.js';
-import { humanGap, cappedGap, DIFFICULTY_TIERS } from '../src/difficulty.js';
+import { getDaily } from '../src/generation.js';
+import { humanPar, humanGap, autoRecruit } from '../src/human-bot.js';
+import { floorPars } from '../src/par.js';
 import { PLAYABLE_PIECES } from '../src/pieces.js';
 
 const DAY = 86_400_000;
+const SLACK = 4;
 const arg = (name, fallback) => { const index = process.argv.indexOf(`--${name}`); return index > 0 ? process.argv[index + 1] : fallback; };
 
 function measure(date, auto) {
   const began = performance.now();
-  const daily = generateDaily(date);
+  const daily = getDaily(date);
   const human = auto ? humanPar(daily, { recruit: autoRecruit }) : humanPar(daily);
+  const par = floorPars(daily);
   return {
-    date, tier: daily.difficulty, piece: daily.playerPiece, score: daily.generation.certificate.score,
-    certified: human.certified, par: human.par, failed: human.runs.map((run) => run === null),
-    won: human.results.map((runs) => runs.filter((run) => run.won).length), runs: human.results[0].length,
-    captured: human.results.map((runs) => runs.filter((run) => run.won && run.hits > 0).length),
-    // The result card shows the bot when every floor has a run (humanRun).
-    shown: human.runs.every((run) => run !== null),
-    gap: humanGap(human).total, capped: cappedGap(human), ms: performance.now() - began,
+    date, piece: daily.playerPiece, modifier: daily.modifier ?? 'none', par, botPar: human.par, runs: human.results[0].length,
+    won: human.results.map((runs) => runs.filter((run) => run.won).length),
+    missed: human.results.map((runs, floor) => runs.filter((run) => !run.won || run.moves > par[floor] + SLACK).length),
+    gap: humanGap(human).floors, ms: performance.now() - began,
   };
 }
 
@@ -50,39 +49,31 @@ if (!isMainThread) {
   })));
   const median = (values) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : '–'; };
   const mean = (values) => (values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : '–');
-  const percent = (part, whole) => (whole ? `${Math.round((100 * part) / whole)}%` : '–');
+  const percent = (part, whole) => (whole ? `${(100 * part / whole).toFixed(1)}%` : '–');
   const sum = (values) => values.reduce((a, b) => a + b, 0);
-  const summarize = (group) => {
-    const floors = [0, 1, 2];
-    return [
-      group.length,
-      floors.map((floor) => percent(sum(group.map((row) => row.won[floor])), sum(group.map((row) => row.runs)))).join(' / '),
-      floors.map((floor) => group.filter((row) => row.failed[floor]).length).join(' / '),
-      floors.map((floor) => median(group.map((row) => row.par[floor]))).join(' / '),
-      floors.map((floor) => median(group.map((row) => row.certified[floor]))).join(' / '),
-      `${median(group.map((row) => sum(row.par)))} / ${median(group.map((row) => sum(row.certified)))}`,
-      mean(group.map((row) => row.gap)),
-      mean(group.map((row) => row.capped)),
-      mean(group.map((row) => row.score)),
-    ];
-  };
-  const header = '| Tier | Piece | Days | Runs won F1 / F2 / F3 | Floors failed | Par F1 / F2 / F3 | Certified F1 / F2 / F3 | Total par / certified | Human gap | Capped gap | Score |\n|---|---|---|---|---|---|---|---|---|---|---|';
-  const line = (tier, piece, group) => `| ${tier} | ${piece} | ${summarize(group).join(' | ')} |`;
-  console.log(`Human-like bot over ${rows.length} editions (${start} to ${end}); medians of par and moves, means of the gaps and score.\n`);
+  const floors = [0, 1, 2];
+  const summarize = (group) => [
+    group.length,
+    floors.map((floor) => percent(sum(group.map((row) => row.won[floor])), sum(group.map((row) => row.runs)))).join(' / '),
+    floors.map((floor) => percent(sum(group.map((row) => row.missed[floor])), sum(group.map((row) => row.runs)))).join(' / '),
+    floors.map((floor) => median(group.map((row) => row.par[floor]))).join(' / '),
+    floors.map((floor) => median(group.map((row) => row.botPar[floor]))).join(' / '),
+    floors.map((floor) => mean(group.map((row) => row.gap[floor]))).join(' / '),
+  ];
+  const header = `| Piece | Days | Runs won F1 / F2 / F3 | Runs past par + ${SLACK} | Par | Bot's median moves | Human gap (means) |\n|---|---|---|---|---|---|---|`;
+  const line = (label, group) => `| ${label} | ${summarize(group).join(' | ')} |`;
+  console.log(`Human-like bot over ${rows.length} editions (${start} to ${end}), ${rows[0]?.runs ?? 0} runs a floor${process.argv.includes('--auto') ? ', recruit on Auto' : ''}; medians of par and moves.\n`);
   console.log(header);
-  for (const tier of Object.keys(DIFFICULTY_TIERS)) {
-    for (const piece of PLAYABLE_PIECES) {
-      const group = rows.filter((row) => row.tier === tier && row.piece === piece);
-      if (group.length) console.log(line(DIFFICULTY_TIERS[tier].name, piece, group));
-    }
+  for (const piece of PLAYABLE_PIECES) {
+    const group = rows.filter((row) => row.piece === piece);
+    if (group.length) console.log(line(piece, group));
   }
-  console.log('\nBy tier:\n');
-  console.log(header);
-  for (const tier of Object.keys(DIFFICULTY_TIERS)) console.log(line(DIFFICULTY_TIERS[tier].name, 'all', rows.filter((row) => row.tier === tier)));
-  console.log(line('all', 'all', rows));
-  console.log('\nBy piece:\n');
-  console.log(header);
-  for (const piece of PLAYABLE_PIECES) console.log(line('all', piece, rows.filter((row) => row.piece === piece)));
-  const captured = sum(rows.map((row) => sum(row.captured))), wins = sum(rows.map((row) => sum(row.won)));
-  console.log(`\n${percent(rows.filter((row) => !row.failed.some(Boolean)).length, rows.length)} of editions had a human-like run clear every floor, so the result card shows the human-like bot on them. ${percent(captured, wins)} of winning floor runs were captured at least once. Bot time: median ${median(rows.map((row) => row.ms)).toFixed(0)} ms per edition, ${((performance.now() - began) / 1000).toFixed(1)} s in all on ${jobs} threads.`);
+  console.log(line('all', rows));
+  console.log('\nBy modifier:\n');
+  console.log(header.replace('Piece', 'Modifier'));
+  for (const modifier of ['none', 'ice', 'collapse']) {
+    const group = rows.filter((row) => row.modifier === modifier);
+    if (group.length) console.log(line(modifier, group));
+  }
+  console.log(`\nBot time: median ${median(rows.map((row) => row.ms)).toFixed(0)} ms per edition, ${((performance.now() - began) / 1000).toFixed(1)} s in all on ${jobs} threads.`);
 }

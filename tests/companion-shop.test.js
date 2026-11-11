@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {act,createGame,getDaily,legalMoves,validateSave,COMPANIONS} from '../src/game.js';
+import {act,legalMoves,COMPANIONS} from '../src/game.js';
 import {COMPANIONS as RULE_COMPANIONS,createGame as createCandidate,validateSave as validateCandidate,RULES_VERSION} from '../src/rules.js';
 import {getRawDaily} from '../src/edition.js';
 import {findFloorRoute} from '../src/fairness.js';
+import {randomRoomDaily} from './fixtures/random-room.js';
 
+// Companions were sold only before editions were composed, so these older-save
+// rules play on random rooms (tests/fixtures/random-room.js), whose first floors
+// can earn enough to afford every companion under the legacy ledger. A whole
+// run's route, floor by floor, stands in for the certificate.
 const move=(x,y)=>({type:'move',x,y});
-// Floor 1 of a stored edition, played by its certificate up to the stairs.
+function routed(date) {
+  const day=randomRoomDaily(date);
+  let state=createCandidate(day);const actions=[];
+  for(let floor=0;floor<3;floor++) {
+    const found=findFloorRoute(state);
+    if(found.status!=='solved')return null;
+    actions.push(...found.actions);state=found.state;
+  }
+  return state.status==='won'?{...day,generation:{certificate:{actions}}}:null;
+}
+const createGame=(day)=>createCandidate(day);
+const validateSave=(state,date)=>validateCandidate(state,date,daily);
+// Floor 1, played by its route up to the stairs.
 function clearedFirstFloor(daily) {
   let state=createGame(daily);
   for(const action of daily.generation.certificate.actions) {
@@ -17,10 +34,9 @@ function clearedFirstFloor(daily) {
   return state;
 }
 // The first day from 2026-11-05 whose first floor earns enough under the legacy
-// ledger (every capture banked) to afford every companion: regenerating the
-// editions changes which days do.
-const daily=Array.from({length:30},(_,day)=>getDaily(new Date(Date.UTC(2026,10,5+day))))
-  .find((candidate)=>{const state=clearedFirstFloor(candidate);return state.treasure+state.captures>=8;});
+// ledger (every capture banked) to afford every companion.
+const daily=Array.from({length:40},(_,day)=>new Date(Date.UTC(2026,10,5+day)).toISOString().slice(0,10)).map(routed)
+  .find((candidate)=>{if(!candidate)return false;const state=clearedFirstFloor(candidate);return state.treasure+state.captures>=8;});
 let earned=clearedFirstFloor(daily);
 assert.equal(earned.exit.open,true);
 // Legacy-order tests need every companion affordable. Saves from before optional-only capture

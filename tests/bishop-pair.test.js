@@ -243,7 +243,9 @@ test('the bishop pair is a feat with a What? explainer, never a share-card mark 
   assert.equal(autoExplainer([{ type: 'bishop-pair' }], () => false), null);
 });
 
-// Real bishop days whose first floor waits with a bishop recruit.
+// Real bishop days whose first floor waits with a bishop recruit. It waits
+// three or more moves out (composed rooms keep it off the planted line), so
+// the bishop starts one diagonal step from it, as if it had walked there.
 function bishopDays(limit) {
   const days = [];
   for (let day = 0; day < 730 && days.length < limit; day++) {
@@ -252,7 +254,13 @@ function bishopDays(limit) {
     if (raw.playerPiece !== 'bishop') continue;
     const state = createGame(getDaily(date));
     const recruit = state.items.find((item) => item.type === 'companion');
-    if (recruit?.piece === 'bishop' && legalMoves(state).some((tile) => tile.x === recruit.x && tile.y === recruit.y)) days.push({ date, state, recruit });
+    if (recruit?.piece !== 'bishop') continue;
+    const step = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([dx, dy]) => ({ x: recruit.x + dx, y: recruit.y + dy }))
+      .find((tile) => tile.x >= 0 && tile.y >= 0 && tile.x < 8 && tile.y < 8 && state.map[tile.y][tile.x] !== '#'
+        && !state.enemies.some((foe) => foe.x === tile.x && foe.y === tile.y) && !state.items.some((item) => item.x === tile.x && item.y === tile.y));
+    if (!step) continue;
+    Object.assign(state.player, { x: step.x, y: step.y, moved: true });
+    if (legalMoves(state).some((tile) => tile.x === recruit.x && tile.y === recruit.y)) days.push({ date, state, recruit });
   }
   return days;
 }

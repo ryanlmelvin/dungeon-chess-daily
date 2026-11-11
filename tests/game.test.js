@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, POWERUPS, SHOP_ITEMS, validateSave, walkable } from '../src/game.js';
+import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, createPracticeGame, dangerTiles, getDaily, getShareText, legalMoves, PIECES, PLAYABLE_PIECES, PIECE_COUNTS, POWERUPS, SHOP_ITEMS, validateSave, walkable } from '../src/game.js';
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { royalRules, floorDecoys } from '../src/rules.js';
+import { royalRules, floorCensus, createGame as createRoom, validateSave as validateRoomSave } from '../src/rules.js';
+import { PAWN_TARGETS } from '../src/composer.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
 const daily = getDaily('2026-11-05');
 const move = (x, y) => ({ type: 'move', x, y });
 const hasMove = (state, x, y) => legalMoves(state).some((tile) => tile.x === x && tile.y === y);
+// A composed day's twin without its hint powerups, as certificates are proved (src/generation.js proveComposed).
+const twinOf = (day) => ({ ...day, composed: day.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
+// The engine on its own: a random room (tests/fixtures/random-room.js), emptied.
 function scenario(piece = 'rook', x = 4, y = 6) {
-  const state = createGame(daily);
+  const state = createRoom(randomRoomDaily('2026-11-05'));
   state.player = { piece, x, y, moved: false };
   state.enemies = []; state.items = []; state.map = Array(8).fill('........'); state.props = []; state.objective = {piece: 'king', complete: false};
   return state;
@@ -265,37 +270,44 @@ test('save validation accepts real chess runs and rejects incompatible or corrup
   }
 });
 
+// A composed floor's cast as it begins: its targets (two pawns, else a chess army's count),
+// decoys of other roles (now and then one more than a chess army's count, where the
+// composer stands one in for a guard or a box), one species per role, all apart.
 function assertInitialArmy(state) {
   const counts = Object.fromEntries(PIECES.map((piece) => [piece, state.enemies.filter((foe) => foe.role === piece).length]));
-  for (const piece of PIECES) assert.ok(counts[piece] <= PIECE_COUNTS[piece], `${state.date} floor ${state.floor}: too many native ${piece}s`);
-  assert.equal(counts[state.objective.piece], PIECE_COUNTS[state.objective.piece]);
-  // The tier's `decoys` knob sets how many optional residents join the targets.
-  const decoys = floorDecoys(state);
-  assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + decoys.length);
-  assert.equal(new Set(state.enemies.map((foe) => foe.role)).size, 1 + new Set(decoys.map((species) => species.piece)).size);
+  const target = state.objective.piece;
+  assert.equal(counts[target], target === 'pawn' ? PAWN_TARGETS : PIECE_COUNTS[target], `${state.date} floor ${state.floor}: targets`);
+  assert.deepEqual(floorCensus(state), { residents: state.enemies.length, targets: counts[target] });
   assert.equal(new Set(state.enemies.map((foe) => `${foe.x},${foe.y}`)).size, state.enemies.length);
   for (const piece of PIECES) {
     const group = state.enemies.filter((foe) => foe.role === piece);
     if (group.length) assert.equal(new Set(group.map((foe) => `${foe.species}:${foe.palette}`)).size, 1);
   }
   assert.ok(state.enemies.every((foe) => walkable(state,foe.x,foe.y)));
-  assert.ok(state.enemies.every((foe) => !state.items.some((item) => item.x===foe.x && item.y===foe.y)));
-  if (state.startingPiece==='bishop' && state.objective.piece==='bishop') assert.ok(state.enemies.filter((foe) => foe.role==='bishop').every((foe) => (foe.x+foe.y)%2===0));
+  // A bishop's targets stand on its own colour, where it can take them.
+  if (state.startingPiece==='bishop' && target==='bishop') assert.ok(state.enemies.filter((foe) => foe.role==='bishop').every((foe) => (foe.x+foe.y)%2===(state.player.x+state.player.y)%2));
 }
 
-test('100 consecutive certified dates win without powers, and only pawn routes are captured, preserving valid saves', () => {
+test('100 consecutive certified dates win without powers, never captured, preserving valid saves', () => {
   for (let day = 0; day < 100; day++) {
     const issue = getDaily(new Date(Date.UTC(2026, 10, 5 + day)));
-    let state = createGame(issue);
+    // As played, hints collected, every save valid.
+    let played = createGame(issue);
+    for (const action of issue.generation.certificate.actions) {
+      played = act(played, action);
+      assert.equal(validateSave(played, played.date), true, `${played.date} save after move ${played.turns}`);
+    }
+    assert.equal(played.status, 'won', played.date);
+    // The certificate itself, on the day's twin without hint powerups: no power, no help, never captured.
+    let state = createRoom(twinOf(issue));
     assertInitialArmy(state);
     const proof = verifyWinningRoute(state, issue.generation.certificate.actions);
     assert.equal(proof.valid, true, `${state.date}: ${proof.reason}`);
     for (const action of issue.generation.certificate.actions) {
       const next = act(state, action);
-      if (next.floor !== state.floor) assertInitialArmy(next);
+      if (next.floor !== state.floor && next.status === 'playing') assertInitialArmy(next);
       state = next;
-      assert.equal(validateSave(state, state.date), true, `${state.date} save after move ${state.turns}`);
-      assert.ok(state.hits <= (state.startingPiece === 'pawn' ? 4 : 0));
+      assert.equal(state.hits, 0, `${state.date}: a planted line is never captured`);
       // Only the king floor's own recruit (a king) may help, under royal rules.
       if (royalRules(state)) assert.ok(state.companion === null || state.companion.basePiece === 'king');
       else assert.equal(state.companion, null);
@@ -309,7 +321,7 @@ test('100 consecutive certified dates win without powers, and only pawn routes a
   }
 });
 
-test('objectives, palettes, obstacles and mixed residents vary deterministically across dates', () => {
+test('objectives, palettes, walls and mixed residents vary deterministically across dates', () => {
   const palettes = new Set(), layouts = new Set();
   for (let day = 0; day < 40; day++) {
     const issue = getDaily(new Date(Date.UTC(2026, 10, 5 + day)));
@@ -317,13 +329,13 @@ test('objectives, palettes, obstacles and mixed residents vary deterministically
     assert.notEqual(issue.targets[0], issue.targets[1]);
     assert.ok(!issue.targets.slice(0, 2).includes('king'));
     const state = createGame(issue);
-    const decoys = floorDecoys(state);
-    assert.equal(state.enemies.length, PIECE_COUNTS[state.objective.piece] + decoys.length);
-    assert.equal(new Set(state.enemies.map((enemy) => enemy.species)).size, 1 + new Set(decoys.map((species) => species.id)).size);
-    // The tier's obstacleBase, plus barricades on a floor with monster pawns; a wall that would cut the board in two is skipped.
-    const barricades = state.enemies.some((enemy) => enemy.piece === 'pawn') ? 8 - (issue.playerPiece === 'bishop' ? 4 : state.openFiles) : 0;
-    assert.ok(state.props.length <= issue.obstacleBase + barricades && state.props.length >= Math.min(issue.obstacleBase, 4));
+    assertInitialArmy(state);
+    assert.equal(state.enemies.length, issue.composed[0].enemies.length);
+    // The target species and both decoy species of the floor.
+    assert.equal(new Set(state.enemies.map((enemy) => enemy.species)).size, 3);
+    // Every wall is a prop the room draws.
     assert.equal(state.map.join('').split('#').length - 1, state.props.length);
+    assert.ok(state.props.every((prop) => state.map[prop.y][prop.x] === '#'));
     assert.ok(state.enemies.every((enemy) => walkable(state, enemy.x, enemy.y)));
     assert.ok(state.items.every((item) => walkable(state, item.x, item.y)));
     assert.equal(state.exit.open, false);
@@ -451,16 +463,22 @@ test('capture-all requires all eight identical pawns, including promoted members
 });
 
 
-test('the public API ignores edited daily metadata and binds saves to the requested profile', () => {
+test('the public API ignores edited daily metadata and binds saves to the day\'s own monsters', () => {
   const expected = createGame(daily);
   const edited = structuredClone(daily);
   edited.seed = 0; edited.dungeonSeed = 0; edited.playerPiece = 'king'; edited.playerColor = 'black';
   edited.targets = ['king', 'king', 'king']; edited.legacyTurnOrder = true;
+  edited.difficulty = 'gentle'; edited.composed = []; edited.floorSeeds = [1, 2, 3];
   assert.deepEqual(createGame(edited), expected);
-  const alternate = getDaily(daily.date, { difficulty: 'gentle' });
-  const state = createGame(alternate);
-  assert.equal(validateSave(state, state.date), false);
-  assert.equal(validateSave(state, state.date, { difficulty: 'gentle' }), true);
+  // Every daily plays Fair; a run under other monsters is practice, never the official run.
+  assert.equal(daily.difficulty, 'fair');
+  const gentle = createRoom({ ...daily, difficulty: 'gentle' });
+  assert.equal(validateSave(gentle, gentle.date), false);
+  const practice = createPracticeGame(daily, { difficulty: 'gentle' });
+  assert.equal(validateSave(practice, practice.date, { practice: true }), true);
+  // A save of the day must carry the day's own rooms.
+  const moved = structuredClone(expected); moved.composed[0].enemies[0].x = 7 - moved.composed[0].enemies[0].x;
+  assert.equal(validateSave(moved, moved.date), false);
 });
 
 test('restarting a floor returns to its arrival state without costing a life or a try', () => {
@@ -573,7 +591,8 @@ test('running out of legal moves restarts the dungeon and counts another try, li
   assert.match(trapped.message, /No legal moves/);
   assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
-  assert.equal(validateSave(trapped, trapped.date), true);
+  // The scenario's random room is the edition this save belongs to.
+  assert.equal(validateRoomSave(trapped, trapped.date, randomRoomDaily('2026-11-05')), true);
   assert.equal(getShareText(trapped).split('\n')[1], '🟥 ·');
 });
 

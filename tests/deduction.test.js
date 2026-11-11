@@ -76,8 +76,8 @@ test('each floor\'s full cast is exactly the species that can stand there, order
     }
   }
   assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
-  // Every floor keeps at least one decoy (src/difficulty.js MIN_DECOYS): no floor holds its targets alone.
-  assert.ok(!sizes.has(1) && sizes.has(2) && sizes.has(3), 'no one-species floors; two- and three-species casts both occur');
+  // Every composed floor casts its target with both of its decoy species: no floor holds its targets alone.
+  assert.deepEqual(sizes, new Set([3]), 'three-species casts on every floor');
 });
 
 // A composed floor casts this species with as many copies as its target

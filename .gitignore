@@ -6,6 +6,3 @@ test-results/
 playwright-report/
 .env
 .env.*
-scripts/calibration-shortlist.json
-# A full calibration run's data (about 70 MB), kept for the next incremental run; never commit it.
-scripts/calibration-data.json

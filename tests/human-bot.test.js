@@ -4,11 +4,9 @@ import assert from 'node:assert/strict';
 import { getDaily, act, validateSave } from '../src/game.js';
 import { distanceTable, stepTable, UNREACHABLE } from '../src/move-tables.js';
 import {
-  certifiedFloors, humanPar, humanPlayer, humanRun, medianRun, observe, playFloor, runSeed, failedFloorPar,
+  certifiedFloors, humanPar, humanPlayer, humanGap, medianRun, observe, playFloor, runSeed, failedFloorPar,
   HUMAN_RUNS, HUMAN_MOVE_CAP,
 } from '../src/human-bot.js';
-import { humanGap } from '../src/difficulty.js';
-import { EDITIONS } from '../src/editions.js';
 
 const OPEN = Array(8).fill('........');
 const at = (x, y) => y * 8 + x;
@@ -77,14 +75,14 @@ test('the bot never reads a hidden role: reassigning them changes nothing it see
   assert.ok(compared >= 15, `compared ${compared} choices`);
 });
 
-test('a floor\'s par is the lower median of its successful runs, else the route plus 25%', () => {
+test('the bot\'s par for a floor is the lower median of its successful runs, else the route plus 25%', () => {
   const won = (moves) => ({ won: true, moves, hits: 0 });
   const lost = (moves) => ({ won: false, moves, hits: 1 });
   assert.deepEqual(medianRun([won(9), won(7), lost(40), won(12), won(7)], 6), { par: 7, run: 1 });
   assert.deepEqual(medianRun([won(9), won(7), won(12)], 6), { par: 9, run: 0 });
   assert.deepEqual(medianRun([lost(40), won(15), lost(3)], 6), { par: 15, run: 1 });
   assert.deepEqual(medianRun([lost(40), lost(40), lost(5)], 13), { par: 17, run: null });
-  // Of the runs with par's moves, the result card replays the one captured least.
+  // Of the runs with par's moves, it names the one captured least.
   assert.deepEqual(medianRun([{ won: true, moves: 7, hits: 1 }, won(9), { won: true, moves: 7, hits: 0 }], 6), { par: 7, run: 2 });
   assert.deepEqual([failedFloorPar(13), failedFloorPar(4), failedFloorPar(3), failedFloorPar(8)], [17, 5, 4, 10]);
   // Real editions: a failed floor gets the route's moves plus 25%; others the median run's moves.
@@ -114,31 +112,22 @@ test('the human gap counts extra moves over the route, a failed run as the whole
   assert.equal(gap.total, Math.round((2 + (5 + HUMAN_MOVE_CAP) / 2 - 5 + HUMAN_MOVE_CAP - 10) * 10) / 10);
 });
 
-test('the bot\'s whole run replays each floor from its standard start and validates', () => {
-  // The first edition whose bot runs clear every floor (the editions table stores these runs: tests/par.test.js).
-  let daily, human, run;
-  for (const day of Object.keys(EDITIONS)) {
-    daily = getDaily(day); human = humanPar(daily);
-    run = human.runs.every((entry) => entry !== null) && humanRun(daily, human.runs);
-    if (run) break;
-  }
-  assert.ok(run, 'some edition’s bot clears every floor');
-  // Replayed again from the seeds, the run (its recruit orders included) comes out the same.
-  assert.deepEqual(humanRun(daily, human.runs), run);
-  assert.deepEqual(run.floors, human.par);
-  assert.equal(run.moves, human.par.reduce((a, b) => a + b, 0));
-  assert.equal(run.frames[0].turns, 0);
-  assert.equal(run.frames.at(-1).status, 'won');
+test('the bot plays each floor from its standard start, every position a valid save', () => {
+  const daily = getDaily('2026-11-05');
   const starts = certifiedFloors(daily).starts;
-  const frames = run.frames.map((frame) => JSON.stringify(frame));
-  for (const start of starts.slice(1)) assert.ok(frames.includes(JSON.stringify(start)), 'each floor opens on the certified start');
-  for (const frame of run.frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), daily.date), true, `turn ${frame.turns}`);
-  // No powerups, but for a relic on its pawn's file ahead, which it walks onto.
-  run.frames.forEach((frame, index) => {
-    const pickup = frame.events.find((event) => event.type === 'powerup');
-    if (!pickup) return;
-    const before = run.frames[index - 1].player;
-    assert.ok(before.piece === 'pawn' && pickup.x === before.x && pickup.y < before.y, `turn ${frame.turns}: ${JSON.stringify(pickup)}`);
-  });
-  assert.equal(humanRun(daily, [human.runs[0], null, human.runs[2]]), null);
+  let cleared = 0;
+  for (const [floor, start] of starts.entries()) {
+    const run = playFloor(start, { seed: runSeed(daily, floor, 0), frames: true });
+    assert.equal(run.frames[0], start, 'each floor opens on the certified start');
+    for (const frame of run.frames) assert.equal(validateSave(JSON.parse(JSON.stringify(frame)), daily.date), true, `floor ${floor + 1} turn ${frame.turns}`);
+    // No powerups, but for a relic on its pawn's file ahead, which it walks onto.
+    run.frames.forEach((frame, index) => {
+      const pickup = frame.events.find((event) => event.type === 'powerup');
+      if (!pickup) return;
+      const before = run.frames[index - 1].player;
+      assert.ok(before.piece === 'pawn' && pickup.x === before.x && pickup.y < before.y, `turn ${frame.turns}: ${JSON.stringify(pickup)}`);
+    });
+    if (run.won) cleared++;
+  }
+  assert.ok(cleared >= 2, `the bot cleared ${cleared} floors`);
 });

@@ -7,11 +7,12 @@ building floors around their solutions instead of searching random rooms and
 tuning knobs until the numbers land. Floors could be composed (the composer,
 below) or taken from lichess's puzzles ([Lichess puzzles](#lichess-puzzles)).
 
-Status: idea, written 2026-11-09, with lichess measurements added the same
-day. Phase 0 (the composer prototype, a dev preview) and phase 1 (the scoring
-rules) are built. Phase 2 has begun in the preview: floors start on varied
-squares, rook and queen days compose, and so do floors with pawn targets,
-pawn players, and Ice and Breach days with their modifier.
+Status: written 2026-11-09 as an idea, with lichess measurements added the
+same day. Phases 0 to 3 are built: the composer, the scoring rules, coverage
+of every daily piece, target role and modifier, and the switch (2026-11-11):
+every edition is now composed, the whole archive rebuilt, and the calibrated
+generator retired. [Generation and fairness](generation.md) describes what
+ships; this document keeps how it came about.
 
 ## What we measured
 
@@ -75,6 +76,9 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Par is the planted line + 1 | Agreed (2026-11-10), after playing composed floors with it |
 | One monster ruleset for every day: Fair | Agreed (2026-11-10). Practice offers all five tiers: built, a Monsters choice in the practice menu |
 | King-floor rules: checkmate wins, and the king can't take a piece the recruit king guards | Agreed (2026-11-10), after playing them in the preview |
+| Every edition composed, the archive from 2026-11-01 rebuilt, calibration and the weekday tiers retired | Built (phase 3, 2026-11-11) |
+| A date past the stored window borrows a stored day of its own piece and modifier, so the composer stays out of the app | Chosen (2026-11-11) over composing on the phone |
+| The paper's rule line names the edition ("EDITION NO. 14"), not a difficulty | Chosen (2026-11-11): every day plays Fair |
 
 ## Lichess puzzles
 
@@ -253,10 +257,10 @@ in 2.
 
 ## The composer: floors built around their solution
 
-Today a floor is a random room that a search later proves winnable. Then the
-bot measures its difficulty, and calibration tunes knobs until the
-measurements land in a band. The composer flips the order: pick the solution
-first, then build the room so that this solution works.
+Before the switch a floor was a random room that a search later proved
+winnable. Then the bot measured its difficulty, and calibration tuned knobs
+until the measurements landed in a band. The composer flips the order: pick
+the solution first, then build the room so that this solution works.
 
 1. **Pick a motif and a line.** Choose a tactical motif from a small library,
    such as a fork, a bait and sidestep, a squeeze or a mating net (see
@@ -308,7 +312,7 @@ always brings the planted line back.
 A motif's level is how quiet the key move is: a capture or a threat is level
 1, a non-capturing move that sets up a capture two moves later is level 4 or
 more. The library needs an entry for each player piece and target role.
-Every daily piece is built in the preview. A pawn player's line is mostly
+Every daily piece is built. A pawn player's line is mostly
 timing: a wait, a step or the double step brings the pawn where a target
 steps (or marches) into its diagonal just in time. No monster steps onto the
 pawn's file, so the pawn's own file holds a target pawn still until the pawn
@@ -319,8 +323,8 @@ file (above the start, and above each take before the last), so where a
 pocket needs boxing there, a decoy sleeps in the wall's place and steps off
 the file once it wakes. On the king floor the whole file stays open. A
 target pawn may still wait on the file, frozen there until the pawn takes
-elsewhere; a pawn that walks up under it is cornered (composed days count
-that pawn as terrain, src/rules.js trapped).
+elsewhere; a pawn that walks up under it is cornered (that pawn counts as
+terrain, src/rules.js trapped).
 
 ### Ice and Breach days
 
@@ -355,11 +359,12 @@ file, since no monster ever stands there.
 
 ### Difficulty without calibration
 
-The weekly ramp is dropped while we build the composer (decided 2026-11-09).
-Each day climbs within itself instead: for example floor 1 at level 2, floor 2
-at level 3, and the king floor's net at level 3 or 4. Every day plays alike,
-and nothing needs tuning. One monster ruleset for every day would keep the
-monsters learnable, which a puzzle needs; that question is still open.
+The weekly ramp was dropped for the composer (decided 2026-11-09). Each day
+climbs within itself instead: for example floor 1 at level 2, floor 2 at level
+3, and the king floor's net at level 3 or 4. Every day plays alike, and
+nothing needs tuning. Every day plays one monster ruleset, Fair, which keeps
+the monsters learnable, as a puzzle needs (agreed 2026-11-10); practice offers
+all five.
 
 If a weekly ramp ever returns, the weekday would pick motif levels (Monday 1–2
 up to Saturday 4–5). Levels are designed, not fitted, and the bot's miss rate
@@ -378,9 +383,12 @@ Reused as is: the rules engine (`src/rules.js`), the replay verifier
 (`src/fairness.js`), the stored-editions format (the planted line is the
 `route`), and the human-like bot as a probe.
 
-Retired once the switch lands: the knob table and calibration scripts
-(`src/calibration.js`, `scripts/calibrate-difficulty.mjs`), the capped-gap
-targeting, floor assembly across candidates, and probably the fallback bank.
+Retired with the switch (2026-11-11): the knob table and calibration scripts
+(`src/calibration.js`, `scripts/calibrate-difficulty.mjs`,
+`scripts/calibration-search.mjs`), the weekday tiers and their targets, the
+capped-gap targeting, floor assembly across candidates, the whole-run route
+search and the fallback bank. A full rebuild of every edition takes about
+five minutes on seven threads.
 
 ## Agreed rule changes
 
@@ -422,18 +430,20 @@ Each phase ends with a preview you play before anything long runs or ships.
    rate. Decision: does it feel like a puzzle?
 1. **Scoring rules (built).** No lives, so a capture is a stroke; the king
    ignores frost. Every edition regenerated, previewed, shipped.
-2. **Coverage.** Motifs for every piece and target role, pawn floors, Ice and
-   Breach days, recruits and powerup placement. Settle par here. Built so
-   far: varied start squares, rook and queen players (bait, squeeze and the
+2. **Coverage (built).** Motifs for every piece and target role, pawn floors,
+   Ice and Breach days, recruits and powerup placement; par settled. Built:
+   varied start squares, rook and queen players (bait, squeeze and the
    king's net along the pocket's line), pawn targets (two pawns that
    march into a squeeze or wind up at a bait; a wall under each one's file
    keeps it from crowning), pawn players (tempo and crown floors; the
    king floor mated by the recruit king, the queen, or both), and Ice and
    Breach days (below).
-3. **Switch.** Generate every edition with the composer, regenerate the
-   archive (minutes), retire calibration and the weekday tiers (every day
-   plays Fair, par is the planted line + 1, and the two king rules hold),
-   and update the README, the manual and `docs/generation.md`.
+3. **Switch (built, 2026-11-11).** Every edition composed, the archive
+   regenerated (five minutes), calibration and the weekday tiers retired
+   (every day plays Fair, par is the planted line + 1, and the two king rules
+   hold on every room), and the README, the manual and `docs/generation.md`
+   updated. Dates past the stored window borrow a stored day of their piece
+   and modifier.
 4. **Maybe.** The floor clock, and a weekly ramp by motif level if one is ever
    wanted back.
 

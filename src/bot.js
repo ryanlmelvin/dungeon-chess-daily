@@ -1,13 +1,9 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 // The "Dungeon Bot" a player can compare against after beating the day, shown
-// only after a win: the human-like bot (src/human-bot.js) when it won every
-// floor, since that's the relatable comparison, else the fairness checker's
-// certified route. A composed day (the dev preview) shows its planted line.
-import { act, createGame, scoredMoves } from './game.js';
-import { createGame as createComposedGame } from './rules.js';
-import { humanRun } from './human-bot.js';
-import { humanSummary } from './par.js';
+// only after a win: the line each floor was built around (src/composer.js),
+// which is the day's certificate. Par is one move more on every floor.
+import { act, createGame, scoredMoves } from './rules.js';
 
 const sum = (floors) => floors.reduce((total, moves) => total + moves, 0);
 
@@ -21,8 +17,8 @@ const sum = (floors) => floors.reduce((total, moves) => total + moves, 0);
 export function botRun(daily) {
   const actions = daily?.generation?.certificate?.actions;
   if (!Array.isArray(actions) || !actions.length) return null;
-  // A composed day plays its own rooms; createGame rebuilds the published edition of the date.
-  let state = daily.generation.source === 'composed' ? createComposedGame(daily) : createGame(daily);
+  // The day passed in is played as it is: an edition from getDaily, or a dev preview's composed day.
+  let state = createGame(daily);
   const frames = [state];
   for (const action of actions) {
     const next = act(state, action);
@@ -36,24 +32,13 @@ export function botRun(daily) {
 }
 
 /**
- * The run the result card compares against and replays: `kind` 'human' (the
- * human-like bot, when it won every floor; its floors are the day's pars),
- * 'certified' (the certificate, from botRun) or, on a composed day
- * (src/composer.js), 'planted': the line each floor was built around, which
- * is its certificate. Null without a certificate.
+ * The run the result card compares against and replays: `kind` 'planted',
+ * the line each floor was built around (botRun of the certificate). Null
+ * without a certificate.
  */
-export function dungeonBot(daily, summary) {
-  if (daily?.generation?.source === 'composed') {
-    const run = botRun(daily);
-    return run && { kind: 'planted', ...run };
-  }
-  if (summary === undefined) summary = humanSummary(daily);
-  if (summary?.runs?.every((run) => run !== null)) {
-    const run = humanRun(daily, summary.runs);
-    if (run) return { kind: 'human', ...run };
-  }
+export function dungeonBot(daily) {
   const run = botRun(daily);
-  return run && { kind: 'certified', ...run };
+  return run && { kind: 'planted', ...run };
 }
 
 /** Scored moves a won run spent per floor, plus their total, for the comparison card. */

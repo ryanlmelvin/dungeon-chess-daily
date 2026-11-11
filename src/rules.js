@@ -7,9 +7,8 @@ import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcem
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
-import { openPromotionFiles } from './difficulty.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
-export const RULES_VERSION = 11;
+export const RULES_VERSION = 12;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -310,7 +309,7 @@ export function closeAttacker(state, square) {
   const frost = state.powers?.freeze > 0;
   for (const foe of state.enemies) {
     if ((foe.x === square.x && foe.y === square.y) || pinned(foe) || offBalance(foe) || (frost && frozen(state, foe))) continue;
-    if (state.composed && guardedFromKing(state, foe, square)) continue;
+    if (guardedFromKing(state, foe, square)) continue;
     const dx = square.x - foe.x, dy = square.y - foe.y;
     const ax = Math.abs(dx), ay = Math.abs(dy);
     if (foe.piece === 'knight') {
@@ -496,13 +495,12 @@ function attackPath(state, foe, target) {
   return path;
 }
 
-// Two king-floor rules on trial in composed days only (src/composer.js, the
-// phase-0 preview); published editions never have `composed`, so they play as
-// before. (A third, kings never standing side by side, kept the recruit king
-// from cornering a king that slipped its net; dropped after play.) K2: the
-// royal king never takes a piece the recruit king guards.
+// Two king-floor rules from chess (docs/puzzle-first-idea.md, agreed after
+// play on composed days). (A third, kings never standing side by side, kept
+// the recruit king from cornering a king that slipped its net; dropped after
+// play.) K2: the royal king never takes a piece the recruit king guards.
 function guardedFromKing(state, foe, square) {
-  if (!(state.composed && state.floor === 2 && foe.role === 'king' && state.companion?.piece === 'king')) return false;
+  if (!(state.floor === 2 && foe.role === 'king' && state.companion?.piece === 'king')) return false;
   return chebyshev(state.companion, square) === 1;
 }
 // K1: checkmate wins at once. The royal king is threatened, has no safe step,
@@ -512,7 +510,7 @@ function guardedFromKing(state, foe, square) {
 // and Auto's step can't undo it. It checks again after the recruit's move, for
 // a mate the recruit completes.
 function checkmate(state) {
-  if (!(state.composed && state.floor === 2) || state.objective.complete) return false;
+  if (state.floor !== 2 || state.objective.complete) return false;
   const king = state.enemies.find((foe) => foe.role === 'king');
   if (!king || !kingThreatened(state, king) || safeKingMoves(state, king).length) return false;
   const blocks = state.enemies.some((guard) => guard !== king && !pinned(guard) && !frozen(state, guard)
@@ -832,9 +830,11 @@ function connectedBoard(state) {
 // and power-up square suit the day's piece: a practice bishop couldn't reach
 // the power-up on more than half its floors or the recruit on four in five,
 // and now and then a practice knight had every jump from its start walled
-// off. So, on its own random stream, leaving monsters and the other walls
-// where the official room has them: a practice piece with no move from its
-// start has the walls on its first moves cleared; the waiting recruit stands
+// off; composed rooms, built around the day's piece, box one in more often.
+// So, on its own random stream, leaving monsters and the other walls where the
+// official room has them: a practice piece boxed in at its start (no square
+// it can reach is two or more steps away) has the first wall along each of its
+// lines cleared (a knight's or king's on its first moves); the waiting recruit stands
 // on one of its first moves, as it does for the day's piece (a pawn recruit
 // on a file open to the far rank); a coin or power-up it can't reach moves to
 // a square it can, two or more steps away (the room's middle rows when it
@@ -843,10 +843,14 @@ function fitPracticeRoom(state, layoutPiece) {
   const piece = state.startingPiece;
   if (!state.practice || piece === layoutPiece || piece === 'pawn') return;
   let reach = reachableFrom(state, piece, state.player);
-  if (reach.every((seen, index) => !seen || index === state.player.x + state.player.y * 8)) {
-    const steps = rays(piece) ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
+  const near = (index) => Math.max(Math.abs((index % 8) - state.player.x), Math.abs(Math.floor(index / 8) - state.player.y)) <= 1;
+  if (reach.every((seen, index) => !seen || near(index))) {
+    const lines = rays(piece);
+    const steps = lines ?? (piece === 'knight' ? KNIGHT : [...ORTHOGONAL, ...DIAGONAL]);
     for (const [dx, dy] of steps) {
-      const x = state.player.x + dx, y = state.player.y + dy;
+      let x = state.player.x + dx, y = state.player.y + dy;
+      // A slider's line runs on to its first wall.
+      while (lines && inside(x, y) && walkable(state, x, y)) { x += dx; y += dy; }
       if (!inside(x, y) || walkable(state, x, y)) continue;
       state.map[y] = state.map[y].slice(0, x) + '.' + state.map[y].slice(x + 1);
       state.props = state.props.filter((prop) => prop.x !== x || prop.y !== y);
@@ -888,18 +892,16 @@ function fitPracticeRoom(state, layoutPiece) {
 // corner knight walled off, a pawn facing a pillar). Knights and kings keep
 // every destination clear; pawns their one- and two-step advance; rooks,
 // bishops and queens the first square of each line.
-// The 2026-11-05 launch dungeon predates this rule and keeps its published
-// layout so its saved runs still validate. Keyed by seed, not date, so a
-// fallback layout plays the same on any date it is certified for.
+// The 2026-11-05 launch dungeon's random room predates this rule and keeps
+// its old layout. Keyed by seed, not date.
 const LEGACY_LAYOUT_SEEDS = new Set([1830689584]);
 // A pawn floor draws its eight pawns from the four back rows instead of one
 // fixed V, so pawn floors stop looking alike from day to day. Its own random
 // stream leaves the room's other draws (mirror, powerup, walls) in sequence.
 // The pawns stay off the player's file and the decoys' squares, at least
 // three on each side of that file and at most three on one row.
-// The first two editions (2026-11-05 and 2026-11-06) keep the fixed V so
-// their saved runs still validate; 2026-11-06's seed is also the white-pawn
-// fallback, which keeps its certificate.
+// The first two editions' random rooms (2026-11-05 and 2026-11-06) keep the
+// fixed V.
 const FIXED_PAWN_FORMATION_SEEDS = new Set([1830689584, 1881022441]);
 
 /**
@@ -915,14 +917,15 @@ export function floorSeed(state, floor = state.floor) {
 }
 const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 && seeds.every((seed) => Number.isInteger(seed) && seed >= 0);
 /**
- * Composed rooms, a prototype (src/composer.js builds each floor around a
- * planted solution). A composed day carries one room per floor: `map` (eight
- * rows of '.' and '#'), `enemies` ({ x, y, cast }, where cast 0 is the floor's
- * target species and 1 and 2 its decoy species; tooling may pass a `species`
- * instead), `items` (coins, a powerup, the recruit) and, for tooling, the
- * player's `start`. On an Ice day a room may lay its own `ice` tiles (open
- * squares); without them it gets the day's seeded draw. No published edition
- * has them.
+ * Composed rooms: every edition's (src/composer.js builds each floor around a
+ * planted solution; src/generation.js loads them). A composed day carries one
+ * room per floor: `map` (eight rows of '.' and '#'), `enemies` ({ x, y, cast,
+ * held? }, where cast 0 is the floor's target species and 1 and 2 its decoy
+ * species, and `held` the moves a decoy sleeps; tooling may pass a `species`
+ * instead), `items` (coins, a powerup, the recruit) and the player's `start`
+ * where it isn't e2. On an Ice day a room lays its own `ice` tiles (open
+ * squares); without them it gets the day's seeded draw. A game created
+ * without them builds random rooms, which only tests and tools still use.
  */
 const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && room.map.length === 8
   && room.map.every((row) => typeof row === 'string' && /^[.#]{8}$/.test(row))
@@ -931,13 +934,24 @@ const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && 
 const validComposed = (rooms) => Array.isArray(rooms) && rooms.length === 3 && rooms.every(validComposedRoom);
 
 /**
- * Barricades on a floor where monster pawns live (its targets or a decoy
- * species): walls on the rank where they would promote (row 7, the player's
- * side), all but the day's open squares (`openFiles`, src/difficulty.js
- * openPromotionFiles of its date, or of a fallback's template date): every other square when half stay open, else the open
- * ones drawn, both from the floor's own stream. A pawn on a barricaded file
- * stops a square short, so promotion is rare rather than impossible. They come
- * on top of the room's walls. The launch edition keeps its published layout.
+ * How many squares of the monster pawns' promotion rank a random room leaves
+ * open (promotionBarricades), by the UTC weekday of `date`: two from Monday to
+ * Thursday, every other square (four) from Friday to Sunday. Composed rooms
+ * lay their own walls under their pawns instead.
+ */
+export const WEEKDAY_OPEN_PROMOTION_FILES = Object.freeze([4, 2, 2, 2, 2, 4, 4]);
+/** The open promotion squares for a canonical YYYY-MM-DD date (two for anything else). */
+export const openPromotionFiles = (date) => WEEKDAY_OPEN_PROMOTION_FILES[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? 2;
+
+/**
+ * Barricades on a random room's floor where monster pawns live (its targets
+ * or a decoy species): walls on the rank where they would promote (row 7, the
+ * player's side), all but the day's open squares (`openFiles`,
+ * openPromotionFiles of its date): every other square when half stay open,
+ * else the open ones drawn, both from the floor's own stream. A pawn on a
+ * barricaded file stops a square short, so promotion is rare rather than
+ * impossible. They come on top of the room's walls. The launch edition's
+ * seed keeps its old layout.
  */
 function promotionBarricades(state, residents) {
   if (LEGACY_LAYOUT_SEEDS.has(floorSeed(state)) || !residents.some((creature) => creature.piece === 'pawn')) return [];
@@ -1035,8 +1049,25 @@ function powerRoll(roll, coinless) {
   return coinless ? ['shield', 'freeze'][Math.floor(roll * 2)] : ['shield', 'freeze', 'magnet'][Math.floor(roll * 3)];
 }
 
-// A floor's optional residents: its two decoy species, alternating, `decoys` of
-// them (a difficulty knob, 0-4; default 2), never more of one role than a chess
+/**
+ * Who lives on `floor` before any arrival: `residents`, all of them, and
+ * `targets`, how many have the floor's target role. A composed room counts its
+ * own (two pawns make a pawn target there); a random room holds a chess
+ * army's count of targets and its floorDecoys.
+ */
+export function floorCensus(state, floor = state.floor) {
+  const target = state.targets[floor];
+  if (validComposed(state.composed)) {
+    const cast = [state.species[floor], state.species[3 + floor * 2], state.species[4 + floor * 2]];
+    const roles = state.composed[floor].enemies.map((entry) => (entry.species ?? cast[entry.cast]).piece);
+    return { residents: roles.length, targets: roles.filter((role) => role === target).length };
+  }
+  const decoys = floorDecoys(state, floor);
+  return { residents: PIECE_COUNTS[target] + decoys.length, targets: PIECE_COUNTS[target] + decoys.filter((species) => species?.piece === target).length };
+}
+
+// A random room's optional residents: its two decoy species, alternating, `decoys` of
+// them (a layout knob, 0-4; default 2), never more of one role than a chess
 // army holds.
 export function floorDecoys(state, floor = state.floor) {
   const pair = [state.species[3 + floor * 2], state.species[4 + floor * 2]];
@@ -1050,7 +1081,8 @@ export function floorDecoys(state, floor = state.floor) {
   return chosen;
 }
 
-// Difficulty knobs (src/difficulty.js, src/calibration.js); 0 keeps the plain layout.
+// A random room's layout knobs (once calibrated per tier; now only tests and
+// tools set them); 0 keeps the plain layout.
 // Decoys past the usual two start on a free square in the back three rows.
 // `scatter` draws non-pawn targets in the back four rows, off every line the
 // player's piece covers from its start square. `guards` moves up to that many
@@ -1139,6 +1171,8 @@ function composedRoom(state) {
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
   }
+  // Practice with another piece: its first moves, recruit and pickups fitted to it, as in any room.
+  fitPracticeRoom(state, state.layoutPiece ?? state.startingPiece);
   setupFloorModifier(state);
   // On an Ice day a composed room lays its own ice (placed around its planted line), not the seeded draw.
   if (state.modifier === 'ice' && room.ice) state.ice = room.ice.map(({ x, y }) => ({ x, y })).sort((a, b) => a.y - b.y || a.x - b.x);
@@ -1271,13 +1305,12 @@ function setFloor(state, kingRecruit = false) {
 const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
 
 // Waiting answers a board where monsters block every move, so only terrain can
-// truly trap the player: no move even with every monster gone. On a composed
-// day (the dev preview, src/composer.js) a monster pawn on a pawn player's own
-// file counts as terrain too: it may never step onto that file, its only way
-// forward, so it never moves away. Published editions never have `composed`.
+// truly trap the player: no move even with every monster gone. A monster pawn
+// on a pawn player's own file counts as terrain too: it may never step onto
+// that file, its only way forward, so it never moves away.
 function trapped(state) {
   if (state.status !== 'playing' || state.exit.open || legalMoves(state).length !== 0) return false;
-  const stays = (foe) => Boolean(state.composed) && state.player.piece === 'pawn' && foe.piece === 'pawn' && foe.x === state.player.x;
+  const stays = (foe) => state.player.piece === 'pawn' && foe.piece === 'pawn' && foe.x === state.player.x;
   return movesFor({ ...state, enemies: state.enemies.filter(stays) }, state.player).length === 0;
 }
 
@@ -1329,11 +1362,11 @@ export function createGame(daily = getRawDaily()) {
     message: `${captureGoal(daily.targets[0])}. The newspaper holds a clue.`,
   };
   if (daily.practice === true) { state.practice = true; state.layoutPiece = daily.layoutPiece; }
-  // An assembled day's floors each come from their own candidate layout (floorSeed).
+  // A composed day's floors each have a seed of their own (floorSeed).
   if (validFloorSeeds(daily.floorSeeds)) state.floorSeeds = [...daily.floorSeeds];
-  // A composed day's rooms (validComposed); published editions have none.
+  // A composed day's rooms (validComposed): every edition has them.
   if (validComposed(daily.composed)) state.composed = structuredClone(daily.composed);
-  // Barricades leave the edition's open promotion squares; a fallback keeps its template's.
+  // A random room's barricades leave the date's open promotion squares (promotionBarricades).
   state.openFiles = Number.isInteger(daily.openFiles) ? daily.openFiles : openPromotionFiles(daily.date);
   // Plain days carry no modifier field, so their saves keep their shape.
   if (daily.modifier && daily.modifier !== 'none') state.modifier = daily.modifier;
@@ -1386,7 +1419,7 @@ function finishFloor(state) {
   const treasure = state.treasure - state.floorStart.treasure;
   const hits = state.hits - state.floorStart.hits;
   const turns = state.turns - state.floorStart.turns;
-  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), ...(hits && { hits }), captures, treasure, grade: treasure === 3 ? 'gold' : captures > PIECE_COUNTS[state.objective.piece] ? 'silver' : 'bronze' });
+  state.records.push({ floor: state.floor, turns, scored: state.objective.moves ?? turns, ...(state.restartedMoves && { restartedMoves: state.restartedMoves }), ...(hits && { hits }), captures, treasure, grade: treasure === 3 ? 'gold' : captures > floorCensus(state).targets ? 'silver' : 'bronze' });
   // Captures and paid hints are penalty moves on the floor's score (scoredMoves).
   if (state.hints?.length) state.records.at(-1).hints = [...state.hints];
   if (state.floor === 2) {
@@ -1405,14 +1438,12 @@ function finishFloor(state) {
 }
 
 // Each floor's challenge pieces are mandatory, so only the optional residents pay out.
-function bonusResidents(state, floor) {
-  return floorDecoys(state, floor).filter((species) => species?.piece !== state.targets[floor]).length;
-}
 function bonusCaptures(state) {
-  const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - (PIECE_COUNTS[state.targets[record.floor]] + floorDecoys(state, record.floor).length - bonusResidents(state, record.floor)), 0);
+  const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - floorCensus(state, record.floor).targets, 0);
   const remaining = state.enemies.filter((foe) => (foe.role ?? foe.piece) !== state.targets[state.floor]).length;
+  const { residents, targets } = floorCensus(state);
   // Collapse reinforcements are decoys too: each one that entered pays when taken.
-  return earlier + bonusResidents(state, state.floor) + (state.reinforcements ?? 0) - remaining;
+  return earlier + residents - targets + (state.reinforcements ?? 0) - remaining;
 }
 
 function spentGold(state) {
@@ -1583,8 +1614,8 @@ export function recruitChoice(previous, action) {
 }
 
 // The bishop pair. A bishop never leaves its square colour, and a recruit waits
-// one move from your start, so a bishop recruit joining your bishop shares your
-// colour and could only ever reach squares you already cover. Instead, its move
+// where your piece can reach it, so a bishop recruit joining your bishop shares
+// your colour and could only ever reach squares you already cover. Instead, its move
 // that turn hops it onto the other colour: two bishops on opposite colours
 // cover every square between them. It hops to a side square of its own (up,
 // down, left or right, always the other colour) that is open and holds no
@@ -1991,6 +2022,8 @@ function play(previous, action) {
   // monsters don't move, and an order the move carries is ignored, as on any
   // cleared floor. A move that got you captured mates nothing.
   const mated = state.playerColor === 'white' && !close && checkmate(state);
+  // A mate skips the recruit's phase, which would have noted you sharing its square.
+  if (mated && state.companion) state.companion.sharing = same(state.companion, state.player);
   if (!mated) {
     // Castling was the recruit's move, so an order to move it again is no action.
     // A cleared floor ignores orders: the recruit hunts on its own there.
@@ -2078,8 +2111,11 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if ((value.decoys ?? 2) !== (daily.decoys ?? 2) || (value.scatter ?? 0) !== (daily.scatter ?? 0) || (value.guards ?? 0) !== (daily.guards ?? 0) || (value.screens ?? 0) !== (daily.screens ?? 0)) return false;
     // Not `edition`: the number moved when the archive began at 2026-11-01, and seed and date pin the day.
     if (value.seed !== daily.seed || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
+    // A composed day's rooms travel with every save of it.
+    if (!equal(value.composed ?? null, validComposed(daily.composed) ? daily.composed : null)) return false;
     // Collapse days may add reinforcements to a floor (up to a cap).
-    const population = (floor) => PIECE_COUNTS[daily.targets[floor]] + floorDecoys(daily, floor).length + extraPopulation(value.modifier);
+    const census = [0, 1, 2].map((floor) => floorCensus(daily, floor));
+    const population = (floor) => census[floor].residents + extraPopulation(value.modifier);
     const reinforced = value.reinforcements ?? 0;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     // Each capture may also pay a fork and a combo bonus (tactics.js).
@@ -2134,7 +2170,8 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
       if (original !== template.enemies.find((entry) => entry.id === foe.id) && value.enemies.filter((entry) => entry.role === foe.role).length > PIECE_COUNTS[foe.role]) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || same(foe, value.player)) return false;
-      if (foe.pinned !== undefined && !(integer(foe.pinned, 1, PIN_MOVES) && foe.phase === 'ready')) return false;
+      // A held decoy sleeps as long as its room says, which may outlast a pin.
+      if (foe.pinned !== undefined && !(integer(foe.pinned, 1, Math.max(PIN_MOVES, original.pinned ?? 0)) && foe.phase === 'ready')) return false;
       // Saves from before missed lunges unbalanced a monster have no flag; a missed lunge resets its wind-up.
       if (foe.offBalance !== undefined && !(foe.offBalance === true && foe.phase === 'ready')) return false;
       if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
@@ -2156,7 +2193,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     // Runs saved while floors 1 and 2 held no recruit never had one to pick up.
     } else if (deliveredOrder || (recruit && value.floor === 2 && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
-    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && (record.hits === undefined || integer(record.hits, 1, 2 * record.turns)) && integer(record.captures, PIECE_COUNTS[daily.targets[index]], population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > PIECE_COUNTS[daily.targets[index]] ? 'silver' : 'bronze'))) return false;
+    if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && (record.hits === undefined || integer(record.hits, 1, 2 * record.turns)) && integer(record.captures, census[index].targets, population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > census[index].targets ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.records.every((record) => record.hints === undefined || validHints(record.hints))) return false;
@@ -2182,7 +2219,7 @@ export function validateSave(value, date, daily = getRawDaily(date)) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', 'checkmate', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

@@ -198,7 +198,7 @@ function safeStep(state, action, mode) {
   return next !== state && next.status !== 'lost' && !hurt(next) && !powered(next, mode)
     && next.hits === state.hits ? next : null;
 }
-/** `options`: the recruit mode, as findWinningRoute takes it. */
+/** `options`: the recruit mode, as findFloorRoute takes it. */
 export function safeTransition(state, action, options) {
   return safeStep(state, action, recruitMode(options));
 }
@@ -217,7 +217,7 @@ function routeStep(state, next, mode) {
   if (next.hits > spendableHits(state)) return null;
   return next;
 }
-/** `options`: the recruit mode, as findWinningRoute takes it. */
+/** `options`: the recruit mode, as findFloorRoute takes it. */
 export function routeTransition(state, action, options) {
   return routeStep(state, act(state, action), recruitMode(options));
 }
@@ -236,7 +236,7 @@ function routeFor(node) {
  * ally except the king floor's own recruit.
  * Metrics describe this witnessed route; they are not shortest-path bounds or
  * claims that its tactical decisions are unavoidable on every winning route.
- * `options` takes the recruit mode findWinningRoute does: with 'steer' a move
+ * `options` takes the recruit mode findFloorRoute does: with 'steer' a move
  * or wait may carry a recruit order, and `everyRecruit` lets floors 1 and 2's
  * recruits join. Outside the default the metrics add `recruit`: how many
  * actions carried an order, the recruit's captures (and of targets), floors it
@@ -340,7 +340,7 @@ function countRecruit(recruit, state, next, action) {
 }
 
 // Expansions each floor's two-ply rollout may spend before its beam search
-// takes over (fewer when the candidate's budget is nearly spent).
+// takes over (fewer when the search's budget is nearly spent).
 export const ROLLOUT_BUDGET = 2000;
 
 // Of the floor clears among `nodes`, the one captured least (the first of
@@ -355,7 +355,7 @@ function bestClear(nodes) {
 /**
  * Search one floor from `start` until its challenge is complete, then take the
  * stairs at once, never captured more than `maxHits` times in the run.
- * `budget` is the candidate's, shared by its floors: { explored,
+ * `budget` is the search's: { explored,
  * maxExpansions, beamWidth }; `explored` grows. Returns the floor's actions
  * (the stairs last) and the state after the stairs (the next floor's start, or
  * the won run), or null when the budget runs out or every line is captured
@@ -460,81 +460,16 @@ function searchFloor(start, budget, maxHits, mode = AUTO) {
 }
 
 /**
- * A bounded deterministic witness finder, not an exhaustive impossibility
- * oracle. A failed/pruned search is always "unknown", never "unwinnable".
- * maxExpansions counts simulated transitions, not elapsed wall-clock time, so
- * generation cannot diverge between fast and slow devices.
- *
- * It certifies floor by floor: each floor is searched from its standard
- * start, where the route before it arrived, until its challenge is complete,
- * and then the route takes the stairs. Nothing else carries over that could
- * change a floor's play: the piece reverts at the stairs, monster tie-breaks
- * and Collapse arrivals count the floor's own moves, and routes never buy, so
- * gold doesn't matter. What does carry over is the run's captures and its
- * 50-move cap. A pawn's route may be captured up to 4 times across the run, so
- * each floor's search prefers the clear captured least, and when a later floor
- * can't be certified with the captures left, a floor that took some is
- * searched again allowing one fewer. The floors share one budget, in order,
- * so a quick floor leaves more for the next.
- *
- * `floorSearch` (tooling only: scripts/calibrate-difficulty.mjs keeps each
- * floor's search so a later calibration can reuse it) sees every floor's
- * search in turn. It is called with { start, maxHits, explored, search }:
- * `explored` counts the candidate's expansions before this floor, and
- * `search()` runs the floor's search, returning { floor, explored }, the
- * floor's { actions, state } (its stairs last, the state after them) or null,
- * and the expansions it used. floorSearch returns the same, so it can record
- * each floor's search or stand in for one it has already seen. Without it,
- * nothing changes.
- */
-export function findWinningRoute(initial, budget = {}) {
-  // Every run-ending transition here is rejected, so restarts are only marked.
-  return whileSearching(() => searchRoute(initial, budget));
-}
-function searchRoute(initial, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit, floorSearch } = {}) {
-  if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {
-    throw new RangeError('Search budgets must be nonnegative integers with a positive beam width.');
-  }
-  // 'auto' (the default, every shipped certificate) or 'steer' (tooling): see RECRUIT_MODES.
-  const mode = recruitMode({ recruit, everyRecruit });
-  if (!initial || initial.status !== 'playing' || hasPowers(initial, mode) || unreachablePickups(initial).length) return { status: 'unknown', explored: 0 };
-  const budget = { explored: 0, maxExpansions, beamWidth };
-  // One floor's search, through floorSearch when tooling watches.
-  const searchOne = (state, maxHits) => {
-    const before = budget.explored;
-    const search = () => ({ floor: searchFloor(state, budget, maxHits, mode), explored: budget.explored - before });
-    if (!floorSearch) return search().floor;
-    const { floor, explored } = floorSearch({ start: state, maxHits, explored: before, search });
-    budget.explored = before + explored;
-    return floor;
-  };
-  let blocked = false;
-  // The route from `state` to the end of the run, or null.
-  const finish = (state) => {
-    for (let maxHits = spendableHits(state); ;) {
-      const floor = searchOne(state, maxHits);
-      if (!floor) return null;
-      if (floor.state.status === 'won') return floor.actions;
-      // A later floor with an unreachable pickup can't be certified by any route.
-      if (unreachablePickups(floor.state).length) { blocked = true; return null; }
-      const rest = finish(floor.state);
-      if (rest) return [...floor.actions, ...rest];
-      // Too few captures left for what follows? Allow one fewer by this floor's end.
-      const taken = floor.state.hits;
-      if (blocked || taken === state.hits || budget.explored >= maxExpansions) return null;
-      maxHits = taken - 1;
-    }
-  };
-  const actions = finish(initial);
-  return actions ? { status: 'solved', actions, explored: budget.explored } : { status: 'unknown', explored: budget.explored };
-}
-
-/**
- * One floor's search alone, for tooling (scripts/measure-recruits.mjs): from
- * `start`, the start of a floor, the route until its challenge is complete,
- * then its stairs, never captured more than `maxHits` times in the run (by
- * default the run's own allowance). The budgets and recruit modes are findWinningRoute's, with the
- * whole budget for this floor. `state` is the position after the stairs.
+ * A bounded deterministic witness finder for one floor, not an exhaustive
+ * impossibility oracle: a failed or pruned search is always "unknown", never
+ * "unwinnable". From `start`, the start of a floor, it finds a route until the
+ * floor's challenge is complete, then its stairs, never captured more than
+ * `maxHits` times in the run (by default the run's own allowance). The
+ * composer uses it for its walk fallback (src/composer.js). `maxExpansions`
+ * counts simulated transitions, not elapsed time, so a result never depends
+ * on the device; `beamWidth` bounds the beam search after a cheap two-ply
+ * rollout; `recruit` and `everyRecruit` pick the recruit mode (RECRUIT_MODES).
+ * `state` is the position after the stairs.
  */
 export function findFloorRoute(start, { maxExpansions = 12_000, beamWidth = 24, recruit = 'auto', everyRecruit, maxHits } = {}) {
   if (!Number.isInteger(maxExpansions) || maxExpansions < 0 || !Number.isInteger(beamWidth) || beamWidth < 1) {

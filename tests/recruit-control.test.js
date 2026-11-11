@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { act, createGame, getDaily, legalMoves, recruitChoice, validateSave } from '../src/game.js';
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
+import { createGame as createRoom } from '../src/rules.js';
 import { botRun } from '../src/bot.js';
 import { decodeRoute, encodeRoute } from '../src/route-code.js';
 import { goldAtRisk } from '../src/cave-in.js';
@@ -283,7 +284,9 @@ test('recruitChoice previews the recruit’s squares without changing anything',
 test('Auto is unchanged: every recruit move on certified routes can be ordered by hand, to the same result', () => {
   const strip = ({ message, notes, ...rest }) => rest;
   let mirrored = 0;
-  for (const date of ['2026-11-06', '2026-11-08', '2026-11-11', '2026-11-13', '2026-11-16', '2026-11-20']) {
+  // Planted lines recruit only on the king floor, a move or two each, so it takes a few weeks of days.
+  for (let day = 0; day < 60 && mirrored <= 20; day++) {
+    const date = new Date(Date.UTC(2026, 10, 6 + day)).toISOString().slice(0, 10);
     const daily = getDaily(date);
     let state = createGame(daily);
     for (const action of daily.generation.certificate.actions) {
@@ -294,7 +297,9 @@ test('Auto is unchanged: every recruit move on certified routes can be ordered b
         const order = moved ? { x: moved.x, y: moved.y } : 'hold';
         const choice = recruitChoice(state, action);
         // The move that clears a floor has no order step: the recruit hunts on its own from there.
-        if (auto.exit.open) assert.equal(choice, null, `${date}: no order on the clearing move`);
+        // But for the recruit's own mate on the king floor: then its move is the clearing one.
+        const recruitMates = auto.events.slice(phase).some((event) => event.type === 'checkmate');
+        if (auto.exit.open && !recruitMates) assert.equal(choice, null, `${date}: no order on the clearing move`);
         else assert.ok(order === 'hold' || choice.moves.some((tile) => tile.x === order.x && tile.y === order.y), `${date}: Auto's move is on offer`);
         assert.deepEqual(strip(act(state, { ...action, recruit: order })), strip(auto), `${date}: same result`);
         mirrored++;
@@ -311,10 +316,12 @@ test('certificates carry no recruit orders: the route code has none, and the ver
   const { actions, metrics } = daily.generation.certificate;
   assert.ok(actions.every((action) => action.recruit === undefined));
   assert.deepEqual(decodeRoute(encodeRoute(actions)), actions);
-  const replay = verifyWinningRoute(createGame(daily), actions);
+  // Proved on the day's twin without its hint powerups (src/generation.js proveComposed).
+  const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
+  const replay = verifyWinningRoute(createRoom(twin), actions);
   assert.equal(replay.valid, true, replay.reason); assert.deepEqual(replay.metrics, metrics);
   const ordered = actions.map((action) => (action.type === 'descend' ? action : { ...action, recruit: 'hold' }));
-  const refused = verifyWinningRoute(createGame(daily), ordered);
+  const refused = verifyWinningRoute(createRoom(twin), ordered);
   assert.equal(refused.valid, false); assert.match(refused.reason, /Only chess moves/);
   // The Dungeon Bot replays the same Auto route.
   const bot = botRun(daily);
@@ -324,8 +331,12 @@ test('certificates carry no recruit orders: the route code has none, and the ver
 test('runs played with orders keep valid saves on every floor', () => {
   const daily = getDaily('2026-11-13');
   let state = createGame(daily);
-  // Pick up the first floor's recruit and order it around for a few turns.
+  // Down to the king floor by the planted lines, whose recruit king waits a move from the start;
+  // pick it up and order it around for a few turns.
+  for (const action of daily.generation.certificate.actions) { if (state.floor === 2) break; state = act(state, action); }
+  assert.equal(state.floor, 2);
   const pickup = state.items.find((item) => item.type === 'companion');
+  assert.ok(legalMoves(state).some((tile) => tile.x === pickup.x && tile.y === pickup.y));
   state.powers.freeze = 6;
   state = act(state, move(pickup.x, pickup.y, 'hold'));
   for (let turn = 0; turn < 4; turn++) {

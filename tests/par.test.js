@@ -3,10 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor, retryLostRun } from '../src/game.js';
 import { botRun, playerRun } from '../src/bot.js';
-import { floorPars, parFor, runPars, humanSummary, validSummary } from '../src/par.js';
-import { humanPar, failedFloorPar, HUMAN_RUNS } from '../src/human-bot.js';
+import { floorPars, parFor, runPars } from '../src/par.js';
 import { EDITIONS } from '../src/editions.js';
-import { generateDaily } from '../src/generation.js';
+import { decodeRoute } from '../src/route-code.js';
 
 const daily = getDaily(new Date(Date.UTC(2026, 10, 5)));
 // The certified route's scored moves per floor.
@@ -24,57 +23,32 @@ function playRoute(each = () => {}) {
   return state;
 }
 
-test('each floor\'s par is the human-like bot\'s, stored by the build, for the official piece, color and monsters only', () => {
+test('each floor\'s par is its planted line plus one, for the official piece, color and monsters only', () => {
   const pars = floorPars(daily);
-  assert.deepEqual(pars, humanPar(daily).par);
-  assert.deepEqual(pars, EDITIONS[daily.date].par, 'the build stored the same pars');
+  assert.deepEqual(pars, route.map((moves) => moves + 1));
   const state = createGame(daily);
   assert.equal(parFor(state, daily), pars[0]);
   assert.deepEqual(runPars(createPracticeGame(daily), daily), pars);
   const otherPiece = daily.playerPiece === 'rook' ? 'bishop' : 'rook';
   assert.equal(parFor(createPracticeGame(daily, { piece: otherPiece }), daily), null);
   assert.equal(parFor(createPracticeGame(daily, { color: 'black' }), daily), null);
-  assert.equal(parFor(createPracticeGame(daily, { difficulty: daily.difficulty === 'gentle' ? 'fair' : 'gentle' }), daily), null);
+  assert.equal(parFor(createPracticeGame(daily, { difficulty: 'gentle' }), daily), null);
   assert.equal(floorPars({ ...daily, generation: undefined }), null);
+  // Only a whole day's certificate has pars: three floors, each closed by its stairs.
+  const actions = daily.generation.certificate.actions;
+  assert.equal(floorPars({ generation: { certificate: { actions: actions.slice(0, -1) } } }), null);
+  assert.deepEqual(floorPars({ generation: { certificate: { actions: [{ type: 'wait' }, { type: 'descend' }, { type: 'move', x: 1, y: 1 }, { type: 'wait' }, { type: 'descend' }, { type: 'descend' }] } } }), [2, 3, 1]);
 });
 
-test('a floor the bot fails takes the certified route\'s moves plus 25% as par', () => {
-  const failed = Object.entries(EDITIONS).find(([, entry]) => entry.runs.includes(null));
-  assert.ok(failed, 'some edition has a floor the bot fails');
-  const [date, entry] = failed;
-  const certified = botRun(getDaily(date)).floors;
-  entry.runs.forEach((run, floor) => { if (run === null) assert.equal(entry.par[floor], failedFloorPar(certified[floor])); });
-});
-
-test('the editions table stores a par and a shown run for every date, exactly as the bot works them out', () => {
-  for (const [date, entry] of Object.entries(EDITIONS)) assert.ok(validSummary(entry), `${date}: ${JSON.stringify(entry)}`);
-  const dates = Object.keys(EDITIONS);
-  for (const date of [dates[0], dates[9], dates[200], dates.at(-1)]) {
-    const { par, runs } = humanPar(generateDaily(date));
-    assert.deepEqual({ par, runs }, { par: EDITIONS[date].par, runs: EDITIONS[date].runs }, date);
+test('every stored edition\'s par is its lines plus one: 4 or 5 a floor, 6 or 7 on a rare walk', () => {
+  const tally = {};
+  for (const [date, entry] of Object.entries(EDITIONS)) {
+    const pars = floorPars({ generation: { certificate: { actions: decodeRoute(entry.route) } } });
+    assert.equal(pars?.length, 3, date);
+    for (const par of pars) tally[par] = (tally[par] ?? 0) + 1;
   }
-  assert.equal(validSummary({ par: [3, 4, 5], runs: [0, null, HUMAN_RUNS - 1] }), true);
-  for (const bad of [{ par: [3, 4], runs: [0, 0] }, { par: [3, 0, 5], runs: [0, 0, 0] }, { par: [3, 4, 5], runs: [0, HUMAN_RUNS, 0] }, { par: [3, 4, 5.5], runs: [0, 0, 0] }, { par: [3, 4, 5] }]) {
-    assert.equal(validSummary(bad), false, JSON.stringify(bad));
-  }
-});
-
-test('a date past the window works par out once, then reads it from device storage', () => {
-  const store = new Map();
-  globalThis.localStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) };
-  try {
-    const edition = generateDaily('2031-02-11');
-    const summary = humanSummary(edition);
-    assert.ok(validSummary(summary));
-    const keys = () => [...store.keys()].filter((key) => key.startsWith('dchess-par:'));
-    assert.equal(keys().length, 1);
-    // A remembered entry counts while it matches this certificate; a tampered one is worked out again.
-    const [key] = keys();
-    store.set(key, JSON.stringify({ ...JSON.parse(store.get(key)), par: [1, 2, 3] }));
-    assert.deepEqual(humanSummary({ ...edition, seed: edition.seed + 1 }).par, [1, 2, 3]);
-    store.set(key, JSON.stringify({ ...JSON.parse(store.get(key)), route: 'xyz' }));
-    assert.deepEqual(humanSummary({ ...edition, seed: edition.seed + 2 }).par, summary.par);
-  } finally { delete globalThis.localStorage; }
+  assert.deepEqual(Object.keys(tally).map(Number).sort(), [4, 5, 6, 7]);
+  assert.ok(tally[6] + tally[7] <= 6, `few walks: ${JSON.stringify(tally)}`);
 });
 
 test('the certified route replays and validates, and older saves carrying stars still validate', () => {

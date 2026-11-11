@@ -3,16 +3,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EDITIONS, EDITIONS_RANGE } from '../src/editions.js';
 import { encodeRoute, decodeRoute } from '../src/route-code.js';
-import { generateDaily } from '../src/generation.js';
-import { MAX_FLOOR_PAR, LONG_FLOOR_PAR } from '../src/difficulty.js';
+import { encodeRooms, decodeRooms } from '../src/room-code.js';
+import { getDaily, generateDaily, borrowedDaily, composedSeeds } from '../src/generation.js';
+import { composeDay } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
+import { createGame, act, validateSave } from '../src/rules.js';
+import { DAILY_TIER } from '../src/difficulty.js';
 
 test('routes survive the one-character-per-action encoding', () => {
   const actions = [{ type: 'move', x: 0, y: 0 }, { type: 'move', x: 7, y: 7 }, { type: 'wait' }, { type: 'move', x: 3, y: 5 }, { type: 'descend' }];
   assert.deepEqual(decodeRoute(encodeRoute(actions)), actions);
 });
 
-test('the precomputed table covers every date in its range', () => {
+test('rooms survive the room code exactly, key order included', () => {
+  const room = (extra) => ({
+    map: ['#.......', '........', '..##....', '........', '........', '.......#', '........', '#......#'],
+    enemies: [{ x: 1, y: 1, cast: 0 }, { x: 6, y: 2, cast: 2, held: 4 }, { x: 3, y: 4, cast: 1 }],
+    items: [{ x: 2, y: 5, type: 'coin' }, { x: 5, y: 5, type: 'coin', hint: true }, { x: 0, y: 3, type: 'powerup', power: 'magnet', hint: true }, { x: 7, y: 6, type: 'companion', piece: 'king' }],
+    ...extra,
+  });
+  const rooms = [room({ start: { x: 1, y: 6 } }), room({}), room({ start: { x: 4, y: 7 }, ice: [{ x: 4, y: 3 }, { x: 0, y: 0 + 1 }] })];
+  const back = decodeRooms(encodeRooms(rooms));
+  assert.deepEqual(back, rooms);
+  assert.equal(JSON.stringify(back), JSON.stringify(rooms));
+  assert.throws(() => decodeRooms('nonsense'));
+  assert.throws(() => encodeRooms([room({ enemies: [{ x: 1, y: 1, species: {} }] }), room({}), room({})]));
+  // Every stored edition decodes and encodes back to the very same code.
+  for (const [date, entry] of Object.entries(EDITIONS)) assert.equal(encodeRooms(decodeRooms(entry.rooms)), entry.rooms, date);
+});
+
+test('the stored table covers every date in its range', () => {
   assert.ok(EDITIONS_RANGE, 'src/editions.js must be generated');
   let count = 0;
   for (let time = Date.parse(EDITIONS_RANGE.start); time <= Date.parse(EDITIONS_RANGE.end); time += 86_400_000) {
@@ -20,42 +40,65 @@ test('the precomputed table covers every date in its range', () => {
     count++;
   }
   assert.equal(Object.keys(EDITIONS).length, count);
+  assert.equal(EDITIONS_RANGE.start, '2026-11-01', 'the whole archive, from edition 1');
 });
 
-test('a precomputed edition is exactly the edition the search would certify', () => {
-  const dates = Object.keys(EDITIONS);
-  const fallback = dates.find((date) => EDITIONS[date].attempt === 'fallback');
-  for (const date of [dates[0], dates[3], dates[40], ...(fallback ? [fallback] : [])]) {
-    assert.deepEqual(generateDaily(date), generateDaily(date, { precomputed: false }), date);
+test('a stored edition is exactly the day the composer composes', () => {
+  // A few quick days; npm run audit:editions composes every one again.
+  for (const date of ['2026-11-05', '2026-11-06', '2026-11-08']) {
+    const { daily } = composeDay(date);
+    assert.deepEqual({ rooms: encodeRooms(daily.composed), route: encodeRoute(daily.generation.certificate.actions) }, EDITIONS[date], date);
+    const stored = getDaily(date);
+    assert.deepEqual(stored.composed, daily.composed);
+    assert.deepEqual(stored.generation.certificate.actions, daily.generation.certificate.actions);
+    assert.deepEqual(stored.floorSeeds, composedSeeds(date));
+    assert.equal(stored.difficulty, DAILY_TIER);
+    assert.equal(stored.generation.source, 'composed');
   }
 });
 
-test('a date past the window is searched once, then replayed from device storage', () => {
-  const store = new Map();
-  globalThis.localStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, String(value)) };
-  try {
-    const date = '2031-02-11';
-    const searched = generateDaily(date);
-    assert.equal(store.size, 1);
-    const began = performance.now();
-    const replayed = generateDaily(date);
-    assert.ok(performance.now() - began < 1000);
-    assert.deepEqual(replayed, searched);
-    // A corrupt or tampered entry is ignored; the search runs again.
-    for (const value of ['{', JSON.stringify({ tier: searched.difficulty, attempt: 7, route: '' }), JSON.stringify({ tier: searched.difficulty, attempt: 0, route: '...' })]) {
-      store.set([...store.keys()][0], value);
-      assert.deepEqual(generateDaily(date), searched);
+test('stored editions prove as they load, and their lines keep every save valid', () => {
+  const dates = Object.keys(EDITIONS);
+  for (let n = 0; n < dates.length; n += 25) {
+    const date = dates[n];
+    const daily = generateDaily(date);
+    assert.equal(daily.generation.borrowed, undefined, date);
+    let state = createGame(daily);
+    for (const action of daily.generation.certificate.actions) {
+      state = act(state, action);
+      assert.equal(validateSave(state, date, daily), true, `${date} after ${JSON.stringify(action)}`);
     }
-  } finally { delete globalThis.localStorage; }
+    assert.equal(state.status, 'won', date);
+    assert.equal(state.hits, 0, `${date}: a planted line is never captured`);
+  }
 });
 
-test('stored floors stay short: a floor runs past par 10 (a pawn’s past 14) on few days, never past 14', () => {
-  const editions = Object.values(EDITIONS);
-  const pars = editions.flatMap((entry) => entry.par);
-  assert.ok(pars.every((par) => par <= LONG_FLOOR_PAR), `longest ${Math.max(...pars)}`);
-  // A pawn's floors may run 4 moves longer: its route may be captured 4 times, each a move.
-  const longFloors = ([date, entry]) => entry.par.filter((par) => par > MAX_FLOOR_PAR + (getRawDaily(date).playerPiece === 'pawn' ? 4 : 0)).length;
-  const long = Object.entries(EDITIONS).filter((day) => longFloors(day) > 0);
-  assert.ok(long.length <= editions.length / 10, `${long.length} days with a long floor`);
-  assert.ok(long.every((day) => longFloors(day) === 1), 'never two long floors in a day');
+test('a date past the window borrows a stored day of its own piece and modifier, under its own cast', () => {
+  for (const date of ['2031-02-11', '2031-02-12', '2033-07-04']) {
+    const raw = getRawDaily(date);
+    const daily = getDaily(date);
+    const template = daily.generation.borrowed;
+    assert.ok(EDITIONS[template], `${date} borrows a stored day`);
+    const source = getRawDaily(template);
+    assert.equal(source.playerPiece, raw.playerPiece);
+    assert.equal(source.modifier, raw.modifier);
+    // The stored day's rooms, line, seeds and roles; the date's own names, colors and shops.
+    assert.deepEqual(daily.composed, decodeRooms(EDITIONS[template].rooms));
+    assert.deepEqual(daily.generation.certificate.actions, decodeRoute(EDITIONS[template].route));
+    assert.deepEqual(daily.floorSeeds, composedSeeds(template));
+    assert.deepEqual(daily.targets, source.targets);
+    assert.deepEqual(daily.species.map((creature) => creature.piece), source.species.map((creature) => creature.piece));
+    assert.deepEqual(daily.species.map((creature) => creature.name), raw.species.map((creature) => creature.name));
+    assert.deepEqual(daily.shops, raw.shops);
+    assert.equal(daily.edition, raw.edition);
+    // It plays exactly as stored: the line wins with every save valid.
+    let state = createGame(daily);
+    for (const action of daily.generation.certificate.actions) {
+      state = act(state, action);
+      assert.equal(validateSave(state, date, daily), true, `${date} after ${JSON.stringify(action)}`);
+    }
+    assert.equal(state.status, 'won');
+    // The same date always borrows the same day.
+    assert.deepEqual(borrowedDaily(raw), generateDaily(date));
+  }
 });

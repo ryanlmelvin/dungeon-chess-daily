@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Barricades (src/rules.js promotionBarricades): on a floor with monster pawns,
-// walls on the rank where they would promote, all but the day's open squares.
+// Barricades (src/rules.js promotionBarricades): on a random room's floor with
+// monster pawns, walls on the rank where they would promote, all but the
+// day's open squares. (Composed rooms wall their own pawns' files instead.)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { candidateFor } from '../src/generation.js';
-import { knobsFor, tierForDate, openPromotionFiles, WEEKDAY_OPEN_PROMOTION_FILES } from '../src/difficulty.js';
-import { createGame, floorDecoys } from '../src/rules.js';
+import { createGame, floorDecoys, openPromotionFiles, WEEKDAY_OPEN_PROMOTION_FILES } from '../src/rules.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
-// Floor 1 of the first candidate of real dates past the stored editions.
+// Floor 1 of the random rooms of real dates, with the plain room's seven walls.
 function firstFloors(count) {
   const floors = [];
   for (let day = 0; floors.length < count && day < 400; day++) {
     const date = new Date(Date.UTC(2031, 0, 1 + day)).toISOString().slice(0, 10);
-    const base = getRawDaily(date), tier = tierForDate(date), knobs = knobsFor(tier, base.playerPiece);
-    const state = createGame(candidateFor(base, tier, knobs, 0));
+    const base = getRawDaily(date);
+    const state = createGame(randomRoomDaily(date));
     const pawns = state.targets[0] === 'pawn' || floorDecoys(state, 0).some((species) => species.piece === 'pawn');
-    floors.push({ date, state, pawns, walls: knobs.obstacleBase, open: openPromotionFiles(date), bishop: base.playerPiece === 'bishop' });
+    floors.push({ date, state, pawns, walls: 7, open: openPromotionFiles(date), bishop: base.playerPiece === 'bishop' });
   }
   return floors;
 }

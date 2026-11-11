@@ -7,9 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, legalMoves, recruitChoice, PIECES } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
-import { candidateFor } from '../src/generation.js';
-import { knobsFor, tierForDate } from '../src/difficulty.js';
 import { hash, random } from '../src/random.js';
+import { randomRoomDaily } from './fixtures/random-room.js';
 
 const move = (x, y, recruit) => (recruit === undefined ? { type: 'move', x, y } : { type: 'move', x, y, recruit });
 const wait = (recruit) => (recruit === undefined ? { type: 'wait' } : { type: 'wait', recruit });
@@ -149,8 +148,7 @@ test('the king floor always recruits a king, on the square its draw always gave;
   let kings = 0;
   for (let day = 0; day < 120; day++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
-    const tier = tierForDate(raw.date);
-    const candidate = candidateFor(raw, tier, knobsFor(tier, raw.playerPiece), day % 4);
+    const candidate = randomRoomDaily(raw.date, { attempt: day % 4 });
     for (const start of floorsOf(candidate)) {
       const recruit = start.items.find((item) => item.type === 'companion');
       if (start.floor < 2) { early.add(recruit.piece); continue; }
@@ -173,8 +171,7 @@ test('a pawn recruit waits only on a file open to the far rank, drawn from its o
   let pawns = 0, moved = 0, redrawn = 0;
   for (let day = 0; day < 240; day++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 5 + day)));
-    const tier = tierForDate(raw.date);
-    const candidate = candidateFor(raw, tier, knobsFor(tier, raw.playerPiece), day % 4);
+    const candidate = randomRoomDaily(raw.date, { attempt: day % 4 });
     // The same layout twice: placement is deterministic.
     assert.deepEqual(createGame(candidate).items, createGame(candidate).items);
     for (const start of floorsOf(candidate)) {

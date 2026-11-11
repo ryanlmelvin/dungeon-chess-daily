@@ -3,11 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, unreachablePickups } from '../src/rules.js';
-import { generateDaily } from '../src/generation.js';
+import { getDaily } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
-import { FALLBACKS } from '../src/fallbacks.js';
-import { TIER_IDS } from '../src/difficulty.js';
-import { PLAYABLE_PIECES } from '../src/pieces.js';
+import { EDITIONS } from '../src/editions.js';
 
 function scenario(piece, x = 4, y = 6) {
   const state = createGame(getRawDaily('2026-11-05'));
@@ -23,43 +21,43 @@ function mapWithOpenSquares(squares) {
   return rows.map((row) => row.join(''));
 }
 
+// A composed day's twin without its hint powerups, as certificates are proved (src/generation.js proveComposed).
+const twinOf = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
+
 // This is terrain reachability with the actual chess movement graph. Combat
 // survivability is checked independently by replaying the full winning route.
-test('all fallback floors have reachable stationary pickups for every piece and difficulty', () => {
+test('every stored edition\'s floors have reachable pickups: a few coins, a powerup only as a hint, and the king floor\'s king', () => {
   let floors = 0;
-  // Plain play plus the two rule-changing room modifiers (ice, collapse).
-  assert.equal(Object.keys(FALLBACKS).length, TIER_IDS.length * PLAYABLE_PIECES.length * 3);
-  for (const [identity, fallback] of Object.entries(FALLBACKS)) {
-    const [difficulty, piece, color] = identity.split(':');
-    const daily = generateDaily(fallback.date, { difficulty, maxAttempts: 0 });
-    assert.equal(daily.playerPiece, piece);
-    assert.equal(daily.playerColor, color);
+  // Every third stored edition (the build proves every one: npm run verify:editions).
+  const dates = Object.keys(EDITIONS).filter((_, index) => index % 3 === 0);
+  for (const date of dates) {
+    const daily = getDaily(date);
     let state = createGame(daily);
-    const visitedFloors = new Set();
     const checkFloor = () => {
-      assert.deepEqual(unreachablePickups(state), [], `${identity}, floor ${state.floor}`);
-      // Gold has nothing left to buy on the last floor, so it holds no coins or coin magnet.
+      const label = `${date}, floor ${state.floor}`;
+      assert.deepEqual(unreachablePickups(state), [], label);
+      // Gold has nothing left to buy on the last floor, so it holds no coins and no powerup.
       const last = state.floor === 2;
-      assert.equal(state.items.filter((item) => item.type === 'coin').length, last ? 0 : 3, `${identity}, floor ${state.floor}`);
-      assert.ok(state.items.some((item) => item.type === 'powerup'));
-      if (last) assert.ok(!state.items.some((item) => item.power === 'magnet'), `${identity}: magnet on the last floor`);
-      // Every floor holds one recruit: any piece on floors 1 and 2, a king on the last.
+      const coins = state.items.filter((item) => item.type === 'coin').length;
+      assert.ok(last ? coins === 0 : coins <= 3, `${label}: ${coins} coins`);
+      // A powerup lies in a room only as floor 1 or 2's hint.
+      assert.ok(state.items.filter((item) => item.type === 'powerup').every((item) => item.hint && !last), label);
+      // Floors 1 and 2 may recruit any piece; the last always waits with a king.
       const recruits = state.items.filter((item) => item.type === 'companion').map((item) => item.piece);
-      assert.equal(recruits.length, 1, `${identity}, floor ${state.floor}`);
-      assert.ok((last ? ['king'] : ['pawn', 'rook', 'knight', 'bishop', 'queen', 'king']).includes(recruits[0]), `${identity}, floor ${state.floor}: ${recruits[0]}`);
-      visitedFloors.add(state.floor); floors++;
+      if (last) assert.deepEqual(recruits, ['king'], label);
+      else assert.ok(recruits.length <= 1, label);
+      floors++;
     };
     checkFloor();
     for (const action of daily.generation.certificate.actions) {
       const next = act(state, action);
-      const changedFloor = next.floor !== state.floor;
+      const changedFloor = next.floor !== state.floor && next.status === 'playing';
       state = next;
       if (changedFloor) checkFloor();
     }
     assert.equal(state.status, 'won');
-    assert.deepEqual([...visitedFloors], [0, 1, 2]);
   }
-  assert.equal(floors, Object.keys(FALLBACKS).length * 3);
+  assert.equal(floors, dates.length * 3);
 });
 
 test('a bishop cannot reach coins, relics or recruits on the opposite square color', () => {
@@ -126,8 +124,8 @@ test('a blocked pawn cannot assume promotion or capture an empty diagonal pickup
 });
 
 test('certification rejects an unreachable pickup even when the unchanged route still wins', () => {
-  const fallback = FALLBACKS['tough:bishop:white'];
-  const daily = generateDaily(fallback.date, { difficulty: 'tough', maxAttempts: 0 });
+  const date = Object.keys(EDITIONS).find((day) => getRawDaily(day).playerPiece === 'bishop' && getRawDaily(day).modifier === 'none');
+  const daily = twinOf(getDaily(date));
   const initial = createGame(daily);
   const actions = daily.generation.certificate.actions;
   assert.equal(verifyWinningRoute(initial, actions).valid, true);

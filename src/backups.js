@@ -1,7 +1,9 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
-import { validateSave } from './game.js';
+import { validateSave, RULES_VERSION } from './game.js';
 
-const SAVE_KEY = /^daily:(?:(v(?:[3-9]|1[01])):)?(\d{4}-\d{2}-\d{2})$/;
+// Official runs: `daily:vN:DATE` for rules version N (3 to the current one), or `daily:DATE` from before versions.
+const SAVE_KEY = /^daily:(?:(v[1-9]\d*):)?(\d{4}-\d{2}-\d{2})$/;
+const CURRENT = `v${RULES_VERSION}`;
 const STATUS_RANK = { lost: 0, playing: 1, won: 2 };
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isSound = (value) => value === 'on' || value === 'off';
@@ -11,13 +13,14 @@ function readRun(key, serialized) {
     const match = SAVE_KEY.exec(key);
     if (!match || typeof serialized !== 'string') return null;
     const [, version, date] = match;
+    if (version && !(Number(version.slice(1)) >= 3 && Number(version.slice(1)) <= RULES_VERSION)) return null;
     if (!Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) return null;
     const run = JSON.parse(serialized);
     if (!isRecord(run) || run.date !== date || typeof run.status !== 'string' || !Object.hasOwn(STATUS_RANK, run.status)) return null;
     const schemas = version ? [Number(version.slice(1))] : [2, 3];
     if (!schemas.includes(run.schema) || !Number.isInteger(run.floor) || run.floor < 0 || run.floor > 2) return null;
-    if (version === 'v11' && !validateSave(run, date)) return null;
-    return { run, archived: version !== 'v11' };
+    if (version === CURRENT && !validateSave(run, date)) return null;
+    return { run, archived: version !== CURRENT };
   } catch { return null; }
 }
 

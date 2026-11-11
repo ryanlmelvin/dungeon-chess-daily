@@ -17,21 +17,23 @@ npm run dev                         # Vite on 127.0.0.1:4319 (no service worker 
 npm test                            # node --test tests/*.test.js
 node --test tests/game.test.js      # one file (substitute any tests/*.test.js)
 node --test --test-name-pattern="window closes" tests/en-passant.test.js   # one test
-npm run build                       # verify fallbacks → build editions → vite build → service worker
+npm run build                       # compose new editions → vite build → service worker
 node scripts/serve.mjs              # serve dist/ at http://127.0.0.1:4320/dungeon-chess-daily/ (Pages prefix)
 ```
 
 Content checks:
 
 ```sh
-npm run verify:fallbacks                    # replay all 75 tier/piece/modifier fallback routes
-npm run verify:editions                     # replay the stored editions in src/editions.js
-npm run audit:dungeons -- 2026-11-05 365    # independently replay a year of dailies (3rd arg forces a tier)
-npm run build:editions [-- --full]          # incremental re-certification; --full redoes every date
-node scripts/measure-human-par.mjs          # human-gap / difficulty report over stored editions
+npm run verify:editions                     # replay every stored edition in src/editions.js (seconds)
+npm run audit:editions                      # compose every stored date again and compare (minutes)
+npm run audit:dungeons -- 2026-11-01 365    # replay a year of dailies, validating the save after every action
+npm run build:editions [-- --full]          # compose missing or stale dates; --full composes every date (~5 min)
+node scripts/measure-composer.mjs           # composer report: motifs, times, lines, the bot's runs
+node scripts/measure-human-par.mjs          # the human-like bot over the stored editions, against par
 ```
 
-Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD`
+Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to play
+that date composed afresh by the composer as it is now, before rebuilding editions
 (`src/composed-preview.js`, stripped from production builds, saved apart from real runs).
 
 Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` and
@@ -45,34 +47,35 @@ deploy, check the live `release.json` and play the published edition.
 re-select, optionally with a recruit order `{x,y}` or `'hold'`), legal moves,
 captures, promotion, en passant, castling, recruits, pickups, scoring, share text.
 `src/monster-ai.js` (every monster moves every turn, seeded tie-breaks),
-`src/modifiers.js` (ice, collapse, dark — part of `state.modifier`), `src/cave-in.js`
+`src/modifiers.js` (ice and collapse, "Breach"; dark is retired — part of `state.modifier`), `src/cave-in.js`
 (lingering on a cleared floor) and `src/tactics.js` (fork/combo bonuses only) plug
 into it. `src/game.js` is the public, certified API the UI imports: `getDaily()`
 normalizes to UTC and returns the canonical edition; callers can't swap its seed,
 piece, targets or layout.
 
 **Editions and fairness.** `src/edition.js` derives the raw daily (seed, piece,
-headlines) from the date; `src/difficulty.js` maps the UTC weekday to a tier and
-knobs. `src/generation.js` runs at most sixteen fixed-budget candidate searches,
-one floor at a time, and assembles the day from candidates' floors whose capped
-human gap sums closest to the weekday target. `src/fairness.js`
-(`verifyWinningRoute`) replays the stitched route as one run; a route is the
-certificate. If search fails, `src/fallbacks.js` (generated bank, ~9k lines) is
-used. `src/human-bot.js` + `src/recruit-policy.js` are the "plays like a person"
-bot that produces par (`src/par.js`) and the human gap; `src/bot.js` shows the
-post-win replay. `src/calibration.js` and the `scripts/calibrate-*` scripts tune
-the knobs.
+species, headlines, modifier) from the date. Every edition is composed:
+`src/composer.js` builds each floor around a short planted line (bait / squeeze /
+net motifs; tempo / crown lines for pawns), proved by an exact shortest-win search
+and guarded by the human-like bot, and the planted lines are the day's certificate.
+`src/generation.js` (`proveComposed`) replays them through `src/fairness.js`
+(`verifyWinningRoute`, on the day's twin without hint powerups) and then as played.
+Every daily plays the Fair monsters (`DAILY_TIER`, `src/difficulty.js`, which holds
+the five tiers practice can choose). Par is each floor's line plus one
+(`src/par.js`); `src/bot.js` replays the lines after a win. `src/human-bot.js` +
+`src/recruit-policy.js` are the "plays like a person" bot, now only a probe and the
+composer's guard. Authoritative description: `docs/generation.md`; history, decisions
+and measurements: `docs/puzzle-first-idea.md`.
 
-**Shipped certificates.** `src/editions.js` (generated, committed) stores encoded
-routes (`src/route-code.js`) for launch through two years past the build date, so
-opening a day replays instead of searching. Dates outside that window search once
-on-device and cache in local storage. Every build rolls the window forward
-incrementally.
+**Shipped editions.** `src/editions.js` (generated, committed) stores each day's rooms
+(`src/room-code.js`) and lines (`src/route-code.js`) from launch (2026-11-01) through
+two years past the build date; the app decodes and proves them as they load and never
+carries the composer. Every build composes new dates incrementally. A date past the
+window borrows a stored day of its own piece and modifier (`borrowedDaily`).
 
-**Composer (phase 0, not in production).** `src/composer.js` builds floors around a
-planted solution (bait / squeeze / fork / net motifs) and proves them with an exact
-shortest-win search. Plan and measurements: `docs/puzzle-first-idea.md` (the file
-header still says `puzzle-first-plan.md`).
+**Random rooms (tests only).** A game created without composed rooms builds the old
+seeded random room (`setFloor` in `src/rules.js`); no edition uses it, and tests keep it
+as a fixture (`tests/fixtures/random-room.js`).
 
 **UI.** `src/main.js` owns input, the newspaper, saves, archive, sharing and dialogs;
 `src/renderer.js` is the pixelated Three.js board; `src/sprites.js`, `*-art.js`
@@ -81,23 +84,21 @@ are onboarding; `src/pwa.js` + `scripts/build-sw.mjs` handle the fingerprinted,
 integrity-verified offline cache; `src/archive.js`, `src/backups.js`,
 `src/storage.js` handle past days and saves.
 
-## Changing rules, AI, search or the bot
+## Changing rules, AI, the composer or the bot
 
-Anything that alters gameplay, monster AI, modifiers, search budgets/order,
-calibration, the human bot, day targets or fallback selection can change editions:
+Anything that alters gameplay, monster AI, modifiers, the composer or the human bot
+(the composer's guard reads it) can change editions:
 
-1. Bump `RULES_VERSION` in `src/rules.js` (`GENERATOR_VERSION` and the save schema
-   follow it). `HUMAN_BOT_VERSION` alone only recomputes pars; `LAYOUT_SEED_VERSION`
-   (`src/generation.js`) reseeds candidate layouts and is normally left alone.
-2. Recalibrate if difficulty shifts: `npm run calibrate:difficulty` (hours; writes
-   gitignored `scripts/calibration-data.json`, ~70 MB, never commit it).
-3. `node scripts/build-fallbacks.mjs`, `npm run verify:fallbacks`,
-   `npm run build:editions -- --full`, `npm test`.
+1. Bump `RULES_VERSION` in `src/rules.js` for a change to play (`GENERATOR_VERSION`,
+   the save schema and the save keys follow it). `COMPOSER_VERSION`
+   (`src/generation.js`) salts the composer's seeds; bumping it re-rolls every room,
+   so it is normally left alone.
+2. `npm run build:editions -- --full`, then `npm run verify:editions` and `npm test`.
+   Let the user play a local preview of the days they'll meet before shipping.
 
-New rules apply to the whole archive: rebuild every past edition, no legacy
-cutoff. `docs/generation.md` is the authoritative description of the guarantee,
-tiers, human gap, floor assembly and calibration; keep it in step with behavior
-changes.
+New rules apply to the whole archive: rebuild every past edition, no legacy cutoff.
+`docs/generation.md` is the authoritative description of the guarantee, the composer's
+checks, par and versioning; keep it in step with behavior changes.
 
 ## Design constraints
 
@@ -106,6 +107,8 @@ changes.
   lives: a capture of the player adds a move to the score.
 - The king is never the daily piece; certified routes never use powerups, shields,
   freezes or the floor 1–2 recruits, and carry no recruit orders (Auto).
+- Every daily plays Fair; par is the planted line + 1; on the king floor checkmate
+  wins and the king can't take a piece the recruit king guards.
 - Keep UI text and the share card minimal. Dialogs must not scroll on small phones
   (check around 440×780, 402×680 and iPhone SE widths).
 - Original assets only; music is CC0 and seeded by date separately from generation.

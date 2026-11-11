@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { archiveMonth, dailySaveKey, editionNumber, isArchiveDate, savedStatus, shiftMonth } from '../src/archive.js';
 import { FIRST_EDITION_DATE, getRawDaily } from '../src/edition.js';
-import { getDaily, createGame, validateSave } from '../src/game.js';
+import { getDaily, createGame, validateSave, RULES_VERSION } from '../src/game.js';
 
 test('edition #1 is the first archive date', () => {
   assert.equal(getRawDaily(FIRST_EDITION_DATE).edition, 1);
@@ -45,13 +45,14 @@ test('only valid past editions can be reopened from the archive', () => {
   }
 });
 
-test('saved status reads each day from its official v11 key', () => {
+test('saved status reads each day from its official key under the current rules', () => {
   const date = '2026-11-05';
   const saved = new Map([
     [dailySaveKey('2026-11-07'), JSON.stringify({ date: '2026-11-07', status: 'won' })],
     [dailySaveKey('2026-11-06'), JSON.stringify({ date: '2026-11-06', status: 'playing' })],
     [dailySaveKey(date), '{not json'],
-    ['practice:v11:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
+    [`practice:v${RULES_VERSION}:2026-11-08`, JSON.stringify({ date: '2026-11-08', status: 'won' })],
+    ['daily:v11:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
     ['daily:v5:2026-11-08', JSON.stringify({ date: '2026-11-08', status: 'won' })],
   ]);
   const { days } = archiveMonth('2026-11', '2026-11-09', FIRST_EDITION_DATE, (name) => saved.get(name) ?? null);
