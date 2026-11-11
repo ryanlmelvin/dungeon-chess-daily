@@ -48,6 +48,7 @@ import { distanceTable, UNREACHABLE } from './move-tables.js';
 import { hash, random } from './random.js';
 import { playFloor, runSeed, HUMAN_RUNS } from './human-bot.js';
 import { ICE_TILES } from './modifiers.js';
+import { placeTreasure } from './treasure.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -1569,9 +1570,12 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * each floor. `tier` composes under other monsters, and `daily` overrides the
  * raw daily (tooling: synthetic casts, or another modifier); `starts` the
  * start set (startSquares); `trace` hears each floor's composeFloor events,
- * with its `floor` (tooling).
+ * with its `floor` (tooling). `treasure` (a dev preview, off unless asked for)
+ * adds a chest off each floor's line where one qualifies (src/treasure.js):
+ * such a floor gains `treasure` (its square and proving line), and the day's
+ * generation lists each floor's proving line, or null.
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false } = {}) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
@@ -1582,6 +1586,12 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
+  // Treasure: once a floor's room, line and hint are settled, a chest where one qualifies. Nothing else in the room changes.
+  if (treasure) for (const [floor, composed] of floors.entries()) {
+    const began = performance.now();
+    Object.assign(composed, placeTreasure(composed, { seed: base.floorSeeds[floor], actionsFrom, start: (room) => floorStart(base, floor, room) }));
+    composed.treasureMs = performance.now() - began;
+  }
   const actions = floors.flatMap((floor) => [...floor.line, { type: 'descend' }]);
   const daily = { ...base, composed: floors.map((floor) => floor.room) };
   // Proved as every edition is when it loads (on its twin without hint powerups, then as played),
@@ -1589,5 +1599,6 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   const proof = proveComposed(daily, actions, { saves: true });
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
   daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), certificate: { actions, metrics: proof.metrics } };
+  if (treasure) daily.generation.treasure = floors.map((floor) => floor.treasure?.line ?? null);
   return { daily, floors };
 }
