@@ -27,7 +27,7 @@ const PALETTE_NAMES = ['ice', 'ember', 'moss', 'violet', 'gold', 'rose'];
 const HEADLINES = {
   pawn: [
     'join the front line',
-    // Not "eye": the paper never names a species, even by pun (Floating eye).
+    // Not "eye": headlines never name a species, even by pun (Floating eye).
     'advance one step, chase a promotion',
     'open with a double-time march',
     'take the next rank by storm',
@@ -112,16 +112,16 @@ const HEADLINES = {
   ],
 };
 
-// Saved themes name the species; the paper itself never does (headlineFor).
+// Saved themes name the species; the paper's headlines never do (headlineFor).
 function headlineSubject(creature) {
   return PIECE_COUNTS[creature.piece] > 1
     ? `${creature.palette[0].toUpperCase() + creature.palette.slice(1)} ${creature.plural.toLowerCase()}`
     : creature.name;
 }
 
-// The paper describes how a floor's target moves but never says who it is: each
-// story lines up the floor's suspects instead (main.js). Both lists use the same
-// index, so a subject says nothing beyond the verb's number (one queen or king).
+// A headline says how a floor's target moves but never names it: the story's
+// picture shows who it is (main.js). Both lists use the same index, so a
+// subject says nothing beyond the verb's number (one queen or king).
 export const HEADLINE_SUBJECTS = Object.freeze({
   plural: Object.freeze(['Some residents', 'Certain tenants', 'Insiders say some locals', 'Mystery guests',
     'Unnamed regulars', 'Witnesses say some lodgers', 'Sources say certain newcomers', 'Masked locals']),

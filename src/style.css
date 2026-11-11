@@ -31,15 +31,6 @@
 .side-stories article+article{border-left:1px solid #747474;padding-left:20px}
 .side-stories h3{font:400 28px/.95 'VT323','Courier New',monospace;margin:0 0 7px}
 .side-stories p{clear:both;margin:0}
-/* Suspect lineups (main.js createLineup): two mugshots side by side, small-caps names below. */
-.lead-lineup{align-self:center;min-width:0}
-.lineup{margin:10px 0;min-width:0}
-.lead-lineup .lineup{margin:0}
-.lineup figcaption{font-size:16px;line-height:1;text-transform:uppercase;margin:0 0 6px}
-.lineup ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.lineup li{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;text-align:center;font-size:16px;line-height:1;text-transform:uppercase}
-.lineup li span{max-width:100%;overflow-wrap:break-word}
-.lineup canvas{flex:none;display:block;width:44px;height:44px;image-rendering:pixelated;border:2px solid var(--ink)}
 .paper-action{display:flex;justify-content:flex-end;margin-top:20px}
 .primary{background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:3px 3px 0 #24212a45;padding:14px 20px;font-weight:bold;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:24px}
 .primary:hover{background:#443b49}.primary span{font-size:22px;line-height:1}
@@ -145,21 +136,47 @@ body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px
 @media(prefers-reduced-motion:reduce){.descend-button.urgent{animation:none;background:#3a2a25f0}}
 .shop-news{color:#ff9a4a;margin:0 0 8px}.shop-news b{color:#ffd0a8}
 @media(max-width:600px){.modifier-bulletin{font-size:17px;padding:5px 8px}}
-/* Phones: the whole paper, down to its Enter button, fits a 375×812 screen on
-   every day, bulletin included. Placed after the other phone rules so it wins. */
+/* Phones: the whole paper, down to its Enter button, fits the screen without
+   scrolling. main.js fitPaper keeps the roomiest print that fits: these rules,
+   then data-fit="tight" (402×680), then "tighter" (an iPhone SE in Safari).
+   Placed after the other phone rules so it wins. */
 @media(max-width:600px){
   .lead-story{grid-template-columns:1.3fr 1fr;padding:12px 0}
   .lead-copy h2{font-size:26px;margin-bottom:0}
   .newspaper .deck,.side-stories p{display:none}
   .side-stories{padding:10px 0}
   .side-stories h3{font-size:22px}
-  .lineup{margin:8px 0 0}
-  .lineup figcaption{font-size:12px;margin-bottom:4px}
-  .lineup ul{gap:4px}
-  .lineup li{gap:2px;font-size:13px}
   .modifier-bulletin{font-size:15px;padding:4px 7px;margin-top:8px}
   .modifier-emoji{font-size:16px}
   .paper-action{margin-top:12px}
+  .paper-screen[data-fit]{padding:8px 12px 10px}
+  [data-fit] .newspaper{padding:12px 15px 14px}
+  [data-fit] .newspaper h1{font-size:clamp(26px,7vw,32px);margin:6px 0 4px;padding-top:6px}
+  [data-fit] .newspaper .paper-rule{padding:4px 0}
+  [data-fit] .modifier-bulletin{margin-top:6px}
+  [data-fit] .lead-story{padding:8px 0}
+  [data-fit] .side-stories{padding:8px 0}
+  [data-fit] .side-stories h3{font-size:20px}
+  [data-fit] .story-portrait{width:40px;height:40px}
+  [data-fit] .paper-action{margin-top:8px}
+  [data-fit] .paper-action .primary{padding:10px 15px}
+  /* Smaller type, a narrower picture without its caption, and the bulletin
+     wrapping under its label. */
+  .paper-screen[data-fit=tighter]{padding:4px 10px}
+  [data-fit=tighter] .newspaper{padding:8px 13px 11px}
+  [data-fit=tighter] .paper-dateline{font-size:12px}
+  [data-fit=tighter] .newspaper h1{font-size:24px;margin:3px 0;padding-top:4px}
+  [data-fit=tighter] .newspaper .paper-rule{font-size:12px;padding:2px 0}
+  [data-fit=tighter] .modifier-bulletin{display:block;font-size:14px;margin-top:5px}
+  [data-fit=tighter] .modifier-emoji{margin-right:6px}
+  [data-fit=tighter] .lead-story{grid-template-columns:1.6fr 1fr;padding:6px 0}
+  [data-fit=tighter] .lead-copy h2{font-size:22px}
+  [data-fit=tighter] .paper-figure figcaption{display:none}
+  [data-fit=tighter] .side-stories{padding:6px 0}
+  [data-fit=tighter] .side-stories h3{font-size:17px}
+  [data-fit=tighter] .story-portrait{margin-bottom:2px}
+  [data-fit=tighter] .paper-action{margin-top:6px}
+  [data-fit=tighter] .paper-action .primary{padding:8px 13px}
 }
 /* Tactics (tactics.js): the combo counter and the brief Fork!/Combo! stamp. */
 .combo-status{color:#a5e2cc;white-space:nowrap}.combo-status.hot{color:#ff9a4a}

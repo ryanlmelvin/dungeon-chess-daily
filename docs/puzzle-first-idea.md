@@ -54,6 +54,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Difficulty comes from how hidden the key move is, not from extra moves | Agreed |
 | No lives: each capture adds 1 move to that floor's score (no new share symbol) | Built (phase 1) |
 | Fix the count giveaway: the other suspect has as many copies as the target | Agreed |
+| The paper pictures only each floor's target, with no suspect lineup | Built (2026-11-10). Composed rooms keep the count rule above |
 | The king floor's king ignores frost | Built (phase 1) |
 | No knight-against-knight standoffs; Gentle knights are brave if tiers stay | Agreed |
 | Tighter rooms: no open boards a target can flee across | Agreed |
@@ -342,7 +343,8 @@ file, since no monster ever stands there.
   other suspect has the same number of copies as the target: two for rooks,
   knights and bishops, one for a queen or king. On pawn floors, eight copies
   always name the target, so the paper can call them open-and-shut; composed
-  floors use two pawns instead, so the rule holds there too.
+  floors use two pawns instead, so the rule holds there too. Since 2026-11-10
+  the paper pictures only the target; composed rooms keep the rule.
 - **Par** is the planted line plus 1 (agreed 2026-11-10). That gives a
   careful player who spots the idea a spare move: E means "found it", under
   par means "found the exact line" or a clever use of a powerup or recruit,

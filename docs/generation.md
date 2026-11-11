@@ -253,8 +253,8 @@ guard, then corners the lone king, which no person would plan. So par comes
 from a bot that plays like a person, `src/human-bot.js`:
 
 - **It sees what a player sees**: the board, items and red lanes, the floor's
-  target role and which species is the target (as if the newspaper were
-  solved), and a species' role once one of them has been captured. It never
+  target role and which species is the target (the newspaper pictures it),
+  and a species' role once one of them has been captured. It never
   reads a hidden role and never simulates the monsters' replies. A monster of
   unknown role is dangerous up close: the squares next to it and a knight's jump
   away count as unsafe, for any role but the target's.
@@ -464,11 +464,9 @@ either side of its targets (Gentle 1.75–3.25, Fair 3.25–4.75, Tricky
 knobs to.
 
 The newspaper prints the tier (for example "DIFFICULTY: TOUGH") and, besides
-each floor's clue and two suspects (the target's species and one other that can
-appear there), nothing else about the dungeon. Every floor keeps at least one
-decoy (`MIN_DECOYS`), so there are always two suspects: no floor is an
-open-and-shut case of its targets alone, every floor has a decoy to take for
-gold, and the king floor always has a royal guard.
+each floor's headline and a picture of its target's species, nothing else about
+the dungeon. Every floor keeps at least one decoy (`MIN_DECOYS`), so every floor
+has a decoy to take for gold, and the king floor always has a royal guard.
 
 The tier also sets how smart the monsters are ([Smarter monsters by
 tier](#smarter-monsters-by-tier)), the main step from one tier to the next.

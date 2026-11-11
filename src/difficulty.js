@@ -123,10 +123,10 @@ export const DEFAULT_KNOBS = Object.freeze({ obstacleBase: 7, decoys: 2, scatter
 
 /**
  * Every floor keeps at least this many decoys beside its targets. A floor of
- * targets alone shows a lone suspect in the paper (an open-and-shut floor),
- * has no decoy to take for gold and, on the king floor, no royal guard. The
- * calibration grid never measures fewer (scripts/calibrate-difficulty.mjs),
- * and knobsFor raises an older table row that has fewer.
+ * targets alone has no decoy to take for gold and, on the king floor, no royal
+ * guard. The calibration grid never measures fewer
+ * (scripts/calibrate-difficulty.mjs), and knobsFor raises an older table row
+ * that has fewer.
  */
 export const MIN_DECOYS = 1;
 

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only
-// Pictures for the deduction loop: the newspaper's suspect mugshots, the hint
-// cards (the target, the danger map) and the guide's unmasking example.
+// Pictures for the deduction loop: the hint cards (the target's mugshot, the
+// danger map) and the guide's unmasking example.
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE, SPRITES, PALETTE, haloed, PIECE_HALO, DANGER_HATCH } from './sprites.js';
 
 const WALL = '#302a36';
@@ -10,7 +10,7 @@ const MINT = '#a5e2cc';
 const GOLD = '#e6c17a';
 
 /** A suspect against a lineup wall with height marks, `scale` pixels per sprite pixel. */
-export function drawMugshot(ctx, creature, scale = 2) {
+function drawMugshot(ctx, creature, scale = 2) {
   if (!ctx) return;
   const size = SPRITE_SIZE * scale;
   ctx.imageSmoothingEnabled = false;

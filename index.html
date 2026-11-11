@@ -28,7 +28,7 @@
         <p id="modifier-bulletin" class="modifier-bulletin" hidden><span id="modifier-emoji" class="modifier-emoji" aria-hidden="true"></span><b id="modifier-kicker"></b> <span id="modifier-headline"></span></p>
         <div class="lead-story">
           <div class="lead-copy"><h2 id="headline"></h2><p id="deck" class="deck" aria-hidden="true"></p></div>
-          <div id="lead-lineup" class="lead-lineup"></div>
+          <figure class="paper-figure"><canvas id="paper-art" width="180" height="150" role="img"></canvas><figcaption>Artist's impression</figcaption></figure>
         </div>
         <div id="side-stories" class="side-stories"></div>
         <div class="paper-action"><button id="start-button" class="primary">Enter today's dungeon <span aria-hidden="true">↘</span></button></div>
@@ -219,7 +219,7 @@
         <p>Every 10 moves, a new monster walks in at the door. At most 3 per floor, and none once the stairs open.</p>
       </article>
       <article class="guide-page" data-section="hints" data-title="Hints &amp; par" hidden>
-        <p>Each story in the paper describes one floor’s target. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
+        <p>The paper shows each floor’s target, and its headline says how it moves. Stuck? Tap <b>Hint</b>: the first is free, the next two add <b>+1 move</b> each.</p>
         <p><b>Par</b> is about how many moves a careful player needs. Your count stops at the last target, though a capture still adds one.</p>
         <p>A bot clears every daily before it’s published: after you win, watch its run. Win or lose, you can then practice with any piece, against any monsters.</p>
       </article>
@@ -275,7 +275,7 @@
     <div id="hint-card" class="hint-card">
       <canvas id="hint-art" class="hint-art" width="200" height="200" role="img"></canvas>
       <p id="hint-move"></p>
-      <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper’s suspects. Every monster hides its true piece.</p>
+      <p id="hint-clue" class="hint-clue"><b>Watch how the monsters move</b> and check the paper. Every monster hides its true piece.</p>
     </div>
     <div id="hint-pager" class="hint-pager" hidden><button id="hint-back" type="button" aria-label="Previous hint card">‹</button><span id="hint-page" aria-live="polite"></span><button id="hint-forward" type="button" aria-label="Next hint card">›</button></div>
     <button id="hint-next" class="hint-next" type="button" hidden></button>

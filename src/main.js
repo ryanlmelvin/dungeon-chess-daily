@@ -16,10 +16,10 @@ import { createDungeonRenderer } from './renderer.js';
 import { initPWA, getReleaseVersion } from './pwa.js';
 import { initPersistentStorage } from './storage.js';
 import { planBackupMerge } from './backups.js';
-import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
+import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { pinUsable, captureGoal, shareDate, createGame as createComposedGame } from './rules.js';
-import { paperSuspects, nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
-import { drawMugshot, drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
+import { nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
+import { drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { caveInLabel, caveInLoss, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
@@ -174,6 +174,7 @@ function switchScreen(next) {
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
+  if (next === 'paper') fitPaper();
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (next === 'game') requestAnimationFrame(() => renderer?.resize());
   syncMusic();
@@ -183,10 +184,11 @@ function renderPaper() {
   $('paper-date').textContent = paperDate(daily.date);
   // The weekday's difficulty tier, e.g. "DIFFICULTY: TOUGH": no clue about the dungeon itself.
   $('paper-tier').textContent = `${composedDay ? 'COMPOSED PREVIEW · ' : ''}${Object.hasOwn(DIFFICULTY_TIERS, daily.difficulty) ? tierLabel(daily.date, daily.difficulty).toUpperCase() : 'THE UNDERGROUND EDITION'}`;
-  // Each story says how one floor's target moves, never who it is, and lines up that floor's suspects.
+  // Each story pictures one floor's target, and its headline says how it moves
+  // without naming it: crack the headline and you know that monster's piece.
   $('headline').textContent = headlineFor(daily.species[0], daily.date, 0);
   $('deck').replaceChildren(createPrintLines(0));
-  $('lead-lineup').replaceChildren(createLineup(0));
+  drawPaperArt(daily.species[0]);
   // The day's room modifier gets a bulletin under the masthead; plain days none.
   const modifier = MODIFIERS[daily.modifier] ?? MODIFIERS.none;
   $('modifier-bulletin').hidden = modifier.id === 'none';
@@ -194,43 +196,58 @@ function renderPaper() {
   $('modifier-kicker').textContent = `${modifier.name}:`;
   $('modifier-headline').textContent = modifier.headline;
   $('side-stories').replaceChildren(...[1, 2].map((floor) => {
+    const creature = daily.species[floor];
     const article = document.createElement('article');
-    const h = document.createElement('h3'); h.textContent = headlineFor(daily.species[floor], daily.date, floor);
+    const h = document.createElement('h3'); h.textContent = headlineFor(creature, daily.date, floor);
     const p = document.createElement('p');
     p.setAttribute('aria-hidden', 'true');
     p.append(createPrintLines(floor));
-    article.append(h, createLineup(floor), p); return article;
+    article.append(createPortrait(creature), h, p); return article;
   }));
   $('paper-screen').setAttribute('aria-label', archiveMode ? `Archive newspaper, ${shareDate(daily.date)}` : "Today's newspaper");
   $('archive-banner').hidden = !archiveMode;
   $('start-button').replaceChildren(document.createTextNode(state ? state.status === 'playing' ? practice ? 'Resume practice ' : 'Resume your descent ' : 'Read your result ' : archiveMode || composedDay ? 'Enter this dungeon ' : "Enter today's dungeon "));
   const arrow = document.createElement('span'); arrow.textContent = '↘'; arrow.ariaHidden = 'true'; $('start-button').append(arrow);
+  fitPaper();
 }
-// A police lineup of two suspects (src/rules.js paperSuspects): the floor's
-// target and one other species that can turn up there, by name, so the order
-// never points at the target.
-function createLineup(floor) {
-  const cast = paperSuspects(daily, floor);
-  const figure = document.createElement('figure');
-  figure.className = 'lineup';
-  const caption = document.createElement('figcaption');
-  caption.textContent = cast.length === 1 ? `Floor ${floor + 1}: open-and-shut case` : `Floor ${floor + 1} suspects`;
-  const list = document.createElement('ul');
-  list.append(...cast.map((creature) => {
-    const item = document.createElement('li');
-    const portrait = document.createElement('canvas');
-    portrait.width = portrait.height = SPRITE_SIZE * 2;
-    portrait.setAttribute('aria-hidden', 'true');
-    drawMugshot(portrait.getContext('2d'), creature);
-    const name = document.createElement('span');
-    name.textContent = creature.name;
-    item.append(portrait, name);
-    return item;
-  }));
-  figure.append(caption, list);
-  return figure;
+// On a phone the paper never scrolls: keep the roomiest print that fits
+// (style.css [data-fit]). The day's headlines and bulletin, the archive banner
+// and the Install bar all change how much room there is.
+function fitPaper() {
+  const paper = $('paper-screen');
+  delete paper.dataset.fit;
+  if (paper.hidden || !matchMedia('(max-width:600px)').matches) return;
+  for (const fit of ['tight', 'tighter']) {
+    if (document.documentElement.scrollHeight <= innerHeight) return;
+    paper.dataset.fit = fit;
+  }
 }
-// Decorative, unreadable print: the headlines and suspect lineups carry the clues.
+addEventListener('resize', fitPaper);
+document.fonts?.ready.then(fitPaper);
+new ResizeObserver(fitPaper).observe($('pwa-bar'));
+// The lead story's "Artist's impression": floor 1's target on an inked chess floor.
+function drawPaperArt(creature) {
+  const canvas = $('paper-art');
+  canvas.setAttribute('aria-label', creature.name);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.fillStyle = '#302a36'; ctx.fillRect(0, 0, 180, 150);
+  for (let y = 0; y < 150; y += 3) for (let x = 0; x < 180; x += 3) if ((x * 13 + y * 7) % 19 < 4) { ctx.fillStyle = '#49404d'; ctx.fillRect(x, y, 1, 1); }
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) { ctx.fillStyle = (x + y) % 2 ? '#743f47' : '#201d25'; ctx.fillRect(x * 30, 110 + y * 10, 30, 10); }
+  ctx.fillStyle = '#1c1921'; ctx.fillRect(5, 0, 18, 115); ctx.fillRect(157, 0, 18, 115);
+  drawSprite(ctx, creature.id, 40, 14, 5, spritePalette(creature.palette));
+}
+// A side story's portrait of its floor's target.
+function createPortrait(creature) {
+  const portrait = document.createElement('canvas');
+  portrait.width = portrait.height = SPRITE_SIZE * 2;
+  portrait.className = 'story-portrait';
+  portrait.setAttribute('role', 'img');
+  portrait.setAttribute('aria-label', creature.name);
+  drawSprite(portrait.getContext('2d'), creature.id, 0, 0, 2, spritePalette(creature.palette));
+  return portrait;
+}
+// Decorative, unreadable print: the headlines and pictures carry the clues.
 function createPrintLines(variant) {
   const canvas = document.createElement('canvas');
   canvas.width = 180; canvas.height = 26; canvas.className = 'print-lines';

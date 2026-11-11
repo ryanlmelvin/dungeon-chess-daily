@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The deduction loop: an anonymous paper with suspect lineups, unmasking on
-// capture, and tiered hints whose paid tiers are penalty moves.
+// The deduction loop: anonymous headlines, unmasking on capture, and tiered
+// hints whose paid tiers are penalty moves.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor } from '../src/game.js';
@@ -36,7 +36,8 @@ function nextFloor(previous) {
   return act(state, { type: 'descend' });
 }
 
-test('the paper never names a species or a palette: headlines are anonymous on every floor', () => {
+// The story's picture shows the target; its headline says only how it moves.
+test('headlines never name a species or a palette, on any floor', () => {
   const words = new Set(['ice', 'ember', 'moss', 'violet', 'gold', 'rose']);
   for (let offset = 0; offset < 1200; offset++) {
     for (const species of getRawDaily(day(offset)).species) for (const name of [species.baseName, species.plural]) for (const word of name.toLowerCase().split(' ')) words.add(word);
@@ -67,9 +68,9 @@ test('each floor\'s full cast is exactly the species that can stand there, order
       // Collapse days may add the floor's decoy species through the door.
       const arrivals = issue.modifier === 'collapse' ? [0, 1, 2].flatMap((n) => reinforcementOptions(state, n).map((foe) => foe.species)) : [];
       assert.deepEqual(new Set(lineup.map((species) => species.id)), new Set([...residents, ...arrivals]), `${issue.date} floor ${floor + 1}`);
-      assert.ok(lineup.some((species) => species.id === issue.species[floor].id), 'the target is a suspect');
+      assert.ok(lineup.some((species) => species.id === issue.species[floor].id), 'the target is in the cast');
       assert.deepEqual(lineup.map((species) => species.name), lineup.map((species) => species.name).sort(), 'ordered by name');
-      assert.deepEqual(floorLineup(state), lineup, 'the paper and the board agree');
+      assert.deepEqual(floorLineup(state), lineup, 'the edition and the board agree');
       firsts.add(lineup[0].id === issue.species[floor].id);
       sizes.add(lineup.length);
     }
@@ -79,7 +80,9 @@ test('each floor\'s full cast is exactly the species that can stand there, order
   assert.ok(!sizes.has(1) && sizes.has(2) && sizes.has(3), 'no one-species floors; two- and three-species casts both occur');
 });
 
-test('the paper shows two suspects: the target and one other species from the floor, stable per date, by name', () => {
+// The paper no longer prints paperSuspects; the composer still casts the other
+// species with as many copies as the target (composer.js castFor).
+test('paperSuspects pairs the target with one other species from the floor, stable per date, by name', () => {
   const firsts = new Set();
   let arrivalsOnly = 0, alone = 0, firstDecoy = 0, secondDecoy = 0;
   for (let offset = 0; offset < 120; offset++) {
@@ -105,29 +108,29 @@ test('the paper shows two suspects: the target and one other species from the fl
       assert.deepEqual(paperSuspects(getDaily(issue.date), floor), shown, `${label}: stable`);
       firsts.add(shown[0].id === target.id);
     }
-    // The paper draws from its own hash stream: the edition and its dungeon are untouched.
+    // It draws from its own hash stream: the edition and its dungeon are untouched.
     assert.deepEqual(issue, pristine);
     assert.deepEqual(createGame(issue), createGame(pristine));
   }
   assert.deepEqual(firsts, new Set([true, false]), 'the target is first only by alphabet');
-  assert.ok(firstDecoy > 0 && secondDecoy > 0, 'either decoy species can be the one shown');
-  // With a decoy on every floor, the paper never runs an open-and-shut case, and the other suspect is always in the room.
-  assert.equal(alone, 0, 'no open-and-shut floors');
+  assert.ok(firstDecoy > 0 && secondDecoy > 0, 'either decoy species can be the one picked');
+  // With a decoy on every floor, there is always another species, and it is always in the room.
+  assert.equal(alone, 0, 'no floor of targets alone');
   assert.equal(arrivalsOnly, 0, 'no floor whose only other species arrives by Collapse');
 });
 
-test('capturing a species the paper did not show still unmasks it and saves', () => {
+test('capturing a decoy, which the paper never pictures, still unmasks it and saves', () => {
   let found = null;
   for (let offset = 0; offset < 120 && !found; offset++) {
     const issue = getDaily(day(offset));
     let state = createGame(issue);
     for (const action of issue.generation.certificate.actions) {
       state = act(state, action);
-      const hidden = state.events.find((event) => event.type === 'unmask' && !paperSuspects(issue, state.floor).some((species) => species.id === event.species));
+      const hidden = state.events.find((event) => event.type === 'unmask' && event.species !== issue.species[state.floor].id);
       if (hidden) { found = { issue, state, species: hidden.species }; break; }
     }
   }
-  assert.ok(found, 'some certified route captures a species the paper left out');
+  assert.ok(found, 'some certified route captures a decoy');
   assert.ok(found.state.unmasked.includes(found.species));
   assert.equal(validateSave(json(found.state), found.issue.date), true);
 });
