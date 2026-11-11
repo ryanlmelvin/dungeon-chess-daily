@@ -161,3 +161,28 @@ test('a composed Breach day brings arrivals in off a pawn player’s file', asyn
   assert.ok(arrival && arrival.x !== 4, 'it came in off the e-file');
   assert.match(due.message, /^.+ stumbles in beside the door\.$/);
 });
+
+// Decoy pawns (src/composer.js DECOY_PAWN_CROWN) start on rank 6 or higher,
+// five or more of their moves from crowning, so none has crowned when the
+// planted line clears the floor, and none starts on rank 1 (target pawns are
+// barricaded instead). 2028-09-17's second floor once had decoy pawns on e2
+// (one move from crowning) and b1 (on its last rank); 2026-11-16, a rook day,
+// one on b2. Neither day needs a bait guard pawn a rank lower.
+test('composed decoy pawns start five or more moves from crowning', async () => {
+  const { composeDay, DECOY_PAWN_CROWN } = await import('../src/composer.js');
+  let seen = 0;
+  for (const date of ['2028-09-17', '2026-11-16']) {
+    const { daily, floors } = composeDay(date);
+    floors.forEach((floor, f) => {
+      const cast = [daily.species[f], daily.species[3 + f * 2], daily.species[4 + f * 2]];
+      for (const foe of floor.room.enemies) {
+        if (foe.cast === 0 || cast[foe.cast].piece !== 'pawn') continue;
+        seen++;
+        // A monster pawn marches down a rank a move, two from its seventh rank.
+        const moves = 7 - foe.y - (foe.y === 1 ? 1 : 0);
+        assert.ok(moves >= DECOY_PAWN_CROWN, `${date} floor ${f + 1}: a decoy pawn on ${'abcdefgh'[foe.x]}${8 - foe.y} crowns in ${moves}`);
+      }
+    });
+  }
+  assert.ok(seen >= 2, 'both days still have decoy pawns');
+});

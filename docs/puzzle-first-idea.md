@@ -268,7 +268,10 @@ first, then build the room so that this solution works.
    irrelevant, so a player can calculate it the way a chess puzzle is solved.
 3. **Dress the room.** Add the other decoys, coins and powerups in a quiet
    zone that cannot reach the line's squares within its few moves, sealed off
-   by walls where needed.
+   by walls where needed. A decoy pawn starts on rank 6 or higher, five moves
+   or more from crowning, so none has crowned when the planted line clears the
+   floor (a pawn guarding a bait target may stand on rank 5 where no other
+   decoy can guard it).
 4. **Prove it with one replay.** Play the planted line once through the
    production engine with the existing verifier (`verifyWinningRoute`). If it
    wins, the line is the floor's certificate. If not, reroll the dressing from

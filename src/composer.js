@@ -85,6 +85,25 @@ export const COMPOSED_TIER = 'fair';
  */
 export const FLOOR_DECOYS = Object.freeze(['held', 'roam', 'roam']);
 /**
+ * A decoy pawn starts at least this many of its moves from crowning. It
+ * marches down a rank a move (two from rank 7), so it starts on rank 6 or
+ * higher: none has crowned by the time a planted line of 3 or 4 moves clears
+ * the floor (and the monsters move once more), so a pawn waiting out a box
+ * after the clear meets no fresh queen; and none stands on rank 1, where it
+ * would already have crowned. Target pawns are barricaded instead.
+ */
+export const DECOY_PAWN_CROWN = 5;
+/**
+ * A pawn guarding a bait target may stand one rank lower, where no decoy of
+ * another species can guard it (bait): it crowns no sooner than the monsters'
+ * fourth move. Bait is never a pawn player's motif.
+ */
+export const GUARD_PAWN_CROWN = 4;
+// A monster pawn's moves from `tile` to its last rank (row 7), its double step included.
+const crownMoves = (tile) => 7 - tile.y - (tile.y === 1 ? 1 : 0);
+// May a decoy of `role` start on `tile`? A pawn only `crown` moves or more from crowning.
+const decoyStart = (role, tile, crown = DECOY_PAWN_CROWN) => role !== 'pawn' || crownMoves(tile) >= crown;
+/**
  * Where a composed floor may start the player. Every published floor starts
  * on e2 ('e2'); a composed floor may start on any square of `wide`, drawn
  * afresh for each motif instance from the floor's seed, so the same pocket or
@@ -378,10 +397,23 @@ const MOTIFS = {
       const guard = context.guards.shift();
       if (!guard) { if (direct) return null; continue; }
       const spots = shuffle(firstSteps('king', perch.tile).concat(KNIGHT.map(([dx, dy]) => at(perch.tile.x + dx, perch.tile.y + dy))).filter(inside), rng);
-      const spot = spots.find((tile) => plan.free(tile) && covers(guard.role, tile, perch.tile) && !covers(guard.role, tile, bait)
-        && !covers(guard.role, tile, start));
+      const fits = (role, crown) => spots.find((tile) => plan.free(tile) && covers(role, tile, perch.tile) && !covers(role, tile, bait)
+        && !covers(role, tile, start) && decoyStart(role, tile, crown));
+      let spot = fits(guard.role), standIn = null;
+      // A pawn guard with no square far enough from crowning (DECOY_PAWN_CROWN) gives way to
+      // the next guard of another species (which decoy guards a target changes no count),
+      // else to one more of the other decoy species, whose count the count rule leaves
+      // free; with neither, it may stand a rank lower (GUARD_PAWN_CROWN).
+      if (!spot && guard.role === 'pawn') {
+        const n = context.guards.findIndex((other) => other.role !== 'pawn' && fits(other.role));
+        if (n >= 0) [standIn] = context.guards.splice(n, 1);
+        else if (context.unnamed && context.unnamed.role !== 'pawn' && fits(context.unnamed.role)) standIn = { ...context.unnamed };
+        spot = standIn ? fits(standIn.role) : fits(guard.role, GUARD_PAWN_CROWN);
+      }
       if (!spot) { context.guards.unshift(guard); if (direct) return null; continue; }
-      plan.place(guard.cast, guard.role, spot);
+      if (standIn) context.guards.unshift(guard);
+      const placed = standIn ?? guard;
+      plan.place(placed.cast, placed.role, spot);
     }
     return { plan, motif: 'bait' };
   },
@@ -1125,8 +1157,10 @@ function hinted(built, best, line, base, floor, rng, carried) {
       return { room, kind };
     }
     if (kind === 'held') {
-      // A sleeping decoy boxing a pawn's pocket stays where it is.
-      const sleeper = room.enemies.find((foe) => foe.held && !built.boxes?.some((tile) => same(tile, foe)));
+      // A sleeping decoy boxing a pawn's pocket stays where it is, and a decoy pawn
+      // moves no nearer crowning than it may start (DECOY_PAWN_CROWN).
+      const roles = [base.species[floor], base.species[3 + floor * 2], base.species[4 + floor * 2]].map((species) => species.piece);
+      const sleeper = room.enemies.find((foe) => foe.held && !built.boxes?.some((tile) => same(tile, foe)) && decoyStart(roles[foe.cast], square));
       if (!sleeper) continue;
       Object.assign(sleeper, { x: square.x, y: square.y });
     } else room.items.push({ x: square.x, y: square.y, type: 'powerup', power: kind, hint: true });
@@ -1341,7 +1375,7 @@ function dress(plan, context, line, base, floor, rng) {
     const moves = distanceTable(plan.map(), decoy.role === 'pawn' ? 'king' : decoy.role);
     const reach = (tile) => Math.min(...lineSquares.map((square) => moves[index(tile) * 64 + index(square)]));
     const spots = shuffle(squares, rng).filter((tile) => plan.free(tile) && chebyshev(tile, start) >= 2 && !covers(decoy.role, tile, start)
-      && plan.units.every((unit) => chebyshev(unit, tile) >= 2) && !(decoy.role === 'pawn' && context.climb?.has(index(tile))));
+      && plan.units.every((unit) => chebyshev(unit, tile) >= 2) && !(decoy.role === 'pawn' && context.climb?.has(index(tile))) && decoyStart(decoy.role, tile));
     const spot = spots.find((tile) => reach(tile) >= near && reach(tile) <= away) ?? spots[0];
     if (!spot) return null;
     plan.place(decoy.cast, decoy.role, spot);
@@ -1429,7 +1463,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
       // The instance's start, from a stream of its own (with one start, the rest draws as before).
       const square = pool.length === 1 ? pool[0] : pool[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * pool.length)];
       const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start: square, guards: [...cast.suspects, cast.other], mate: pawnFallback ? 'queen' : mate,
-        ...(piece === 'pawn' && { unnamed: cast.unnamed }) };
+        unnamed: cast.unnamed };
       const built = pawnFallback ? (floor === 2 ? pawnNet({ ...context, relaxed: true }) : pawnLine(context, 'tempo'))
         : motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[name](context);
       if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
