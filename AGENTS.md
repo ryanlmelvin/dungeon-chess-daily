@@ -36,6 +36,10 @@ node scripts/measure-par-slack.mjs --jobs 8 # room around each floor's idea: fir
 Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to play
 that date composed afresh by the composer as it is now, before rebuilding editions
 (`src/composed-preview.js`, stripped from production builds, saved apart from real runs).
+The preview also composes partner floors (`composeDay`'s `partner` option, in no stored
+edition: a tandem floor, won with the floor's recruit on Manual orders, on days whose
+matchup has one) unless the URL adds `&partner=0`; `measure-par-slack.mjs --partner`
+measures them.
 
 Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` and
 `npm run build`, then deploys `dist/` to Pages. `dist/` is never committed. After a
