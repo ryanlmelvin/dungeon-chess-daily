@@ -69,6 +69,13 @@ dialog .journal-cue:active:not(:disabled) { transform: none; }
   .result-paper .journal-cue { min-height: 0; height: 1.2em; margin: 0 0 10px; padding: 0; font-size: 19px; }
   .result-paper .journal-book { width: 16px; height: 16px; }
 }
+/* A phone on its side: the shop has no row to spare, so the cue sits beside the gold line. */
+@media (max-height: 500px) and (min-width: 640px) {
+  #shop-gold { display: inline-block; margin-right: 18px; vertical-align: middle; }
+  dialog .journal-cue { display: inline-flex; width: auto; min-height: 0; margin: 0 0 8px; padding: 0; font-size: 16px; line-height: 1.15; vertical-align: middle; }
+  dialog .journal-cue .journal-book { width: 16px; height: 16px; }
+  dialog .journal-cue.new::after { margin-left: 4px; font-size: 16px; line-height: 1.15; }
+}
 
 /* The moment: a new page, small, over the screen's heading; it takes no taps and is gone in a few seconds. */
 .journal-flyer { --paper: #c9c9c7; --ink: #252525; position: fixed; z-index: 30; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; align-items: center; width: min(340px, calc(100vw - 24px)); padding: 8px 10px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); box-shadow: 4px 4px 0 #050505; font-family: 'VT323', 'Courier New', monospace; pointer-events: none; will-change: transform, opacity; }

@@ -19,6 +19,8 @@ import { getDaily, validateSave, RULES_VERSION } from './game.js';
 
 /** How long a new page shows before it flies into the journal, and how long it flies. */
 const MOMENT_MS = { arrive: 220, hold: 2600, fly: 620 };
+/** The page's diagram plays faster while it shows, so the moment ends on the idea's payoff. */
+const MOMENT_SPEED = 1.6;
 /** A checkmate's burst (src/checkmate.js) plays first. */
 const AFTER_BURST_MS = 2300;
 
@@ -229,7 +231,7 @@ export function initJournal({ prefix, storage = localStorage }) {
         if (moment !== run) return;
         // The screen it was for has gone: so has the moment.
         if (!cue.getClientRects().length) { stopMoment(); return; }
-        lesson.draw(canvas, now - start);
+        lesson.draw(canvas, (now - start) * MOMENT_SPEED);
         run.frame = requestAnimationFrame(step);
       };
       step(start);
@@ -242,11 +244,14 @@ export function initJournal({ prefix, storage = localStorage }) {
         const flight = card.animate(
           [{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${Math.max(0.06, to.width / from.width)})`, opacity: 0.5 }],
           { duration: MOMENT_MS.fly, easing: 'cubic-bezier(.5,0,.75,.35)', fill: 'forwards' });
-        flight.onfinish = () => {
+        const land = () => {
           if (moment !== run) return;
           stopMoment();
           cue.classList.remove('landed'); void cue.offsetWidth; cue.classList.add('landed');
         };
+        flight.onfinish = land;
+        // A page that isn't being drawn (a hidden tab) never finishes its flight: it lands anyway.
+        run.timer = setTimeout(land, MOMENT_MS.fly + 400);
       }, MOMENT_MS.arrive + MOMENT_MS.hold);
     }, delay);
   }
