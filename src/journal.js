@@ -50,7 +50,7 @@ export const PAGES = Object.freeze([
   },
   {
     id: 'tempo', kind: 'idea', name: 'Tempo', pieces: ['pawn'],
-    text: 'Pawns take diagonally. Step or wait until the target walks into one, then strike.',
+    text: 'Pawns take diagonally. Step or wait until the target walks into reach, then strike.',
     art: 'A pawn steps up and waits. A monster walks into the pawn’s diagonal, and the pawn captures it.',
     draw: drawTempoDemo, still: TEMPO_STILL,
   },
