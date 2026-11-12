@@ -28,9 +28,11 @@ import { routeTransition, positionKey } from './fairness.js';
  * the share of the human-like bot's runs that may make par (the composer
  * runs them: plain sensible play must not find a subtle form's idea), and
  * the search steps a floor's verdict may take (past it the floor is not
- * tight: it was not proved so).
+ * tight: it was not proved so). The bot's share is a quarter because its par
+ * rate on a floor is two-humped, nearly always or hardly ever: with a half,
+ * one tight floor in five still let it make par in 11 to 20 of its 40 runs.
  */
-export const TIGHT = Object.freeze({ firstShare: 1 / 2, botPar: 1 / 2, budget: 100_000 });
+export const TIGHT = Object.freeze({ firstShare: 1 / 2, botPar: 1 / 4, budget: 100_000 });
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.role ?? null) === state.objective.piece;

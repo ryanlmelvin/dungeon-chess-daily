@@ -2065,7 +2065,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         return { hasty };
       };
       let best = null;
-      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
+      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2) && !(best && built.form); dressing++) {
         const plan = dress(built.plan.clone(), context, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
         if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
         const room = plan.room();
