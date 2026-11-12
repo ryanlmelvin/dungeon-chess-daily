@@ -1836,7 +1836,6 @@ function offerFloorRetries(head) {
     button.textContent = th.textContent;
     button.setAttribute('aria-label', `Retry floor ${floor + 1}`);
     button.addEventListener('click', () => startRetry(floor, 'result'));
-    th.removeAttribute('aria-label');
     th.replaceChildren(button);
   });
 }

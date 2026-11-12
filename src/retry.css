@@ -21,7 +21,7 @@ dialog .shop-retry { flex: none; white-space: nowrap; color: var(--paper); }
    The headings keep their row's height; the tap target reaches past it. */
 .bot-table thead .retry-label { font-size: 15px; text-transform: uppercase; color: #5f5864; text-align: left; }
 .bot-table .floor-retry { position: relative; margin: -2px 0; padding: 0 8px; min-height: 0; font: inherit; line-height: inherit; text-transform: inherit; color: var(--ink); background: transparent; border: 1px solid #5f5864; box-shadow: 2px 2px 0 #999; }
-.bot-table .floor-retry::after { content: ''; position: absolute; inset: -12px -8px; }
+.bot-table .floor-retry::after { content: ''; position: absolute; inset: -8px -8px -12px; }
 .bot-table .floor-retry:hover { background: #25252514; }
 .bot-table .floor-retry:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #999; }
 .bot-table .floor-retry:focus-visible { outline-color: var(--ink); }

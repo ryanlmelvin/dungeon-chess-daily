@@ -94,6 +94,13 @@ are onboarding; `src/pwa.js` + `scripts/build-sw.mjs` handle the fingerprinted,
 integrity-verified offline cache; `src/archive.js`, `src/backups.js`,
 `src/storage.js` handle past days and saves.
 
+**Retry floor.** `src/retry.js` (pure, with `src/retry.css`) is the sandbox the shop and
+the results paper open on a cleared floor: a second, unsaved game begun from the floor's
+snapshot, with a free Undo and Reset. While one is open, `state` in `src/main.js` is the
+retry's game and the real run waits in `retry.real`; `save`, `refreshFromOtherWindow` and
+`takeStairs` stand aside and nothing is written. New code that writes anything (storage,
+the ledger, the journal, a seen flag) must stand aside during a retry too.
+
 **Streak and stats.** `src/stats.js` keeps the ledger: the editions entered and won on
 their own UTC day with the official piece (never archive back-play or practice), each
 win with its floors' scores against par. It is stored under `<prefix>ledger`,
