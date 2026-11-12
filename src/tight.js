@@ -5,18 +5,21 @@
 // `tight` option); this module judges them, exactly.
 //
 // Monsters are deterministic, so every line of play within par (the planted
-// line plus one) can be searched (parRoom). A tight floor passes three tests
-// (tightVerdict):
+// line plus one) can be searched (parRoom). A tight bait or squeeze passes two
+// exact tests (tightVerdict) and one by the human-like bot (the composer runs
+// it, botFinds); a pawn's king floor one of its own:
 //   1. No win within par skips the idea, as a player would name it
 //      (playsIdea): a bait is a target taken off-balance right after its lunge
 //      missed, a squeeze a target taken on the square it just stepped onto, in
 //      your reach. Lines that absorb a capture count: a hit only costs a move.
 //   2. A neutral first move costs par: of the first actions that aren't
 //      captured at once, at most TIGHT.firstShare still leave a win within par.
-//   3. A pawn's king floor: no win within par has the pawn make fewer moves
+//   3. Plain sensible play doesn't find it: the bot, which knows no ideas,
+//      makes par in at most TIGHT.botPar of its runs.
+//   4. A pawn's king floor: no win within par has the pawn make fewer moves
 //      than the planted line does (the recruit king mating alone).
 // The composer's own checks (nothing wins sooner, the hasty two, the bot
-// guard) still apply to every floor.
+// guard against slogs) still apply to every floor.
 import { act } from './rules.js';
 import { routeTransition, positionKey } from './fairness.js';
 
