@@ -32,6 +32,7 @@ import { createGame, act, legalMoves, floorScoredMoves, scoredMoves } from './ru
 import { distanceTable, UNREACHABLE } from './move-tables.js';
 import { hash, random } from './random.js';
 import { steerRecruit } from './recruit-policy.js';
+import { terrainMap, openLane } from './terrain.js';
 
 /** Bump when the bot's play or its runs change. */
 export const HUMAN_BOT_VERSION = 4;
@@ -68,7 +69,8 @@ export function observe(state, known = new Map()) {
   const targetSpecies = state.species[state.floor]?.id;
   const recruit = state.items.find((item) => item.type === 'companion');
   return {
-    map: state.map, floor: state.floor, objective: state.objective.piece, exitOpen: state.exit.open,
+    // The board as it stands: a pit or a shut gate is a wall to plan around (src/terrain.js).
+    map: terrainMap(state), floor: state.floor, objective: state.objective.piece, exitOpen: state.exit.open,
     player: { x: state.player.x, y: state.player.y, piece: state.player.piece },
     companion: state.companion ? { x: state.companion.x, y: state.companion.y, piece: state.companion.piece } : null,
     recruit: recruit ? { x: recruit.x, y: recruit.y, piece: recruit.piece } : null,
@@ -77,7 +79,7 @@ export function observe(state, known = new Map()) {
     monsters: state.enemies.map((foe) => ({
       id: foe.id, species: foe.species, x: foe.x, y: foe.y, target: foe.species === targetSpecies,
       piece: foe.promoted ? 'queen' : foe.species === targetSpecies ? state.objective.piece : known.get(foe.species) ?? null,
-      lane: foe.phase === 'aim' ? foe.intent.map(({ x, y }) => ({ x, y })) : null,
+      lane: foe.phase === 'aim' ? openLane(state, foe.intent).map(({ x, y }) => ({ x, y })) : null,
     })),
   };
 }

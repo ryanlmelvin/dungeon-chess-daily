@@ -17,6 +17,7 @@
 // run replayed from its seed gives the same orders again.
 import { recruitChoice } from './rules.js';
 import { distanceTable, UNREACHABLE } from './move-tables.js';
+import { terrainMap } from './terrain.js';
 
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const square = (tile) => ({ x: tile.x, y: tile.y });
@@ -46,7 +47,7 @@ export function steerRecruit(state, choice, view) {
   const targetIds = new Set(view.monsters.filter((foe) => foe.target).map((foe) => foe.id));
   const targets = board.enemies.filter((foe) => targetIds.has(foe.id));
   if (!targets.length || !moves.length) return undefined;
-  const table = distanceTable(board.map, unit.piece);
+  const table = distanceTable(terrainMap(board), unit.piece);
   const distance = (tile) => Math.min(...targets.map((foe) => {
     const steps = table[(tile.y * 8 + tile.x) * 64 + foe.y * 8 + foe.x];
     return steps === UNREACHABLE ? 20 : steps;

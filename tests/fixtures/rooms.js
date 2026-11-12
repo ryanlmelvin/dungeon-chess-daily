@@ -17,10 +17,11 @@ export function openMap(walls = []) {
  * open one; `enemies`, each { x, y, cast } (0 the floor's target species, 1
  * and 2 its decoy species) or { x, y, species }, with `held` moves asleep;
  * `items` (coins, powerups, a recruit); the player's `start` (e2 by default)
- * and, on an Ice day, its own `ice`.
+ * and, on an Ice day, its own `ice`; on a day with moving terrain, its own
+ * `cracks` (cracked tiles) or `gates` ({ x, y, phase }).
  */
-export function room({ map, walls = [], enemies = [], items = [], start, ice } = {}) {
-  return { map: map ? [...map] : openMap(walls), enemies, items, ...(start && { start }), ...(ice && { ice }) };
+export function room({ map, walls = [], enemies = [], items = [], start, ice, cracks, gates } = {}) {
+  return { map: map ? [...map] : openMap(walls), enemies, items, ...(start && { start }), ...(ice && { ice }), ...(cracks && { cracks }), ...(gates && { gates }) };
 }
 
 /** A daily (or a date's raw daily) with these rooms, floor by floor; a floor left out is open and empty. */

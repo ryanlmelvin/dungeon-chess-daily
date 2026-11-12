@@ -7,6 +7,10 @@ import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcem
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
+// Moving terrain (pits and shut gates): one seam, src/terrain.js.
+import { floorAt, shutAt, settled, openLane } from './terrain.js';
+import { stepOff } from './cracks.js';
+import { gateTick } from './gates.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
 export const RULES_VERSION = 13;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -53,7 +57,10 @@ const purchaseCost = (id) => POWERUPS.find((power) => power.id === id)?.cost;
 function same(a, b) { return a.x === b.x && a.y === b.y; }
 function distance(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
 function inside(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < 8 && y < 8; }
-export function walkable(state, x, y) { return inside(x, y) && state.map?.[y]?.[x] !== '#'; }
+// Open floor right now: no wall, and no pit or shut gate either (src/terrain.js solid; `shut` is absent off a terrain day).
+export function walkable(state, x, y) { return inside(x, y) && state.map?.[y]?.[x] !== '#' && !(state.shut && shutAt(state, x, y)); }
+// A piece has stepped off `from`: on a crumbling day a cracked tile there falls away (src/cracks.js).
+function left(state, from, by) { if (state.cracks) stepOff(state, from.x, from.y, by); }
 // Hot in the certification search: a plain loop, no closure per call.
 export function enemyAt(state, x, y) {
   const { enemies } = state;
@@ -192,7 +199,7 @@ function attackReach(state, unit) {
     for (let step = 1; step <= longest; step++) {
       // movesFor's push with attacksOnly: an unwalkable square or a friend ends the line unlisted.
       const x = ux + dx * step, y = uy + dy * step;
-      if (x < 0 || y < 0 || x > 7 || y > 7 || map?.[y]?.[x] === '#') break;
+      if (x < 0 || y < 0 || x > 7 || y > 7 || map?.[y]?.[x] === '#' || (state.shut && shutAt(state, x, y))) break;
       const bit = y * 8 + x;
       // movesFor's occupant for a monster.
       if (companion && companion.x === x && companion.y === y) break;
@@ -325,7 +332,8 @@ export function closeAttacker(state, square) {
  * Reachability permits revisits; a Hamiltonian (knight's) tour is unnecessary.
  */
 export function unreachablePickups(state) {
-  const board = { ...state, enemies: [], companion: null };
+  // A shut gate opens again, so it never puts a pickup out of reach (settled).
+  const board = { ...settled(state), enemies: [], companion: null };
   const queue = [{ ...state.player }];
   const key = (unit) => `${unit.x},${unit.y}:${unit.piece}:${unit.moved ? 1 : 0}`;
   const visited = new Set([key(queue[0])]);
@@ -366,6 +374,8 @@ const squareKey = (x, y) => `${x},${y}`;
 function hopelessPosition(state, manualRecruit = false) {
   if (state?.status !== 'playing' || !state.objective || state.objective.complete || state.exit?.open
     || !Array.isArray(state.map) || !Array.isArray(state.enemies) || !state.player) return false;
+  // Terrain that never comes back counts as walls here: pits do, a gate (it opens again) never. A cracked tile still standing is floor.
+  state = settled(state);
   const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === state.objective.piece);
   if (!targets.length) return false;
   // Shop tools never lie in rooms; if one ever did, picking it up could change everything.
@@ -470,7 +480,8 @@ function playerLandingSquares(state) {
 /** Entire committed attack lanes; jump/step captures warn on their destination. */
 export function dangerTiles(state) {
   const cells = new Map();
-  for (const foe of state.enemies) if (foe.phase === 'aim') for (const tile of foe.intent) cells.set(`${tile.x},${tile.y}`, { ...tile });
+  // A path a gate has shut on since (or a pit opened in) is shown as far as it still reaches.
+  for (const foe of state.enemies) if (foe.phase === 'aim') for (const tile of openLane(state, foe.intent)) cells.set(`${tile.x},${tile.y}`, { ...tile });
   return [...cells.values()];
 }
 
@@ -544,6 +555,7 @@ function moveMonster(state, foe) {
   const from = { x: foe.x, y: foe.y };
   foe.x = step.x; foe.y = step.y; foe.moved = true;
   state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
+  left(state, from, foe.id);
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
   windUp(state, foe);
@@ -604,6 +616,7 @@ function relocate(state, foe, move) {
   const from = { x: foe.x, y: foe.y };
   foe.x = move.x; foe.y = move.y; foe.moved = true;
   state.events.push({ type: 'enemy-move', id: foe.id, from, x: foe.x, y: foe.y });
+  left(state, from, foe.id);
   noteDoubleStep(state, foe, from);
   promoteMonster(state, foe);
 }
@@ -683,7 +696,9 @@ function returnToPawn(state) {
     if (!walkable(state, x, y) || enemyAt(state, x, y) || (state.companion && state.companion.x === x && state.companion.y === y)) continue;
     const candidate = { ...state.player, x, y };
     if (!movesFor(state, candidate).length) continue;
+    const from = { x: state.player.x, y: state.player.y };
     state.player.x = x; state.player.y = y;
+    left(state, from, 'player');
     return;
   }
 }
@@ -893,7 +908,9 @@ const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 &&
 const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && room.map.length === 8
   && room.map.every((row) => typeof row === 'string' && /^[.#]{8}$/.test(row))
   && Array.isArray(room.enemies) && Array.isArray(room.items) && (room.ice === undefined || Array.isArray(room.ice))
-  && [...room.enemies, ...room.items, ...(room.start ? [room.start] : []), ...(room.ice ?? [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
+  // Moving terrain a room lays for itself: cracked tiles (src/cracks.js) and gates, each with its place in the rhythm (src/gates.js).
+  && (room.cracks === undefined || Array.isArray(room.cracks)) && (room.gates === undefined || (Array.isArray(room.gates) && room.gates.every((gate) => Number.isInteger(gate?.phase) && gate.phase >= 0 && gate.phase < 4)))
+  && [...room.enemies, ...room.items, ...(room.start ? [room.start] : []), ...(room.ice ?? []), ...(room.cracks ?? []), ...(room.gates ?? [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
 const validComposed = (rooms) => Array.isArray(rooms) && rooms.length === 3 && rooms.every(validComposedRoom);
 
 // The king floor plays by royal rules: a smarter king and guards (enemyTurn)
@@ -981,7 +998,8 @@ const NO_MOVES = 'No legal moves. Back to the start of today’s dungeon.';
 function trapped(state) {
   if (state.status !== 'playing' || state.exit.open || legalMoves(state).length !== 0) return false;
   const stays = (foe) => state.player.piece === 'pawn' && foe.piece === 'pawn' && foe.x === state.player.x;
-  return movesFor({ ...state, enemies: state.enemies.filter(stays) }, state.player).length === 0;
+  // Pits are terrain for good; a shut gate opens again, so waiting answers it as it answers a monster (settled).
+  return movesFor({ ...settled(state), enemies: state.enemies.filter(stays) }, state.player).length === 0;
 }
 
 // Running out of moves starts the FLOOR over (restartFloor; the owner's call,
@@ -1421,6 +1439,7 @@ function moveCompanion(state, unit, destination) {
   const captured = enemyAt(state,destination.x,destination.y);
   unit.x=destination.x; unit.y=destination.y; unit.moved=true; unit.sharing=false;
   state.events.push({type:'companion-move',piece:unit.piece,from,x:unit.x,y:unit.y});
+  left(state, from, 'companion');
   if (captured) captureEnemy(state,captured,true);
   if (unit.piece==='pawn' && unit.y===0) {
     unit.piece='queen';
@@ -1598,6 +1617,7 @@ function play(previous, action) {
       settle(state);
       if (state.playerColor === 'white' && !checkmate(state)) { enemyTurn(state); settle(state); }
     }
+    gateTick(state);
     collapseTick(state); settle(state);
     caveInTick(state, previous); settle(state);
     if (trapped(state)) restartFloor(state, [], noMoves(state));
@@ -1671,8 +1691,11 @@ function play(previous, action) {
     state.feats.push({ floor: state.floor, kind: 'castle' });
     state.message = 'Castled! King and rook switched sides in one move.';
   }
+  const stood = { x: state.player.x, y: state.player.y };
   state.player.x = to.x; state.player.y = to.y; state.player.moved = true;
   state.events.push({ type: 'move', x: to.x, y: to.y });
+  left(state, stood, 'player');
+  if (castle) left(state, castle.companion.from, 'companion');
   if (slide) {
     state.events.push({ type: 'slide', from: { x: action.x, y: action.y }, x: to.x, y: to.y });
     if (!state.message) state.message = 'You skid across the ice.';
@@ -1741,6 +1764,7 @@ function play(previous, action) {
     if (!castle) settle(state);
     if (state.playerColor === 'white' && (close || !checkmate(state))) { enemyTurn(state, Boolean(close)); settle(state); }
   }
+  gateTick(state);
   collapseTick(state); settle(state);
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartFloor(state, [], noMoves(state));
@@ -1936,7 +1960,7 @@ export function validateSave(value, date, daily) {
       if (foe.pinned !== undefined && !(integer(foe.pinned, 1, Math.max(PIN_MOVES, original.pinned ?? 0)) && foe.phase === 'ready')) return false;
       // Saves from before missed lunges unbalanced a monster have no flag; a missed lunge resets its wind-up.
       if (foe.offBalance !== undefined && !(foe.offBalance === true && foe.phase === 'ready')) return false;
-      if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => walkable(value, tile.x, tile.y))) return false;
+      if (!['ready', 'aim'].includes(foe.phase) || !Array.isArray(foe.intent) || foe.intent.length > 7 || !foe.intent.every((tile) => floorAt(value, tile.x, tile.y))) return false;
       return foe.phase === 'aim' ? foe.intent.length > 0 && inside(foe.target?.x, foe.target?.y) : foe.intent.length === 0 && foe.target === null;
     })) return false;
     if (new Set(value.enemies.map((foe) => foe.id)).size !== value.enemies.length || new Set(value.enemies.map((foe) => `${foe.x},${foe.y}`)).size !== value.enemies.length) return false;
@@ -1980,7 +2004,7 @@ export function validateSave(value, date, daily) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', 'checkmate', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', 'checkmate', 'crumble', 'gates', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

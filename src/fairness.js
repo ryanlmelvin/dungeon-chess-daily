@@ -61,6 +61,8 @@ export function positionKey(state, includeTime = true) {
       enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true, enemy.pinned ?? 0]),
     state.items.filter((item) => item.type !== 'coin'), state.powers, state.companion, state.companions, state.enPassant ?? null,
     state.reinforcements ?? null, state.reinforcementsSkipped ?? null,
+    // Moving terrain (src/terrain.js): the tiles still cracked, and each gate's state.
+    state.cracks ?? null, state.gates ?? null,
   ]);
 }
 

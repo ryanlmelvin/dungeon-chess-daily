@@ -14,14 +14,25 @@
 //   someone stands there it comes in on the nearest empty square instead: an
 //   arrival never waits.
 //
+// - cracks (Crumbling floor, src/cracks.js): a cracked tile falls away when the
+//   piece standing on it steps off, and the pit it leaves blocks like a wall.
+// - gates (src/gates.js): gate squares shut and open on a rhythm the board
+//   shows, two moves each; shut, a gate blocks like a wall.
+//   Neither is drawn for any date yet (DRAW): a day carries one only when
+//   tooling or the dev preview asks (src/composed-preview.js &modifier=).
+//   Both are moving terrain, one seam for the whole engine (src/terrain.js).
+//
 // This module imports nothing from rules.js, so edition.js can use it too.
 import { hash, random } from './random.js';
 import { PIECE_COUNTS } from './pieces.js';
+import { setupCracks, validCracks } from './cracks.js';
+import { setupGates, validGates } from './gates.js';
+import { maskOf, shutSquares } from './terrain.js';
 
 // The floor's own seed (src/rules.js floorSeed, which this module can't import).
 const roomSeed = (state) => state.floorSeeds?.[state.floor] ?? state.seed;
 
-export const MODIFIERS = Object.freeze({
+const DRAWN = {
   none: Object.freeze({ id: 'none', emoji: '', name: 'Plain', headline: '', explain: '', changesRules: false }),
   ice: Object.freeze({
     id: 'ice', emoji: '🧊', name: 'Ice', changesRules: true,
@@ -34,7 +45,26 @@ export const MODIFIERS = Object.freeze({
     headline: 'A crypt wall gives way: fresh monsters stumble through the door every ten moves',
     explain: 'Breach: every 10 moves on a floor, a new monster walks in at the door. If someone is standing there, it squeezes in on the nearest empty square instead. At most 3 per floor, none once the stairs open. They aren’t targets, but they pay when taken.',
   }),
+};
+// The two in preview, not drawn for any date yet (DRAW): a day carries one only when tooling or the
+// dev preview asks (src/composed-preview.js &modifier=). They are entries of MODIFIERS that a listing
+// of it leaves out (not enumerable) until dates draw them, so everything that names a day's modifier
+// finds them and nothing that walks the drawn ones does.
+const PREVIEW = Object.freeze({
+  cracks: Object.freeze({
+    id: 'cracks', emoji: '🕳️', name: 'Crumbling floor', changesRules: true,
+    headline: 'Masons condemn the flagstones: a cracked tile falls away behind whoever steps off it',
+    explain: 'Crumbling floor: a cracked tile falls away when the piece standing on it steps off, yours or a monster’s. The pit it leaves blocks like a wall; knights jump it.',
+  }),
+  gates: Object.freeze({
+    id: 'gates', emoji: '⛓️', name: 'Gates', changesRules: true,
+    headline: 'Gatekeeper keeps strict time: every gate stays shut two moves, then open two',
+    explain: 'Gates: shut, a gate blocks like a wall; open, it is floor. Each holds two moves and changes once every piece has moved. An arrow marks one that changes after this move. A gate never shuts on a piece.',
+  }),
 });
+export const MODIFIERS = Object.freeze(Object.defineProperties({ ...DRAWN }, Object.fromEntries(Object.entries(PREVIEW).map(([id, value]) => [id, { value, enumerable: false }]))));
+/** The modifiers that are moving terrain (src/terrain.js): a room lays its own tiles or gates for them. */
+export const TERRAIN_MODIFIERS = Object.freeze(['cracks', 'gates']);
 // Uniform over these, so about half the days stay plain. The second slot was
 // Dark (retired: it hid the board, which took the planning out of a day); its
 // days became plain, so every other date keeps its draw and its dungeon.
@@ -64,6 +94,9 @@ function occupied(state, tile) {
  */
 export function setupFloorModifier(state) {
   if (state.modifier === 'collapse') { state.reinforcements = 0; state.reinforcementsSkipped = 0; }
+  // Moving terrain: the room's own cracked tiles or gates (a room that lays none has none).
+  if (state.modifier === 'cracks') setupCracks(state, state.composed?.[state.floor]);
+  if (state.modifier === 'gates') setupGates(state, state.composed?.[state.floor]);
   if (state.modifier !== 'ice') return;
   const rng = random(hash(`${roomSeed(state)}:ice:${state.floor}`));
   const candidates = [];
@@ -187,10 +220,21 @@ export function extraPopulation(modifier) { return modifier === 'collapse' ? COL
 /** Checks the modifier's own save fields against a freshly set-up template floor. */
 export function validModifierState(value, template) {
   if (JSON.stringify(value.ice) !== JSON.stringify(template.ice)) return false;
+  if (!validTerrain(value, template)) return false;
   if (value.modifier !== 'collapse') return value.reinforcements === undefined && value.reinforcementsSkipped === undefined;
   // Saves from before called-off arrivals have no skip count.
   const count = value.reinforcements, skipped = value.reinforcementsSkipped ?? 0;
   return Number.isInteger(count) && count >= 0 && Number.isInteger(skipped) && skipped >= 0 && count + skipped <= collapseDue(value);
+}
+
+// Moving terrain's own save fields: a day without it carries none of them, and a day with
+// it carries its record and the squares that record shuts right now (src/terrain.js).
+function validTerrain(value, template) {
+  const fields = { cracks: ['cracks', 'pits', 'shut'], gates: ['gates', 'shut'] }[value.modifier] ?? [];
+  if (['cracks', 'pits', 'gates', 'shut'].some((field) => (value[field] !== undefined) !== fields.includes(field))) return false;
+  if (!fields.length) return true;
+  if (!(value.modifier === 'cracks' ? validCracks(value, template) : validGates(value, template))) return false;
+  return JSON.stringify(value.shut) === JSON.stringify(maskOf(shutSquares(value)));
 }
 
 /** Short in-game label, e.g. "🧊 Ice" or "🧱 Next arrival in 4". */
