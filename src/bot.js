@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // The "Dungeon Bot" a player can compare against after beating the day, shown
 // only after a win: the line each floor was built around (src/composer.js),
-// which is the day's certificate. Par is one move more on every floor.
+// which is the day's certificate. Par is one move more on every floor. On a
+// partner floor (a Tandem) the line carries the recruit's orders, so the
+// replay shows the recruit making them.
 import { act, createGame, scoredMoves } from './rules.js';
 
 const sum = (floors) => floors.reduce((total, moves) => total + moves, 0);
@@ -39,6 +41,25 @@ export function botRun(daily) {
 export function dungeonBot(daily) {
   const run = botRun(daily);
   return run && { kind: 'planted', ...run };
+}
+
+// The engine's lines coach the player ("Tap the stairs…", "You move it after
+// each of your moves."); the replay keeps what happened, told of the bot.
+const COACHING = /\b(tap|choose|take the stairs|you move it|watch your back)\b/i;
+const RETOLD = [
+  [/\bjoins you\b/g, 'joins the bot'], [/\byour next move\b/g, 'the bot’s next move'], [/\bYou completed\b/g, 'The bot completed'],
+  [/\bYou dropped\b/g, 'The bot dropped'], [/\bYou skid\b/g, 'The bot skids'], [/\bYour recruit\b/g, 'Its recruit'], [/\byour two bishops\b/g, 'its two bishops'],
+];
+/**
+ * What one frame of the bot's replay says: the engine's lines for that action
+ * (its notes, then its message), sentence by sentence, the coaching dropped
+ * and the rest told of the bot. A sentence that still speaks to the player
+ * is left out, so a line the engine gains later can't address the wrong one.
+ */
+export function replayNote(frame) {
+  const sentences = [...(frame?.notes ?? []), frame?.message ?? ''].join(' ').match(/[^.!?]+[.!?]*/g) ?? [];
+  return sentences.filter((part) => !COACHING.test(part)).map((part) => RETOLD.reduce((text, [from, to]) => text.replace(from, to), part))
+    .filter((part) => !/\byou(r|rs)?\b/i.test(part)).join('').trim();
 }
 
 /** Scored moves a won run spent per floor, plus their total, for the comparison card. */

@@ -26,7 +26,7 @@ import { drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
 import { caveInLabel, caveInLoss, caveInRunning, cavedIn, goldAtRisk } from './cave-in.js';
-import { dungeonBot, playerRun, verdict } from './bot.js';
+import { dungeonBot, playerRun, verdict, replayNote } from './bot.js';
 import { parFor, runPars } from './par.js';
 import { celebrateCheckmate } from './checkmate.js';
 import { initJournal } from './journal-ui.js';
@@ -1661,8 +1661,8 @@ function replayFrame() {
   $('replay-label').textContent = last
     ? `Bot escaped in ${total} moves`
     : `Bot · Floor ${frame.floor + 1}/3 · Move ${moves}${frame.exit?.open ? ' ✓' : ''} of ${total}`;
-  // Engine messages coach the player ("Tap the stairs…"); keep only what happened.
-  const said = replay.index && !frame.awaitingPlayer ? ([...(frame.notes ?? []), frame.message].join(' ').match(/[^.!?]+[.!?]*/g) ?? []).filter((part) => !/\b(tap|choose|take the stairs)\b/i.test(part)).join('').trim().replace(/\bjoins you\b/, 'joins the bot').replace(/\bYou completed\b/, 'The bot completed').replace(/\bYou dropped\b/, 'The bot dropped') : '';
+  // Engine messages coach the player ("Tap the stairs…"); keep only what happened, told of the bot (src/bot.js).
+  const said = replay.index && !frame.awaitingPlayer ? replayNote(frame) : '';
   $('game-message').textContent = last ? 'The bot escapes the dungeon.' : frame.events.some((event) => event.type === 'descend') ? `The bot takes the stairs to floor ${frame.floor + 1}.` : said;
   $('game-message').hidden = !$('game-message').textContent;
   // Drop the live game's placement (an inline top plus the replay's own
