@@ -1,12 +1,12 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 // Animated diagrams for the journal's lesson pages (src/journal.js), one per
-// idea a floor is composed around (src/composer.js): the squeeze, the mating
-// net, and a pawn's tempo and crown lines. Drawn on a 5x5 board crop like the
-// other explainers (src/tactics-art.js), whose off-balance demo is the bait
-// page's. Each takes (canvas, time in ms) and loops; its *_STILL time is a
-// frame that reads on its own, for reduced motion.
-import { drawSprite, SPRITE_SIZE, spritePalette, piecePalette, CROWN, CROWN_PALETTE, PALETTE } from './sprites.js';
+// idea a floor is composed around (src/composer.js): the squeeze, the tandem,
+// the mating net, and a pawn's tempo and crown lines. Drawn on a 5x5 board
+// crop like the other explainers (src/tactics-art.js), whose off-balance demo
+// is the bait page's. Each takes (canvas, time in ms) and loops; its *_STILL
+// time is a frame that reads on its own, for reduced motion.
+import { drawSprite, SPRITE_SIZE, spritePalette, piecePalette, CROWN, CROWN_PALETTE, PALETTE, COMPANION_PALETTE } from './sprites.js';
 
 const MINT = '#a5e2cc';
 const RED = '#ed8b9c';
@@ -152,6 +152,42 @@ export function drawSqueezeDemo(canvas, time, { playerPalette = {}, monsterPalet
 }
 /** The monster has stepped onto the covered square. */
 export const SQUEEZE_STILL = 2700;
+
+/**
+ * Tandem: two targets stand walled in side by side, each guarding the other's
+ * square, so whichever you take, the other takes you. A recruit can't be
+ * taken: your knight recruit takes the first, and your bishop takes the
+ * other, no longer guarded.
+ */
+export function drawTandemDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet') } = {}) {
+  const t = loop(time);
+  frame(canvas, t, (ctx) => {
+    // The twins (1,0) and (2,0); the recruit knight (2,2) takes (1,0), then your bishop (4,2) takes (2,0) up its diagonal.
+    for (const [x, y] of [[0, 0], [3, 0], [1, 1], [2, 1]]) wall(ctx, x, y);
+    const send = beat(t, 1500, 2100);
+    const aim = beat(t, 2550, 2850) * (1 - beat(t, 3500, 3700));
+    const take = beat(t, 3500, 4100);
+    const pulse = 0.7 + 0.3 * Math.sin(t / 110);
+    // While both stand, each guards the other.
+    const guard = beat(t, 200, 500) * (1 - beat(t, 1900, 2100)) * pulse;
+    ring(ctx, 1, 0, RED, guard);
+    ring(ctx, 2, 0, RED, guard);
+    line(ctx, center(4), center(2), center(2), center(0), GOLD, aim * 0.9);
+    ring(ctx, 2, 0, GOLD, aim * pulse);
+    faded(ctx, 1 - beat(t, 2000, 2150), () => sprite(ctx, 'bat', center(1), center(0), monsterPalette));
+    faded(ctx, 1 - beat(t, 4000, 4150), () => sprite(ctx, 'bat', center(2), center(0), monsterPalette));
+    burst(ctx, center(1), center(0), beat(t, 2100, 2600), MINT);
+    burst(ctx, center(2), center(0), beat(t, 4100, 4600), GOLD);
+    sprite(ctx, 'piece-knight', lerp(center(2), center(1), send), lerp(center(2), center(0), send) - Math.sin(Math.PI * send) * 22, COMPANION_PALETTE);
+    sprite(ctx, 'piece-bishop', lerp(center(4), center(2), take), lerp(center(2), center(0), take), playerPalette);
+    label(ctx, 'EACH GUARDS THE OTHER', 100, 182, RED, beat(t, 300, 500) * (1 - beat(t, 1300, 1450)), 20);
+    label(ctx, 'RECRUIT FIRST', 100, 182, MINT, beat(t, 1500, 1650) * (1 - beat(t, 2400, 2550)), 24);
+    label(ctx, 'NOW TAKE THE OTHER', 100, 182, GOLD, beat(t, 2550, 2700) * (1 - beat(t, 3500, 3650)), 22);
+    label(ctx, 'TANDEM!', 100, 182, GOLD, beat(t, 4100, 4300), 28);
+  });
+}
+/** The recruit has taken one; your bishop eyes the other, no longer guarded. */
+export const TANDEM_STILL = 3100;
 
 /**
  * Mating net: the king has a dead end of two squares. Your rook checks along

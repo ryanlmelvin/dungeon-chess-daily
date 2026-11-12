@@ -12,7 +12,7 @@
 import { floorPars } from './par.js';
 import { isOfficialRun, scoredMoves, floorScoredMoves, PLAYABLE_PIECES } from './game.js';
 import { isMotifName } from './motif-code.js';
-import { drawSqueezeDemo, SQUEEZE_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL } from './journal-art.js';
+import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL } from './journal-art.js';
 import { drawOffBalanceDemo, OFF_BALANCE_STILL, drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
 import { drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { piecePalette } from './sprites.js';
@@ -41,6 +41,12 @@ export const PAGES = Object.freeze([
     text: 'A monster must move every turn. Cover the only square it can step to, and take it there.',
     art: 'A monster is walled into two squares. A knight lands where it covers the one square the monster can step to; the monster steps there and the knight captures it.',
     draw: drawSqueezeDemo, still: SQUEEZE_STILL,
+  },
+  {
+    id: 'tandem', kind: 'idea', name: 'Tandem', pieces: OFFICERS,
+    text: 'Two targets guard each other. Your recruit can’t be taken: send it first, then take the other.',
+    art: 'Two monsters stand walled in side by side, each ringed in red. A mint knight, your recruit, takes one; your bishop then takes the other.',
+    draw: drawTandemDemo, still: TANDEM_STILL,
   },
   {
     id: 'net', kind: 'idea', name: 'Mating net', pieces: ANY_PIECE,
