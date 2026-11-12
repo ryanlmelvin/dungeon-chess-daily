@@ -36,21 +36,28 @@ export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:$
 const cache = new Map();
 
 /**
+ * How src/fairness.js verifies a day's certificate, given its partner floor
+ * (`generation.partner`): the recruit on orders on a day that has one, else
+ * moving itself, as on every other day.
+ */
+export const certificateMode = (partner) => (partner === null || partner === undefined ? undefined : { recruit: 'steer' });
+
+/**
  * Prove a composed day by its `actions` (each floor's planted line, then the
  * stairs). They must win on the day's twin without its hint powerups, the way
  * src/fairness.js verifyWinningRoute certifies (a certified route collects no
  * powerup); picking a hint up changes no monster's move, so the real day must
  * then win as played, hints collected, never captured. With `saves` (the
  * build and the composer) every position along the way must also be a valid
- * save, as a player's run would be. `partner` names a partner floor (dev
- * preview, src/composer.js): its line is played with that floor's recruit on
- * orders, so the day is proved with the recruit steered, and the recruit may
- * join and take orders on that floor alone. Returns { valid: true, metrics }
- * or { valid: false, reason }.
+ * save, as a player's run would be. `partner` names the day's partner floor
+ * (0 or 1; src/composer.js, a Tandem floor): its line is played with that
+ * floor's recruit on orders, so the day is proved with the recruit steered,
+ * and the recruit may join and take orders on that floor alone. Returns
+ * { valid: true, metrics } or { valid: false, reason }.
  */
 export function proveComposed(daily, actions, { saves = false, partner = null } = {}) {
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  const proof = verifyWinningRoute(createGame(twin), actions, partner === null ? undefined : { recruit: 'steer' });
+  const proof = verifyWinningRoute(createGame(twin), actions, certificateMode(partner));
   if (!proof.valid) return proof;
   let played = createGame(daily);
   if (saves && !validateSave(played, daily.date, daily)) return { valid: false, reason: 'The day\'s start is not a valid save.' };
@@ -68,20 +75,33 @@ export function proveComposed(daily, actions, { saves = false, partner = null } 
  * A raw daily (src/edition.js getRawDaily) dressed as a composed edition:
  * `rooms` and `actions` as stored, the Fair monsters, and the floor seeds of
  * the date the rooms were composed for (`composedFor`, the date itself unless
- * borrowed). Not yet proved.
+ * borrowed). `partner` is the day's partner floor, if it has one
+ * (`generation.partner`). Not yet proved.
  */
-export function composedDaily(raw, rooms, actions, composedFor = raw.date) {
+export function composedDaily(raw, rooms, actions, composedFor = raw.date, partner = null) {
   const daily = { ...raw, difficulty: DAILY_TIER, floorSeeds: composedSeeds(composedFor), composed: structuredClone(rooms) };
   delete daily.generation;
-  daily.generation = { version: GENERATOR_VERSION, source: 'composed', ...(composedFor !== raw.date && { borrowed: composedFor }), certificate: { actions: structuredClone(actions) } };
+  daily.generation = { version: GENERATOR_VERSION, source: 'composed', ...(composedFor !== raw.date && { borrowed: composedFor }), ...(partner !== null && { partner }), certificate: { actions: structuredClone(actions) } };
   return daily;
+}
+
+/**
+ * A stored entry's partner floor (src/editions.js `partner`): 0 or 1 for the
+ * floor whose line carries recruit orders, null for a day without one.
+ * Anything else is no entry at all.
+ */
+export function storedPartner(entry) {
+  if (entry?.partner === undefined) return null;
+  if (entry.partner !== 0 && entry.partner !== 1) throw new SyntaxError('A stored partner floor is floor 1 or 2.');
+  return entry.partner;
 }
 
 // A stored entry as the edition of `raw`, or null when it no longer proves.
 function storedDaily(raw, entry, composedFor = raw.date) {
   try {
-    const daily = composedDaily(raw, decodeRooms(entry.rooms), decodeRoute(entry.route), composedFor);
-    const proof = proveComposed(daily, daily.generation.certificate.actions);
+    const partner = storedPartner(entry);
+    const daily = composedDaily(raw, decodeRooms(entry.rooms), decodeRoute(entry.route), composedFor, partner);
+    const proof = proveComposed(daily, daily.generation.certificate.actions, { partner });
     if (!proof.valid) return null;
     daily.generation.certificate.metrics = proof.metrics;
     // The idea each floor was built around (src/motif-code.js), for the journal; a borrowed day takes its template's.
@@ -109,11 +129,11 @@ function storedOfKind(raw) {
 /**
  * A date with no stored edition (past the build's window, two years ahead of
  * every build) borrows a stored day of its own piece and modifier, picked by
- * the date from the 50 or so the window holds: that day's rooms, lines and
- * floor seeds, played in its roles (each species keeps the date's own name
- * and colors but takes on the stored day's piece, as do the targets). So it
- * plays exactly as the stored day does, under another cast's names. Null when
- * the window holds no such day.
+ * the date from the 50 or so the window holds: that day's rooms, lines,
+ * partner floor and floor seeds, played in its roles (each species keeps the
+ * date's own name and colors but takes on the stored day's piece, as do the
+ * targets). So it plays exactly as the stored day does, under another cast's
+ * names. Null when the window holds no such day.
  */
 export function borrowedDaily(raw) {
   const pool = storedOfKind(raw);

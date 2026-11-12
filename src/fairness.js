@@ -6,17 +6,19 @@ import { distanceTable, UNREACHABLE } from './move-tables.js';
 const same = (a, b) => a.x === b.x && a.y === b.y;
 
 /**
- * Who moves the recruit on a route. Every shipped certificate is 'auto': no
- * action carries a recruit order, so the recruit's own AI moves it and never
- * takes a target, and only the king floor's own recruit (a king
- * one move from the start) may join; bought companions, powerups and earlier
- * floors' recruits never help. 'steer' (tooling only, to measure what Manual
- * recruit control could certify) plays the recruit like a Manual player: each
- * move or wait may carry an order (src/rules.js companionTurn), so the recruit
- * may take any monster, targets and the king included, and it hops for the
- * bishop pair where you pick the square. `everyRecruit` lets every floor's
- * recruit join, which 'steer' does unless told otherwise; with 'auto' it
- * measures what floors 1 and 2's recruits add on Auto.
+ * Who moves the recruit on a route. Most certificates are 'auto': no action
+ * carries a recruit order, so the recruit's own AI moves it and never takes a
+ * target, and only the king floor's own recruit (a king one move from the
+ * start) may join; bought companions, powerups and earlier floors' recruits
+ * never help. 'steer' plays the recruit as a player does: each move or wait
+ * may carry an order (src/rules.js companionTurn), so the recruit may take
+ * any monster, targets and the king included, and it hops for the bishop
+ * pair where you pick the square. A day with a partner floor is verified
+ * steered (src/generation.js proveComposed, which also holds the recruit's
+ * help to that floor alone); tooling uses it to measure what orders could
+ * certify. `everyRecruit` lets every floor's recruit join, which 'steer' does
+ * unless told otherwise; with 'auto' it measures what floors 1 and 2's
+ * recruits add when they move themselves.
  */
 export const RECRUIT_MODES = Object.freeze(['auto', 'steer']);
 function recruitMode({ recruit = 'auto', everyRecruit = recruit === 'steer' } = {}) {
@@ -261,8 +263,8 @@ function verifyRoute(initial, actions, options) {
   };
   const recruit = { orders: 0, captures: 0, targetCaptures: 0, clears: 0, joined: 0, promotions: 0, hops: 0 };
   for (const action of actions) {
-    // A certified route leaves its recruit on Auto: it never carries a recruit
-    // order. Only a steered route may, on a move or a wait.
+    // A route whose recruit moves itself never carries a recruit order. Only a
+    // steered route may (a day with a partner floor), on a move or a wait.
     if (!action || !['move', 'descend', 'wait'].includes(action.type)
       || (action.recruit !== undefined && (!mode.steer || action.type === 'descend'))) {
       return { valid: false, reason: 'Only chess moves, waiting and stairs are allowed.' };

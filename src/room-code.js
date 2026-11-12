@@ -10,8 +10,8 @@
 //   (cast 0 is the floor's target species, 1 and 2 its decoy species; held
 //   is how many moves a sleeping decoy sleeps, 0 when it hunts at once);
 // - ',' and its items, two characters each: the square, then 'o' a coin
-//   ('O' the hint coin), a powerup's letter (POWER_LETTERS, upper case when it
-//   is the hint) or a recruit's piece as its PIECES digit;
+//   ('O' the hint coin), 'c' the chest, a powerup's letter (POWER_LETTERS,
+//   upper case when it is the hint) or a recruit's piece as its PIECES digit;
 // - on an Ice day, ',' and its ice tiles, a character each.
 // Decoding gives back the same rooms, key order included, so a save of the
 // day (which carries its rooms) compares equal.
@@ -23,6 +23,8 @@ const NO_START = '.';
 /** A powerup's letter in a room code. */
 export const POWER_LETTERS = Object.freeze({ shield: 's', freeze: 'f', magnet: 'm', pin: 'p', leap: 'l', takeback: 't' });
 const POWER_OF = Object.fromEntries(Object.entries(POWER_LETTERS).flatMap(([power, letter]) => [[letter, power], [letter.toUpperCase(), power]]));
+/** The chest's letter (src/treasure.js): no powerup's, in either case. */
+const CHEST = 'c';
 const MAX_HELD = 20;
 
 const square = (tile) => {
@@ -53,6 +55,7 @@ function encodeRoom(room) {
   }).join('');
   const items = room.items.map((item) => {
     if (item.type === 'coin') return square(item) + (item.hint ? 'O' : 'o');
+    if (item.type === 'chest') return square(item) + CHEST;
     if (item.type === 'powerup' && Object.hasOwn(POWER_LETTERS, item.power)) return square(item) + (item.hint ? POWER_LETTERS[item.power].toUpperCase() : POWER_LETTERS[item.power]);
     if (item.type === 'companion' && PIECES.includes(item.piece)) return square(item) + PIECES.indexOf(item.piece);
     throw new RangeError(`A room item a room code can't hold: ${JSON.stringify(item)}.`);
@@ -88,6 +91,7 @@ function decodeRoom(text) {
     items: pairs(items).map(([at, code]) => {
       const tile = tileOf(at);
       if (code === 'o' || code === 'O') return { ...tile, type: 'coin', ...(code === 'O' && { hint: true }) };
+      if (code === CHEST) return { ...tile, type: 'chest' };
       if (Object.hasOwn(POWER_OF, code)) return { ...tile, type: 'powerup', power: POWER_OF[code], ...(code === code.toUpperCase() && { hint: true }) };
       if (/^[0-9]$/.test(code) && PIECES[Number(code)]) return { ...tile, type: 'companion', piece: PIECES[Number(code)] };
       throw new SyntaxError(`Bad item ${code} in a room code.`);

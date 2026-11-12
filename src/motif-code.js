@@ -3,8 +3,8 @@
 // The idea each of a day's three floors was composed around (src/composer.js
 // motifs), as stored with its edition (src/editions.js): the journal's lesson
 // pages (src/journal.js) hang on these names.
-/** One letter per motif the composer has today; any other name is stored whole. */
-const CODES = Object.freeze({ bait: 'b', squeeze: 's', net: 'n', tempo: 't', crown: 'c', fork: 'f', walk: 'w' });
+/** One letter per motif the composer has today ('d' the tandem, a duo's floor); any other name is stored whole. */
+const CODES = Object.freeze({ bait: 'b', squeeze: 's', net: 'n', tempo: 't', crown: 'c', fork: 'f', walk: 'w', tandem: 'd' });
 const NAMES = Object.freeze(Object.fromEntries(Object.entries(CODES).map(([name, code]) => [code, name])));
 const NAME = /^[a-z][a-z0-9-]{0,23}$/;
 
