@@ -49,40 +49,45 @@ export const PIT_ART = Object.freeze([
 ]);
 export const PIT_PALETTE = Object.freeze({ e: '#5b4a55', w: '#3a2e3a', v: '#231a25', b: '#060406', r: '#1c151e' });
 
-/** A gate's colours: iron bars, and the arrow that says it changes after this move (mint: it opens; amber: it shuts). */
-export const GATE_PALETTE = Object.freeze({ k: '#17131b', s: '#4d5661', i: '#93a0ae', h: '#d5dee6', m: '#8af4d5', a: '#ffb057' });
-/** A small rising arrow, for the near edge of an open gate that is about to shut. */
-export const GATE_RISE = Object.freeze(['..a..', '.aaa.', 'aa.aa']);
+/** A gate's colours: iron bars, and the bone-bright number of moves until it changes. */
+export const GATE_PALETTE = Object.freeze({ k: '#17131b', s: '#4d5661', i: '#93a0ae', h: '#d5dee6', n: '#fff6dc' });
+/** The numbers a gate can wear (src/gates.js gateLooks `left`), five texels by seven, in strokes two texels thick: read at a glance on a phone. */
+export const GATE_DIGITS = Object.freeze({
+  1: ['..nn.', '.nnn.', '..nn.', '..nn.', '..nn.', '..nn.', '.nnnn'],
+  2: ['.nnn.', 'nn.nn', '...nn', '..nn.', '.nn..', 'nn...', 'nnnnn'],
+  3: ['nnnn.', '...nn', '...nn', '.nnn.', '...nn', '...nn', 'nnnn.'],
+});
 
 // Each bar is two texels wide.
 const BARS = [1, 5, 9, 13];
 const blank = () => Array.from({ length: 16 }, () => Array(16).fill('.'));
-// A dark plate with a chevron on it: pointing down where the bars are about to
-// drop (the gate opens), up where they are about to rise (it shuts).
-function arrow(grid, key, down) {
-  for (let y = 4; y <= 11; y++) for (let x = 3; x <= 12; x++) grid[y][x] = 'k';
-  const rows = ['mm....mm', 'mmm..mmm', '.mmmmmm.', '..mmmm..', '...mm...'];
-  (down ? rows : [...rows].reverse()).forEach((row, n) => [...row].forEach((cell, x) => { if (cell === 'm') grid[5 + n + (down ? 0 : 1)][4 + x] = key; }));
+// The gate's number on a dark plate whose top-left texel is (left, top): the moves until it changes.
+function number(grid, left, top, count) {
+  const digit = GATE_DIGITS[count] ?? GATE_DIGITS[3];
+  for (let y = 0; y < 9; y++) for (let x = 0; x < 7; x++) grid[top + y][left + x] = 'k';
+  digit.forEach((row, y) => [...row].forEach((cell, x) => { if (cell === 'n') grid[top + 1 + y][left + 1 + x] = 'n'; }));
 }
 
 /**
  * A gate's art by its look: shut, a portcullis standing on its square (drawn
  * upright, like a pillar); open, the slot its bars have sunk into (drawn flat
- * on the floor). `turning`: it changes after this move, so it wears its arrow.
+ * on the floor). `left` is the number it wears, the moves until it changes: a
+ * plate hung in the middle of the bars when shut, in the near corner of the
+ * square when open, where it shows beside a piece standing in the gate.
  */
-export function gateArt(shut, turning) {
+export function gateArt(shut, left) {
   const grid = blank();
   if (shut) {
     for (let x = 0; x < 16; x++) { grid[1][x] = 'k'; grid[2][x] = x === 0 || x === 15 ? 'k' : 'h'; grid[3][x] = 'k'; }
     for (const x of BARS) for (let y = 4; y <= 15; y++) { grid[y][x] = y === 15 ? 'h' : 'i'; grid[y][x + 1] = 's'; }
     for (const y of [7, 12]) for (let x = 0; x < 16; x++) { grid[y][x] = 'i'; grid[y + 1][x] = grid[y + 1][x] === '.' ? 'k' : grid[y + 1][x]; }
-    if (turning) arrow(grid, 'm', true);
+    number(grid, 5, 5, left);
   } else {
     // The sockets the bars dropped into, between two low posts.
     for (let x = 0; x < 16; x++) { grid[7][x] = 'k'; grid[8][x] = 'k'; }
     for (const x of BARS) { grid[7][x] = 'i'; grid[7][x + 1] = 's'; }
     for (const x of [0, 1, 14, 15]) for (let y = 5; y <= 10; y++) grid[y][x] = y === 5 ? 'h' : x === 0 || x === 15 ? 'i' : 's';
-    if (turning) arrow(grid, 'a', false);
+    number(grid, 9, 7, left);
   }
   return grid.map((row) => row.join(''));
 }

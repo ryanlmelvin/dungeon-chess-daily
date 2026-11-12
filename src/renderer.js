@@ -5,7 +5,7 @@ import { planBoardLayout } from './layout.js';
 import { frozen } from './rules.js';
 import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE, DANGER_HATCH } from './sprites.js';
 // Moving terrain (src/terrain.js): a crumbling floor's tiles and pits, and the gates.
-import { CRACK_ART, CRACK_PALETTE, PIT_ART, PIT_PALETTE, gateArt, GATE_PALETTE, GATE_RISE } from './terrain-art.js';
+import { CRACK_ART, CRACK_PALETTE, PIT_ART, PIT_PALETTE, gateArt, GATE_PALETTE, GATE_DIGITS } from './terrain-art.js';
 import { gateLooks } from './gates.js';
 import { openLane } from './terrain.js';
 
@@ -172,8 +172,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   textures.set('snowflake', pixelTexture(SNOWFLAKE, SNOWFLAKE_PALETTE));
   textures.set('crack', pixelTexture(CRACK_ART, CRACK_PALETTE));
   textures.set('pit', pixelTexture(PIT_ART, PIT_PALETTE));
-  textures.set('gate-rise', pixelTexture(GATE_RISE, GATE_PALETTE));
-  for (const shut of [true, false]) for (const turning of [true, false]) textures.set(`gate-${shut ? 'shut' : 'open'}${turning ? '-turning' : ''}`, pixelTexture(gateArt(shut, turning), GATE_PALETTE));
+  // Each gate look with the number it wears: the moves until it changes (src/gates.js gateLooks).
+  for (const shut of [true, false]) for (const left of Object.keys(GATE_DIGITS).map(Number)) textures.set(`gate-${shut ? 'shut' : 'open'}-${left}`, pixelTexture(gateArt(shut, left), GATE_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
@@ -631,7 +631,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       for (const tile of view.pits) tileMark(terrain, tile.x, tile.y, 0.975, 0.975, pit, 0.009);
     }
     for (const gate of view.gates) {
-      const texture = textures.get(`gate-${gate.shut ? 'shut' : 'open'}${gate.turning ? '-turning' : ''}`);
+      const texture = textures.get(`gate-${gate.shut ? 'shut' : 'open'}-${Math.min(3, Math.max(1, gate.left))}`);
       if (gate.shut) {
         // Shut: a portcullis standing on a raised footprint, as a wall's prop does.
         block(terrain, gate.x, 0.045, gate.y, 0.78, 0.14, 0.78, basic(0x19151c));
@@ -647,12 +647,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       } else {
         // Open: the slot its bars sank into, flat on the floor.
         tileMark(terrain, gate.x, gate.y, 0.94, 0.94, basic(0xffffff, { map: texture, transparent: true, alphaTest: 0.5, depthWrite: false }), TERRAIN_OVER);
-      }
-      // Open and about to shut: a row of rising arrows along the square's near edge as well, where they
-      // show under a piece standing in the gate (it shuts once that piece has left).
-      if (gate.turning && !gate.shut) {
-        const rise = basic(0xffffff, { map: textures.get('gate-rise'), transparent: true, alphaTest: 0.5, depthWrite: false });
-        for (const dx of [-0.29, 0, 0.29]) tileMark(terrain, gate.x + dx, gate.y + 0.4, 0.22, 0.132, rise, TERRAIN_OVER + 0.002);
       }
     }
   }

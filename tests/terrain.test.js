@@ -192,16 +192,17 @@ test('gates: two moves shut, two moves open, each from its own place in the rhyt
   const laid = sealed({ gates });
   let state = game('gates', laid);
   const shut = () => state.gates.map((gate) => (gate.shut ? 'S' : 'O')).join('');
-  const turning = () => gateLooks(state).map((gate) => (gate.turning ? '!' : '.')).join('');
-  const seen = [[shut(), turning()]];
+  // The number each gate wears: the moves until it changes, this one included.
+  const left = () => gateLooks(state).map((gate) => { assert.equal(gate.turning, gate.left === 1); return gate.left; }).join('');
+  const seen = [[shut(), left()]];
   for (let n = 0; n < 5; n++) {
     state = act(state, wait);
-    seen.push([shut(), turning()]);
+    seen.push([shut(), left()]);
     assert.equal(saved(state, 'gates', laid), true);
     assert.deepEqual(state.shut, maskOf(state.gates.filter((gate) => gate.shut)));
   }
-  // Read down a column: SSOO, SOOS, OOSS, OSSO, and the arrow (!) on the last move of each hold.
-  assert.deepEqual(seen, [['SSOO', '.!.!'], ['SOOS', '!.!.'], ['OOSS', '.!.!'], ['OSSO', '!.!.'], ['SSOO', '.!.!'], ['SOOS', '!.!.']]);
+  // Read down a column: SSOO, SOOS, OOSS, OSSO, and each gate counting 2, 1 through a hold.
+  assert.deepEqual(seen, [['SSOO', '2121'], ['SOOS', '1212'], ['OOSS', '2121'], ['OSSO', '1212'], ['SSOO', '2121'], ['SOOS', '1212']]);
   assert.equal(GATE_HOLD, 2);
   assert.equal(dueShut({ phase: 0 }, 0), true);
   assert.equal(dueShut({ phase: 0 }, 2), false);
@@ -216,13 +217,13 @@ test('gates: through a turn the gates look as they did when it began, the recrui
   const laid = sealed({ start: { x: 3, y: 6 }, items: [{ x: 3, y: 5, type: 'companion', piece: 'king' }], gates: [{ x: 6, y: 3, phase: 3 }, { x: 6, y: 5, phase: 0 }] });
   let state = game('gates', laid);
   const before = gateLooks(state);
-  assert.deepEqual(before, [{ x: 6, y: 3, shut: false, turning: true }, { x: 6, y: 5, shut: true, turning: false }]);
+  assert.deepEqual(before, [{ x: 6, y: 3, shut: false, turning: true, left: 1 }, { x: 6, y: 5, shut: true, turning: false, left: 2 }]);
   // The position as the recruit's order is asked for: your move is played, the monsters' is not, and no gate has turned.
   const asked = recruitChoice(state, move(3, 5));
   assert.ok(asked.board.turns > state.turns);
   assert.deepEqual(gateLooks(asked.board), before);
   state = act(state, { ...move(3, 5), recruit: 'hold' });
-  assert.deepEqual(gateLooks(state), [{ x: 6, y: 3, shut: true, turning: false }, { x: 6, y: 5, shut: true, turning: true }]);
+  assert.deepEqual(gateLooks(state), [{ x: 6, y: 3, shut: true, turning: false, left: 2 }, { x: 6, y: 5, shut: true, turning: true, left: 1 }]);
   assert.equal(state.gateTurns, 1);
 });
 
@@ -248,7 +249,7 @@ test('gates: a gate never shuts on a piece, and shuts once it is left', () => {
   state = act(state, move(3, 3));
   assert.equal(state.gates[0].shut, false);
   assert.equal(dueShut(state.gates[0], 1), true);
-  assert.deepEqual(gateLooks(state), [{ x: 3, y: 3, shut: false, turning: true }], 'shown open, about to shut');
+  assert.deepEqual(gateLooks(state), [{ x: 3, y: 3, shut: false, turning: true, left: 1 }], 'shown open, shutting once it is left');
   assert.equal(saved(state, 'gates', laid), true);
   state = act(state, wait);
   assert.equal(state.gates[0].shut, false, 'still held open');

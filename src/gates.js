@@ -12,10 +12,12 @@
 //   recruit's and every monster's. So through a whole turn everyone meets the
 //   same gates, and what you see before you move is what your move and the
 //   monsters' answer to it will meet.
-// - With a hold of two moves a gate has four looks and the board draws each
-//   (src/renderer.js): shut, shut and opening after this move, open, open and
-//   shutting after this move. A gate with no arrow keeps its state for this
-//   move and the next, so nothing needs counting.
+// - Every gate wears a number (src/renderer.js): the moves until it changes,
+//   this move included. A shut gate reading 1 opens after this move; an open
+//   one reading 2 is floor for this move and the next. The board does the
+//   counting, the way "Wake in 3" does for sleepers. (An earlier look marked
+//   only the gates about to change, with coloured arrows; the owner could not
+//   read them, 2026-11-12.)
 // - A gate never shuts on a piece. One that is due to shut while someone
 //   stands in it stays open, and shuts at the end of the first turn that
 //   leaves it empty while it is still due shut. Its rhythm never shifts.
@@ -49,15 +51,19 @@ export function dueShut(gate, moves) { return step(gate, moves) < GATE_HOLD; }
 export function changesNext(state, gate) { return step(gate, clock(state)) % GATE_HOLD === GATE_HOLD - 1; }
 
 /**
- * A gate as the board shows it: { x, y, shut, turning }, `turning` when it
- * changes after this move. A gate held open by the piece standing in it is
- * open and turning: it shuts as soon as it is left.
+ * A gate as the board shows it: { x, y, shut, turning, left }. `left` is the
+ * number it wears: the moves it keeps this state, this move included (1: it
+ * changes after this move, which is `turning`). A gate held open by the piece
+ * standing in it shuts as soon as it is left, so it reads 1; if its open spell
+ * begins next move anyway, it reads through that spell.
  */
 export function gateLooks(state) {
   const moves = clock(state);
   return (state.gates ?? []).map((gate) => {
     const jammed = !gate.shut && dueShut(gate, moves);
-    return { x: gate.x, y: gate.y, shut: gate.shut, turning: jammed ? dueShut(gate, moves + 1) : changesNext(state, gate) };
+    const turning = jammed ? dueShut(gate, moves + 1) : changesNext(state, gate);
+    const left = jammed ? (turning ? 1 : 1 + GATE_HOLD) : GATE_HOLD - (step(gate, moves) % GATE_HOLD);
+    return { x: gate.x, y: gate.y, shut: gate.shut, turning, left };
   });
 }
 

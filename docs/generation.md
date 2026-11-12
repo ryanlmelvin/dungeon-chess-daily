@@ -444,12 +444,13 @@ open and pits as walls (`settled`): a gate opens again, a pit never mends.
   gates. Shut, a gate blocks as a wall does; open, it is floor. Every gate
   stays shut two moves, then open two, and so on, each from its own place in
   that cycle (`phase`), and gates change between turns, once you, your
-  recruit and every monster have moved: one turn is played on one board. The
-  board draws a gate's four looks, so nothing is counted: shut; shut with a
-  down arrow (it opens after this move); open; open with an up arrow (it
-  shuts after this move). A gate never shuts on a piece: it stays open under
-  one and shuts at the end of the first turn that leaves it empty while it
-  is still due shut; its rhythm never shifts. A monster already wound up
+  recruit and every monster have moved: one turn is played on one board.
+  Every gate wears a number, the moves until it changes, this move included:
+  a shut gate reading 1 opens after this move, an open one reading 2 is
+  floor for this move and the next (arrows on the gates about to change came
+  first; the owner could not read them). A gate never shuts on a piece: it
+  stays open under one, reading 1, and shuts at the end of the first turn
+  that leaves it empty while it is still due shut; its rhythm never shifts. A monster already wound up
   when a gate shuts across its path still lunges, finds the gate and stands
   off-balance. A piece with no move only because gates are shut is not
   cornered: waiting answers it.
