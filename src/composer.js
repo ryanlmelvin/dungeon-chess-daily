@@ -2729,7 +2729,8 @@ function composeTerrainFloor(base, floor, options) {
     };
     try {
       // Floor 2's tight forms are not composed around terrain: its plain motifs are (floor 1 keeps the day's idea first).
-      const composed = composeFloor(base, floor, { ...options, tight: Boolean(options.tight) && floor === 0, terrain: hooks });
+      // Nor are the ideas in preview (the Standstill, the Lure): they stay off around terrain, and on in the fallback below if asked for.
+      const composed = composeFloor(base, floor, { ...options, tight: Boolean(options.tight) && floor === 0, ideas: [], terrain: hooks });
       // Why it matters, on the finished room (searched without its hint powerup, as the day's proof is).
       const why = terrainReason(base, floor, { ...composed.room, items: composed.room.items.filter((item) => !(item.hint && item.type === 'powerup')) }, composed.line);
       return { ...composed, terrain: 'idea', why, rounds: round + 1, ms: performance.now() - began };
