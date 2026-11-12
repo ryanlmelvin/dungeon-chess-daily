@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
-import { act, createGame, legalMoves, validateSave, resetFloor, walkable, dangerTiles, hopelessFloor, unreachablePickups } from '../src/rules.js';
+import { act, createGame, legalMoves, validateSave, resetFloor, walkable, dangerTiles, hopelessFloor, unreachablePickups, recruitChoice } from '../src/rules.js';
 import { MODIFIERS, TERRAIN_MODIFIERS, modifierFor, modifierOf, modifierStatus } from '../src/modifiers.js';
 import { solid, floorAt, shutAt, shutNow, terrainMap, settled, maskOf } from '../src/terrain.js';
 import { cracked } from '../src/cracks.js';
@@ -44,7 +44,7 @@ test('no date draws the two preview modifiers, and a plain day carries no terrai
   const laid = sealed({ cracks: [{ x: 4, y: 4 }], gates: [{ x: 3, y: 3, phase: 0 }] });
   for (const modifier of ['none', 'ice', 'collapse']) {
     const state = game(modifier, laid);
-    for (const field of ['shut', 'cracks', 'pits', 'gates']) assert.equal(state[field], undefined, `${modifier}: ${field}`);
+    for (const field of ['shut', 'cracks', 'pits', 'gates', 'gateTurns']) assert.equal(state[field], undefined, `${modifier}: ${field}`);
     assert.equal(walkable(state, 3, 3), true);
     assert.equal(terrainMap(state), state.map);
     assert.equal(settled(state), state);
@@ -211,6 +211,21 @@ test('gates: two moves shut, two moves open, each from its own place in the rhyt
   assert.equal(resetFloor(state).gates.map((gate) => (gate.shut ? 'S' : 'O')).join(''), 'SSOO');
 });
 
+test('gates: through a turn the gates look as they did when it began, the recruit’s order included', () => {
+  // A king recruit beside the rook's start; d5 is open and shuts after this move.
+  const laid = sealed({ start: { x: 3, y: 6 }, items: [{ x: 3, y: 5, type: 'companion', piece: 'king' }], gates: [{ x: 6, y: 3, phase: 3 }, { x: 6, y: 5, phase: 0 }] });
+  let state = game('gates', laid);
+  const before = gateLooks(state);
+  assert.deepEqual(before, [{ x: 6, y: 3, shut: false, turning: true }, { x: 6, y: 5, shut: true, turning: false }]);
+  // The position as the recruit's order is asked for: your move is played, the monsters' is not, and no gate has turned.
+  const asked = recruitChoice(state, move(3, 5));
+  assert.ok(asked.board.turns > state.turns);
+  assert.deepEqual(gateLooks(asked.board), before);
+  state = act(state, { ...move(3, 5), recruit: 'hold' });
+  assert.deepEqual(gateLooks(state), [{ x: 6, y: 3, shut: true, turning: false }, { x: 6, y: 5, shut: true, turning: true }]);
+  assert.equal(state.gateTurns, 1);
+});
+
 test('gates: a shut gate blocks standing and lines like a wall, and gates change between turns', () => {
   // d5 shuts after the first move; the rook starts on d2.
   const laid = sealed({ start: { x: 3, y: 6 }, gates: [{ x: 3, y: 3, phase: 3 }] });
@@ -298,6 +313,7 @@ test('saves: terrain travels with the save, reloads mid-floor and must agree wit
   const forged = (change) => { const copy = JSON.parse(JSON.stringify(turned)); change(copy); return validateSave(copy, DATE, daily('gates', gates)); };
   assert.equal(forged((save) => { save.gates[1].shut = true; shutNow(save); }), false, 'shut while its rhythm has it open');
   assert.equal(forged((save) => { save.gates[0].phase = 3; }), false, 'another rhythm');
+  assert.equal(forged((save) => { save.gateTurns = 0; }), false, 'the gates’ clock behind the floor’s moves');
   assert.equal(forged((save) => { save.gates.pop(); shutNow(save); }), false, 'a gate missing');
   assert.equal(forged((save) => { save.shut = maskOf([{ x: 0, y: 7 }]); }), false, 'the board out of step with the gates');
   assert.equal(forged((save) => { save.cracks = []; save.pits = []; }), false, 'another modifier’s fields');

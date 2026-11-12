@@ -230,8 +230,8 @@ export function validModifierState(value, template) {
 // Moving terrain's own save fields: a day without it carries none of them, and a day with
 // it carries its record and the squares that record shuts right now (src/terrain.js).
 function validTerrain(value, template) {
-  const fields = { cracks: ['cracks', 'pits', 'shut'], gates: ['gates', 'shut'] }[value.modifier] ?? [];
-  if (['cracks', 'pits', 'gates', 'shut'].some((field) => (value[field] !== undefined) !== fields.includes(field))) return false;
+  const fields = { cracks: ['cracks', 'pits', 'shut'], gates: ['gates', 'gateTurns', 'shut'] }[value.modifier] ?? [];
+  if (['cracks', 'pits', 'gates', 'gateTurns', 'shut'].some((field) => (value[field] !== undefined) !== fields.includes(field))) return false;
   if (!fields.length) return true;
   if (!(value.modifier === 'cracks' ? validCracks(value, template) : validGates(value, template))) return false;
   return JSON.stringify(value.shut) === JSON.stringify(maskOf(shutSquares(value)));
