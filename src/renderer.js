@@ -4,6 +4,10 @@ import * as THREE from 'three';
 import { planBoardLayout } from './layout.js';
 import { frozen } from './rules.js';
 import { SPRITES, PALETTE, spritePalette, piecePalette, haloed, PIECE_HALO, COMPANION_PALETTE, STONE_SIZE, paintStone, CROWN, CROWN_PALETTE, DANGER_HATCH } from './sprites.js';
+// Moving terrain (src/terrain.js): a crumbling floor's tiles and pits, and the gates.
+import { CRACK_ART, CRACK_PALETTE, PIT_ART, PIT_PALETTE, gateArt, GATE_PALETTE, GATE_RISE } from './terrain-art.js';
+import { gateLooks } from './gates.js';
+import { openLane } from './terrain.js';
 
 const VOID = 0x100d12;
 const WHITE = 0xeee8e1;
@@ -30,6 +34,13 @@ const SKID_SWAYS = 2;
 // How much longer a turn with a skid takes to play than one without: its
 // landing waits SKID_LEAD + SKID_MS instead of a normal move's 145 ms.
 const SKID_EXTRA_MS = SKID_LEAD + SKID_MS - 145;
+// Moving terrain. A cracked tile falls as the piece that stood on it leaves:
+// the pit shows TILE_FALL_MS into that piece's move, with a puff of rubble.
+// Gates turn once every piece has moved, with the turn's other marks; one that
+// shuts rises out of its slot in GATE_RISE_MS. Under reduced motion both
+// simply change.
+const TILE_FALL_MS = 90;
+const GATE_RISE_MS = 170;
 // Choosing a pin: a white crosshair, never mistaken for a fork's gold ring.
 const PIN_TARGET = 0xffffff;
 // Pieces, monsters and their sparks draw after everything lying on the floor
@@ -144,7 +155,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const actors = new THREE.Group();
   const hints = new THREE.Group();
   const collectibles = new THREE.Group();
-  scene.add(board, hints, collectibles, actors);
+  // Cracked tiles, pits and gates: redrawn as they change, the room's walls never are.
+  const terrain = new THREE.Group();
+  scene.add(board, terrain, hints, collectibles, actors);
   const cube = new THREE.BoxGeometry(1, 1, 1);
   const plane = new THREE.PlaneGeometry(1, 1);
   const materials = new Set();
@@ -155,6 +168,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
   textures.set('gem', pixelTexture(GEM, GEM_PALETTE));
   textures.set('snowflake', pixelTexture(SNOWFLAKE, SNOWFLAKE_PALETTE));
+  textures.set('crack', pixelTexture(CRACK_ART, CRACK_PALETTE));
+  textures.set('pit', pixelTexture(PIT_ART, PIT_PALETTE));
+  textures.set('gate-rise', pixelTexture(GATE_RISE, GATE_PALETTE));
+  for (const shut of [true, false]) for (const turning of [true, false]) textures.set(`gate-${shut ? 'shut' : 'open'}${turning ? '-turning' : ''}`, pixelTexture(gateArt(shut, turning), GATE_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
   const entities = new Map();
@@ -197,6 +214,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let inspector = null;
   let hoverTimer = 0;
   let hoverTile = null;
+  // Moving terrain: what is drawn now, and the changes still to come this turn (at their times).
+  let terrainKey = '';
+  let terrainView = { cracks: [], pits: [], gates: [] };
+  const terrainQueue = [];
+  const rising = [];
 
   function basic(color, extra = {}) {
     const material = new THREE.MeshBasicMaterial({ color, ...extra });
@@ -271,6 +293,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     clear(actors);
     clear(hints);
     clear(collectibles);
+    clear(terrain);
+    terrainKey = '';
+    terrainQueue.length = rising.length = 0;
     itemKey = '';
     pendingItems = null;
     recruitSprites = [];
@@ -580,6 +605,69 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
   }
 
+  // Moving terrain as a state has it: the tiles still cracked, the pits, and each gate's look (src/gates.js gateLooks).
+  const terrainOf = (next) => ({ cracks: next.cracks ?? [], pits: next.pits ?? [], gates: next.gates ? gateLooks(next) : [] });
+  function drawTerrain(view, risen = []) {
+    terrainView = view;
+    const key = JSON.stringify(view);
+    if (key === terrainKey) return;
+    terrainKey = key;
+    clear(terrain);
+    rising.length = 0;
+    if (view.cracks.length) {
+      // A cracked tile: a shade darker, as if it had already settled, under its fracture.
+      const weak = basic(0x000000, { transparent: true, opacity: 0.2, depthWrite: false });
+      const crack = basic(0xffffff, { map: textures.get('crack'), transparent: true, alphaTest: 0.5, depthWrite: false });
+      for (const tile of view.cracks) {
+        tileMark(terrain, tile.x, tile.y, 0.94, 0.94, weak, 0.006);
+        tileMark(terrain, tile.x, tile.y, 0.94, 0.94, crack, 0.008);
+      }
+    }
+    if (view.pits.length) {
+      const pit = basic(0xffffff, { map: textures.get('pit') });
+      for (const tile of view.pits) tileMark(terrain, tile.x, tile.y, 0.975, 0.975, pit, 0.009);
+    }
+    for (const gate of view.gates) {
+      const texture = textures.get(`gate-${gate.shut ? 'shut' : 'open'}${gate.turning ? '-turning' : ''}`);
+      if (gate.shut) {
+        // Shut: a portcullis standing on a raised footprint, as a wall's prop does.
+        block(terrain, gate.x, 0.045, gate.y, 0.78, 0.14, 0.78, basic(0x19151c));
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.1, depthWrite: false });
+        materials.add(material);
+        const bars = new THREE.Sprite(material);
+        bars.center.set(0.5, 0);
+        bars.scale.set(0.9, 0.9, 1);
+        // Its foot where a prop's would be (a prop is centred 0.27 up; this one grows from the floor).
+        bars.position.set(gate.x, 0.13, gate.y + 0.43);
+        terrain.add(bars);
+        if (!reducedMotion && risen.some((tile) => tile.x === gate.x && tile.y === gate.y)) { bars.scale.y = 0.05; rising.push({ bars, at: performance.now() }); }
+      } else {
+        // Open: the slot its bars sank into, flat on the floor.
+        tileMark(terrain, gate.x, gate.y, 0.94, 0.94, basic(0xffffff, { map: texture, transparent: true, alphaTest: 0.5, depthWrite: false }), 0.008);
+      }
+      // Open and about to shut: a row of rising arrows along the square's near edge as well, where they
+      // show under a piece standing in the gate (it shuts once that piece has left).
+      if (gate.turning && !gate.shut) {
+        const rise = basic(0xffffff, { map: textures.get('gate-rise'), transparent: true, alphaTest: 0.5, depthWrite: false });
+        for (const dx of [-0.29, 0, 0.29]) tileMark(terrain, gate.x + dx, gate.y + 0.4, 0.22, 0.132, rise, 0.012);
+      }
+    }
+  }
+  // A tile falling away: stone chips drop into the new pit.
+  function rubble(x, y) {
+    if (reducedMotion) return;
+    for (let i = 0; i < 10; i++) {
+      const material = new THREE.SpriteMaterial({ color: STONE[i % STONE.length], transparent: true, depthWrite: false });
+      materials.add(material);
+      const mesh = new THREE.Sprite(material);
+      const size = 0.06 + (i % 3) * 0.025;
+      mesh.scale.set(size, size, 1);
+      mesh.position.set(x + (Math.random() - 0.5) * 0.7, 0.2, y + (Math.random() - 0.5) * 0.7);
+      actors.add(mesh);
+      particles.push({ mesh, life: 0.45, velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.7 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4) });
+    }
+  }
+
   function burst(x, y) {
     if (reducedMotion) return;
     for (let i = 0; i < 8; i++) {
@@ -720,7 +808,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     // The shaded tiles, rather than the connector, identify threatened squares.
     for (const enemy of next.enemies) {
       if (enemy.phase !== 'aim') continue;
-      const target = enemy.intent?.at(-1);
+      // A path a gate has shut on since is drawn as far as it still reaches (src/terrain.js).
+      const target = openLane(next, enemy.intent ?? []).at(-1);
       if (!target) continue;
       const dx = target.x - enemy.x;
       const dy = target.y - enemy.y;
@@ -986,6 +1075,28 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       pendingHints = null;
       updateHints(next);
     }
+    // Moving terrain. With the turn's moves playing out, each cracked tile falls as its piece leaves
+    // and the gates turn once every piece has moved; otherwise the board simply shows the state.
+    const ground = terrainOf(next);
+    if (animateTurn) {
+      const falls = events.filter((event) => event.type === 'crumble');
+      const fallen = (tile) => falls.some((event) => event.x === tile.x && event.y === tile.y);
+      terrainQueue.length = 0;
+      drawTerrain({ cracks: [...ground.cracks, ...falls.map(({ x, y }) => ({ x, y }))], pits: ground.pits.filter((tile) => !fallen(tile)), gates: terrainView.gates.length === ground.gates.length ? terrainView.gates : ground.gates });
+      for (const fall of falls) {
+        const delay = fall.by === 'player' ? playerDelay : fall.by === 'companion' ? companionDelay : enemyDelay;
+        terrainQueue.push({ at: now + delay + TILE_FALL_MS, run: () => {
+          rubble(fall.x, fall.y);
+          drawTerrain({ ...terrainView, cracks: terrainView.cracks.filter((tile) => tile.x !== fall.x || tile.y !== fall.y), pits: [...terrainView.pits, { x: fall.x, y: fall.y }] });
+        } });
+      }
+      const shown = terrainView.gates;
+      terrainQueue.push({ at: now + Math.max(playerDelay + skid, companionDelay, enemyDelay) + 175, run: () => drawTerrain(ground, ground.gates.filter((gate) => gate.shut && shown.some((before) => before.x === gate.x && before.y === gate.y && !before.shut))) });
+      terrainQueue.sort((a, b) => a.at - b.at);
+    } else if (freshEvents || changedBoard || !terrainQueue.length) {
+      terrainQueue.length = 0;
+      drawTerrain(ground);
+    }
     // A monster entering through a collapsing door arrives in a puff of dust.
     for (const event of events) if (event.type === 'reinforcement') burst(event.x, event.y);
     // The ceiling comes down once the turn's moves have landed (never on a new room).
@@ -1162,6 +1273,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (pendingItems && timestamp >= pendingItems.at) {
       updateItems(pendingItems.items);
       pendingItems = null;
+    }
+    // Moving terrain: tiles fall and gates turn at their times; a gate that shut rises out of its slot.
+    while (terrainQueue.length && timestamp >= terrainQueue[0].at) terrainQueue.shift().run();
+    for (let i = rising.length - 1; i >= 0; i--) {
+      const t = Math.min(1, (timestamp - rising[i].at) / GATE_RISE_MS);
+      rising[i].bars.scale.y = 0.9 * Math.max(0.05, t);
+      if (t >= 1) rising.splice(i, 1);
     }
     if (pendingQuake && timestamp >= pendingQuake.at) {
       const { event } = pendingQuake;
