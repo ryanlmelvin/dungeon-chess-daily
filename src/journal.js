@@ -44,7 +44,7 @@ export const PAGES = Object.freeze([
   },
   {
     id: 'tandem', kind: 'idea', name: 'Tandem', pieces: OFFICERS,
-    text: 'Two targets guard each other. Your recruit can’t be taken: send it first, then take the other.',
+    text: 'Two targets guard each other. Your recruit can’t be taken: send it, then take the other.',
     art: 'Two monsters stand walled in side by side, each ringed in red. A mint knight, your recruit, takes one; your bishop then takes the other.',
     draw: drawTandemDemo, still: TANDEM_STILL,
   },
