@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, dangerTiles, legalMoves, PLAYABLE_PIECES as PIECES, royalRules, validateSave, walkable, RULES_VERSION } from '../src/rules.js';
 import { findFloorRoute, spendableHits, verifyWinningRoute } from '../src/fairness.js';
-import { generateDaily, getDaily, GENERATOR_VERSION } from '../src/generation.js';
+import { generateDaily, getDaily, proveComposed, certificateMode, GENERATOR_VERSION } from '../src/generation.js';
+import { EDITIONS } from '../src/editions.js';
 import { DAILY_TIER } from '../src/difficulty.js';
 import { withRooms } from './fixtures/rooms.js';
 
@@ -39,14 +40,18 @@ function scenario(piece = 'rook', color = 'white') {
 const twinOf = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
 function replay(edition) {
   const daily = twinOf(edition);
+  // The day's partner floor (a Tandem), where the floor's recruit joins and takes orders; null on a day without one.
+  const partner = daily.generation.partner ?? null;
   const initial = createGame(daily);
   let state = initial, promoted = false, revertedPromotion = false, threatenedDecisions = 0;
   for (const action of daily.generation.certificate.actions) {
     assert.ok(['move', 'descend', 'wait'].includes(action.type));
+    const partnered = state.floor === partner;
+    assert.ok(action.recruit === undefined || (partnered && action.type !== 'descend'), 'only a partner floor\'s moves carry recruit orders');
     if (action.type === 'move') {
       assert.ok(legalMoves(state).some((tile) => tile.x === action.x && tile.y === action.y));
-      // Only the king floor's own recruit may help, and only under royal rules.
-      assert.ok(!state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !royalRules(state))) && item.x === action.x && item.y === action.y));
+      // Only the king floor's own recruit may help under royal rules, and a partner floor's on that floor.
+      assert.ok(!state.items.some((item) => (item.type === 'powerup' || (item.type === 'companion' && !royalRules(state) && !partnered)) && item.x === action.x && item.y === action.y));
       if (dangerTiles(state).length > 0) threatenedDecisions++;
     }
     const next = act(state, action);
@@ -56,9 +61,9 @@ function replay(edition) {
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
     if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
-    else assert.equal(next.companion, null);
+    else if (next.floor !== partner) assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
-    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit', 'companion-order'].includes(event.type) || (event.type === 'player-captured' && !spendableHits(initial)) || (event.type.startsWith('companion') && !royalRules(next))));
+    assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit'].includes(event.type) || (event.type === 'player-captured' && !spendableHits(initial)) || (event.type.startsWith('companion') && !royalRules(state) && !partnered)));
     assert.equal(validateSave(next, daily.date, daily), true, `${daily.date}: valid save after ${JSON.stringify(action)}`);
     if (next.events.some((event) => event.type === 'promotion')) promoted = true;
     if (next.floor !== state.floor && next.status === 'playing') {
@@ -89,12 +94,44 @@ test('stored editions of every daily piece and modifier certify with the product
     const { initial } = replay(daily);
     assert.equal(initial.schema, RULES_VERSION);
     assert.equal(initial.rulesVersion, RULES_VERSION);
-    const proof = verifyWinningRoute(initial, daily.generation.certificate.actions);
+    // Verified as the day is proved: the recruit steered on a day with a partner floor (src/generation.js proveComposed).
+    const proof = verifyWinningRoute(initial, daily.generation.certificate.actions, certificateMode(daily.generation.partner));
     assert.equal(proof.valid, true, `${kind}: ${proof.reason}`);
     assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);
     assert.equal(proof.metrics.hits, 0, `${kind}: planted lines are never captured`);
   }
   assert.equal(seen.size, PIECES.length * 3, 'every piece on plain, Ice and Breach days');
+});
+
+test('a stored Tandem day certifies with its recruit on orders, on its partner floor alone', () => {
+  // The first stored day with a partner floor on floor 1, and the first with one on floor 2.
+  for (const floor of [0, 1]) {
+    const date = Object.keys(EDITIONS).find((day) => EDITIONS[day].partner === floor);
+    assert.ok(date, `a stored day whose floor ${floor + 1} is a partner floor`);
+    const daily = getDaily(date), { actions } = daily.generation.certificate;
+    assert.equal(daily.generation.partner, floor);
+    assert.equal(daily.generation.motifs[floor], 'tandem');
+    replay(daily);
+    const initial = createGame(twinOf(daily));
+    // Without orders the verifier refuses the line; steered, it proves, and the recruit took one target of the two.
+    assert.equal(verifyWinningRoute(initial, actions).valid, false, `${date}: a route whose recruit moves itself carries no order`);
+    const proof = verifyWinningRoute(initial, actions, certificateMode(floor));
+    assert.equal(proof.valid, true, `${date}: ${proof.reason}`);
+    assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);
+    assert.ok(proof.metrics.recruit.orders >= 2, `${date}: the line posts the recruit, then sends it`);
+    assert.equal(proof.metrics.recruit.targetCaptures, 1, `${date}: the recruit takes one twin`);
+    assert.equal(proof.metrics.recruit.clears, 0, `${date}: and you take the other`);
+    // The day proves with its partner floor named, and with no other.
+    assert.equal(proveComposed(daily, actions, { saves: true, partner: floor }).valid, true, date);
+    assert.equal(proveComposed(daily, actions, { saves: true }).valid, false, `${date}: unnamed, the orders are refused`);
+    assert.equal(proveComposed(daily, actions, { partner: 1 - floor }).valid, false, `${date}: the recruit helps on its own floor alone`);
+    // The orders sit on the partner floor's moves and nowhere else.
+    let at = 0;
+    for (const action of actions) {
+      if (action.recruit !== undefined) assert.equal(at, floor, `${date}: an order on floor ${at + 1}`);
+      if (action.type === 'descend') at++;
+    }
+  }
 });
 
 test('the full certificate permits promotion and the promoted pawn reverts between rooms', () => {
@@ -115,27 +152,34 @@ test('the full certificate permits promotion and the promoted pawn reverts betwe
 });
 
 test('certificates reject tampered moves, omitted extraction, extra actions, purchases and automatic relics', () => {
-  const daily = twinOf(getDaily(dates.get('rook:white')));
-  const initial = createGame(daily);
-  const actions = daily.generation.certificate.actions;
-  assert.equal(actions.at(-1).type, 'descend');
-  assert.equal(verifyWinningRoute(initial, actions).valid, true);
-  for (const tampered of [
-    [], actions.slice(0, -1), actions.slice(1),
-    [move(-1, 4), ...actions], [{ type: 'descend' }, ...actions],
-    [{ type: 'buy', id: 'shield' }, ...actions], [...actions, actions[0]],
-  ]) assert.equal(verifyWinningRoute(initial, tampered).valid, false);
-  for (const power of ['shield', 'freeze', 'magnet']) {
-    const powered = structuredClone(initial); powered.powers[power] = 1;
-    assert.equal(verifyWinningRoute(powered, actions).valid, false);
-    const pickup = structuredClone(initial);
-    pickup.items.push({ ...actions[0], type: 'powerup', power });
-    const proof = verifyWinningRoute(pickup, actions);
-    assert.equal(proof.valid, false);
-    assert.match(proof.reason, /powerup/);
+  // A rook day without a partner floor, and one with: tampering fails either way the day is verified.
+  const rookDays = Object.keys(EDITIONS).filter((day) => getRawDaily(day).playerPiece === 'rook');
+  for (const date of [rookDays.find((day) => EDITIONS[day].partner === undefined), rookDays.find((day) => EDITIONS[day].partner !== undefined)]) {
+    assert.ok(date);
+    const daily = twinOf(getDaily(date)), mode = certificateMode(daily.generation.partner);
+    const initial = createGame(daily);
+    const actions = daily.generation.certificate.actions;
+    assert.equal(actions.at(-1).type, 'descend');
+    assert.equal(verifyWinningRoute(initial, actions, mode).valid, true, date);
+    // The line's first move: a relic laid on its square must spoil the proof.
+    const first = actions.find((action) => action.type === 'move');
+    for (const tampered of [
+      [], actions.slice(0, -1), actions.slice(1),
+      [move(-1, 4), ...actions], [{ type: 'descend' }, ...actions],
+      [{ type: 'buy', id: 'shield' }, ...actions], [...actions, actions[0]],
+    ]) assert.equal(verifyWinningRoute(initial, tampered, mode).valid, false, date);
+    for (const power of ['shield', 'freeze', 'magnet']) {
+      const powered = structuredClone(initial); powered.powers[power] = 1;
+      assert.equal(verifyWinningRoute(powered, actions, mode).valid, false);
+      const pickup = structuredClone(initial);
+      pickup.items.push({ x: first.x, y: first.y, type: 'powerup', power });
+      const proof = verifyWinningRoute(pickup, actions, mode);
+      assert.equal(proof.valid, false);
+      assert.match(proof.reason, /powerup/);
+    }
+    const bought = structuredClone(initial); bought.purchases = ['freeze'];
+    assert.equal(verifyWinningRoute(bought, actions, mode).valid, false);
   }
-  const bought = structuredClone(initial); bought.purchases = ['freeze'];
-  assert.equal(verifyWinningRoute(bought, actions).valid, false);
 });
 
 test('active companions and companion pickups cannot support a no-powerup certificate', () => {

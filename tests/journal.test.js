@@ -39,6 +39,10 @@ test('motifs survive their code, and a name the code has no letter for is stored
   assert.deepEqual(decodeMotifs('b,s,n'), ['bait', 'squeeze', 'net']);
   assert.equal(encodeMotifs(['partner', 'walk', 'net']), 'partner,w,n');
   assert.deepEqual(decodeMotifs('partner,w,n'), ['partner', 'walk', 'net']);
+  // The tandem has its letter; spelled out, as a build before the letter would have stored it, it reads the same.
+  assert.equal(encodeMotifs(['tandem', 'squeeze', 'net']), 'd,s,n');
+  assert.deepEqual(decodeMotifs('d,s,n'), ['tandem', 'squeeze', 'net']);
+  assert.deepEqual(decodeMotifs('b,tandem,n'), ['bait', 'tandem', 'net']);
   for (const motifs of [['tempo', 'crown', 'net'], ['fork', 'treasure-chest', 'walk']]) assert.deepEqual(decodeMotifs(encodeMotifs(motifs)), motifs);
   for (const bad of [undefined, null, '', 'b,s', 'b,s,n,n', 'b,,n', 'B,s,n', 'b,s,n ', ['bait', 'squeeze', 'net'], 7]) assert.equal(decodeMotifs(bad), null, JSON.stringify(bad));
   assert.throws(() => encodeMotifs(['bait', 'squeeze']));
@@ -54,7 +58,7 @@ test('every stored edition names its three floors\' motifs, and its daily carrie
     assert.equal(encodeMotifs(motifs), entry.motifs, date);
     motifs.forEach((motif) => seen.add(motif));
   }
-  for (const motif of ['bait', 'squeeze', 'net', 'tempo', 'crown']) assert.ok(seen.has(motif), motif);
+  for (const motif of ['bait', 'squeeze', 'tandem', 'net', 'tempo', 'crown']) assert.ok(seen.has(motif), motif);
   for (const date of [OFFICER_DAY, PAWN_DAY, '2026-11-01', Object.keys(EDITIONS).at(-1)]) {
     assert.deepEqual(getDaily(date).generation.motifs, decodeMotifs(EDITIONS[date].motifs), date);
   }
@@ -82,7 +86,10 @@ test('the book: one page per idea but the walk, each with a name, a short text a
   assert.equal(new Set(PAGES.map((page) => page.id)).size, PAGES.length);
   assert.equal(pageFor(NO_IDEA), null);
   assert.equal(pageFor('partner'), null, 'a motif with no page yet is harmless');
-  for (const id of ['bait', 'squeeze', 'net', 'tempo', 'crown']) assert.equal(pageFor(id)?.kind, 'idea', id);
+  for (const id of ['bait', 'squeeze', 'tandem', 'net', 'tempo', 'crown']) assert.equal(pageFor(id)?.kind, 'idea', id);
+  // Every idea a stored floor is built around has its page, but the walk.
+  const stored = new Set(Object.values(EDITIONS).flatMap((entry) => decodeMotifs(entry.motifs)));
+  for (const motif of stored) assert.equal(Boolean(pageFor(motif)), motif !== NO_IDEA, motif);
   // A stand-in canvas: the diagrams only draw.
   const context = new Proxy({}, { get: (target, name) => (name in target ? target[name] : () => {}), set: (target, name, value) => { target[name] = value; return true; } });
   const canvas = { width: 200, height: 200, getContext: () => context };
@@ -134,6 +141,45 @@ test('clearing a floor at par or better finds its idea: at the shop, and in the 
   assert.deepEqual(floorFinds(penalized, daily, 1), []);
   // A floor in play has found nothing yet.
   assert.deepEqual(floorFinds(createGame(daily), daily, 0), []);
+});
+
+test('a Tandem floor cleared at par finds the Tandem page, for the piece that played it', () => {
+  // The first stored day with a partner floor: its planted line, recruit orders and all, clears that floor one under par.
+  const date = Object.keys(EDITIONS).find((day) => EDITIONS[day].partner !== undefined);
+  const { daily, shops, won, piece } = playDay(date);
+  const floor = daily.generation.partner;
+  assert.equal(daily.generation.motifs[floor], 'tandem');
+  const page = pageFor('tandem');
+  assert.equal(page.name, 'Tandem');
+  assert.ok(page.pieces.includes(piece) && !page.pieces.includes('pawn'), 'an officer\'s idea');
+  assert.deepEqual(floorFinds(shops[floor], daily), ['tandem'], 'at the shop after the floor');
+  const { journal, fresh } = fileRun(emptyJournal(), won, daily);
+  assert.deepEqual(fresh.find((find) => find.id === 'tandem'), { id: 'tandem', piece, page: true });
+  assert.deepEqual(journal.finds.tandem, { [piece]: date });
+  assert.deepEqual(pagePieces(journal, page).filter((entry) => entry.found), [{ piece, found: true }]);
+  // Even par finds it; a move over, having searched for it, does not.
+  const pars = floorPars(daily);
+  const even = structuredClone(won); even.records[floor].scored = pars[floor];
+  assert.deepEqual(floorFinds(even, daily, floor), ['tandem']);
+  const over = structuredClone(won); over.records[floor].scored = pars[floor] + 1;
+  assert.deepEqual(floorFinds(over, daily, floor), []);
+});
+
+test('the journal reads the same across a rules version bump: what was found stays found', () => {
+  // As a device stored it under rules version 12: no version anywhere in it.
+  const text = '{"schema":1,"finds":{"bait":{"knight":"2026-11-09"},"net":{"knight":"2026-11-09","pawn":"2026-11-05"}},"filled":1}';
+  assert.doesNotMatch(text, /v\d+|rulesVersion|13|12/);
+  const journal = readJournal(text);
+  assert.equal(writeJournal(journal), text, 'read and written back unchanged');
+  assert.equal(journal.filled, BACKFILL_VERSION, 'already back-filled: the device\'s saves are not read again');
+  // A save from before the bump no longer fits its rebuilt edition, so a back-fill would read none of it. Nothing is unfiled.
+  const old = { ...officer.won, schema: RULES_VERSION - 1, rulesVersion: RULES_VERSION - 1 };
+  assert.equal(validateSave(old, OFFICER_DAY), false);
+  assert.deepEqual(backfill(journal, [], getDaily), journal);
+  // A run under the new rules files into the same book, beside the old finds.
+  const { journal: later } = fileRun(journal, officer.won, officer.daily);
+  for (const [id, pieces] of Object.entries(journal.finds)) for (const piece of Object.keys(pieces)) assert.ok(later.finds[id][piece], `${id} with a ${piece} is still found`);
+  assert.equal(later.finds.squeeze[officer.piece], OFFICER_DAY, 'and the new run\'s find is filed beside them');
 });
 
 test('only the day\'s own piece, color and monsters find anything, never practice', () => {

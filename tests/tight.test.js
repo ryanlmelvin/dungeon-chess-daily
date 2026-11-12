@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Tight floors (src/tight.js, and composeDay's `tight` option in
-// src/composer.js): floors whose idea has to be found. Off unless asked for,
-// and with it off a day composes exactly as its stored edition.
+// src/composer.js): floors whose idea has to be found. Part of the release
+// configuration, so a day composes with them exactly as its stored edition.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeDay, actionsFrom, usesIdea, playLine, dayIdea, composedSeeds, BOT_GUARD, BURROWS } from '../src/composer.js';
+import { composeDay, actionsFrom, usesIdea, playLine, dayIdea, composedSeeds, BOT_GUARD, BURROWS, RELEASE } from '../src/composer.js';
 import { parRoom, playsIdea, tightVerdict, TIGHT } from '../src/tight.js';
 import { getDaily } from '../src/game.js';
 import { getRawDaily } from '../src/edition.js';
@@ -13,32 +13,38 @@ import { certifiedFloors, playFloor, runSeed } from '../src/human-bot.js';
 const square = (name) => ({ x: 'abcdefgh'.indexOf(name[0]), y: 8 - Number(name[1]) });
 const line = (text) => text.split(' ').map((word) => (word === 'wait' ? { type: 'wait' } : { type: 'move', ...square(word) }));
 const spell = (actions) => actions.map((action) => (action.type === 'move' ? `${'abcdefgh'[action.x]}${8 - action.y}` : action.type)).join(' ');
-// A day composed with the option on or off: its floors, each floor's motif instance (the
-// `kept` trace's) and each floor's start on the twin without hint powerups, as a planted line is searched.
-function compose(date, tight) {
+// A day composed with the option on (the release configuration, as stored) or off: its floors, each
+// floor's motif instance (the `kept` trace's) and each floor's start on the twin without hint
+// powerups, as a planted line is searched. `options` turns other options off, for a fixture.
+function compose(date, tight, options = {}) {
   const builts = [];
-  const { daily, floors } = composeDay(date, { tight, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } });
+  const { daily, floors } = composeDay(date, { ...options, tight, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } });
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
   return { daily, floors, builts, starts: certifiedFloors(twin).starts, played: certifiedFloors(daily).starts };
 }
 
-test('with the option off a day composes as its stored edition', () => {
-  // 2026-11-18 (a knight) changes with the option on; 2026-11-28 (a pawn) doesn't (the test below).
-  for (const date of ['2026-11-18', '2026-11-28']) {
-    const plain = composeDay(date, { tight: false }), stored = getDaily(date);
-    assert.deepEqual(plain.daily.composed, stored.composed, `${date}: the stored rooms`);
-    assert.deepEqual(plain.daily.generation.certificate.actions, stored.generation.certificate.actions, `${date}: the stored lines`);
-    assert.ok(plain.floors.every((floor) => floor.form === undefined), `${date}: no floor names a form`);
+test('the release configuration composes each day as its stored edition, and with the option off no floor names a form', () => {
+  assert.equal(RELEASE.tight, true);
+  // 2026-11-17 (a knight) has a subtle floor 2 and changes with the option off; 2026-11-28 (a pawn) doesn't (a test below).
+  for (const date of ['2026-11-17', '2026-11-28']) {
+    const release = composeDay(date), stored = getDaily(date);
+    assert.deepEqual(release.daily.composed, stored.composed, `${date}: the stored rooms`);
+    assert.deepEqual(release.daily.generation.certificate.actions, stored.generation.certificate.actions, `${date}: the stored lines`);
+    assert.deepEqual(release.daily.generation.motifs, stored.generation.motifs, `${date}: the stored ideas`);
+    assert.deepEqual(release.dropped, [], `${date}: nothing given up`);
+    assert.ok(composeDay(date, { tight: false }).floors.every((floor) => floor.form === undefined), `${date}: no floor names a form with the option off`);
   }
+  assert.equal(composeDay('2026-11-17').floors[1].form, 'subtle');
 });
 
-// Floor 2 of a tight day, by form. 2026-11-18: a knight against two bishops,
-// the mouth; 2026-11-30: a knight against a lone queen, her corridor alone;
-// 2026-12-11: a knight against two rooks on an Ice day, the pincer;
-// 2026-11-17: a knight against a lone queen, the pincer; 2027-01-01: a bishop
-// against pawns, a plain squeeze picked for tightness.
+// Floor 2 of a tight day, by form, as stored. 2026-12-04: a knight against two
+// rooks, the mouth; 2026-11-30: a knight against a lone queen, her corridor
+// alone; 2026-12-26: a bishop against two rooks, the pincer; 2026-11-17: a
+// knight against a lone queen, the pincer; 2026-11-23: a queen against two
+// rooks, the pincer; 2027-01-01: a bishop against pawns, a plain squeeze
+// picked for tightness.
 const FORMS = [
-  ['2026-11-18', 'bait', 'subtle'], ['2026-11-30', 'bait', 'subtle'], ['2026-12-11', 'squeeze', 'subtle'], ['2026-11-17', 'squeeze', 'subtle'], ['2027-01-01', 'squeeze', 'picked'],
+  ['2026-12-04', 'bait', 'subtle'], ['2026-11-30', 'bait', 'subtle'], ['2026-12-26', 'squeeze', 'subtle'], ['2026-11-17', 'squeeze', 'subtle'], ['2026-11-23', 'squeeze', 'subtle'], ['2027-01-01', 'squeeze', 'picked'],
 ];
 test('each tight form composes, proves and has to be found', () => {
   for (const [date, motif, form] of FORMS) {
@@ -59,7 +65,7 @@ test('each tight form composes, proves and has to be found', () => {
     const room = parRoom(starts[1], floor.line.length, { actionsFrom, idea: (frames, actions) => playsIdea(built, frames, actions, usesIdea) });
     assert.ok(!room.cut && room.wins > 0 && room.off === 0, `${date}: ${room.off} of ${room.wins} wins within par skip the idea`);
     assert.ok(room.keepPar >= 1 && room.keepPar <= TIGHT.firstShare * room.firsts, `${date}: ${room.keepPar} of ${room.firsts} first actions keep par`);
-    // The bot knows no ideas: it makes par in at most half its runs, and the guard still holds.
+    // The bot knows no ideas: it makes par in at most a quarter of its runs, and the guard still holds.
     const runs = Array.from({ length: BOT_GUARD.runs }, (_, run) => playFloor(played[1], { seed: runSeed(daily, 1, run), cap: par + BOT_GUARD.slack + 1 }));
     assert.ok(runs.filter((run) => run.won && run.moves <= par).length <= TIGHT.botPar * BOT_GUARD.runs, `${date}: the bot rarely makes par`);
     assert.ok(runs.every((run) => !(run.won && run.moves <= BOT_GUARD.short)), `${date}: no bot run wins in two`);
@@ -72,18 +78,20 @@ test('a tight day shows its idea plainly on floor 1 and subtly on floor 2', () =
   const raw = getRawDaily('2026-11-17');
   const base = { ...raw, floorSeeds: composedSeeds(raw.date) };
   assert.equal(dayIdea(base), 'squeeze');
-  const tight = composeDay('2026-11-17', { tight: true }), plain = composeDay('2026-11-17');
+  const tight = composeDay('2026-11-17'), plain = composeDay('2026-11-17', { tight: false });
   assert.deepEqual(tight.floors.map((floor) => [floor.motif, floor.form ?? 'plain']), [['squeeze', 'plain'], ['squeeze', 'subtle'], ['net', 'plain']]);
   assert.deepEqual(plain.floors.map((floor) => floor.motif), ['bait', 'squeeze', 'net']);
   assert.deepEqual(tight.floors[2].room, plain.floors[2].room, 'the king floor of another piece than the pawn stays');
-  // 2026-11-13: a rook against rooks on floor 2, which move along its own lines: no burrow holds them, and the day stays as it is.
-  const same = composeDay('2026-11-13', { tight: true }), stored = getDaily('2026-11-13');
+  // 2026-11-13: a rook against rooks on floor 2, which move along its own lines: no burrow holds them, and the option changes nothing.
+  const same = composeDay('2026-11-13'), stored = getDaily('2026-11-13');
   assert.deepEqual(same.daily.composed, stored.composed);
+  assert.deepEqual(same.daily.composed, composeDay('2026-11-13', { tight: false }).daily.composed);
   assert.ok(same.floors.every((floor) => floor.form === undefined));
 });
 
 test('the mouth: sidestep one lunge into the corridor\'s mouth, and the other target lunges there', () => {
-  const { daily, floors, starts } = compose('2026-11-18', true);
+  // 2026-12-04: a knight against two rooks.
+  const { daily, floors, starts } = compose('2026-12-04', true);
   const actions = floors[1].line, states = playLine(starts[1], actions);
   const isTarget = (state, id) => state.enemies.find((foe) => foe.id === id)?.role === daily.targets[1];
   const home = starts[1].player, door = states[1].player;
@@ -100,7 +108,8 @@ test('the mouth: sidestep one lunge into the corridor\'s mouth, and the other ta
 });
 
 test('the pincer: off the key a target dodges out of its other exit, on it every exit is in reach', () => {
-  const { daily, floors, builts, starts } = compose('2026-12-11', true);
+  // 2026-12-26: a bishop against two rooks.
+  const { daily, floors, builts, starts } = compose('2026-12-26', true);
   const built = builts[1], key = built.key, begin = starts[1];
   const targets = (state) => state.enemies.filter((foe) => foe.role === daily.targets[1]);
   const takes = (state) => actionsFrom(state).filter((action) => action.type === 'move' && targets(state).some((foe) => foe.x === action.x && foe.y === action.y));
@@ -129,15 +138,16 @@ test('a tight day leaves a pawn\'s day alone, its king floor included', () => {
 });
 
 test('the faithful idea test reads a skid, and the same squeeze from another square', () => {
-  // 2026-11-24 floor 2, a bishop's squeeze on ice: the planted line aims a square short of the key and skids onto it.
-  const icy = compose('2026-11-24', false);
-  const skid = playLine(icy.starts[1], icy.floors[1].line);
-  assert.equal(icy.floors[1].motif, 'squeeze');
-  assert.ok(skid[1].events.some((event) => event.type === 'slide'), 'the line skids');
-  assert.equal(usesIdea(icy.builts[1], skid, icy.floors[1].line), false, 'the narrow test misreads the square aimed at');
-  assert.equal(playsIdea(icy.builts[1], skid, icy.floors[1].line, usesIdea), true);
-  // 2026-11-16 floor 2, a rook's squeeze planted "d5 b5 wait f5": "b2 b5 wait f5" covers the same landing from another square.
-  const rook = compose('2026-11-16', false);
+  // 2026-11-24 floor 1, a bishop's squeeze on ice: the planted line aims a square short of the key and skids onto it.
+  const icy = compose('2026-11-24', true);
+  const skid = playLine(icy.starts[0], icy.floors[0].line);
+  assert.deepEqual([icy.floors[0].motif, icy.floors[0].ice], ['squeeze', 'skid']);
+  assert.ok(skid.some((state) => state.events.some((event) => event.type === 'slide')), 'the line skids');
+  assert.equal(usesIdea(icy.builts[0], skid, icy.floors[0].line), false, 'the narrow test misreads the square aimed at');
+  assert.equal(playsIdea(icy.builts[0], skid, icy.floors[0].line, usesIdea), true);
+  // 2026-11-16 floor 2 without the day's partner floor and tight forms, a rook's plain squeeze planted
+  // "d5 b5 wait f5" (a fixture: as stored, that floor is a Tandem): "b2 b5 wait f5" covers the same landing from another square.
+  const rook = compose('2026-11-16', false, { partner: false });
   assert.equal(spell(rook.floors[1].line), 'd5 b5 wait f5');
   const other = line('b2 b5 wait f5'), states = playLine(rook.starts[1], other);
   assert.ok(states?.at(-1).exit.open, 'it wins as fast');

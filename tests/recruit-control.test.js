@@ -7,6 +7,8 @@ import { act, createGame, getDaily, legalMoves, recruitChoice, validateSave } fr
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { createGame as createRoom } from '../src/rules.js';
+import { proveComposed, certificateMode } from '../src/generation.js';
+import { EDITIONS } from '../src/editions.js';
 import { botRun } from '../src/bot.js';
 import { decodeRoute, encodeRoute } from '../src/route-code.js';
 import { goldAtRisk } from '../src/cave-in.js';
@@ -279,12 +281,12 @@ test('recruitChoice previews the recruit’s squares without changing anything',
   assert.ok(recruitChoice(state, wait()).moves.length > 0);
 });
 
-// Certified routes leave the recruit on Auto. Since an order may name any legal
-// square, a Manual player can always play exactly the move Auto would have.
-test('Auto is unchanged: every recruit move on certified routes can be ordered by hand, to the same result', () => {
+// Off a partner floor, certified routes leave the recruit to move itself (Auto). Since an
+// order may name any legal square, a player can always play exactly the move it would have.
+test('Auto is unchanged: every recruit move a certified route leaves to the recruit can be ordered by hand, to the same result', () => {
   const strip = ({ message, notes, ...rest }) => rest;
   let mirrored = 0;
-  // Planted lines recruit only on the king floor, a move or two each, so it takes a few weeks of days.
+  // Those lines recruit only on the king floor, a move or two each, so it takes a few weeks of days.
   for (let day = 0; day < 60 && mirrored <= 20; day++) {
     const date = new Date(Date.UTC(2026, 10, 6 + day)).toISOString().slice(0, 10);
     const daily = getDaily(date);
@@ -292,7 +294,8 @@ test('Auto is unchanged: every recruit move on certified routes can be ordered b
     for (const action of daily.generation.certificate.actions) {
       const auto = act(state, action);
       const phase = auto.events.findIndex((event) => event.type === 'companion-phase');
-      if (phase >= 0) {
+      // A partner floor's moves carry their own orders: nothing is left to the recruit there.
+      if (phase >= 0 && action.recruit === undefined) {
         const moved = auto.events.slice(phase).find((event) => event.type === 'companion-move');
         const order = moved ? { x: moved.x, y: moved.y } : 'hold';
         const choice = recruitChoice(state, action);
@@ -311,21 +314,34 @@ test('Auto is unchanged: every recruit move on certified routes can be ordered b
   assert.ok(mirrored > 20, `${mirrored} recruit moves mirrored`);
 });
 
-test('certificates carry no recruit orders: the route code has none, and the verifier refuses one', () => {
-  const daily = getDaily('2026-11-13');
-  const { actions, metrics } = daily.generation.certificate;
-  assert.ok(actions.every((action) => action.recruit === undefined));
-  assert.deepEqual(decodeRoute(encodeRoute(actions)), actions);
-  // Proved on the day's twin without its hint powerups (src/generation.js proveComposed).
-  const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  const replay = verifyWinningRoute(createRoom(twin), actions);
-  assert.equal(replay.valid, true, replay.reason); assert.deepEqual(replay.metrics, metrics);
-  const ordered = actions.map((action) => (action.type === 'descend' ? action : { ...action, recruit: 'hold' }));
-  const refused = verifyWinningRoute(createRoom(twin), ordered);
-  assert.equal(refused.valid, false); assert.match(refused.reason, /Only chess moves/);
-  // The Dungeon Bot replays the same Auto route.
-  const bot = botRun(daily);
-  assert.equal(bot.frames.length, actions.length + 1); assert.equal(bot.frames.at(-1).status, 'won');
+test('a certificate carries recruit orders on its partner floor alone: the route code keeps them, and the verifier refuses any other', () => {
+  // The first stored officer's day without a partner floor, and the first with one.
+  const plain = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner === undefined && getRawDaily(date).playerPiece !== 'pawn');
+  const tandem = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner !== undefined);
+  for (const date of [plain, tandem]) {
+    const daily = getDaily(date), partner = daily.generation.partner ?? null;
+    const { actions, metrics } = daily.generation.certificate;
+    let floor = 0;
+    for (const action of actions) {
+      if (action.recruit !== undefined) assert.equal(floor, partner, `${date}: an order on floor ${floor + 1}`);
+      if (action.type === 'descend') floor++;
+    }
+    assert.equal(actions.some((action) => action.recruit !== undefined), partner !== null, date);
+    assert.deepEqual(decodeRoute(encodeRoute(actions)), actions);
+    assert.equal(encodeRoute(actions), EDITIONS[date].route, `${date}: the stored route`);
+    // Proved on the day's twin without its hint powerups (src/generation.js proveComposed).
+    const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
+    const replay = verifyWinningRoute(createRoom(twin), actions, certificateMode(partner));
+    assert.equal(replay.valid, true, replay.reason); assert.deepEqual(replay.metrics, metrics);
+    // Every other move ordered too: a route whose recruit moves itself takes no order, and the day's proof none off its partner floor.
+    const ordered = actions.map((action) => (action.type === 'descend' || action.recruit !== undefined ? action : { ...action, recruit: 'hold' }));
+    const refused = verifyWinningRoute(createRoom(twin), ordered);
+    assert.equal(refused.valid, false); assert.match(refused.reason, /Only chess moves/);
+    assert.equal(proveComposed(daily, ordered, { partner }).valid, false, date);
+    // The Dungeon Bot replays the same route, its orders included.
+    const bot = botRun(daily);
+    assert.equal(bot.frames.length, actions.length + 1); assert.equal(bot.frames.at(-1).status, 'won');
+  }
 });
 
 test('runs played with orders keep valid saves on every floor', () => {

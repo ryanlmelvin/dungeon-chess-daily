@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, canChoosePiece, createGame, createPracticeGame, getDaily, isOfficialRun, legalMoves, PIECES, unreachablePickups, validateSave } from '../src/game.js';
-import { createGame as createRawGame } from '../src/rules.js';
+import { createGame as createRawGame, CHEST_GOLD } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { DIFFICULTY_TIERS, TIER_IDS } from '../src/difficulty.js';
 import { monsterSmarts } from '../src/monster-ai.js';
@@ -21,6 +21,9 @@ const layout = (state) => ({
 const kept = (state) => ({ objective: state.objective, enemies: layout(state).enemies });
 const walls = (state) => state.map.flatMap((row, y) => [...row].flatMap((cell, x) => (cell === '#' ? [`${x},${y}`] : [])));
 const pickups = (state) => state.items.map(({ x, y, ...item }) => JSON.stringify(item)).sort();
+// The chest is the daily's own second goal: a practice room is the official one without it.
+const isChest = (item) => item.type === 'chest';
+const chestless = (state) => ({ ...state, items: state.items.filter((item) => !isChest(item)) });
 
 // Complete the room in a fixture so layout/validation tests exercise real
 // descent without trying to solve an intentionally uncertified variant.
@@ -53,15 +56,16 @@ test('all twelve choices keep every official room across all floors, fitted to t
       let practice = createPracticeGame(daily, { piece, color });
       for (let floor = 0; floor < 3; floor++) {
         const label = `${date}: ${color} ${piece}, floor ${floor}`;
-        // The day's own piece, and a pawn, play the official room as it is.
-        if (piece === daily.playerPiece || piece === 'pawn') assert.deepEqual(layout(practice), layout(floors[floor]), label);
+        assert.ok(!practice.items.some(isChest), `${label}: no chest in practice`);
+        // The day's own piece, and a pawn, play the official room as it is, but for its chest.
+        if (piece === daily.playerPiece || piece === 'pawn') assert.deepEqual(layout(practice), layout(chestless(floors[floor])), label);
         else {
           // Another piece keeps its monsters and pickups and may lose walls. The rooms are
           // built around the day's piece, so it may find some out of reach, but it is never
           // boxed in at its start: some square it reaches lies two or more steps away.
           assert.deepEqual(kept(practice), kept(floors[floor]), label);
           assert.ok(walls(practice).every((wall) => walls(floors[floor]).includes(wall)), `${label}: practice only clears walls`);
-          assert.deepEqual(pickups(practice), pickups(floors[floor]), label);
+          assert.deepEqual(pickups(practice), pickups(chestless(floors[floor])), label);
           const table = distanceTable(practice.map, piece), from = practice.player.y * 8 + practice.player.x;
           assert.ok(Array.from({ length: 64 }, (_, to) => to).some((to) => table[from * 64 + to] !== UNREACHABLE
             && Math.max(Math.abs((to % 8) - practice.player.x), Math.abs(Math.floor(to / 8) - practice.player.y)) > 1), `${label}: boxed in`);
@@ -215,7 +219,7 @@ test('every monster ruleset keeps the official rooms on every floor and changes 
       let practice = createPracticeGame(daily, { difficulty });
       for (let floor = 0; floor < 3; floor++) {
         const label = `${date}: ${difficulty} monsters, floor ${floor}`;
-        assert.deepEqual(layout(practice), layout(floors[floor]), label);
+        assert.deepEqual(layout(practice), layout(chestless(floors[floor])), label);
         // The ruleset sets how smart the monsters are and, as on its weekday, the cave-in countdown.
         assert.equal(practice.difficulty, difficulty, label);
         assert.equal(monsterSmarts(practice), DIFFICULTY_TIERS[difficulty].rank, label);
@@ -226,6 +230,32 @@ test('every monster ruleset keeps the official rooms on every floor and changes 
         if (floor < 2) practice = nextFloor(practice);
       }
     }
+  }
+});
+
+test('practice rooms hold no chest: the official run keeps its own, and a practice save can\'t claim one', () => {
+  // The first stored day whose floor 1 holds a chest.
+  const day = Array.from({ length: 90 }, (_, n) => new Date(Date.UTC(2026, 10, 1 + n)).toISOString().slice(0, 10)).find((date) => getDaily(date).composed[0].items.some(isChest));
+  assert.ok(day, 'a day with a chest on floor 1');
+  const daily = getDaily(day);
+  const official = createGame(daily);
+  assert.equal(official.items.filter(isChest).length, 1, 'the official run has its chest');
+  const otherPiece = PIECES.find((piece) => piece !== daily.playerPiece && piece !== 'pawn');
+  const otherTier = TIER_IDS.find((tier) => tier !== daily.difficulty);
+  // Even the day's own piece, colour and monsters: practice is no second try at the mark.
+  for (const options of [{}, { color: 'black' }, { piece: otherPiece }, { piece: 'pawn' }, { difficulty: otherTier }]) {
+    const label = `${day}: ${JSON.stringify(options)}`;
+    const practice = createPracticeGame(daily, options);
+    assert.ok(!practice.items.some(isChest), label);
+    assert.deepEqual(practice.composed, daily.composed, `${label}: the day's rooms travel with the save as they are`);
+    assert.equal(validateSave(roundTrip(practice), day, { practice: true }), true, label);
+    const claimed = structuredClone(practice); claimed.feats.push({ floor: 0, kind: 'chest' }); claimed.gold += CHEST_GOLD;
+    assert.equal(validateSave(claimed, day, { practice: true }), false, `${label}: a chest feat`);
+    const laid = structuredClone(practice); laid.items.push(official.items.find(isChest));
+    assert.equal(validateSave(laid, day, { practice: true }), false, `${label}: a chest laid back in`);
+    // Every later floor is chestless too.
+    let state = practice;
+    for (let floor = 1; floor < 3; floor++) { state = nextFloor(state); assert.ok(!state.items.some(isChest), `${label}, floor ${floor}`); }
   }
 });
 

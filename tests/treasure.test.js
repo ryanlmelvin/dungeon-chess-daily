@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Treasure (src/treasure.js, a dev preview): the chest as src/rules.js plays
-// it, and the chest the composer places off each floor's planted line.
+// Treasure (src/treasure.js): the chest as src/rules.js plays it, and the
+// chest the composer places off each floor's planted line, where one costs
+// the spare move and isn't the bot's by accident.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, act, resetFloor, validateSave, getShareText, treasureMark, chestTaken, floorScoredMoves, CHEST_GOLD, TREASURE_MARK } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
+import { EDITIONS } from '../src/editions.js';
+import { encodeRooms, decodeRooms } from '../src/room-code.js';
 
 // A knight's day with hand-built rooms: the knight starts on e2, the floor's
 // one target sleeps on f5 (held, so nothing moves), a chest lies on d4 and a
@@ -111,19 +114,120 @@ test('validateSave checks a save\'s chests', () => {
   assert.ok(!valid(forge(bare.state, (save) => { save.feats.push({ floor: 0, kind: 'chest' }); save.gold += CHEST_GOLD; }), bare.daily), 'a chest feat on a floor that has none');
 });
 
-// The composer's chests. 2026-11-12 is a bishop's Breach day, 2026-11-24 a
-// bishop's Ice day and 2026-11-19 a pawn's day.
-const DATES = ['2026-11-12', '2026-11-24', '2026-11-19'];
+// The composer's chests, as stored. 2026-11-12 is a bishop's Breach day,
+// 2026-11-14 a knight's plain day, 2026-11-24 a bishop's Ice day (its floor 2
+// a Tandem, which gets no chest) and 2026-11-19 a pawn's day.
+const DATES = ['2026-11-12', '2026-11-14', '2026-11-24', '2026-11-19'];
 const index = (tile) => tile.y * 8 + tile.x;
 const withoutHints = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) });
 
-test('composeDay places chests only when asked, and changes nothing else', async () => {
+// A rook's day with one hand-built room: the rook starts on e2 and the floor's one target sleeps on b5,
+// two moves away through e5 (the planted line) or through b2, three through many other squares.
+const B5 = { x: 1, y: 3 }, E5 = { x: 4, y: 3 }, B2 = { x: 1, y: 6 };
+function rookFloor() {
+  const raw = getRawDaily('2026-11-13');
+  assert.equal(raw.playerPiece, 'rook');
+  const room = { map: Array(8).fill('........'), enemies: [{ ...B5, cast: 0, held: 9 }], items: [] };
+  const start = (first) => createGame({ ...raw, composed: [first, room, room] });
+  return { room, line: [move(E5), move(B5)], start };
+}
+
+test('a chest costs the spare move: no square a win of the line\'s length passes through', async () => {
+  const { actionsFrom } = await import('../src/composer.js');
+  const { placeTreasure, parWins, takesTreasure, TREASURE_BOT } = await import('../src/treasure.js');
+  const { room, line, start } = rookFloor(), par = line.length + 1;
+  const placed = placeTreasure({ room, line }, { seed: 7, start, actionsFrom });
+  assert.ok(placed.treasure, 'the floor gets a chest');
+  const chest = placed.room.items.find((item) => item.type === 'chest');
+  assert.deepEqual([chest.x, chest.y], [placed.treasure.x, placed.treasure.y]);
+  assert.deepEqual(placed.room, { ...room, items: [chest] }, 'the room is the same but for its chest');
+  // b2 qualifies by the first rule (a par win passes through it, off the line), but "b2 b5" wins in two, the line's own length.
+  const quick = parWins(start(room), par - 1, { actionsFrom, hits: true });
+  assert.equal(quick.wins, 2, 'two wins of the line\'s length: through e5 and through b2');
+  assert.ok(quick.through[index(B2)] > 0 && quick.through[index(E5)] > 0);
+  assert.equal(quick.through[index(chest)] + quick.last[index(chest)], 0, 'none takes the chest');
+  assert.notDeepEqual([chest.x, chest.y], [B2.x, B2.y]);
+  assert.ok(placed.treasureChecks.spare < placed.treasureChecks.squares, 'the check ruled squares out');
+  assert.equal(placed.treasureChecks.calm, placed.treasureChecks.spare, 'and the bot, which goes straight for the target, stumbles on none');
+  // So the chest's line is exactly par long: under par, or even with treasure.
+  assert.equal(placed.treasure.line.length, par);
+  assert.ok(takesTreasure(start(placed.room), placed.treasure.line, par));
+  assert.ok(placed.treasure.marks <= TREASURE_BOT.share * TREASURE_BOT.runs);
+});
+
+test('a floor whose every qualifying square lies on a win of the line\'s length gets no chest', async () => {
+  const { actionsFrom } = await import('../src/composer.js');
+  const { placeTreasure } = await import('../src/treasure.js');
+  // The knight's room above: the sleeping target on f5 is two jumps away through g3 (the line) or through d4, and
+  // a knight has no three-jump way there, so d4 is the only square a par win passes through, and "d4 f5" wins in two.
+  const { daily } = day({ plain: true });
+  const start = (room) => createGame({ ...daily, composed: [room, daily.composed[1], daily.composed[2]] });
+  const placed = placeTreasure({ room: daily.composed[0], line: [move(G3), move(F5)] }, { seed: 7, start, actionsFrom });
+  assert.equal(placed.treasure, null);
+  assert.equal(placed.treasureMiss, 'spare');
+  assert.deepEqual(placed.treasureChecks, { squares: 1, spare: 0, calm: 0, unchecked: index(D4) }, 'the first rule alone would lay it on d4');
+  assert.equal(placed.room, undefined, 'the floor keeps its room');
+});
+
+test('a chest taken on the move that mates still counts against the spare move', async () => {
+  const { composeDay, actionsFrom } = await import('../src/composer.js');
+  const { parWins } = await import('../src/treasure.js');
+  const { certifiedFloors } = await import('../src/human-bot.js');
+  // 2026-11-17's king floor (a knight): its one qualifying square is where another mate of the line's length lands,
+  // door still shut as the knight arrives, so a chest there would be taken on the way to an under-par win.
+  const { daily, floors } = composeDay('2026-11-17');
+  const floor = floors[2], par = floor.line.length + 1;
+  assert.equal(floor.treasure, null);
+  assert.equal(floor.treasureMiss, 'spare');
+  const begin = certifiedFloors(withoutHints(daily)).starts[2];
+  const quick = parWins(begin, par - 1, { actionsFrom, hits: true });
+  const square = floor.treasureChecks.unchecked;
+  assert.ok(Number.isInteger(square), 'the first rule alone would lay a chest');
+  assert.ok(quick.through[square] + quick.last[square] > 0, 'a win of the line\'s length takes it');
+});
+
+test('one batch of the bot\'s runs answers for every square: a chest never changes its play', async () => {
   const { composeDay } = await import('../src/composer.js');
+  const { botMarks, TREASURE_BOT } = await import('../src/treasure.js');
+  const { certifiedFloors, playFloor, runSeed } = await import('../src/human-bot.js');
+  // 2026-11-16 (a rook): its king floor's chest was chosen after the bot ruled four squares out.
+  const { daily, floors } = composeDay('2026-11-16');
+  const chestless = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => item.type !== 'chest') })) };
+  const played = certifiedFloors(daily), bare = certifiedFloors(chestless);
+  let judged = 0;
+  floors.forEach((floor, f) => {
+    if (!floor.treasure) return;
+    judged++;
+    const par = floor.line.length + 1, seedOf = (run) => runSeed(daily, f, run);
+    let direct = 0;
+    for (let run = 0; run < TREASURE_BOT.runs; run++) {
+      const withChest = playFloor(played.starts[f], { seed: seedOf(run), cap: par + 1 }), without = playFloor(bare.starts[f], { seed: seedOf(run), cap: par + 1 });
+      assert.deepEqual(withChest.actions, without.actions, `floor ${f + 1}, run ${run}: the same moves with the chest in the room`);
+      if (chestTaken(withChest.state, f) && withChest.won && withChest.moves <= par) direct++;
+    }
+    assert.equal(botMarks(played.starts[f], par, seedOf)[index(floor.treasure)], direct, `floor ${f + 1}: the batch counts the chest's square as its own runs do`);
+    assert.equal(floor.treasure.marks, direct, `floor ${f + 1}: as the composer counted`);
+    assert.ok(direct <= TREASURE_BOT.share * TREASURE_BOT.runs, `floor ${f + 1}: seldom by accident`);
+  });
+  assert.ok(judged >= 2);
+  assert.ok(floors[2].treasureChecks.calm < floors[2].treasureChecks.spare, 'the bot ruled squares out on the king floor');
+  // 2026-12-31's floor 1 (a knight): the bot stumbles on every square that costs the spare move, so it has no chest.
+  const lost = composeDay('2026-12-31').floors[0];
+  assert.deepEqual([lost.treasure, lost.treasureMiss], [null, 'bot']);
+  assert.ok(lost.treasureChecks.spare > 0 && lost.treasureChecks.calm === 0);
+});
+
+test('composeDay places chests unless told not to, and they change nothing else', async () => {
+  const { composeDay, RELEASE } = await import('../src/composer.js');
+  assert.equal(RELEASE.treasure, true);
   for (const date of DATES) {
-    const plain = composeDay(date), rich = composeDay(date, { treasure: true });
-    assert.ok(plain.daily.composed.every((room) => room.items.every((item) => item.type !== 'chest')), `${date}: no chest unless asked`);
+    const plain = composeDay(date, { treasure: false }), rich = composeDay(date);
+    assert.ok(plain.daily.composed.every((room) => room.items.every((item) => item.type !== 'chest')), `${date}: no chest with the option off`);
     assert.equal(plain.daily.generation.treasure, undefined);
     assert.deepEqual(rich.daily.generation.certificate.actions, plain.daily.generation.certificate.actions, `${date}: the planted lines stay`);
+    // The release configuration is the stored edition, chests and all.
+    assert.equal(encodeRooms(rich.daily.composed), EDITIONS[date].rooms, `${date}: the stored rooms`);
+    assert.deepEqual(decodeRooms(EDITIONS[date].rooms), rich.daily.composed, `${date}: and the room code gives the chests back`);
     rich.floors.forEach((floor, f) => {
       const chests = floor.room.items.filter((item) => item.type === 'chest');
       assert.equal(chests.length, floor.treasure ? 1 : 0);
@@ -142,14 +246,14 @@ test('composeDay places chests only when asked, and changes nothing else', async
   }
 });
 
-test('each chest lies off its planted line and its proving line takes it within par', async () => {
+test('each chest lies off its planted line and its proving line takes it at par, never under', async () => {
   const { composeDay, shortestWins, actionsFrom } = await import('../src/composer.js');
-  const { parWins, takesTreasure } = await import('../src/treasure.js');
+  const { parWins, takesTreasure, TREASURE_BOT } = await import('../src/treasure.js');
   const { certifiedFloors } = await import('../src/human-bot.js');
   const { routeTransition } = await import('../src/fairness.js');
   let chests = 0;
   for (const date of DATES) {
-    const { daily, floors } = composeDay(date, { treasure: true });
+    const { daily, floors } = composeDay(date);
     const played = certifiedFloors(daily), searched = certifiedFloors(withoutHints(daily));
     floors.forEach((floor, f) => {
       const { treasure, room, line } = floor, par = line.length + 1;
@@ -163,8 +267,8 @@ test('each chest lies off its planted line and its proving line takes it within 
         ...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index);
       assert.ok(!off.includes(index(treasure)), `${where}: the chest lies off the line`);
       assert.equal(room.map[treasure.y][treasure.x], '.', `${where}: on an open square`);
-      // The proving line, as played on the real room: a win within par, never captured, the chest taken, so the mark is earned.
-      assert.ok(treasure.line.length <= par);
+      // The proving line, as played on the real room: a win at par, never captured, the chest taken, so the mark is earned.
+      assert.equal(treasure.line.length, par, `${where}: the chest costs the spare move`);
       assert.ok(takesTreasure(played.starts[f], treasure.line, par), `${where}: the proving line takes the chest within par`);
       let state = played.starts[f];
       for (const action of treasure.line) state = act(state, action);
@@ -175,7 +279,14 @@ test('each chest lies off its planted line and its proving line takes it within 
       assert.equal(counted.through[index(treasure)], treasure.through);
       assert.ok(treasure.through >= 1 && treasure.through <= counted.wins);
       assert.equal(shortestWins(searched.starts[f], line.length - 1), null, `${where}: nothing shorter than the planted line`);
+      // The two checks: no win scoring the line's length takes it (captures counted, the winning move included), and the bot seldom does at par.
+      const quick = parWins(searched.starts[f], par - 1, { actionsFrom, hits: true });
+      assert.ok(!quick.cut && quick.wins >= 1, `${where}: the planted line is such a win`);
+      assert.equal(quick.through[index(treasure)] + quick.last[index(treasure)], 0, `${where}: under par, or even with treasure`);
+      assert.ok(treasure.marks <= TREASURE_BOT.share * TREASURE_BOT.runs, `${where}: the bot's marks`);
     });
+    // A floor without one says why.
+    for (const floor of floors) if (!floor.treasure) assert.ok(['none', 'spare', 'bot', 'partner'].includes(floor.treasureMiss), `${date}: ${floor.treasureMiss}`);
   }
   assert.ok(chests >= 6, 'most floors of these days carry a chest');
 });
@@ -184,7 +295,7 @@ test('a run that takes every chest at par validates all the way and marks its sh
   const { composeDay } = await import('../src/composer.js');
   const { floorPars } = await import('../src/par.js');
   const date = '2026-11-12';
-  const { daily, floors } = composeDay(date, { treasure: true });
+  const { daily, floors } = composeDay(date);
   const pars = floorPars(daily);
   assert.deepEqual(pars, floors.map((floor) => floor.line.length + 1));
   let state = createGame(daily);

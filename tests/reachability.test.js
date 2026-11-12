@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, unreachablePickups } from '../src/rules.js';
-import { getDaily } from '../src/generation.js';
+import { getDaily, certificateMode } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { EDITIONS } from '../src/editions.js';
 import { withRooms } from './fixtures/rooms.js';
@@ -129,10 +129,14 @@ test('certification rejects an unreachable pickup even when the unchanged route 
   const daily = twinOf(getDaily(date));
   const initial = createGame(daily);
   const actions = daily.generation.certificate.actions;
-  assert.equal(verifyWinningRoute(initial, actions).valid, true);
+  // Verified as the day is proved: the recruit on orders if it has a partner floor.
+  const mode = certificateMode(daily.generation.partner);
+  assert.equal(verifyWinningRoute(initial, actions, mode).valid, true);
+  // A coin on the colour the bishop never stands on (its start square's other colour).
+  const offColour = 1 - (initial.player.x + initial.player.y) % 2;
   let impossible;
   for (let y = 0; y < 8 && !impossible; y++) for (let x = 0; x < 8; x++) {
-    if ((x + y) % 2 === 1 && initial.map[y][x] !== '#' && !initial.items.some((item) => item.x === x && item.y === y)) {
+    if ((x + y) % 2 === offColour && initial.map[y][x] !== '#' && !initial.items.some((item) => item.x === x && item.y === y)) {
       impossible = { type: 'coin', x, y }; break;
     }
   }
@@ -141,6 +145,6 @@ test('certification rejects an unreachable pickup even when the unchanged route 
   let state = initial;
   for (const action of actions) state = act(state, action);
   assert.equal(state.status, 'won', 'the added stationary coin does not obstruct the existing solution');
-  const proof = verifyWinningRoute(initial, actions);
+  const proof = verifyWinningRoute(initial, actions, mode);
   assert.equal(proof.valid, false, 'winning the dungeon does not excuse an unreachable pickup');
 });

@@ -488,7 +488,7 @@ test('every modifier certifies: its stored editions prove under it', () => {
     assert.equal(daily.modifier, modifier);
     const initial = createGame(daily);
     assert.equal(initial.modifier, modifier === 'none' ? undefined : modifier);
-    const proof = proveComposed(daily, daily.generation.certificate.actions, { saves: true });
+    const proof = proveComposed(daily, daily.generation.certificate.actions, { saves: true, partner: daily.generation.partner ?? null });
     assert.equal(proof.valid, true, `${modifier}: ${proof.reason}`);
     // An Ice day's rooms lay their own ice around the line.
     if (modifier === 'ice') assert.ok(daily.composed.every((room) => room.ice?.length === ICE_TILES), 'every Ice room lays its own tiles');

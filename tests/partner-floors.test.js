@@ -1,17 +1,17 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// Partner floors (src/composer.js, composeDay's `partner` option, on only in
-// the dev preview): a tandem floor's two targets guard each other, and the
-// floor is won by the recruit taking one on your order and you the other.
+// Partner floors (src/composer.js, composeDay's `partner` option, part of the
+// release configuration): a tandem floor's two targets guard each other, and
+// the floor is won by the recruit taking one on your order and you the other.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeDay, composeTandem, partnerFloors, shortestWins, hastyScore, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES } from '../src/composer.js';
-import { proveComposed } from '../src/generation.js';
+import { composeDay, composeTandem, partnerFloors, shortestWins, hastyScore, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES, RELEASE } from '../src/composer.js';
+import { proveComposed, getDaily } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
 import { act, closeAttacker } from '../src/rules.js';
 import { certifiedFloors } from '../src/human-bot.js';
 import { floorPars } from '../src/par.js';
-import { botRun } from '../src/bot.js';
+import { botRun, replayNote } from '../src/bot.js';
 import { EDITIONS } from '../src/editions.js';
 import { encodeRoute } from '../src/route-code.js';
 import { encodeRooms } from '../src/room-code.js';
@@ -21,20 +21,34 @@ import { composedDayFor } from '../src/composed-preview.js';
 const DAYS = ['2026-11-15', '2026-11-18', '2026-11-22'];
 // A bishop against pawns and a queen: no tandem.
 const NO_MATCHUP = '2026-11-12';
+// A day in the release configuration (its partner floor included, as stored), and the same day without one.
 const composed = new Map();
 const compose = (date, partner) => { const key = `${date}:${partner}`; if (!composed.has(key)) composed.set(key, composeDay(date, { partner })); return composed.get(key); };
 const day = (date) => compose(date, true), plain = (date) => compose(date, false);
 const isTarget = (state, foe) => foe.role === state.objective.piece;
 
-test('with the option off a day composes as its stored edition, tandem matchup or not', () => {
-  for (const date of [DAYS[0], NO_MATCHUP]) {
-    const { daily } = date === DAYS[0] ? composeDay(date) : plain(date);
-    assert.equal(daily.generation.partner, undefined);
-    assert.ok(!daily.generation.motifs.includes(PARTNER_MOTIF));
-    assert.equal(encodeRooms(daily.composed), EDITIONS[date].rooms, `${date} rooms`);
-    assert.equal(encodeRoute(daily.generation.certificate.actions), EDITIONS[date].route, `${date} lines`);
+test('the release configuration composes each day as its stored edition, tandem day or not', () => {
+  assert.equal(RELEASE.partner, true);
+  for (const date of [...DAYS, NO_MATCHUP]) {
+    const { daily, dropped } = composeDay(date), entry = EDITIONS[date];
+    assert.deepEqual(daily, day(date).daily, `${date}: partner floors are on by default`);
+    assert.deepEqual(dropped, [], `${date}: nothing given up`);
+    assert.equal(encodeRooms(daily.composed), entry.rooms, `${date} rooms`);
+    assert.equal(encodeRoute(daily.generation.certificate.actions), entry.route, `${date} lines`);
+    // The stored entry names the partner floor, and the edition that loads carries it with its orders.
+    assert.equal(entry.partner, daily.generation.partner, `${date} partner floor`);
+    const stored = getDaily(date);
+    assert.equal(stored.generation.partner, daily.generation.partner);
+    assert.deepEqual(stored.generation.certificate.actions, daily.generation.certificate.actions);
+    assert.deepEqual(stored.generation.motifs, daily.generation.motifs);
+    assert.deepEqual(stored.composed, daily.composed);
   }
-  assert.deepEqual(plain(DAYS[0]).daily, composeDay(DAYS[0]).daily, 'partner: false is the default');
+  assert.equal(EDITIONS[NO_MATCHUP].partner, undefined, 'a day without one stores none');
+  // With the option off the day has no partner floor and no tandem.
+  const off = plain(DAYS[0]).daily;
+  assert.equal(off.generation.partner, undefined);
+  assert.ok(!off.generation.motifs.includes(PARTNER_MOTIF));
+  assert.ok(off.generation.certificate.actions.every((action) => action.recruit === undefined));
 });
 
 test('a day with no tandem matchup composes the same with the option on', () => {
@@ -124,14 +138,14 @@ test('the day proves with the recruit steered on its partner floor, and only so'
   for (const date of DAYS) {
     const { daily } = day(date), floor = daily.generation.partner, { actions } = daily.generation.certificate;
     assert.equal(proveComposed(daily, actions, { saves: true, partner: floor }).valid, true, date);
-    // A certificate on Auto carries no orders and joins no floor 1–2 recruit.
+    // A certificate whose recruit moves itself carries no orders and joins no floor 1–2 recruit.
     assert.equal(proveComposed(daily, actions, { saves: true }).valid, false);
     // The orders belong to the partner floor alone.
     assert.equal(proveComposed(daily, actions, { partner: floor === 0 ? 1 : 0 }).valid, false);
-    // Left on Auto, the recruit never takes a twin: the same moves without their orders don't win.
+    // Left to itself, the recruit never takes a twin: the same moves without their orders don't win.
     let state = certifiedFloors(daily).starts[floor];
     for (const { recruit, ...action } of daily.generation.certificate.actions.slice(...floorSpan(actions, floor))) state = act(state, action);
-    assert.equal(state.exit.open, false, `${date}: Auto wins the line`);
+    assert.equal(state.exit.open, false, `${date}: the line wins without its orders`);
     // The Dungeon Bot replays the lines, orders and all.
     assert.deepEqual(botRun(daily).floors[floor], TANDEM_MOVES);
   }
@@ -151,18 +165,46 @@ test('composeTandem composes only its matchups', () => {
   assert.equal(composeTandem({ ...getRawDaily(DAYS[0]), difficulty: paired.difficulty, modifier: paired.modifier, floorSeeds: paired.floorSeeds }, 2), null, 'the king floor');
 });
 
-test('the dev preview composes partner floors unless told partner=0', () => {
-  // Treasure (the preview's other option) off, to see the partner floor alone.
-  const on = composedDayFor(`?composed=${DAYS[0]}&treasure=0`), off = composedDayFor(`?composed=${DAYS[0]}&treasure=0&partner=0`);
+test('the dev preview composes the stored edition, and no partner floor when told partner=0', () => {
+  const on = composedDayFor(`?composed=${DAYS[0]}`), off = composedDayFor(`?composed=${DAYS[0]}&partner=0`);
   assert.deepEqual(on, day(DAYS[0]).daily);
+  assert.equal(encodeRooms(on.composed), EDITIONS[DAYS[0]].rooms, 'the preview is the stored edition');
+  assert.equal(encodeRoute(on.generation.certificate.actions), EDITIONS[DAYS[0]].route);
+  assert.deepEqual(off, plain(DAYS[0]).daily);
   assert.equal(off.generation.partner, undefined);
-  assert.equal(encodeRooms(off.composed), EDITIONS[DAYS[0]].rooms);
 });
 
-test('with treasure on too, a partner floor keeps its room and gets no chest', () => {
-  const { daily, floors } = composeDay(DAYS[0], { partner: true, treasure: true }), floor = daily.generation.partner;
+test('a partner floor gets no chest: its room is the same with treasure on or off', () => {
+  const { daily, floors } = day(DAYS[0]), floor = daily.generation.partner;
   assert.equal(floors[floor].motif, PARTNER_MOTIF);
-  assert.deepEqual(daily.composed[floor], day(DAYS[0]).daily.composed[floor]);
+  assert.equal(floors[floor].treasureMiss, 'partner');
   assert.equal(daily.generation.treasure[floor], null);
   assert.ok(!daily.composed[floor].items.some((item) => item.type === 'chest'));
+  assert.deepEqual(daily.composed[floor], composeDay(DAYS[0], { treasure: false }).daily.composed[floor]);
+  // The day's other floors may carry one.
+  assert.ok(daily.composed.some((room, f) => f !== floor && room.items.some((item) => item.type === 'chest')), 'another floor of the day has a chest');
+});
+
+test('the Dungeon Bot\'s replay of a stored Tandem day shows the recruit\'s ordered moves and speaks of the bot', () => {
+  for (const date of DAYS) {
+    const daily = getDaily(date), floor = daily.generation.partner, run = botRun(daily);
+    assert.ok(run, `${date}: the stored lines replay`);
+    assert.deepEqual(run.floors[floor], TANDEM_MOVES);
+    assert.deepEqual(floorPars(daily), run.floors.map((moves) => moves + 1), `${date}: par is each line plus one`);
+    const frames = run.frames.filter((frame, n) => n > 0 && frame.floor === floor && !frame.events.some((event) => event.type === 'descend'));
+    assert.equal(frames.length, TANDEM_MOVES);
+    // Move 1: the recruit joins (and is posted, or held). Move 2: it takes a twin where it was sent. Move 3: the bot takes the other.
+    const orders = daily.generation.certificate.actions.filter((action) => action.recruit !== undefined);
+    assert.ok(frames[0].events.some((event) => event.type === 'companion-recruit'), `${date}: the recruit joins`);
+    const sent = orders[1].recruit;
+    assert.ok(frames[1].events.some((event) => event.type === 'companion-move' && event.x === sent.x && event.y === sent.y), `${date}: the recruit moves where it was ordered`);
+    assert.ok(frames[1].events.some((event) => event.type === 'companion-capture'), `${date}: and takes a twin`);
+    assert.ok(frames[2].exit.open);
+    // What the replay says: told of the bot, never of "you".
+    const notes = run.frames.slice(1).map(replayNote);
+    for (const note of notes) assert.doesNotMatch(note, /\byou(r|rs)?\b/i, `${date}: "${note}"`);
+    assert.match(replayNote(frames[0]), /joins the bot this floor\./, date);
+    assert.doesNotMatch(replayNote(frames[0]), /move it after/);
+    assert.match(replayNote(frames[2]), /The bot completed the challenge ✓ in 3 moves\./, date);
+  }
 });

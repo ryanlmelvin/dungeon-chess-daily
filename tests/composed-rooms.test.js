@@ -85,18 +85,20 @@ test('a pawn player composes days that mix tempo and crown floors and three mate
 });
 
 // Ice and Breach days keep their modifier on composed floors (src/composer.js).
-// 2026-11-24 is an Ice bishop day. Its first floor's line aims one square
-// short of the key square, on ice, and skids onto it ('skid'), and so does
-// its king floor's mate; on its second floor the key square is ice too, so a
-// move aimed straight at it skids past and only the skid stops there
-// ('lock'). Every room lays its own ice, never on a wall, under a monster, on
-// the start or on the exit, and the day wins as played, never captured.
+// 2026-12-14 is an Ice queen day. On its first floor the key square is ice,
+// so a move aimed straight at it skids past and only a skid from the square
+// before stops there ('lock'). Its second floor is a Tandem, whose ice lies
+// off the line ('off'). Its king floor's mate aims one square short of the
+// mating square, on ice, and skids onto it ('skid'). Every room lays its own
+// ice, never on a wall, under a monster, on the start or on the exit, and the
+// day wins as played, never captured.
 test('an Ice day lays each composed room’s ice around its planted line', async () => {
   const { composeDay } = await import('../src/composer.js');
   const { ICE_TILES } = await import('../src/modifiers.js');
-  const { daily, floors } = composeDay('2026-11-24');
+  const { daily, floors } = composeDay('2026-12-14');
   assert.equal(daily.modifier, 'ice');
-  assert.deepEqual(floors.map((floor) => floor.ice), ['skid', 'lock', 'skid']);
+  assert.deepEqual(floors.map((floor) => floor.ice), ['lock', 'off', 'skid']);
+  assert.equal(daily.generation.partner, 1);
   let state = createGame(daily);
   for (const floor of floors) {
     assert.deepEqual(state.ice, daily.composed[state.floor].ice, 'the room’s own ice, not the seeded draw');

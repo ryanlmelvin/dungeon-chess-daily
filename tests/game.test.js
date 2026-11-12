@@ -5,6 +5,7 @@ import { act, resetFloor, retryLostRun, floorScoredMoves, createGame, createPrac
 
 import { getRawDaily } from '../src/edition.js';
 import { verifyWinningRoute } from '../src/fairness.js';
+import { certificateMode } from '../src/generation.js';
 import { royalRules, floorCensus, createGame as createRoom, validateSave as validateRoomSave } from '../src/rules.js';
 import { PAWN_TARGETS } from '../src/composer.js';
 import { room, withRooms } from './fixtures/rooms.js';
@@ -298,19 +299,22 @@ test('100 consecutive certified dates win without powers, never captured, preser
       assert.equal(validateSave(played, played.date), true, `${played.date} save after move ${played.turns}`);
     }
     assert.equal(played.status, 'won', played.date);
-    // The certificate itself, on the day's twin without hint powerups: no power, no help, never captured.
+    // The certificate itself, on the day's twin without hint powerups: no power, never captured, and no
+    // help but a partner floor's recruit on its own floor (the day is then verified with it on orders).
+    const partner = issue.generation.partner ?? null;
     let state = createRoom(twinOf(issue));
     assertInitialArmy(state);
-    const proof = verifyWinningRoute(state, issue.generation.certificate.actions);
+    const proof = verifyWinningRoute(state, issue.generation.certificate.actions, certificateMode(partner));
     assert.equal(proof.valid, true, `${state.date}: ${proof.reason}`);
     for (const action of issue.generation.certificate.actions) {
+      assert.ok(action.recruit === undefined || state.floor === partner, `${state.date}: an order off the partner floor`);
       const next = act(state, action);
       if (next.floor !== state.floor && next.status === 'playing') assertInitialArmy(next);
       state = next;
       assert.equal(state.hits, 0, `${state.date}: a planted line is never captured`);
-      // Only the king floor's own recruit (a king) may help, under royal rules.
+      // Only the king floor's own recruit (a king) may help, under royal rules, and a partner floor's on its floor.
       if (royalRules(state)) assert.ok(state.companion === null || state.companion.basePiece === 'king');
-      else assert.equal(state.companion, null);
+      else if (state.floor !== partner) assert.equal(state.companion, null);
       assert.deepEqual(state.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
       assert.deepEqual(state.purchases, []);
     }

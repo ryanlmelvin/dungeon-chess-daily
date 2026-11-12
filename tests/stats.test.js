@@ -63,6 +63,30 @@ test('the ledger does not depend on the rules version', () => {
   assert.doesNotMatch(serializeLedger(noteRun(emptyLedger(), fifth.won, fifth.daily, '2026-11-05')), new RegExp(`v${RULES_VERSION}|rulesVersion`));
 });
 
+test('across a rules version bump the ledger reads as it was: a win scored under the old rules keeps its score', () => {
+  // What a device held under the version before this one: a ledger with two scored wins, and a save one came from.
+  const days = { '2026-11-04': { piece: 'knight', won: true, score: [1, 0, -1] }, '2026-11-05': { piece: fifth.daily.playerPiece, won: true, score: [0, 2, 0] } };
+  const stored = serializeLedger(ledgerOf(days));
+  const older = (run) => JSON.stringify({ ...run, schema: RULES_VERSION - 1, rulesVersion: RULES_VERSION - 1 });
+  const oldKey = saveKey('2026-11-05', RULES_VERSION - 1);
+  const storage = fakeStorage({ [`${prefix}${LEDGER_KEY}`]: stored, [`${prefix}${oldKey}`]: older(fifth.won) });
+  const ledger = openLedger(storage, prefix, { today: () => '2026-11-06' });
+  assert.equal(serializeLedger(ledger.read()), stored, 'read back unchanged');
+  assert.equal(storage.writes, 0, 'nothing is back-filled or rewritten');
+  assert.equal(ledger.streak(), 2);
+  assert.deepEqual(ledger.summary().par, [1, 3, 1, 1, 0], 'the old scores still count on the Stats page');
+  // Today's win under the new rules joins them, and the old scores stand.
+  ledger.note(sixth.won, sixth.daily);
+  assert.equal(ledger.streak(), 3);
+  assert.deepEqual(ledger.read().days, { ...days, '2026-11-06': { piece: sixth.daily.playerPiece, won: true, score: [-1, -1, -1] } });
+  // The old save itself can no longer be scored (its rooms were rebuilt): a device with no ledger counts it as a win without one,
+  // and merging that into the ledger (an old backup restored) never drops the score already held.
+  const filled = backfillLedger([[oldKey, older(fifth.won)]], '2026-11-06');
+  assert.deepEqual(filled.days['2026-11-05'], { piece: fifth.daily.playerPiece, won: true });
+  assert.deepEqual(mergeLedgers(parseLedger(stored), filled).days, days);
+  assert.deepEqual(mergeLedgers(filled, parseLedger(stored)).days['2026-11-05'], days['2026-11-05'], 'whichever side holds it');
+});
+
 test('entering the official run on its own UTC day counts as played, and winning it records piece and score against par', () => {
   const { daily, entered, won } = fifth;
   const played = noteRun(emptyLedger(), entered, daily, '2026-11-05');
