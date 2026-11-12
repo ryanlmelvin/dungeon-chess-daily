@@ -8,7 +8,7 @@ import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TAC
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
-export const RULES_VERSION = 12;
+export const RULES_VERSION = 13;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -957,7 +957,8 @@ function setFloor(state) {
       piece: creature.piece, role: creature.piece, x: entry.x, y: entry.y, moved: false, phase: 'ready', intent: [], target: null,
       ...(Number.isInteger(entry.held) && entry.held > 0 && { pinned: entry.held, held: true }) };
   });
-  state.items = room.items.map((item) => ({ ...item }));
+  // The chest is the daily's second goal, proved for the day's own piece against par: a practice run has none.
+  state.items = room.items.filter((item) => !(state.practice && item.type === 'chest')).map((item) => ({ ...item }));
   state.props = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
@@ -1720,9 +1721,9 @@ function play(previous, action) {
   return state;
 }
 
-// The chest (a dev preview, src/treasure.js): a composed room may hold one
-// item of type 'chest', off its planted line, as a second goal on the same
-// room. Only the player's own piece takes it, by ending a move on its square
+// The chest (the composer places it, src/treasure.js): a composed room may
+// hold one item of type 'chest', off its planted line, as a second goal on
+// the same room. Only the player's own piece takes it, by ending a move on its square
 // while the door is still shut (a move that completes the challenge by its
 // own capture comes too late); monsters and the recruit ignore it, as they do
 // a coin, and the coin magnet never draws it in. It pays CHEST_GOLD and is
@@ -1759,8 +1760,9 @@ export function treasureMark(state, floor, par) {
 }
 // A save's chests: a 'chest' feat only on a floor whose room holds a chest, once;
 // on the floor in progress the chest lies there until it is taken or the door opens.
+// A practice run's rooms hold none (setFloor).
 function validChests(value, daily) {
-  const holds = (floor) => (daily.composed?.[floor]?.items ?? []).some((item) => item.type === 'chest');
+  const holds = (floor) => daily.practice !== true && (daily.composed?.[floor]?.items ?? []).some((item) => item.type === 'chest');
   const taken = (floor) => (value.feats ?? []).filter((feat) => feat?.kind === 'chest' && feat.floor === floor).length;
   if ([0, 1, 2].some((floor) => taken(floor) > (holds(floor) ? 1 : 0))) return false;
   return !holds(value.floor) || value.items.some((item) => item.type === 'chest') === (!taken(value.floor) && !value.exit.open);
