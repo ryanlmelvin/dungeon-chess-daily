@@ -48,6 +48,12 @@ const CROWN_WIDTH = 0.5;
 // Unmasking (rules.js unmask): a captured monster's true piece pops out of its
 // square, and its look-alikes wear that piece as a badge from then on.
 const UNMASK_POP_MS = 1100;
+// The chest's gem (src/treasure.js): taking the chest sends a diamond up out of
+// it, the same 💎 the floor earns on the share card at par. Original pixel art.
+const GEM = ['..xxxxxxx..', '.xwwcccbbx.', 'xwwcccccbbx', 'xbbbbbbbbbx', '.xwccccbbx.', '..xwcccbx..', '...xwcbx...', '....xcx....', '.....x.....'];
+const GEM_PALETTE = { x: '#14304d', w: '#f2fdff', c: '#79d8ff', b: '#3a9be0' };
+const GEM_POP_MS = 1600;
+const GEM_WIDTH = 0.56;
 const BADGE_WIDTH = 0.42;
 // Paid hints (main.js): rings around the identified targets, in the objective's
 // "Targets left" pink, and the danger map's black-and-white hatch (sprites.js
@@ -142,6 +148,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   textures.set('danger-hatch', hatchTexture());
   textures.set('inspect-hatch', hatchTexture(INSPECT_HATCH, -1));
   textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
+  textures.set('gem', pixelTexture(GEM, GEM_PALETTE));
   textures.set('snowflake', pixelTexture(SNOWFLAKE, SNOWFLAKE_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
   const stones = Array.from({ length: 8 }, (_, i) => stoneTexture(i < 4, i % 4));
@@ -455,6 +462,20 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     sprite.visible = false;
     actors.add(sprite);
     pops.push({ sprite, at, origin: sprite.position.clone() });
+  }
+
+  // Taking the chest (rules.js takeChest): its gem rises out of the chest, hangs
+  // a moment and fades, so the chest reads as the share card's 💎.
+  function popGem(event, at) {
+    const material = new THREE.SpriteMaterial({ map: textures.get('gem'), transparent: true, alphaTest: 0.05, depthWrite: false, depthTest: false });
+    materials.add(material);
+    const sprite = new THREE.Sprite(material);
+    sprite.center.set(0.5, 0.3);
+    sprite.position.set(event.x, 0.3, event.y);
+    sprite.renderOrder = 4;
+    sprite.visible = false;
+    actors.add(sprite);
+    pops.push({ sprite, at, origin: sprite.position.clone(), ms: GEM_POP_MS, size: GEM_WIDTH, aspect: GEM.length / GEM[0].length, rise: 0.95, plain: true });
   }
 
   // A monster that lunged and missed is off-balance (rules.js) until the
@@ -938,6 +959,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       if (ceiling) pendingQuake = { event: ceiling, at: animateTurn ? now + Math.max(playerDelay + skid, companionDelay, enemyDelay) + 175 : now };
     }
     for (const event of unmaskedNow) popRole(event, revealAt(event), enemyPalette);
+    if (!changedBoard) for (const event of events) if (event.type === 'pickup' && event.chest) popGem(event, animateTurn ? captureAt : now);
     currentTurn = next.turns;
     lastEvents = next.events;
     state = next;
@@ -1082,18 +1104,20 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       recruit.material.opacity = covered ? COVERED_RECRUIT_OPACITY : 1;
     }
     // An unmasked piece grows out of its square with a gold flash, rises and
-    // fades. Under reduced motion it simply stands there for a moment.
+    // fades; the chest's gem does the same, higher and longer, in its own colours
+    // (popGem). Under reduced motion each simply stands there for a moment.
     for (let i = pops.length - 1; i >= 0; i--) {
       const pop = pops[i];
       if (timestamp < pop.at) continue;
-      const t = (timestamp - pop.at) / UNMASK_POP_MS;
+      const t = (timestamp - pop.at) / (pop.ms ?? UNMASK_POP_MS);
       if (t >= 1) { release(pop.sprite); pops.splice(i, 1); continue; }
       pop.sprite.visible = true;
       const grow = reducedMotion ? 1 : (0.35 + 0.65 * Math.min(1, t / 0.15)) * (1 + 0.2 * Math.sin(Math.PI * Math.min(1, t / 0.35)));
-      pop.sprite.scale.set(0.8 * grow, 0.8 * grow, 1);
-      pop.sprite.position.copy(pop.origin).addScaledVector(SCREEN_UP, reducedMotion ? 0 : 0.55 * (1 - (1 - Math.min(1, t / 0.5)) ** 2));
+      const size = pop.size ?? 0.8;
+      pop.sprite.scale.set(size * grow, size * (pop.aspect ?? 1) * grow, 1);
+      pop.sprite.position.copy(pop.origin).addScaledVector(SCREEN_UP, reducedMotion ? 0 : (pop.rise ?? 0.55) * (1 - (1 - Math.min(1, t / 0.5)) ** 2));
       pop.sprite.material.opacity = reducedMotion || t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-      pop.sprite.material.color.set(!reducedMotion && t < 0.25 ? 0xffd46b : 0xffffff);
+      pop.sprite.material.color.set(!pop.plain && !reducedMotion && t < 0.25 ? 0xffd46b : 0xffffff);
     }
     if (pendingHints && timestamp >= pendingHints.at) {
       updateHints(pendingHints.next);
