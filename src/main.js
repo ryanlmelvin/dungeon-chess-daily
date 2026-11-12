@@ -1346,14 +1346,14 @@ async function offerHopelessRestart() {
   const floor = state.floor + 1;
   const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
   const who = state.companion || waitingRecruit(state) ? 'Neither your piece nor your recruit can ever' : 'Your piece can never';
-  if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
+  if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the gold and powers you arrived with, and the floor’s move count starts over.`, `Restart floor ${floor}`, 'Keep playing')) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${floor} restarted.`);
 }
 $('reset-floor-button').addEventListener('click', async () => {
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
-  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, 'You keep the gold and powers you arrived with. Moves already made here still count toward this floor’s score.', `Restart floor ${state.floor + 1}`)) return;
+  if (!await askConfirm(`Restart floor ${state.floor + 1}?`, `You keep the gold and powers you arrived with, and this floor’s move count starts over.${floorScoredMoves(resetFloor(state)) ? ' Paid hints still count.' : ''}`, `Restart floor ${state.floor + 1}`)) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot) return;
   refreshFromOtherWindow();
   startOver(resetFloor(state), `Floor ${state.floor + 1} restarted.`);

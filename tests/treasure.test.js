@@ -92,7 +92,8 @@ test('restarting the floor puts the chest back and takes back its gold', () => {
   assert.ok(again.items.some((item) => item.type === 'chest'));
   assert.equal(again.gold, 0);
   assert.ok(!chestTaken(again));
-  assert.equal(again.restartedMoves, 1, 'the move spent still counts');
+  assert.equal(again.restartedMoves, undefined);
+  assert.equal(floorScoredMoves(again), 0, 'the floor’s count starts over');
   assert.ok(valid(again, daily));
 });
 

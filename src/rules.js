@@ -1058,10 +1058,12 @@ function markFloorStart(state) {
 
 /**
  * Return to the start of the current floor: same gold and powers as on
- * arrival. The moves already spent on the floor, captures included, keep
- * counting toward its score (`restartedMoves`), so a restart can't wipe a
- * floor's count back to zero.
- * Paid hints stay paid (and shown), and unmasked species stay unmasked.
+ * arrival, and the floor's move count starts over (the owner's call,
+ * 2026-11-11): the moves and captures of the attempt left behind no longer
+ * count toward its score. Paid hints stay paid (and shown), so their strokes
+ * stay, and unmasked species stay unmasked. Saves from when a restart kept its
+ * moves counting carry them as `restartedMoves`; they still count there
+ * (scoredMoves, floorScoredMoves) until that floor is restarted again.
  */
 export function resetFloor(previous) {
   const snapshot = previous?.floorSnapshot;
@@ -1070,8 +1072,6 @@ export function resetFloor(previous) {
   state.floorSnapshot = structuredClone(snapshot);
   if (previous.replayUnlocked === true) state.replayUnlocked = true;
   if (previous.tries !== undefined) state.tries = previous.tries;
-  const spent = floorScoredMoves(previous) - hintMoves(previous);
-  if (spent) state.restartedMoves = spent;
   keepKnowledge(state, previous);
   state.message = `Floor ${state.floor + 1} reset. ${snapshot.message}`;
   return state;
@@ -1773,8 +1773,9 @@ const FEAT_MARKS = [['en-passant', '\u{1F1EB}\u{1F1F7}'], ['castle', '🏰'], ['
 const PIECE_MARKS = { king: '♚', queen: '♛', rook: '♜', bishop: '♝', knight: '♞', pawn: '♟\uFE0E' };
 /**
  * Moves that count toward a floor's score: those until the challenge was
- * complete, plus those spent on the floor before any Restart this floor, plus
- * one per capture of the player there and one per paid hint. Older records
+ * complete, plus one per capture of the player there and one per paid hint.
+ * A floor restart starts the count over; records from when it didn't carry
+ * the earlier attempts' moves (`restartedMoves`), still counted. Older records
  * count every move.
  */
 export function scoredMoves(record) {
@@ -1782,7 +1783,7 @@ export function scoredMoves(record) {
   return Number.isInteger(moves) ? moves + (record.restartedMoves ?? 0) + (record.hits ?? 0) + hintMoves(record) : moves;
 }
 
-/** Scored moves on the floor in progress, restarts, captures and paid hints included: moves count until the challenge is complete, captures always. */
+/** Scored moves on the floor in progress, captures and paid hints included (and an older save's moves from before a restart): moves count until the challenge is complete, captures always. */
 export function floorScoredMoves(state) { return (state.objective?.moves ?? state.turns - state.floorStart.turns) + (state.restartedMoves ?? 0) + ((state.hits ?? 0) - (state.floorStart.hits ?? 0)) + hintMoves(state); }
 
 /** The edition's full date, e.g. "Sat, Nov 7, 2026" (UTC, like the edition itself), as the archive and dialogs name it. */

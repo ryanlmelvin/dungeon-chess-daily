@@ -493,26 +493,27 @@ test('restarting a floor returns to its arrival state without costing a life or 
     assert.equal(validateSave(state, daily.date), true);
     const reset = resetFloor(state);
     assert.equal(validateSave(reset, daily.date), true, `reset on floor ${state.floor} after move ${state.turns}`);
-    const { restartedMoves, unmasked, ...rest } = reset;
+    const { unmasked, ...rest } = reset;
     assert.deepEqual(withoutMessage(rest), withoutMessage(arrivals[state.floor]));
     // Monsters unmasked before the restart stay unmasked.
     assert.deepEqual(unmasked, state.unmasked);
-    // The moves already spent on the floor keep counting.
-    assert.equal(restartedMoves, floorScoredMoves(state) || undefined);
-    assert.equal(floorScoredMoves(reset), floorScoredMoves(state));
+    // The floor's move count starts over.
+    assert.equal(reset.restartedMoves, undefined);
+    assert.equal(floorScoredMoves(reset), 0);
     assert.match(reset.message, new RegExp(`^Floor ${state.floor + 1} reset`));
   }
   assert.equal(state.status, 'won');
   assert.equal(resetFloor(state), state);
   assert.equal(arrivals.length, 3);
 
-  // Captures on a floor keep counting after a restart; earlier attempts are still counted, never added to.
+  // Captures of the attempt left behind stop counting with its moves.
   const hurt = structuredClone(arrivals[1]);
   hurt.hits += 2; hurt.replayUnlocked = true; hurt.tries = 3;
+  assert.equal(floorScoredMoves(hurt), 2);
   const restored = resetFloor(hurt);
   assert.equal(restored.hits, arrivals[1].hits);
-  assert.equal(restored.restartedMoves, floorScoredMoves(hurt));
-  assert.equal(floorScoredMoves(restored), floorScoredMoves(hurt));
+  assert.equal(restored.restartedMoves, undefined);
+  assert.equal(floorScoredMoves(restored), 0);
   assert.equal(restored.tries, 3);
   assert.equal(restored.replayUnlocked, true);
 

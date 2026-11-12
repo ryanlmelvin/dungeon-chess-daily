@@ -313,8 +313,9 @@ test('Restart this floor during the countdown or after a cave-in returns to the 
     const reset = resetFloor(frame);
     assert.equal(reset.caveIn, undefined); assert.equal(reset.dropped, undefined);
     assert.equal(reset.gold, frame.floorSnapshot.gold); assert.equal(reset.exit.open, false);
-    // Only the moves until the challenge was complete (and any capture of you) carry over as the floor's score.
-    assert.equal(reset.restartedMoves, frame.objective.moves + frame.hits - frame.floorStart.hits);
+    // The floor's count starts over: nothing of the attempt left behind carries into its score.
+    assert.equal(reset.restartedMoves, undefined);
+    assert.equal(floorScoredMoves(reset), (frame.hints ?? []).length);
     assert.equal(validateSave(JSON.parse(JSON.stringify(reset)), date, daily), true);
   }
 });

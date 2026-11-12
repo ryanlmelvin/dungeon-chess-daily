@@ -260,15 +260,15 @@ test('paid hints score like moves: restarts keep them, and records, par, the sha
   const pars = botRun(daily).floors;
   const route = daily.generation.certificate.actions;
   let state = act(act(createGame(daily), hint('suspects')), hint('danger'));
-  // A restart keeps the hints (and shows them), counting the moves made before it once,
-  // captures included: this pawn route's first move is captured.
-  const first = floorScoredMoves(act(createGame(daily), route[0]));
-  const extra = 2 + first;
+  // A restart keeps the hints (and shows them) and their two strokes; the move made before
+  // it no longer counts, nor its capture (this pawn route's first move is captured).
+  const extra = 2;
   state = act(state, route[0]);
+  assert.ok(floorScoredMoves(state) > extra);
   const restarted = resetFloor(state);
   assert.deepEqual(restarted.hints, ['suspects', 'danger']);
-  assert.equal(restarted.restartedMoves, first);
-  assert.equal(floorScoredMoves(restarted), floorScoredMoves(state));
+  assert.equal(restarted.restartedMoves, undefined);
+  assert.equal(floorScoredMoves(restarted), extra);
   assert.equal(validateSave(json(restarted), daily.date), true);
   state = restarted;
   let cleared = null;
