@@ -53,6 +53,19 @@ const BADGE_WIDTH = 0.42;
 // "Targets left" pink, and the danger map's black-and-white hatch (sprites.js
 // DANGER_HATCH).
 const SUSPECT = 0xef8b94;
+// Press-and-hold inspection of one unmasked monster (src/inspect.js). A press
+// that stays within HOLD_SLOP pixels for HOLD_MS is a hold; a mouse resting
+// HOVER_MS on a square asks too. Its marks: amber dots where the monster can
+// move, amber rings where it can capture, a frame on the monster, and red
+// stripes (leaning the other way from the danger map's) where ending a move is
+// captured at once. Nothing in them moves, so reduced motion needs no other look.
+const HOLD_MS = 400;
+const HOLD_SLOP = 10;
+const HOVER_MS = 500;
+const INSPECT = 0xffb057;
+// A dot under a pickup grows past it, as the recruit's green dots do (RECRUIT_DOT).
+const INSPECT_DOT = { square: 0.11, coin: 0.25, powerup: 0.31, chest: 0.37, companion: 0.28 };
+const INSPECT_HATCH = Object.freeze({ light: 'rgba(255,241,228,0.92)', dark: 'rgba(196,30,66,0.78)', period: 8, band: 3 });
 // The gold stars that circle an off-balance monster's head.
 const STAR = ['...x...', '..xyx..', '.xxyxx.', 'xyywyyx', '.xxyxx.', '..xyx..', '...x...'];
 const STAR_SIZE = 0.26;
@@ -78,12 +91,13 @@ function pixelTexture(rows, paletteOverride = {}) {
 }
 
 // The danger map's hazard hatch covering one square: diagonal pixel bands.
-function hatchTexture() {
+// An inspection's stripes are the same bands in red, leaning the other way.
+function hatchTexture(hatch = DANGER_HATCH, lean = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 16;
   const context = canvas.getContext('2d');
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    context.fillStyle = (x + y) % DANGER_HATCH.period < DANGER_HATCH.band ? DANGER_HATCH.light : DANGER_HATCH.dark;
+    context.fillStyle = (x + lean * y + 16) % hatch.period < hatch.band ? hatch.light : hatch.dark;
     context.fillRect(x, y, 1, 1);
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -107,9 +121,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   renderer.setPixelRatio(1);
   renderer.setClearColor(VOID);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none;';
+  // No selection or callout: a held finger on the board is a press and hold (src/inspect.js).
+  renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;';
   renderer.domElement.setAttribute('role', 'img');
-  renderer.domElement.setAttribute('aria-label', 'Dungeon chessboard. Tap a destination square to move. Tap your piece to show its legal moves.');
+  renderer.domElement.setAttribute('aria-label', 'Dungeon chessboard. Tap a destination square to move. Tap your piece to show its legal moves. Press and hold an unmasked monster to see its moves.');
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -125,6 +140,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const textures = new Map(Object.entries(SPRITES).map(([id, rows]) => [id, pixelTexture(rows)]));
   textures.set('crown', pixelTexture(CROWN, CROWN_PALETTE));
   textures.set('danger-hatch', hatchTexture());
+  textures.set('inspect-hatch', hatchTexture(INSPECT_HATCH, -1));
   textures.set('star', pixelTexture(STAR, CROWN_PALETTE));
   textures.set('snowflake', pixelTexture(SNOWFLAKE, SNOWFLAKE_PALETTE));
   textures.set('coin', pixelTexture(['..xxxx..', '.xywwyx.', 'xyywywyx', 'xyyywyyx', 'xyyywyyx', 'xyywywyx', '.xyyyyx.', '..xxxx..']));
@@ -162,6 +178,12 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   let recruitMaterial = null;
   const playerPulse = { value: 0 };
   const moveColor = { value: new THREE.Color(MOVE_COLOR) };
+  // Press-and-hold inspection: the marks on show (src/inspect.js inspectMonster),
+  // who answers the gesture (setInspector), and the mouse's resting square.
+  let inspection = null;
+  let inspector = null;
+  let hoverTimer = 0;
+  let hoverTile = null;
 
   function basic(color, extra = {}) {
     const material = new THREE.MeshBasicMaterial({ color, ...extra });
@@ -630,12 +652,15 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     for (const enemy of next.enemies) if (enemy.pinned) cornerMarks(enemy.x, enemy.y, 0xf2ce80, 0.36, 0.17);
     const danger = next.danger || next.enemies.flatMap((enemy) => enemy.phase === 'aim' ? enemy.intent || [] : []);
     const seen = new Set();
+    // While one monster is inspected the other wind-ups fade, so its own stands alone.
+    const own = inspection && new Set(inspection.coming.map((tile) => `${tile.x}:${tile.y}`));
     for (const tile of danger) {
       const key = `${tile.x}:${tile.y}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      tileMark(hints, tile.x, tile.y, 0.94, 0.94, basic(0xc72c51, { transparent: true, opacity: 0.42, depthWrite: false }), 0.03);
-      cornerMarks(tile.x, tile.y, 0xff6685);
+      const faded = own && !own.has(key);
+      tileMark(hints, tile.x, tile.y, 0.94, 0.94, basic(0xc72c51, { transparent: true, opacity: faded ? 0.16 : 0.42, depthWrite: false }), 0.03);
+      if (!faded) cornerMarks(tile.x, tile.y, 0xff6685);
     }
     // Anchor each attack at the enemy's square center, including jump attacks.
     // The shaded tiles, rather than the connector, identify threatened squares.
@@ -647,8 +672,18 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const dy = target.y - enemy.y;
       const length = Math.hypot(dx, dy);
       if (!length) continue;
-      const beam = tileMark(hints, enemy.x + dx / 2, enemy.y + dy / 2, 0.035, length, basic(0xff557a, { transparent: true, opacity: 0.8, depthWrite: false }), 0.05);
+      // The inspected monster's path is drawn bolder, with an arrowhead where it lands; the others' fade.
+      const bold = inspection?.id === enemy.id;
+      const beam = tileMark(hints, enemy.x + dx / 2, enemy.y + dy / 2, bold ? 0.075 : 0.035, length, basic(0xff557a, { transparent: true, opacity: inspection && !bold ? 0.28 : bold ? 0.95 : 0.8, depthWrite: false }), 0.05);
       beam.rotation.z = Math.atan2(dx, dy);
+      if (bold) {
+        const head = new THREE.Mesh(new THREE.CircleGeometry(0.2, 3), basic(0xff557a, { transparent: true, opacity: 0.95, depthWrite: false }));
+        head.rotation.set(-Math.PI / 2, 0, Math.atan2(-dy, dx));
+        // Short of the last square, where a piece standing there would hide it.
+        const back = Math.min(0.68, length / 2) / length;
+        head.position.set(target.x - dx * back, 0.058, target.y - dy * back);
+        hints.add(head);
+      }
     }
     if (next.showMoves) {
       moveMaterial = basic(MOVE_COLOR, { transparent: true, opacity: 0.5, depthWrite: false });
@@ -701,10 +736,37 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       for (const tile of next.closeRange) tileMark(hints, tile.x, tile.y, 0.94, 0.94, hatch, 0.025);
     }
     if (next.suspects) for (const enemy of next.enemies) if (enemy.species === next.suspects) tileRing(hints, enemy.x, enemy.y, 0.4, 0.48, SUSPECT, 0.95, 0.052);
+    if (inspection) inspectionMarks(inspection, next.items ?? []);
+  }
+
+  // Press-and-hold inspection (src/inspect.js), one unmasked monster's squares:
+  // red stripes where ending a move is captured at once, amber dots where it can
+  // move, amber rings where it can capture (around the piece standing there),
+  // and an amber frame on the monster itself. Its wound-up path is the board's
+  // own red path, drawn bolder in updateHints while the others' fade.
+  function inspectionMarks(marks, items) {
+    const stripes = basic(0xffffff, { map: textures.get('inspect-hatch'), transparent: true, depthWrite: false });
+    for (const tile of marks.atOnce) tileMark(hints, tile.x, tile.y, 0.94, 0.94, stripes, 0.027);
+    const ink = basic(INSPECT, { transparent: true, opacity: 0.95, depthWrite: false });
+    for (const tile of marks.moves) {
+      const pickup = items.find((item) => item.x === tile.x && item.y === tile.y);
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(INSPECT_DOT[pickup?.type] ?? INSPECT_DOT.square, 16), ink);
+      dot.rotation.x = -Math.PI / 2;
+      // Under a waiting recruit's own ring, over everything else on the floor.
+      dot.position.set(tile.x, pickup?.type === 'companion' ? 0.04 : 0.057, tile.y);
+      hints.add(dot);
+    }
+    for (const tile of marks.captures) tileRing(hints, tile.x, tile.y, 0.38, 0.46, INSPECT, 0.95, 0.057);
+    for (const [dx, dy] of [[0, -0.45], [0, 0.45], [-0.45, 0], [0.45, 0]]) {
+      tileMark(hints, marks.x + dx, marks.y + dy, dx ? 0.045 : 0.945, dx ? 0.945 : 0.045, ink, 0.057);
+    }
   }
 
   function render(next, afterTransition = false) {
     if (disposed) return;
+    // Any new paint (a tap, a move, the next action) lifts an inspection's marks.
+    inspection = null;
+    hoverTile = null;
     const now = performance.now();
     const key = `${next.date}:${next.seed}:${next.floor}:${next.map?.join('')}`;
     // UI-only paints reuse the event array. Consume an action's effects once,
@@ -1063,7 +1125,10 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
 
   function pointerCancel(event) {
     if (!pointerStart || pointerStart.id !== event.pointerId) return;
+    const press = pointerStart;
     pointerStart = null;
+    clearTimeout(press.timer);
+    if (press.held) inspector?.release(press.type);
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
   }
 
@@ -1074,21 +1139,80 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     if (pointerStart || event.button !== 0) return;
     pointerStart = { id: event.pointerId };
+    // Press and hold: a press that stays put for HOLD_MS is offered to the
+    // inspector. One it takes (`held`) is never a tap when it lifts.
+    const press = Object.assign(pointerStart, { clientX: event.clientX, clientY: event.clientY, type: event.pointerType, held: false });
+    clearTimeout(hoverTimer);
+    press.timer = setTimeout(() => {
+      if (pointerStart === press && state && inspector) press.held = Boolean(inspector.hold(tileAt(press), press.type));
+    }, HOLD_MS);
     renderer.domElement.setPointerCapture(event.pointerId);
   }
 
-  function pointerUp(event) {
-    if (!pointerStart || pointerStart.id !== event.pointerId) return;
-    pointerCancel(event);
-    if (!state || !onTile) return;
+  // The board square under a point of the page: a piece's or monster's art counts as its square.
+  function tileAt(point) {
     const bounds = renderer.domElement.getBoundingClientRect();
-    const position = new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
+    const position = new THREE.Vector2((point.clientX - bounds.left) / bounds.width * 2 - 1, -(point.clientY - bounds.top) / bounds.height * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(position, camera);
     const sprites = [...entities.values()].map((entity) => entity.art);
     const hits = ray.intersectObjects([...sprites, ...targets]);
     const tile = hits.find((hit) => hit.object.userData.tile)?.object.userData.tile;
-    if (tile) onTile({ ...tile });
+    return tile ? { ...tile } : null;
+  }
+
+  function pointerUp(event) {
+    if (!pointerStart || pointerStart.id !== event.pointerId) return;
+    const held = pointerStart.held;
+    pointerCancel(event);
+    // A hold is never also a tap.
+    if (held || !state || !onTile) return;
+    // Any tap lifts an inspection's marks, whatever else it does.
+    inspect(null);
+    const tile = tileAt(event);
+    if (tile) onTile(tile);
+  }
+
+  // A press that wanders is no hold. A mouse resting HOVER_MS on a square asks
+  // the inspector too, until it leaves that square.
+  function pointerMove(event) {
+    if (pointerStart) {
+      if (pointerStart.id === event.pointerId && !pointerStart.held && Math.hypot(event.clientX - pointerStart.clientX, event.clientY - pointerStart.clientY) > HOLD_SLOP) clearTimeout(pointerStart.timer);
+      return;
+    }
+    if (event.pointerType !== 'mouse' || !inspector || !state) return;
+    if (hoverTile) {
+      const tile = tileAt(event);
+      if (tile && tile.x === hoverTile.x && tile.y === hoverTile.y) return;
+      pointerLeave();
+    }
+    clearTimeout(hoverTimer);
+    const point = { clientX: event.clientX, clientY: event.clientY };
+    hoverTimer = setTimeout(() => {
+      if (disposed || pointerStart || !state) return;
+      const tile = tileAt(point);
+      if (tile && inspector?.hover(tile)) hoverTile = tile;
+    }, HOVER_MS);
+  }
+
+  function pointerLeave() {
+    clearTimeout(hoverTimer);
+    if (!hoverTile) return;
+    hoverTile = null;
+    inspector?.hover(null);
+  }
+
+  // A long press must not open a browser menu over the board (Android does on a held touch).
+  function contextMenu(event) {
+    if (pointerStart && pointerStart.type !== 'mouse') event.preventDefault();
+  }
+
+  // Lay an inspection's marks over the board, or lift them (null). The next paint lifts them too.
+  function inspect(marks = null) {
+    if (disposed || !state || inspection === marks) return;
+    inspection = marks;
+    // Hints still waiting for the turn's moves to land draw the marks when they do.
+    if (!pendingHints && !pendingTransition) updateHints(state);
   }
 
   const canvas = renderer.domElement;
@@ -1096,6 +1220,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   canvas.addEventListener('pointerup', pointerUp);
   canvas.addEventListener('pointercancel', pointerCancel);
   canvas.addEventListener('lostpointercapture', pointerCancel);
+  canvas.addEventListener('pointermove', pointerMove);
+  canvas.addEventListener('pointerleave', pointerLeave);
+  canvas.addEventListener('contextmenu', contextMenu);
   const observer = new ResizeObserver(resize);
   observer.observe(container);
   resize();
@@ -1133,6 +1260,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     boardRect,
     // How much longer a turn with these events takes to play out: an ice skid's slow slide.
     skidTime: (events) => !reducedMotion && events?.some((event) => event.type === 'slide') ? SKID_EXTRA_MS : 0,
+    // Press-and-hold inspection (src/inspect.js): `inspect` lays one monster's
+    // marks over the board or lifts them, `inspected` is what lies there now,
+    // and `setInspector` names who answers a hold, its release and a resting
+    // mouse: { hold(tile, pointerType), release(pointerType), hover(tile | null) }.
+    inspect,
+    inspected: () => inspection,
+    setInspector(next) { inspector = next ?? null; },
     // The planned arrangement ('beside', 'stacked' or 'natural'), where Wait
     // goes, and the board's box (door and first row included) in CSS pixels.
     layout: () => layout,
@@ -1152,6 +1286,11 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       canvas.removeEventListener('pointerup', pointerUp);
       canvas.removeEventListener('pointercancel', pointerCancel);
       canvas.removeEventListener('lostpointercapture', pointerCancel);
+      canvas.removeEventListener('pointermove', pointerMove);
+      canvas.removeEventListener('pointerleave', pointerLeave);
+      canvas.removeEventListener('contextmenu', contextMenu);
+      clearTimeout(hoverTimer);
+      clearTimeout(pointerStart?.timer);
       clear(board);
       clear(actors);
       clear(hints);

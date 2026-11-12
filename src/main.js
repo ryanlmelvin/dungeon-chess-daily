@@ -30,6 +30,7 @@ import { dungeonBot, playerRun, verdict } from './bot.js';
 import { parFor, runPars } from './par.js';
 import { celebrateCheckmate } from './checkmate.js';
 import { initJournal } from './journal-ui.js';
+import { createInspector } from './inspect.js';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -295,6 +296,7 @@ function ensureRenderer() {
       if(legalMoves(state).some(tile=>tile.x===x&&tile.y===y)) takeAction({type:'move',x,y});
       else {showMoves=true;cursor=null;paintBoard();}
     }});
+    renderer.setInspector(inspector);
     return true;
   } catch (error) {
     console.error(error);
@@ -702,6 +704,17 @@ function hintMarks(game) {
   const bought = game.hints ?? [];
   return { suspects: bought.includes('suspects') ? targetSpecies(game).id : null, closeRange: bought.includes('danger') ? closeRangeSquares(game) : null };
 }
+// Press and hold an unmasked monster (src/inspect.js): its squares alone, on the
+// position the board shows. Never during the bot's replay, while choosing a pin
+// (a press pins) or in a caved-in room (a tap takes the stairs): there a press
+// stays the tap it always was. The first showing on a device says what the marks mean.
+const INSPECT_TIP = 'Stripes: captured at once. Red path: its attack is coming.';
+const inspector = createInspector({
+  board: () => (!state || replay || screen !== 'game' || state.status !== 'playing' || pinning || cavedIn(state) ? null : pendingOrder()?.board ?? state),
+  show: (marks) => renderer?.inspect(marks),
+  shown: () => renderer?.inspected() ?? null,
+  onShow: () => { if (tacticSeen('inspect')) return; notify(INSPECT_TIP); try { localStorage.setItem(tacticSeenKey('inspect'), '1'); } catch {} },
+});
 // Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
 function renderTools() {
@@ -1114,6 +1127,8 @@ window.addEventListener('keydown',event=>{
   if(event.target instanceof Element && event.target.closest('button,input,textarea,select,a'))return;
   if(screen!=='game'||!state||replay||turnLocked||document.querySelector('dialog[open]')||event.metaKey||event.ctrlKey||event.altKey)return;
   const name=event.key.length===1?event.key.toLowerCase():event.key;
+  // I: inspect the unmasked monster under the cursor (src/inspect.js); I again lifts it.
+  if(name==='i'){event.preventDefault();inspector.key(cursor);return;}
   if(pendingOrder()){orderKey(event,name);return;}
   if(directions[name]){event.preventDefault();const [dx,dy]=directions[name];cursor??={x:state.player.x,y:state.player.y};const x=Math.max(0,Math.min(7,cursor.x+dx));const door=state.exit.open&&x===state.exit.x&&cursor.y+dy===state.exit.y-1;cursor={x,y:door?state.exit.y-1:Math.max(0,Math.min(7,cursor.y+dy))};showMoves=true;paintBoard();}
   else if(name==='Enter'&&cursor){event.preventDefault();if(cursor.x===state.exit.x&&cursor.y===state.exit.y-1){if(state.exit.open)takeStairs();}else{takeAction({type:'move',...cursor});cursorOnRecruit();}}
