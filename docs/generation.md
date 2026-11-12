@@ -349,7 +349,45 @@ only where something in its dressing leads plain play astray (a sleeping
 decoy it would rather take, or one it won't step next to), so the ceiling
 picks floors by their decoys more than by their idea.
 
-IDEAS_MEASURED
+**What was measured** (2026-11-12, over the 742 stored days, each idea on
+every day it fits; the floors compared are the same days with the idea off
+and on):
+
+- **The Standstill** fits floor 1 of 279 days (38%: a queen's 81, a knight's
+  79, a rook's 65, a bishop's 54) and draws 97. It composes on 71 of them
+  under all three tests (25%: a knight on 51 of its 79 days, a queen on 16,
+  a bishop on 4, a rook on none) and on 122 without the bot's ceiling (44%:
+  knight 65, queen 35, bishop 22). 56 lines take three moves and 15 take
+  four. It stands in for a bait on 51 floors and a squeeze on 20. Those 71
+  floors, before and after: first actions 6.6 and 5.0 a floor, of which 77%
+  and 34% keep par (after: the move to the square and waiting first, or the
+  wait alone); floors with a win within par off the idea, captures allowed,
+  18% and none; bot runs at par 80% and 0.2%, past par + 4 2.9% and 9.1%.
+  The floors the ceiling turns away are mostly the ones that open with the
+  wait itself (the bot waits there on every run).
+- **The Lure** fits floor 1 of 38 days (5%, all a knight's: 25 against rooks,
+  13 against bishops) and draws 11. It composes on 22 under all three tests
+  (58%) and on 29 without the ceiling (76%), always in three moves, in place
+  of a bait on 17 floors and a squeeze on 5. Those 22 floors, before and
+  after: lines of four moves on 20 of them, and of three on all; first
+  actions 4.9 and 4.5 a floor, of which 87% and 24.5% keep par (after: one,
+  now and then two); bot runs at par 86% and none, past par + 4 2.8% and
+  9.4%.
+- No floor's bot par rate rose with an idea on. No floor of either idea
+  holds a chest (0 of 93): within par the only wins are the line itself and,
+  for a Standstill, the same line with the wait made first, so no win
+  leaves the line to land on one.
+- With both on at one day in three, 105 days draw an idea and 32 change:
+  floor 1 goes from 347 baits and 171 squeezes to 325 baits, 161 squeezes,
+  28 Standstills and 4 Lures, and floor 2 is as it was. On every day they
+  fit they would take 80 floor 1s between them (13 days fit both).
+- Over 2026-11-13 to 2027-01-12 (61 days): the Standstill fits 23 days,
+  draws 9 and composes on 5, 3 of them drawn (8 without the ceiling); the
+  Lure fits 2 days, draws neither and composes on both.
+- An idea's floor composes in about a second (Standstill 1.2 s, Lure 0.7 s
+  on average); a day where one is tried and none of its 24 instances passes
+  spends a few seconds more on trying (each dressing costs up to 40 bot
+  runs), a queen's day the most.
 
 `node scripts/measure-ideas.mjs --jobs 8` reports this coverage, and
 `node scripts/measure-tight.mjs --option ideas --drawn --jobs 8` the floors
