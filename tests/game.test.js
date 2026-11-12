@@ -428,7 +428,7 @@ test('wards block a capture, freeze pauses committed attacks and magnets collect
   assert.deepEqual(collected.items,[{x:7,y:5,type:'coin'}]);
 });
 
-test('a cornered piece restarts the same deterministic edition', () => {
+test('a cornered piece starts its floor over, on the same deterministic edition', () => {
   const state = createGame(daily);
   // Walled in on every side, the piece has no move at all.
   state.player = {piece:'king',x:4,y:5,moved:true}; state.map = Array(8).fill('........');
@@ -439,8 +439,30 @@ test('a cornered piece restarts the same deterministic edition', () => {
   assert.equal(restart.player.piece,daily.playerPiece);
   assert.ok(restart.events.some((event) => event.type==='restart'));
   assert.equal(validateSave(restart,daily.date),true);
-  assert.equal(restart.tries,2);
+  // No new try is counted, and nothing is unlocked: the run goes on.
+  assert.equal(restart.tries,undefined); assert.equal(restart.replayUnlocked,undefined);
+  assert.match(restart.message, /^No legal moves\. Floor 1 starts over\.$/);
   assert.equal(getShareText(restart).split('\n')[1], '🟥 ·');
+  // The move after it unlocks nothing either.
+  const on = act(restart, { type: 'wait' });
+  assert.equal(on.replayUnlocked, undefined); assert.equal(validateSave(on, daily.date), true);
+  // On a later floor it is that floor that starts over: the floors behind it, and the gold and powers brought in, stand.
+  let deep = createGame(daily);
+  for (const action of daily.generation.certificate.actions) { deep = act(deep, action); if (deep.floor === 1) break; }
+  assert.equal(deep.floor, 1);
+  const arrived = structuredClone(deep);
+  const boxed = structuredClone(act(deep, { type: 'wait' }));
+  boxed.player.x = 4; boxed.player.y = 5; boxed.map = Array(8).fill('........');
+  boxed.map[4] = '...###..'; boxed.map[5] = '...#.#..'; boxed.map[6] = '...###..';
+  boxed.enemies = []; boxed.items = [];
+  const again = act(boxed, { type: 'wait' });
+  assert.ok(again.events.some((event) => event.type === 'restart'));
+  assert.match(again.message, /Floor 2 starts over/);
+  assert.equal(again.floor, 1); assert.equal(again.records.length, 1); assert.equal(again.gold, arrived.gold);
+  assert.deepEqual(again.powers, arrived.powers); assert.deepEqual(again.map, arrived.map); assert.deepEqual(again.player, arrived.player);
+  assert.equal(floorScoredMoves(again), 0, 'the floor\'s count starts over');
+  assert.equal(again.tries, undefined);
+  assert.equal(validateSave(JSON.parse(JSON.stringify(again)), daily.date), true);
 });
 
 
@@ -584,7 +606,7 @@ test('an in-progress save from the old every-capture rule keeps its gold and sta
   assert.equal(validateSave(late, late.date), false);
 });
 
-test('running out of legal moves restarts the dungeon and counts another try, like losing every life', () => {
+test('running out of legal moves starts the floor over and counts no new try', () => {
   // A room whose target waits in the far corner, walled ahead of the pawn's first step.
   const day = withRooms('2026-11-05', room({ walls: [[4, 4]], enemies: [{ x: 0, y: 0, cast: 0 }] }));
   const state = createRoom(day);
@@ -593,10 +615,11 @@ test('running out of legal moves restarts the dungeon and counts another try, li
   const trapped = act(state, move(4, 5));
   assert.equal(trapped.status, 'playing');
   assert.deepEqual(trapped.events.map((event) => event.type), ['restart']);
-  assert.match(trapped.message, /No legal moves/);
-  assert.equal(trapped.tries, 2); assert.equal(trapped.replayUnlocked, true);
+  assert.match(trapped.message, /No legal moves\. Floor 1 starts over\./);
+  assert.equal(trapped.tries, undefined); assert.equal(trapped.replayUnlocked, undefined);
   assert.equal(trapped.floor, 0); assert.equal(trapped.turns, 0);
-  // The fresh try is the day's own room again: a valid save of it.
+  // The floor is the day's own room again, with what you arrived with: a valid save of it.
+  assert.equal(trapped.powers.freeze, 0);
   assert.equal(validateRoomSave(trapped, trapped.date, day), true);
   assert.equal(getShareText(trapped).split('\n')[1], '🟥 ·');
 });

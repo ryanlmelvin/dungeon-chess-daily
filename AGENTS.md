@@ -160,7 +160,8 @@ checks, par and versioning; keep it in step with behavior changes.
 
 - Every monster moves every turn; don't propose chess-style one-reply turns.
 - Floors should be short clever lines, not chases, sieges or attrition. There are no
-  lives: a capture of the player adds a move to the score.
+  lives: a capture of the player adds a move to the score. A piece with no legal move
+  starts its floor over (`restartFloor`), never the day.
 - The king is never the daily piece; certified routes never use powerups, shields or
   freezes, and take no chest. Off a partner floor they never use the floor 1–2 recruits
   and carry no recruit orders (the king floor's recruit moves itself along them). On a

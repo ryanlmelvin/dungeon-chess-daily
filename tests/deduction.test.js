@@ -299,7 +299,7 @@ test('paid hints score like moves: restarts keep them, and records, par, the sha
   assert.equal(validateSave(json(snapshot), daily.date), false);
 });
 
-test('a Take-back undoes the move, not the hint bought since; a new try starts without hints', () => {
+test('a Take-back undoes the move, not the hint bought since; a cornered piece\'s floor restart keeps the hint too', () => {
   const route = daily.generation.certificate.actions;
   let state = createGame(daily); state.powers.takeback = 1;
   state = act(state, route[0]);
@@ -308,13 +308,14 @@ test('a Take-back undoes the move, not the hint bought since; a new try starts w
   assert.equal(back.turns, 0);
   assert.deepEqual(back.hints, ['suspects']);
   assert.equal(floorScoredMoves(back), 1);
-  // A cornered piece starts a new try: fresh counts, fresh hints.
+  // A cornered piece starts its floor over, as Restart this floor does: no new try, and the hint stays paid.
   const doomed = scenario(act(createGame(daily), hint('suspects')));
   doomed.map[5] = '...###..'; doomed.map[6] = '...#.#..'; doomed.map[7] = '...###..';
   const lost = act(doomed, { type: 'wait' });
-  assert.equal(lost.tries, 2);
-  assert.equal(lost.hints, undefined);
-  assert.equal(lost.unmasked, undefined);
+  assert.ok(lost.events.some((event) => event.type === 'restart'));
+  assert.equal(lost.tries, undefined);
+  assert.deepEqual(lost.hints, ['suspects']);
+  assert.equal(floorScoredMoves(lost), 1, 'only the hint\'s stroke is left on the floor\'s count');
 });
 
 test('the hint dialog pages the cards unlocked on this floor: the free card first, then each paid one in unlock order', () => {

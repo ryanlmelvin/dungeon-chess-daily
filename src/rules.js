@@ -984,10 +984,13 @@ function trapped(state) {
   return movesFor({ ...state, enemies: state.enemies.filter(stays) }, state.player).length === 0;
 }
 
-// Running out of moves ends the try: back to floor 1, with one more try on the share card.
+// Running out of moves starts the FLOOR over (restartFloor; the owner's call,
+// 2026-11-12: starting the whole day over was too harsh). Only a save from
+// before floors kept their own start falls back to a new try from floor 1
+// (restartRun, which retryLostRun also uses for the old 'lost' saves).
 // The certification search (src/fairness.js) throws away every transition
-// that ends the run, so while it runs a run-ending move only marks the
-// restart instead of building a fresh dungeon.
+// that marks a restart, so while it runs such a move only marks it instead of
+// rebuilding anything.
 let markRestartsOnly = false;
 /** Run `search` with restarts only marked; the search discards them anyway. */
 export function whileSearching(search) {
@@ -1016,6 +1019,29 @@ function restartRun(state, events, message) {
   state.message = message;
   return state;
 }
+
+/**
+ * A piece with no legal move starts its floor over, as Restart this floor does
+ * (resetFloor): the gold and powers it arrived with, the floor's move count
+ * afresh, paid hints and unmaskings kept. The try goes on: no new attempt is
+ * counted. A held Take-back keeps its `undo`, so it can still take back the
+ * move that cornered the piece. The 'restart' event marks it for the board,
+ * the searches and the bot (which counts the run as failed, as before).
+ */
+function restartFloor(state, events, message) {
+  if (markRestartsOnly || !state.floorSnapshot) return restartRun(state, events, markRestartsOnly ? message : NO_MOVES);
+  const { undo } = state;
+  const reset = resetFloor({ ...state });
+  for (const key of Object.keys(state)) delete state[key];
+  Object.assign(state, reset);
+  if (undo !== undefined) state.undo = undo;
+  // `scope: 'floor'` tells this restart from the old one of a whole run, which unlocked practice (canChoosePiece).
+  state.events = [...events, { type: 'restart', scope: 'floor', x: state.player.x, y: state.player.y }];
+  state.message = message;
+  return state;
+}
+/** The message a cornered piece's floor restart leaves. */
+const noMoves = (state) => `No legal moves. Floor ${state.floor + 1} starts over.`;
 
 /** Saves from before trapped runs restarted themselves end 'lost'; retrying one counts as another try. */
 export function retryLostRun(previous) {
@@ -1462,8 +1488,8 @@ function nextState(previous) {
   for (const power of POWERUPS) state.powers[power.id] ??= 0;
   // Saves from before optional-only capture gold were paid for every capture; keep what they banked.
   state.paidCaptures ??= state.gold - state.treasure + spentGold(state) - featGold(state.feats);
-  // Older saves only recorded exhaustion in the last action's events.
-  if (previous.events.some((event) => event.type === 'restart')) state.replayUnlocked = true;
+  // Older saves only recorded a run's exhaustion in the last action's events (a floor restart is no exhaustion).
+  if (previous.events.some((event) => event.type === 'restart' && event.scope !== 'floor')) state.replayUnlocked = true;
   return state;
 }
 
@@ -1574,7 +1600,7 @@ function play(previous, action) {
     }
     collapseTick(state); settle(state);
     caveInTick(state, previous); settle(state);
-    if (trapped(state)) restartRun(state, [], NO_MOVES);
+    if (trapped(state)) restartFloor(state, [], noMoves(state));
     return state;
   }
   if (action.type !== 'move' || !legalMoves(previous).some((move) => move.x === action.x && move.y === action.y)) return previous;
@@ -1604,7 +1630,7 @@ function play(previous, action) {
     // (or newly is), even if the square is still an ordinary move.
     const reinterpreted = Boolean(castleBefore) !== Boolean(castleAfter);
     if (relocated || ambushed || opening || reinterpreted || !legalMoves(state).some((move) => move.x === action.x && move.y === action.y)) {
-      if (trapped(state)) return restartRun(state, [], NO_MOVES);
+      if (trapped(state)) return restartFloor(state, [], noMoves(state));
       state.message = `${state.message ? `${state.message} ` : ''}${relocated ? 'Choose a move for your replacement pawn.' : legalMoves(state).length ? 'The board changed. Choose another move.' : 'The board changed. Wait for an opening.'}`;
       return state;
     }
@@ -1717,7 +1743,7 @@ function play(previous, action) {
   }
   collapseTick(state); settle(state);
   caveInTick(state, previous); settle(state);
-  if (trapped(state)) restartRun(state, [], NO_MOVES);
+  if (trapped(state)) restartFloor(state, [], noMoves(state));
   return state;
 }
 

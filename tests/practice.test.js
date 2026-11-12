@@ -136,15 +136,16 @@ test('practice choices control movement and the selected color controls who acts
   }
 });
 
-test('a cornered run unlocks selection durably and preserves the chosen piece, color and layout', () => {
+test('a cornered run starts its floor over: it unlocks no selection, and practice keeps its piece, color and layout', () => {
   const daily = getDaily('2026-11-05');
   assert.equal(canChoosePiece(createGame(daily)), false);
   const officialReset = exhaust(createGame(daily));
   assert.ok(officialReset.events.some((event) => event.type === 'restart'));
-  assert.equal(officialReset.replayUnlocked, true); assert.equal(canChoosePiece(officialReset), true);
+  // The official run goes on from its floor's start: nothing is unlocked by being cornered.
+  assert.equal(officialReset.replayUnlocked, undefined); assert.equal(canChoosePiece(officialReset), false);
   assert.equal(validateSave(roundTrip(officialReset), daily.date), true);
   const moved = act(officialReset, { type: 'move', ...legalMoves(officialReset)[0] });
-  assert.equal(moved.replayUnlocked, true); assert.equal(canChoosePiece(roundTrip(moved)), true);
+  assert.equal(moved.replayUnlocked, undefined); assert.equal(canChoosePiece(roundTrip(moved)), false);
   assert.equal(validateSave(moved, daily.date), true);
 
   for (const color of ['white', 'black']) {
@@ -152,18 +153,21 @@ test('a cornered run unlocks selection durably and preserves the chosen piece, c
     const reset = exhaust(practice);
     assert.equal(reset.startingPiece, 'queen'); assert.equal(reset.player.piece, 'queen');
     assert.equal(reset.playerColor, color); assert.equal(reset.hits, 0);
-    assert.equal(reset.practice, true); assert.equal(reset.replayUnlocked, true);
+    assert.equal(reset.practice, true); assert.equal(canChoosePiece(reset), true);
     assert.deepEqual(layout(reset), layout(practice));
     assert.equal(reset.turns, 0); assert.equal(reset.gold, 0); assert.equal(reset.floor, 0);
     assert.equal(validateSave(roundTrip(reset), daily.date, { practice: true }), true);
     const repeated = exhaust(reset);
-    assert.equal(repeated.replayUnlocked, true); assert.deepEqual(layout(repeated), layout(practice));
+    assert.equal(canChoosePiece(repeated), true); assert.deepEqual(layout(repeated), layout(practice));
   }
 });
 
 test('legacy exhaustion events become durable before the next action clears them', () => {
   const daily = getDaily('2026-11-05');
+  // An old save right after a run ran out of moves: a fresh floor 1 whose last event is a plain restart
+  // (today a cornered piece's floor restart is marked `scope: 'floor'` and unlocks nothing).
   const legacy = exhaust(createGame(daily)); delete legacy.replayUnlocked;
+  legacy.events = legacy.events.map(({ scope, ...event }) => event);
   assert.equal(validateSave(legacy, daily.date), true); assert.equal(canChoosePiece(legacy), true);
   const next = act(legacy, { type: 'move', ...legalMoves(legacy)[0] });
   assert.equal(next.replayUnlocked, true); assert.equal(canChoosePiece(next), true);
@@ -282,7 +286,7 @@ test('a practice run keeps its monsters through a restart and a reload, and forg
   const other = TIER_IDS.find((tier) => tier !== daily.difficulty);
   const practice = createPracticeGame(daily, { piece: 'queen', color: 'black', difficulty: other });
   const reset = exhaust(practice);
-  assert.equal(reset.difficulty, other); assert.equal(reset.replayUnlocked, true);
+  assert.equal(reset.difficulty, other); assert.equal(canChoosePiece(reset), true);
   assert.deepEqual(layout(reset), layout(practice));
   assert.equal(validateSave(roundTrip(reset), daily.date, { practice: true }), true);
   for (const difficulty of ['standard', 'nightmare', ['fair'], null, undefined]) {

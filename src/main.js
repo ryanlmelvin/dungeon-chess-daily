@@ -749,11 +749,11 @@ function renderTools() {
   // A caved-in room takes no more moves or pins: only Take back is left there.
   const pin = state.status === 'playing' && state.powers.pin > 0 && pinUsable(state) && !cavedIn(state);
   const leap = state.status === 'playing' && state.powers.leap > 0 && !cavedIn(state);
-  // The move that ended a run is taken back from the Captured page, not the fresh floor one.
-  const back = Boolean(takebackTarget(state)) && !restarted(state);
+  // A move that cornered you restarts the floor; a held Take back can still undo it from here.
+  const back = Boolean(takebackTarget(state));
   // A held Take back shows from the floor's start, greyed until there is a move
   // to undo, so the tray (and the board below it) never shifts when it wakes.
-  const held = state.status === 'playing' && state.powers.takeback > 0 && !restarted(state);
+  const held = state.status === 'playing' && state.powers.takeback > 0;
   if (!pin) pinning = false;
   $('pin-button').hidden = !pin; $('leap-button').hidden = !leap; $('takeback-button').hidden = !(back || held);
   $('tool-tray').hidden = !(pin || leap || back || held);
@@ -783,14 +783,10 @@ $('leap-button').addEventListener('click', () => {
   notify(`Squares with a ghosted ${borrowedPiece(state)} move like one. Only taking one spends the borrowed move.`);
 });
 $('takeback-button').addEventListener('click', () => { pinning = false; takeAction({ type: 'takeback' }); });
-const restarted = (game) => game?.events.some(event => event.type === 'restart');
-// A run ended with a Take-back still held: the Captured page offers it until it's used or declined.
-const deathTakeback = () => state?.status === 'playing' && restarted(state) && Boolean(takebackTarget(state));
 function enterGame() {
   refreshEdition();
   refreshFromOtherWindow();
   if (state?.status && state.status !== 'playing') return showResult();
-  if (deathTakeback()) return showDeath();
   switchScreen('game');
   if (!ensureRenderer()) return;
   if (!state) { state = newGame(); save(); }
@@ -1103,9 +1099,8 @@ function takeAction(action) {
     setTimeout(() => { if (state === played) offerHopelessRestart(); }, animationTime);
   }
   if (state.status !== 'playing') setTimeout(() => { if (state.status !== 'playing') showResult(); }, animationTime);
-  else if (state.events.some(event => event.type === 'restart')) setTimeout(() => {
-    if (screen === 'game' && state.status === 'playing' && state.events.some(event => event.type === 'restart')) showDeath();
-  }, animationTime);
+  // No legal move left: the floor has started over (src/rules.js restartFloor). Say so where the eye is.
+  else if (state.events.some(event => event.type === 'restart')) notify(state.message);
   return true;
 }
 // The recruit's order. Your move is already on the board;
@@ -1277,12 +1272,11 @@ function showResult() {
 function showResultActions(finished) {
   if (!finished) $('bot-compare').hidden = true;
   $('retry-button').hidden = finished;
-  $('death-takeback-button').hidden = finished || !deathTakeback();
-  $('retry-button').classList.toggle('primary', $('death-takeback-button').hidden);
+  $('retry-button').classList.add('primary');
   $('result-actions').hidden = !finished;
   if (!finished) { $('share-preview').hidden = true; $('share-button').hidden = true; }
 }
-// A cornered piece ends the try, so the only way forward is another one.
+// Only a save from before cornered pieces restarted by themselves ends 'lost': the way forward is another try.
 function showDeath() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -1292,22 +1286,14 @@ function showDeath() {
   $('result-kicker').textContent=`${runLabel()} EDITION`;
   $('result-title').textContent='Cornered.';
   $('result-summary').textContent='No legal moves left. The dungeon has the last word — this time.';
-  $('next-edition').textContent=deathTakeback()?'Take back that move, or try again from floor one.':'Try again from floor one.';
-  $(deathTakeback() ? 'death-takeback-button' : 'retry-button').focus({preventScroll:true});
+  $('next-edition').textContent='Try again from floor one.';
+  $('retry-button').focus({preventScroll:true});
   fitResult();
 }
-$('death-takeback-button').addEventListener('click',()=>{
-  if (!deathTakeback()) return;
-  state = act(state, { type: 'takeback' }); save();
-  showMoves = false; cursor = null; turnLocked = false;
-  enterGame();
-});
 $('retry-button').addEventListener('click',()=>{
   if (!state) return;
   if (state.status === 'lost') { state = retryLostRun(state); save(); }
   if (state.status !== 'playing') return;
-  // Trying again declines the Take-back: the fresh run doesn't carry it.
-  if (deathTakeback()) { state = structuredClone(state); delete state.undo; save(); }
   showMoves = false; cursor = null; turnLocked = false;
   enterGame();
 });

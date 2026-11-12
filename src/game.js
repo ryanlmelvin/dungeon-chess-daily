@@ -30,7 +30,7 @@ export function createPracticeGame(daily = getDaily(), { piece = daily.playerPie
 }
 
 export function canChoosePiece(state) {
-  return !!state && (['won', 'lost'].includes(state.status) || state.practice === true || state.replayUnlocked === true || state.events?.some((event) => event.type === 'restart') === true);
+  return !!state && (['won', 'lost'].includes(state.status) || state.practice === true || state.replayUnlocked === true || state.events?.some((event) => event.type === 'restart' && event.scope !== 'floor') === true);
 }
 
 /** The day's own piece, color and monsters: the only run with a par and a share card. */

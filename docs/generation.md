@@ -382,7 +382,7 @@ Two chess rules hold on the king floor, agreed after play on composed days
 
 A third rule follows from the pawn lane (no monster steps onto a pawn player's
 file): a monster pawn on your pawn's own file never moves away, so a pawn
-walled in under one is cornered at once (`trapped`), and the run restarts.
+walled in under one is cornered at once (`trapped`), and its floor starts over.
 
 ## Saves and versions
 
