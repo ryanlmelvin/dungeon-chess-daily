@@ -2145,16 +2145,22 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   delete base.generation;
   const partnered = partner ? partnerFloor(base, { starts: squares, trace }) : null;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
-  const floors = [], carried = {};
+  const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {
-    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, tight, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
+    arrived.push(Object.keys(carried).length ? { ...carried } : null);
+    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
   // Treasure: once a floor's room, line and hint are settled, a chest where one qualifies. Nothing else in the room changes.
   if (treasure) for (const [floor, composed] of floors.entries()) {
+    // A partner floor gets none: a chest's line is searched without the recruit, and its floor is won with it.
+    if (partnered?.floor === floor) { Object.assign(composed, { treasure: null, treasureMiss: 'partner' }); continue; }
     const began = performance.now();
-    Object.assign(composed, placeTreasure(composed, { seed: base.floorSeeds[floor], actionsFrom, start: (room) => floorStart(base, floor, room) }));
+    Object.assign(composed, placeTreasure(composed, {
+      seed: base.floorSeeds[floor], actionsFrom, start: (room) => floorStart(base, floor, room),
+      played: (room) => floorStart(base, floor, room, arrived[floor]), botSeed: (run) => runSeed(base, floor, run),
+    }));
     composed.treasureMs = performance.now() - began;
   }
   const actions = floors.flatMap((floor) => [...floor.line, { type: 'descend' }]);
