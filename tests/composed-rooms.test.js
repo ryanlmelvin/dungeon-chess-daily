@@ -85,49 +85,51 @@ test('a pawn player composes days that mix tempo and crown floors and three mate
 });
 
 // Ice and Breach days keep their modifier on composed floors (src/composer.js).
-// 2026-12-14 is an Ice queen day. On its first floor the key square is ice,
-// so a move aimed straight at it skids past and only a skid from the square
-// before stops there ('lock'). Its second floor is a Tandem, whose ice lies
-// off the line ('off'). Its king floor's mate aims one square short of the
-// mating square, on ice, and skids onto it ('skid'). Every room lays its own
-// ice, never on a wall, under a monster, on the start or on the exit, and the
-// day wins as played, never captured.
+// Two Ice bishop days. 2026-11-24: its first floor's line aims one square
+// short of the key square, on ice, and skids onto it ('skid'), and so does
+// its king floor's mate; its second floor is a Tandem, whose ice lies off the
+// line ('off'). 2026-12-17: on its second floor the key square is ice too, so
+// a move aimed straight at it skids past and only the skid stops there
+// ('lock'). Every room lays its own ice, never on a wall, under a monster, on
+// the start or on the exit, and each day wins as played, never captured.
 test('an Ice day lays each composed room’s ice around its planted line', async () => {
   const { composeDay } = await import('../src/composer.js');
   const { ICE_TILES } = await import('../src/modifiers.js');
-  const { daily, floors } = composeDay('2026-12-14');
-  assert.equal(daily.modifier, 'ice');
-  assert.deepEqual(floors.map((floor) => floor.ice), ['lock', 'off', 'skid']);
-  assert.equal(daily.generation.partner, 1);
-  let state = createGame(daily);
-  for (const floor of floors) {
-    assert.deepEqual(state.ice, daily.composed[state.floor].ice, 'the room’s own ice, not the seeded draw');
-    assert.equal(state.ice.length, ICE_TILES);
-    const start = { ...state.player };
-    for (const tile of state.ice) {
-      assert.notEqual(state.map[tile.y][tile.x], '#');
-      assert.ok(!state.enemies.some((foe) => foe.x === tile.x && foe.y === tile.y), 'never under a monster');
-      assert.ok(!(tile.x === start.x && tile.y === start.y) && !(tile.x === 4 && tile.y === 0), 'never on the start or the exit');
-    }
-    const hint = floor.room.items.find((item) => item.hint);
-    const skids = [];
-    for (const action of [...floor.line, { type: 'descend' }]) {
-      const next = act(state, action);
-      assert.ok(next !== state && next.hits === state.hits, 'never captured');
-      const slide = next.events.find((event) => event.type === 'slide');
-      if (slide) {
-        skids.push(slide);
-        if (floor.ice === 'lock') {
-          const direct = act(state, { type: 'move', x: slide.x, y: slide.y });
-          assert.ok(direct.player.x !== slide.x || direct.player.y !== slide.y, 'aimed straight at the key square, you skid past it');
-        }
+  for (const [date, kinds, partner] of [['2026-11-24', ['skid', 'off', 'skid'], 1], ['2026-12-17', ['off', 'lock', 'off'], undefined]]) {
+    const { daily, floors } = composeDay(date);
+    assert.equal(daily.modifier, 'ice');
+    assert.deepEqual(floors.map((floor) => floor.ice), kinds, date);
+    assert.equal(daily.generation.partner, partner, date);
+    let state = createGame(daily);
+    for (const floor of floors) {
+      assert.deepEqual(state.ice, daily.composed[state.floor].ice, 'the room’s own ice, not the seeded draw');
+      assert.equal(state.ice.length, ICE_TILES);
+      const start = { ...state.player };
+      for (const tile of state.ice) {
+        assert.notEqual(state.map[tile.y][tile.x], '#');
+        assert.ok(!state.enemies.some((foe) => foe.x === tile.x && foe.y === tile.y), 'never under a monster');
+        assert.ok(!(tile.x === start.x && tile.y === start.y) && !(tile.x === 4 && tile.y === 0), 'never on the start or the exit');
       }
-      state = next;
+      const hint = floor.room.items.find((item) => item.hint);
+      const skids = [];
+      for (const action of [...floor.line, { type: 'descend' }]) {
+        const next = act(state, action);
+        assert.ok(next !== state && next.hits === state.hits, 'never captured');
+        const slide = next.events.find((event) => event.type === 'slide');
+        if (slide) {
+          skids.push(slide);
+          if (floor.ice === 'lock') {
+            const direct = act(state, { type: 'move', x: slide.x, y: slide.y });
+            assert.ok(direct.player.x !== slide.x || direct.player.y !== slide.y, 'aimed straight at the key square, you skid past it');
+          }
+        }
+        state = next;
+      }
+      assert.equal(skids.length, floor.ice === 'off' ? 0 : 1);
+      if (skids.length && hint) assert.deepEqual([skids[0].x, skids[0].y], [hint.x, hint.y], 'the skid lands on the hinted key square');
     }
-    assert.equal(skids.length, floor.ice === 'off' ? 0 : 1);
-    if (skids.length && hint) assert.deepEqual([skids[0].x, skids[0].y], [hint.x, hint.y], 'the skid lands on the hinted key square');
+    assert.equal(state.status, 'won', date);
   }
-  assert.equal(state.status, 'won');
 });
 
 test('a composed room’s ice replaces the day’s seeded draw', () => {

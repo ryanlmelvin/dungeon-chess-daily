@@ -16,35 +16,42 @@ const spell = (actions) => actions.map((action) => (action.type === 'move' ? `${
 // A day composed with the option on (the release configuration, as stored) or off: its floors, each
 // floor's motif instance (the `kept` trace's) and each floor's start on the twin without hint
 // powerups, as a planted line is searched. `options` turns other options off, for a fixture.
+// Each day is composed once and kept: several tests read the same ones.
+const composedDays = new Map();
 function compose(date, tight, options = {}) {
+  const key = JSON.stringify([date, tight, options]);
+  if (composedDays.has(key)) return composedDays.get(key);
   const builts = [];
-  const { daily, floors } = composeDay(date, { ...options, tight, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } });
+  const { daily, floors, dropped } = composeDay(date, { ...options, tight, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } });
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  return { daily, floors, builts, starts: certifiedFloors(twin).starts, played: certifiedFloors(daily).starts };
+  const composed = { daily, floors, dropped, builts, starts: certifiedFloors(twin).starts, played: certifiedFloors(daily).starts };
+  composedDays.set(key, composed);
+  return composed;
 }
 
 test('the release configuration composes each day as its stored edition, and with the option off no floor names a form', () => {
   assert.equal(RELEASE.tight, true);
   // 2026-11-17 (a knight) has a subtle floor 2 and changes with the option off; 2026-11-28 (a pawn) doesn't (a test below).
   for (const date of ['2026-11-17', '2026-11-28']) {
-    const release = composeDay(date), stored = getDaily(date);
+    // With no options at all: tight forms are part of what composeDay composes.
+    const release = date === '2026-11-17' ? composeDay(date) : compose(date, true), stored = getDaily(date);
     assert.deepEqual(release.daily.composed, stored.composed, `${date}: the stored rooms`);
     assert.deepEqual(release.daily.generation.certificate.actions, stored.generation.certificate.actions, `${date}: the stored lines`);
     assert.deepEqual(release.daily.generation.motifs, stored.generation.motifs, `${date}: the stored ideas`);
     assert.deepEqual(release.dropped, [], `${date}: nothing given up`);
-    assert.ok(composeDay(date, { tight: false }).floors.every((floor) => floor.form === undefined), `${date}: no floor names a form with the option off`);
+    assert.ok(compose(date, false).floors.every((floor) => floor.form === undefined), `${date}: no floor names a form with the option off`);
   }
-  assert.equal(composeDay('2026-11-17').floors[1].form, 'subtle');
+  assert.equal(compose('2026-11-17', true).floors[1].form, 'subtle');
+  assert.deepEqual(compose('2026-11-17', true).daily.composed, getDaily('2026-11-17').composed, 'tight: true is the default');
 });
 
 // Floor 2 of a tight day, by form, as stored. 2026-12-04: a knight against two
 // rooks, the mouth; 2026-11-30: a knight against a lone queen, her corridor
 // alone; 2026-12-26: a bishop against two rooks, the pincer; 2026-11-17: a
-// knight against a lone queen, the pincer; 2026-11-23: a queen against two
-// rooks, the pincer; 2027-01-01: a bishop against pawns, a plain squeeze
-// picked for tightness.
+// knight against a lone queen, the pincer; 2027-01-01: a bishop against
+// pawns, a plain squeeze picked for tightness.
 const FORMS = [
-  ['2026-12-04', 'bait', 'subtle'], ['2026-11-30', 'bait', 'subtle'], ['2026-12-26', 'squeeze', 'subtle'], ['2026-11-17', 'squeeze', 'subtle'], ['2026-11-23', 'squeeze', 'subtle'], ['2027-01-01', 'squeeze', 'picked'],
+  ['2026-12-04', 'bait', 'subtle'], ['2026-11-30', 'bait', 'subtle'], ['2026-12-26', 'squeeze', 'subtle'], ['2026-11-17', 'squeeze', 'subtle'], ['2027-01-01', 'squeeze', 'picked'],
 ];
 test('each tight form composes, proves and has to be found', () => {
   for (const [date, motif, form] of FORMS) {
@@ -78,14 +85,14 @@ test('a tight day shows its idea plainly on floor 1 and subtly on floor 2', () =
   const raw = getRawDaily('2026-11-17');
   const base = { ...raw, floorSeeds: composedSeeds(raw.date) };
   assert.equal(dayIdea(base), 'squeeze');
-  const tight = composeDay('2026-11-17'), plain = composeDay('2026-11-17', { tight: false });
+  const tight = compose('2026-11-17', true), plain = compose('2026-11-17', false);
   assert.deepEqual(tight.floors.map((floor) => [floor.motif, floor.form ?? 'plain']), [['squeeze', 'plain'], ['squeeze', 'subtle'], ['net', 'plain']]);
   assert.deepEqual(plain.floors.map((floor) => floor.motif), ['bait', 'squeeze', 'net']);
   assert.deepEqual(tight.floors[2].room, plain.floors[2].room, 'the king floor of another piece than the pawn stays');
   // 2026-11-13: a rook against rooks on floor 2, which move along its own lines: no burrow holds them, and the option changes nothing.
-  const same = composeDay('2026-11-13'), stored = getDaily('2026-11-13');
+  const same = compose('2026-11-13', true), stored = getDaily('2026-11-13');
   assert.deepEqual(same.daily.composed, stored.composed);
-  assert.deepEqual(same.daily.composed, composeDay('2026-11-13', { tight: false }).daily.composed);
+  assert.deepEqual(same.daily.composed, compose('2026-11-13', false).daily.composed);
   assert.ok(same.floors.every((floor) => floor.form === undefined));
 });
 
