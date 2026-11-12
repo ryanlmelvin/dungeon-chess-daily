@@ -1239,6 +1239,16 @@ export function closeRangeSquares(state) {
   }
   return squares;
 }
+/**
+ * Where monster `foe` could move from where it stands, by its piece, the walls
+ * and the pieces in its way: its steps, and a capture of the player
+ * (`capture`). With `attacksOnly`, the squares it attacks instead (a pawn's
+ * diagonals, taken or not). The monsters' own move list, for press-and-hold
+ * inspection (src/inspect.js); changes nothing.
+ */
+export function monsterSquares(state, foe, attacksOnly = false) {
+  return movesFor(state, foe, true, attacksOnly);
+}
 
 // Recruit orders: a move or wait may carry the recruit's order for that turn, a
 // square it can move to ({x, y}) or 'hold'. The player's game always sends one
