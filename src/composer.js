@@ -51,6 +51,7 @@ import { ICE_TILES } from './modifiers.js';
 import { placeTreasure } from './treasure.js';
 // Partner floors steer the recruit (see "Partner floors" below).
 import { recruitChoice } from './rules.js';
+import { tightVerdict, playsIdea, TIGHT } from './tight.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -1006,6 +1007,216 @@ function pocketOrder(options, { seed, attempt, rng }) {
   return [...names.slice(turn), ...names.slice(0, turn)].flatMap((name) => shuffle(pockets.get(name), rng));
 }
 
+// ── Tight floors (composeDay's `tight` option, a dev preview; src/tight.js judges them) ──
+//
+// Subtle forms of the squeeze and the bait, for floor 2 of a tight day (floor
+// 1 keeps the plain form of the same idea where the matchup allows: a day's
+// arc). Both are built around a burrow: a few squares a target paces that
+// your piece can never land on, because the target's lines are not yours.
+// Nothing in a burrow can be taken there, and a target that never sees you
+// never comes out to hunt, so the idea is the only way in:
+//
+// - Pincer (the subtle squeeze): each burrow has two exits, and the target
+//   must step out onto one every other turn. Attack one exit and it uses the
+//   other. One square of yours, the key, attacks both exits of both burrows:
+//   stand there as a target is about to step out, and it steps into reach.
+// - Mouth (the subtle bait): one target winds up at your start square, as in
+//   the plain bait. The other paces a corridor whose far end, the mouth, is
+//   the one square of it you can land on. Sidestep the first lunge into the
+//   mouth: the second target closes in and winds up at you there. Go back and
+//   take the first where it landed, off-balance; the second lunges into the
+//   mouth behind you; return and take it too. A lone queen gets the corridor
+//   alone.
+//
+// Only targets shape these (their role is the floor's one known role): no
+// line depends on what a decoy is.
+
+/**
+ * The targets each player piece can burrow: those whose moves never run along
+ * its own lines, so a wall that shuts the target in still lets the piece
+ * reach the burrow's exits. A queen's lines are everyone's, so she burrows
+ * only for a knight.
+ */
+export const BURROWS = Object.freeze({ knight: ['rook', 'bishop', 'queen'], bishop: ['rook', 'knight'], rook: ['bishop', 'knight'], queen: ['knight', 'rook', 'bishop'] });
+/** Draws a subtle form makes per attempt (each is cheap, and most fail on a wall that would shut a kept square). */
+export const SUBTLE_TRIES = 40;
+/** Motif instances a subtle form tries (of composeFloor's MOTIF_ATTEMPTS) before its floor falls back to a plainer motif. */
+export const SUBTLE_ATTEMPTS = 24;
+/** The subtle form of each idea, as composeFloor's motif. */
+export const SUBTLE = Object.freeze({ bait: 'mouth', squeeze: 'pincer' });
+
+// Shut `tile` to the player's `piece`: walls on the squares it would land on
+// `tile` from, but for `open` squares and those a kept line crosses (the
+// exact search and the tight verdict have the last word there). A bishop
+// never lands on the other colour, so such a square needs none.
+function seal(plan, piece, tile, open = []) {
+  if (piece === 'bishop' && (tile.x + tile.y) % 2 !== (plan.start.x + plan.start.y) % 2) return true;
+  for (const step of firstSteps(piece, tile)) {
+    if (open.some((square) => same(square, step)) || plan.kept.has(index(step))) continue;
+    if (!plan.wall(step)) return false;
+  }
+  return true;
+}
+// Does `piece` on `from` attack every one of `tiles` over the plan's walls?
+const attacksAll = (plan, piece, from, tiles) => { const seen = reach(plan, piece, from); return tiles.every((tile) => seen.some((square) => same(square, tile))); };
+// The squares `piece` reaches from the start in exactly two moves on an empty board.
+function secondMoves(piece, start) {
+  const first = reachable(piece, start);
+  return SQUARES.filter((tile) => !same(tile, start) && !first.some((square) => same(square, tile)) && first.some((via) => reachable(piece, via).some((square) => same(square, tile))));
+}
+
+// The pincer. The key is the first move (a lone queen's the second: she
+// starts a step out of her burrow, so the line still takes three moves).
+function pincer(context) {
+  if (context.target === 'pawn' || !BURROWS[context.piece]?.includes(context.target) || context.attempt >= SUBTLE_ATTEMPTS) return null;
+  for (let tries = 0; tries < SUBTLE_TRIES; tries++) {
+    const built = pincerOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function pincerOnce({ piece, target, count, rng, start }) {
+  const fromStart = reachable(piece, start);
+  const key = shuffle((count === 2 ? fromStart : secondMoves(piece, start)).filter((tile) => tile.y >= 1 && tile.y <= 6 && !same(tile, EXIT)), rng)[0];
+  if (!key) return null;
+  const seen = reachable(piece, key);
+  let plan = new Plan(start);
+  plan.keep(start, key);
+  const burrows = [];
+  for (const home of shuffle(SQUARES, rng)) {
+    if (burrows.length === count) break;
+    // A home out of the key's reach and the start's, never beside the start.
+    if (!plan.free(home) || home.y > 6 || chebyshev(home, start) < 2 || [...seen, ...fromStart].some((square) => same(square, home))) continue;
+    // Two exits the key attacks and the start doesn't.
+    const exits = shuffle(firstSteps(target, home), rng).filter((tile) => plan.free(tile) && seen.some((square) => same(square, tile))
+      && !fromStart.some((square) => same(square, tile)) && !covers(target, tile, key) && !covers(target, tile, start)).slice(0, 2);
+    if (exits.length < 2) continue;
+    const trial = plan.clone();
+    trial.keep(home, ...exits, ...exits.flatMap((exit) => between(key, exit)));
+    if (!box(trial, target, home, exits) || !exits.every((exit) => box(trial, target, exit, [home, ...exits])) || !seal(trial, piece, home, exits)) continue;
+    // Still forked from the key once the walls stand, with the target home.
+    if (!attacksAll(trial, piece, key, exits)) continue;
+    plan = trial;
+    burrows.push({ home, exits });
+  }
+  if (burrows.length < count) return null;
+  // Every burrow must survive the others' walls.
+  if (!burrows.every((burrow) => attacksAll(plan, piece, key, burrow.exits))) return null;
+  for (const burrow of burrows) plan.place(0, target, count === 2 ? burrow.home : burrow.exits[0]);
+  return { plan, motif: 'squeeze', form: 'subtle', key, landing: burrows.flatMap((burrow) => burrow.exits) };
+}
+
+// The mouth. Two targets: one perched at the start square (the plain bait's),
+// one in the corridor. A lone queen: the corridor alone.
+function mouth(context) {
+  const { piece, target } = context;
+  if (target === 'pawn' || !BURROWS[piece]?.includes(target) || context.attempt >= SUBTLE_ATTEMPTS) return null;
+  // A queen takes a rook or bishop perched on her own line at once; she baits only knights.
+  if (piece === 'queen' && target !== 'knight') return null;
+  for (let tries = 0; tries < SUBTLE_TRIES; tries++) {
+    const built = mouthOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function mouthOnce({ piece, target, count, rng, start }) {
+  const plan = new Plan(start);
+  plan.keep(start);
+  const fromStart = reachable(piece, start);
+  const door = shuffle(fromStart.filter((tile) => tile.y >= 1 && tile.y <= 6 && !same(tile, EXIT)), rng)[0];
+  if (!door) return null;
+  // The corridor runs from the mouth along one of the target's lines: hall, then home.
+  const hall = shuffle(firstSteps(target, door), rng)[0];
+  if (!hall) return null;
+  const home = target === 'knight' ? shuffle(firstSteps('knight', hall).filter((tile) => !same(tile, door)), rng)[0] : at(2 * hall.x - door.x, 2 * hall.y - door.y);
+  if (!home || !inside(home) || [hall, home].some((tile) => !plan.free(tile) || tile.y > 6 || chebyshev(tile, start) < 2 || fromStart.some((square) => same(square, tile)))) return null;
+  // From the hall the second target must not cover the start square: the first is retaken there.
+  if (covers(target, hall, start) || covers(target, home, door)) return null;
+  plan.keep(door, hall, home, ...between(start, door));
+  if (count === 2) {
+    // The perch: aimed at the start, as the plain bait's, out of the piece's reach and clear of the corridor.
+    const perches = [];
+    if (target === 'knight') for (const [dx, dy] of KNIGHT) perches.push({ tile: at(start.x + dx, start.y + dy), lane: [], toward: start });
+    else for (const [dx, dy] of RAYS[target]) for (let k = 2; k < 8; k++) {
+      const tile = at(start.x + dx * k, start.y + dy * k);
+      if (!inside(tile)) break;
+      perches.push({ tile, lane: between(start, tile), toward: at(tile.x - dx, tile.y - dy) });
+    }
+    const perch = shuffle(perches, rng).find(({ tile, lane }) => inside(tile) && plan.free(tile) && tile.y <= 6 && chebyshev(tile, start) >= 2
+      && !fromStart.some((square) => same(square, tile)) && !covers(target, tile, door) && [hall, home].every((square) => chebyshev(square, tile) >= 2)
+      && lane.every((square) => plan.free(square) || same(square, start)));
+    if (!perch) return null;
+    plan.keep(...perch.lane);
+    plan.place(0, target, perch.tile);
+    if (!box(plan, target, perch.tile, [perch.toward])) return null;
+  }
+  plan.place(0, target, home);
+  if (!box(plan, target, home, [hall]) || !box(plan, target, hall, [home, door]) || !box(plan, target, door, [hall])) return null;
+  if (!seal(plan, piece, home) || !seal(plan, piece, hall)) return null;
+  // The mouth is still one move away once the walls stand.
+  if (!reach(plan, piece, start).some((square) => same(square, door))) return null;
+  return { plan, motif: 'bait', form: 'subtle', key: door };
+}
+MOTIFS.pincer = pincer;
+MOTIFS.mouth = mouth;
+// Pawn targets never burrow (they only march), so a knight's or a bishop's
+// floor 2 against them is a plain squeeze picked for tightness: the plain
+// builder's instances, on seeded streams of their own, kept only when they
+// pass the tight verdict and the bot's ceiling as the subtle forms must. (A
+// rook or queen reaches too much of the board: about one of their pawn
+// squeezes in fifteen passes, at a second a verdict. A bait picked this way,
+// for targets that move along your own lines, kept one instance in 2,300.)
+MOTIFS.squeezePicked = (context) => {
+  const built = context.target === 'pawn' && ['knight', 'bishop'].includes(context.piece) && context.attempt < SUBTLE_ATTEMPTS ? pawnSqueeze(context) : null;
+  return built && { ...built, form: 'picked' };
+};
+
+/**
+ * Must the idea be found? Of the human-like bot's seeded runs from `start`
+ * (it knows no ideas: plain sensible play), at most TIGHT.botPar may make par.
+ * The runs stop once the verdict is settled.
+ */
+function botFinds(start, base, floor, par) {
+  const most = TIGHT.botPar * BOT_GUARD.runs;
+  let made = 0;
+  for (let run = 0; run < BOT_GUARD.runs && made <= most && made + BOT_GUARD.runs - run > most; run++) {
+    const result = playFloor(start, { seed: runSeed(base, floor, run), cap: par + 1 });
+    if (result.won && result.moves <= par) made++;
+  }
+  return made <= most;
+}
+
+// Which ideas' forms fit a matchup: the plain forms as the builders above
+// allow them, the subtle ones by BURROWS.
+const fitsPlain = (idea, piece, target) => (idea === 'bait' ? !(piece === 'queen' && target === 'queen') && !(target === 'pawn' && (piece === 'bishop' || piece === 'queen'))
+  : target === 'pawn' || SQUEEZES[piece].includes(target));
+const fitsSubtle = (idea, piece, target) => target !== 'pawn' && BURROWS[piece].includes(target) && (idea !== 'bait' || piece !== 'queen' || target === 'knight');
+/**
+ * A tight day's idea ('bait' or 'squeeze'), from its date: floor 1 shows it
+ * plainly and floor 2 asks for its subtle form, where the two matchups allow
+ * one idea on both (a seeded pick where both ideas fit); else the idea floor
+ * 2 has a subtle form of; else the bait, as on any day.
+ */
+export function dayIdea(base) {
+  const ideas = ['bait', 'squeeze'], piece = base.playerPiece;
+  const pick = (list) => list[hash(`${base.floorSeeds[1]}:idea`) % list.length];
+  const both = ideas.filter((idea) => fitsPlain(idea, piece, base.targets[0]) && fitsSubtle(idea, piece, base.targets[1]));
+  if (both.length) return pick(both);
+  const second = ideas.filter((idea) => fitsSubtle(idea, piece, base.targets[1]));
+  return second.length ? pick(second) : 'bait';
+}
+// A tight day's motifs for `floor`, set in place of `preferred`'s: floor 1 the
+// day's idea plainly, then the other; floor 2 the subtle form of the idea,
+// then of the other (pawn targets: a squeeze picked for tightness), then its
+// plain motifs as on any day. A pawn's floors and the king floor keep theirs
+// (the king floor's verdict is in src/tight.js).
+function tightMotifs(preferred, base, floor) {
+  if (base.playerPiece === 'pawn' || floor === 2) return;
+  const idea = dayIdea(base), other = idea === 'bait' ? 'squeeze' : 'bait';
+  if (floor === 0) preferred.splice(0, preferred.length, idea, other);
+  else preferred.unshift(SUBTLE[idea], SUBTLE[other], 'squeezePicked');
+}
+
 /**
  * Which motifs fit a player piece and a floor's target role. The king floor
  * always nets. A pawn's floors are tempo lines, but one that opens with a
@@ -1116,7 +1327,7 @@ export function hastyScore(start, depth, from = floorScoredMoves(start)) {
 // A move's square is where it comes to rest (on ice, past the square aimed at).
 function ideaSquare(built, states, line) {
   if (built.pawnLine) return pawnKey(states, line);
-  if (built.motif === 'squeeze' || built.motif === 'net') return built.key;
+  if (built.motif === 'squeeze' || built.motif === 'net' || built.form) return built.key;
   if (built.motif !== 'bait') return null;
   const n = sidestep(built, states, line);
   return n >= 0 ? { x: states[n + 1].player.x, y: states[n + 1].player.y } : null;
@@ -1213,6 +1424,7 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 
 /** Does a winning line use the planted idea? `built` is the motif instance (composeFloor's trace hands it over at stage 'kept'). */
 export function usesIdea(built, states, line) {
+  if (built.form) return playsIdea({ motif: built.motif }, states, line);
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
   if (built.motif === PARTNER_MOTIF) return tandemIdea(states);
@@ -1779,7 +1991,7 @@ function partnerFloor(base, { starts, trace }) {
  * motif (`replayed` those whose planted idea won within the line's length).
  * On an Ice day `ice` says how the room's ice meets the line (iceVariants).
  */
-export function composeFloor(base, floor, { trace, carried = null, starts = startSquares() } = {}) {
+export function composeFloor(base, floor, { trace, carried = null, starts = startSquares(), tight = false } = {}) {
   const began = performance.now();
   const piece = base.playerPiece;
   const icy = base.modifier === 'ice';
@@ -1788,6 +2000,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   const stats = {};
   // A pawn's king floor nets each of its mates in turn ('net:king', …; PAWN_MATES).
   const preferred = piece === 'pawn' && floor === 2 ? pawnMates(seed).map((mate) => `net:${mate}`) : motifsFor(piece, cast.target, floor);
+  if (tight) tightMotifs(preferred, base, floor);
   // A pawn's unhinted tempo floor, kept until a crown floor takes its place.
   let spare = null;
   for (const motif of [...preferred, 'walk']) {
@@ -1841,12 +2054,14 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const idea = exact && (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
         const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose || !exact ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
+        if (tight && built.mate && !built.relaxed && !tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea }).ok) { trace?.({ motif, attempt, stage: 'tight:lazy', room, line }); return null; }
         if (!guarded) return { hasty };
         // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
         // fallback is still a puzzle, judged until its last tries.
         const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
         const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
         if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
+        if (tight && built.form) { const fails = botFinds(real, base, floor, line.length + 1) ? tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea }).why : 'bot'; if (fails) { trace?.({ motif, attempt, stage: `tight:${fails}`, room, line }); return null; } }
         return { hasty };
       };
       let best = null;
@@ -1895,6 +2110,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
           lines: wins.lines.length, forced: forcedShare(best.states), pressure: best.pressure, matched: cast.matched, lifeTrade: best.hasty < line.length,
           ...(best.ice && { ice: best.ice }), stats, ms: performance.now() - began,
         };
+        if (built.form) Object.assign(composed, { motif: built.motif, form: built.form });
         // A pawn's tempo line with nothing to hint at (it opens with a wait) gives way to a crown line, if one composes.
         if (piece === 'pawn' && motif === 'tempo' && !kind) { spare = composed; break; }
         return composed;
@@ -1919,8 +2135,12 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * floor on the days whose matchup has one (partnerFloors):
  * `generation.partner` is then that floor, whose line carries recruit orders
  * (and which gets no chest: a chest's line is searched without the recruit).
+ * `tight` (a dev preview too, off unless asked for) composes floors whose
+ * idea has to be found (src/tight.js): floor 2 takes a subtle form of the
+ * day's idea, which floor 1 shows plainly, and a pawn's king floor a mate its
+ * pawn can't sit out; such a floor says its `form`.
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false, partner = false } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false, partner = false, tight = false } = {}) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
@@ -1928,7 +2148,7 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {};
   for (const floor of [0, 1, 2]) {
-    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
+    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: Object.keys(carried).length ? { ...carried } : null, starts: squares, tight, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
@@ -1944,7 +2164,7 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   // every position along the way a valid save.
   const proof = proveComposed(daily, actions, { saves: true, ...(partnered && { partner: partnered.floor }) });
   // A partner floor that spoils the day's proof gives the day back to its own motifs.
-  if (!proof.valid && partnered) return composeDay(date, { tier, daily: raw, starts, trace, treasure });
+  if (!proof.valid && partnered) return composeDay(date, { tier, daily: raw, starts, trace, treasure, tight });
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
   daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), ...(partnered && { partner: partnered.floor }), certificate: { actions, metrics: proof.metrics } };
   if (treasure) daily.generation.treasure = floors.map((floor) => floor.treasure?.line ?? null);

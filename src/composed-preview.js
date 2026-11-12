@@ -15,12 +15,14 @@ const startsFor = (search) => { const name = new URLSearchParams(search).get('st
 const treasureFor = (search) => new URLSearchParams(search).get('treasure') !== '0';
 // Partner floors (src/composer.js composeDay's `partner`) are on in the preview; &partner=0 composes the day without one.
 const partnerFor = (search) => new URLSearchParams(search).get('partner') !== '0';
+// Tight floors (src/tight.js, composeDay's `tight`) are on in the preview too; &tight=0 composes the day without them.
+const tightFor = (search) => new URLSearchParams(search).get('tight') !== '0';
 
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
   const date = new URLSearchParams(search).get('composed');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return null;
-  try { return composeDay(date, { starts: startsFor(search), treasure: treasureFor(search), partner: partnerFor(search) }).daily; } catch (error) { console.error(error); return null; }
+  try { return composeDay(date, { starts: startsFor(search), treasure: treasureFor(search), partner: partnerFor(search), tight: tightFor(search) }).daily; } catch (error) { console.error(error); return null; }
 }
 
 /** Each start set saves apart; e2 keeps the key earlier previews used. */
