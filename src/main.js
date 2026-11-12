@@ -1258,16 +1258,22 @@ function showResult() {
   const hold = (line, gap) => line.split(gap).map(part => part.replaceAll(' ', '\u00A0')).join(gap);
   const [title, floors] = shareable ? shareText().split('\n') : [];
   $('share-preview').textContent=shareable ? `${stats.holdStreak(hold(title, ' · '))}\n${hold(floors, '  ')}` : '';
-  const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
+  // A past edition needs no pointer to more: the Archive button sits just above.
+  const next = archiveMode ? '' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
   if (!composedDay) journal.wonRun(state, daily);
   const legend = document.createElement('span');
   legend.className = 'result-legend';
-  legend.textContent = `${RESULT_LEGEND}\n`;
+  legend.textContent = next ? `${RESULT_LEGEND}\n` : RESULT_LEGEND;
   $('next-edition').replaceChildren(...(shareable ? [legend] : []), next);
   $(shareable || composedDay ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
   fitResult();
+}
+// The results paper's last row holds three one-word buttons; the full wording is their label.
+function setPaperButton(today) {
+  $('result-paper-button').textContent = today ? 'Today' : 'Paper';
+  $('result-paper-button').ariaLabel = today ? "Read today's paper" : 'Read the paper';
 }
 function showResultActions(finished) {
   if (!finished) $('bot-compare').hidden = true;
@@ -1466,7 +1472,7 @@ function openEdition(date) {
   notify('');
   showMoves = false; cursor = null;
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
-  $('result-paper-button').textContent = 'Read the paper';
+  setPaperButton(false);
   state = load();
   if (practice && !state) { setPracticeMode(false); state = load(); }
   renderPaper(); switchScreen('paper');
@@ -1513,6 +1519,7 @@ for (const [id, by] of [['archive-previous', -1], ['archive-next', 1]]) {
   $(id).addEventListener('click', () => { archiveShown = shiftMonth(archiveShown, by); renderArchive(); });
 }
 $('archive-button').addEventListener('click', openArchive);
+$('result-archive-button').addEventListener('click', openArchive);
 $('today-button').addEventListener('click', () => openEdition(getDaily().date));
 $('archive-today-button').addEventListener('click', () => openEdition(getDaily().date));
 function progressStatus(message) {
@@ -1606,7 +1613,7 @@ function refreshEdition() {
     return;
   }
   if (screen === 'result') {
-    $('result-paper-button').textContent = "Read today's paper";
+    setPaperButton(true);
     $('next-edition').textContent = "Today's new edition is ready.";
     fitResult();
     return;
