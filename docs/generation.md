@@ -401,6 +401,144 @@ build's report), its page moved from `PREVIEW_PAGES` to `PAGES`
 unchanged, and no `COMPOSER_VERSION` bump, since each idea draws from seeded
 streams of its own), the pinned tests and this document's figures brought up
 to date, and the owner's play of a local preview first.
+## Moving terrain, in preview: a crumbling floor and gates
+
+Two more room modifiers are built and drawn for no date yet
+(`src/modifiers.js`: neither is in `DRAW`, and `MODIFIERS` leaves both out of
+a listing). They are meant for Breach's days, where an arrival every ten
+moves never comes on a floor of three or four. A day carries one only when
+tooling passes it (`composeDay`'s `daily`, the measuring scripts'
+`--modifier`) or the dev preview is opened with `&modifier=cracks` or
+`&modifier=gates` (`src/composed-preview.js`); nothing stored, no rules
+version and no composer version changed for them.
+
+**One seam.** Both are terrain that changes during a floor, and the engine
+has one notion of it (`src/terrain.js`): `solid()` says whether a square is
+solid right now, a wall, a pit or a shut gate alike, and `walkable` in
+`src/rules.js` asks it. So legal moves, attack lanes, the monsters' choices,
+the exact search, the human-like bot (which plans over `terrainMap`) and the
+save check see one board. The squares terrain shuts right now travel in the
+state as two bit masks (`state.shut`) beside each modifier's own record
+(`cracks` and `pits`, or `gates`); `positionKey` holds the tiles still
+cracked and each gate's state; `validateSave` checks the record against the
+room and works the masks out again. A day without terrain carries none of
+these fields. Where the question is what could ever happen (is a pickup in
+reach, is the floor hopeless, is a piece cornered for good), gates count as
+open and pits as walls (`settled`): a gate opens again, a pit never mends.
+
+- **Crumbling floor** (`cracks`, `src/cracks.js`). About eight tiles a room
+  are cracked. A cracked tile falls away when the piece standing on it steps
+  off, yours, your recruit's or a monster's, and the pit it leaves blocks as
+  a wall does for the rest of the floor: nobody stands there, lines stop
+  there, knights jump it. Only a piece that stood on the tile breaks it:
+  sliding across or jumping over leaves it whole. Taking a piece there puts
+  the taker on the tile, which holds until the taker leaves; a captured
+  player stays put, so nothing falls. A lunge at a square that has fallen
+  lands nowhere, and the monster stands off-balance where it was. A monster
+  with no step left stays put, as one walled in always has. A piece of yours
+  with no move left starts its floor over, as on any day, and a target
+  sealed off by pits makes the floor hopeless, which the game already says
+  (`hopelessFloor`). No tile is cracked under a waiting recruit; a coin on a
+  tile that falls lies in the pit.
+- **Gates** (`gates`, `src/gates.js`). Two or three squares a room are
+  gates. Shut, a gate blocks as a wall does; open, it is floor. Every gate
+  stays shut two moves, then open two, and so on, each from its own place in
+  that cycle (`phase`), and gates change between turns, once you, your
+  recruit and every monster have moved: one turn is played on one board. The
+  board draws a gate's four looks, so nothing is counted: shut; shut with a
+  down arrow (it opens after this move); open; open with an up arrow (it
+  shuts after this move). A gate never shuts on a piece: it stays open under
+  one and shuts at the end of the first turn that leaves it empty while it
+  is still due shut; its rhythm never shifts. A monster already wound up
+  when a gate shuts across its path still lunges, finds the gate and stands
+  off-balance. A piece with no move only because gates are shut is not
+  cornered: waiting answers it.
+
+**Composing around terrain** (`src/composer.js`, "Terrain floors"). Ice only
+takes stops away from a slider; a pit or a gate changes what monsters can do.
+So terrain is laid on a motif's instance before anything is searched, and the
+room is proved with it in: the exact search, the idea, the dressing's checks,
+the hasty check and the bot guard all play the real rules. A floor's cracked
+tiles go where the idea lives: one to three among the start, the targets' own
+squares, the squares they can step to and the squares the motif keeps open,
+the rest of the eight anywhere free. Its gates go at the targets' doors: a
+square a target can step to, or a wall of its box opened into a gate, each at
+a place of its own in the rhythm, then one more on a kept square or anywhere
+free. Three rules are added to every floor's own:
+
+1. **The terrain matters** (`terrainReason`). The same room without its
+   tiles or gates must play differently: its line fails there, or something
+   wins sooner there, or something as short wins there that the terrain
+   rules out. A gate must matter twice, open for good and walled for good,
+   or it was only ever floor or only ever a wall.
+2. **No line of waiting.** A line holds at most one wait, and of a floor's
+   shortest lines those that wait least are planted first.
+3. **The idea may be played as a player would name it** (`playsIdea`), so a
+   bait whose lunge found a pit or a gate, and landed nowhere, still counts.
+
+A motif gets twelve searched instances a round and two rounds
+(`TERRAIN_INSTANCES`, `TERRAIN_ROUNDS`). A floor where none passes takes the
+floor a plain day would compose, tight form and all, with its terrain laid off
+the line (`terrainOff`, as Ice's 'off'): on no square the line moves to or
+rests on, with the line still winning, nothing winning sooner, and the hasty
+check and the bot guard passing; the first of twelve seeded layouts that does
+is kept, else the floor lays none. Each floor says which it got (`terrain`:
+'idea', 'off' or 'none'). Two things do not combine and say so here: a Tandem
+keeps its own composition with the terrain off its line (judged with the
+recruit on orders), and floor 2 tries its plain motifs around terrain before
+it falls back to its tight form with the terrain off the line, so a day's
+subtle form gives way to its terrain where the terrain composes. No chest
+lies on a cracked tile or a gate.
+
+**Measured** over 2026-11-13 to 2027-01-12, 61 days and 183 floors with each
+modifier forced on, each beside the same date composed as a plain day
+(`node scripts/measure-terrain.mjs --modifier cracks|gates --jobs 8`):
+
+| | Crumbling floor | Gates |
+|---|---|---|
+| Floors composed around the terrain | 127 (69%): 49, 43 and 35 on floors 1, 2 and 3 | 167 (91%): 54, 52 and 61 |
+| …because the line fails without it | 40 | 115 |
+| …because something wins sooner without it | 5 | 9 |
+| …because it rules out a win as short | 82 | 43 |
+| Floors with the terrain off the line | 56 | 16 |
+| Floors with none | 0 | 0 |
+| Lines of three moves / four | 103 / 80 (plain twins 121 / 62) | 84 / 99 |
+| Lines with a wait | 14 (plain twins 26) | 21 |
+| First actions that keep the line's length, around the terrain / plain twin | 47% / 47% | 51% / 45% |
+| First actions that keep par | 73% / 67% | 75% / 63% |
+| Bot runs at par or better | 51% / 38% | 40% / 38% |
+| Bot runs past par + 4 or failed | 3.7% / 3.0% | 4.5% / 2.7% |
+| The same, where the plain twin has the same idea and is neither tight nor a Tandem | 96 floors: par 51% / 47%, past par + 4 3.6% / 3.1% | 133 floors: par 38% / 46%, past par + 4 4.5% / 2.5% |
+| Bot runs that ended with no move (7,320 runs) | 0 | 0 |
+| Legal moves that strand the piece at once, in the positions those runs met | 887 of 303,747 (0.3%), on 14 floors (plain twins: 240, on 2) | 40 of 356,813, on 1 floor (a pawn's, as on its plain twin) |
+
+The floors that fell back: under a crumbling floor 8 Tandems, 4 tight forms,
+26 king floors (18 of them a bishop's: none of a bishop's 18 king floors
+composed around cracks, its net being indifferent to where the king stands),
+8 baits, 3 squeezes, 5 tempo and 2 crown floors; under gates 8 Tandems, 3
+tight forms, 2 baits, 2 crown floors and a tempo floor. By piece, floors
+around a crumbling floor: bishop 39%, knight 73%, pawn 73%, queen 94%, rook
+87%; around gates: bishop 89%, knight 85%, pawn 90%, queen 97%, rook 97%.
+
+On whether gates make a floor easier: the bot, which sees a shut gate as a
+wall and reads no rhythm, does not find them so. Like for like it makes par
+on 38% of its runs against 46% on the plain twins, on baits 47% against 73%,
+and gated lines are longer (70 of those 133 take four moves, against 42).
+What gates do give is slack at the start: more first actions keep par. The
+bot cannot read "it opens after this move", which is the whole of the idea
+that a gate shows a line's timing, so that half is for play to judge.
+
+A day composes in two to three times a plain day's time. Measured in the
+same runs as their plain twins, on a busy machine: a crumbling day 4.2 s at
+the median against 2.0 s, a gates day 2.4 s against 1.4 s; a queen's day is
+the slow one, 15 to 30 s on average under either. The dev preview composes in
+the page, so a queen's day takes a while to open.
+
+Shipping either one would take: its ids drawn for dates (`DRAW`; Breach's
+179 days are the ones to give them), a rules version (terrain is play), the
+room code holding a room's tiles or gates (`src/room-code.js`, as it holds
+ice), every edition rebuilt, a manual page each, and the journal left as it
+is (a terrain floor is still filed under its idea).
 
 ## Stored editions
 
@@ -602,6 +740,10 @@ and these scripts report what it finds:
 - `node scripts/measure-ideas.mjs` reports the ideas in preview (above): the
   days each fits, draws and composes on, with and without the bot's ceiling,
   what it takes the place of, and the mix of ideas per floor.
+- `node scripts/measure-terrain.mjs --modifier cracks|gates` composes each
+  date under one of the two modifiers in preview and as a plain day, and
+  compares them floor by floor (above); `measure-composer`,
+  `measure-par-slack` and `measure-tight` take `--modifier` too.
 
 The scripts that compose do so in the release configuration, as the build
 does; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option
