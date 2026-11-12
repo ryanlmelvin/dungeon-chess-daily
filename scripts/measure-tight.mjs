@@ -22,14 +22,15 @@
 // it fits, and with --no-ceiling without the bot's ceiling. The report then
 // says which floors the ideas took and what stood there before. --drawn
 // measures only the dates on which one of those ideas is tried at all (the
-// rest compose the same on both sides), which makes a long range affordable.
+// rest compose the same on both sides), which makes a long range affordable;
+// --dates a,b,c measures just those dates of the range.
 // By the human-like bot (--runs seeded runs a floor): runs at par or better,
 // runs that fail or pass par + 4, and runs at par off the idea (faithful).
 // Then how each floor came out (form, fallbacks, line lengths, compose time),
 // and a day-by-day table of --table days from --start. Read-only.
 //   node scripts/measure-tight.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--runs N]
 //     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path] [--no-partner] [--no-treasure]
-//     [--option tight|wait|lure|ideas] [--every] [--no-ceiling] [--drawn]
+//     [--option tight|wait|lure|ideas] [--every] [--no-ceiling] [--drawn] [--dates YYYY-MM-DD,…]
 // --jobs splits the dates over that many processes; --from reads rows a
 // previous run wrote with --json instead of measuring (other modes are still
 // measured), so the unchanging "off" side is computed once.
@@ -57,6 +58,7 @@ const switched = (mode) => (toggled === 'tight' ? { tight: mode === 'on' }
 // With --drawn: does the switched option try an idea on this date at all?
 const drawnOnly = process.argv.includes('--drawn') && toggledIdeas.length > 0;
 const drawn = (date) => { const raw = getRawDaily(date); return previewIdeas({ ...raw, floorSeeds: composedSeeds(date) }, switched('on')).some((ideas) => ideas.length > 0); };
+const only = arg('dates', null)?.split(',') ?? null;
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
 const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
@@ -103,7 +105,7 @@ function measure(wanted) {
   let n = 0;
   for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const date = new Date(time).toISOString().slice(0, 10);
-    if (drawnOnly && !drawn(date)) continue;
+    if ((only && !only.includes(date)) || (drawnOnly && !drawn(date))) continue;
     if (shard && n++ % shard[1] !== shard[0]) continue;
     for (const mode of wanted) rows.push(...measureDay(date, mode));
   }
