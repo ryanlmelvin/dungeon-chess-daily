@@ -21,8 +21,10 @@
 //   always has.
 // - A room lays its own cracked tiles (`room.cracks`, src/composer.js lays
 //   them around its planted line); one that lays none has none. No tile is
-//   cracked under a pickup or a waiting recruit, so nothing is ever lost down
-//   a pit.
+//   cracked under a waiting recruit: a recruit is never lost. A coin or a
+//   powerup may lie on one; if the tile falls before anyone picks it up, it
+//   lies at the bottom of the pit, out of reach (a coin magnet still draws a
+//   coin up).
 //
 // The state keeps `cracks` (the tiles still cracked) and `pits` (those that
 // fell, in the order they fell); src/terrain.js keeps the board in step.
@@ -34,9 +36,9 @@ export const CRACK_TILES = 8;
 const same = (a, b) => a.x === b.x && a.y === b.y;
 const byRow = (a, b) => a.y - b.y || a.x - b.x;
 
-/** A floor begins: its room's cracked tiles, none under a pickup, and no pit yet. */
+/** A floor begins: its room's cracked tiles, none under a waiting recruit, and no pit yet. */
 export function setupCracks(state, room) {
-  state.cracks = (room?.cracks ?? []).filter((tile) => !state.items.some((item) => same(item, tile)))
+  state.cracks = (room?.cracks ?? []).filter((tile) => !state.items.some((item) => item.type === 'companion' && same(item, tile)))
     .map(({ x, y }) => ({ x, y })).sort(byRow);
   state.pits = [];
   shutNow(state);

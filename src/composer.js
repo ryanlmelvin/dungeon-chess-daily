@@ -52,6 +52,10 @@ import { placeTreasure } from './treasure.js';
 // Partner floors steer the recruit (see "Partner floors" below).
 import { recruitChoice } from './rules.js';
 import { tightVerdict, playsIdea, standsAlone, TIGHT } from './tight.js';
+// Terrain floors (see "Terrain floors" at the end): a crumbling floor's tiles and the gates.
+import { TERRAIN_MODIFIERS } from './modifiers.js';
+import { CRACK_TILES } from './cracks.js';
+import { GATE_CYCLE } from './gates.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -200,6 +204,7 @@ class Plan {
     const copy = new Plan(this.start);
     copy.walls = new Set(this.walls); copy.units = this.units.map((unit) => ({ ...unit }));
     copy.items = this.items.map((item) => ({ ...item })); copy.kept = new Set(this.kept);
+    copy.terrain = this.terrain;
     return copy;
   }
   map() {
@@ -208,7 +213,7 @@ class Plan {
   // The room as src/rules.js reads it; `start` only where the player doesn't start on e2.
   room() {
     return { map: this.map(), enemies: this.units.map(({ x, y, cast, held }) => ({ x, y, cast, ...(held && { held }) })), items: this.items.map((item) => ({ ...item })),
-      ...(!same(this.start, HOME) && { start: { ...this.start } }) };
+      ...(!same(this.start, HOME) && { start: { ...this.start } }), ...this.terrain };
   }
 }
 
@@ -1650,6 +1655,8 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 export function usesIdea(built, states, line) {
   // A tight form's idea and an idea in preview are read as a player would name them (src/tight.js).
   if (built.form || built.found) return playsIdea({ motif: built.motif }, states, line);
+  // A terrain floor's bait or squeeze may also be played as a player would name it (a lunge that found a pit or a gate lands nowhere).
+  if (built.wide && !built.pawnLine && playsIdea({ motif: built.motif }, states, line, () => false)) return true;
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
   if (built.motif === PARTNER_MOTIF) return tandemIdea(states);
@@ -2229,6 +2236,9 @@ function partnerFloor(base, { starts, trace }) {
  * On an Ice day `ice` says how the room's ice meets the line (iceVariants).
  */
 export function composeFloor(base, floor, { trace, carried = null, starts = startSquares(), tight = false, ideas = [], ceiling = true } = {}) {
+  // A day of moving terrain composes each floor around its tiles or gates ("Terrain floors", below), which calls back here with its hooks.
+  const terrain = arguments[2]?.terrain ?? null;
+  if (!terrain && TERRAIN_MODIFIERS.includes(base.modifier)) return composeTerrainFloor(base, floor, arguments[2] ?? {});
   const began = performance.now();
   const piece = base.playerPiece;
   const icy = base.modifier === 'ice';
@@ -2245,6 +2255,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   let spare = null;
   for (const motif of [...preferred, 'walk']) {
     if (motif === 'walk' && spare) return { ...spare, ms: performance.now() - began };
+    if (motif === 'walk' && terrain) break;
     const [name, mate = null] = motif.split(':');
     const tally = (stats[motif] ??= { built: 0, replayed: 0, kept: 0 });
     const attempts = motif === 'walk' ? MOTIF_ATTEMPTS * 4 : MOTIF_ATTEMPTS;
@@ -2256,6 +2267,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
     // A pawn starts on the start set's files, on its motif's rows (the king floor's, by its mate).
     const pool = piece === 'pawn' ? pawnStarts(starts, PAWN_ROWS[floor === 2 ? (pawnFallback ? 'queen' : mate) : pawnFallback ? 'tempo' : motif]) : starts;
     for (let attempt = 0; attempt < attempts; attempt++) {
+      if (terrain?.spent(motif)) break;
       const rng = random(hash(`${seed}:${motif}:${attempt}`));
       // The instance's start, from a stream of its own (with one start, the rest draws as before).
       const square = pool.length === 1 ? pool[0] : pool[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * pool.length)];
@@ -2265,6 +2277,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         : motif === 'walk' && floor === 2 ? MOTIFS.net({ ...context, relaxed: true }) : MOTIFS[name](context);
       if (!built) { trace?.({ motif, attempt, stage: 'build' }); continue; }
       tally.built++;
+      if (terrain && !terrain.lay(built, motif, attempt)) { trace?.({ motif, attempt, stage: 'terrain' }); continue; }
       // Decoys the motif didn't use as guards wait walled in.
       context.quiet = context.guards;
       // A pawn decoy never waits where a pawn may need to climb to promote (it could never leave that file).
@@ -2279,8 +2292,10 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
       // Lines with every move scored and none a capture (a pawn's search counts captured lines too).
       const candidates = found.lines.filter((line) => line.length === found.depth).map((line) => ({ line, states: playLine(start, line) }))
         .filter(({ line, states }) => states && usesIdea(built, states, line));
+      if (terrain) terrain.order(candidates);
       const planted = candidates.find(({ line }) => follows(line)) ?? candidates[0];
       if (!planted) { trace?.({ motif, attempt, stage: 'idea', depth: found.depth, lines: found.lines, room: built.plan.room() }); continue; }
+      if (terrain && !terrain.matters(built.plan.room(), planted.line)) { trace?.({ motif, attempt, stage: 'terrain:bare', room: built.plan.room(), line: planted.line }); continue; }
       tally.replayed++;
       // The dressed room's checks, for `line` and its positions `states` from `dressed`: the line
       // wins and (a pawn's) uses the idea, nothing wins sooner or in a hasty two (the exact
@@ -2300,6 +2315,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
         const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
         if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
+        if (terrain && !terrain.matters(room, line)) { tally.idle = (tally.idle ?? 0) + 1; trace?.({ motif, attempt, stage: 'terrain:idle', room, line }); return null; }
         // A tight form, and an idea in preview whatever the option: its idea has to be found (src/tight.js),
         // and a Standstill's wait must be the only action that keeps par as it is made.
         if (built.found || (tight && built.form)) {
@@ -2480,6 +2496,7 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
   const partnered = partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null;
   // The ideas in preview this day's floors try (none unless asked for).
   const ideas = wait || lure ? previewIdeas(base, { wait, lure }, partnered?.floor ?? null) : [[], []];
+  if (partnered && TERRAIN_MODIFIERS.includes(base.modifier)) partnered.composed = terrainOff(base, partnered.floor, partnered.composed, { steered: true });
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {
@@ -2508,4 +2525,209 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
   daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), ...(partnered && { partner: partnered.floor }), certificate: { actions, metrics: proof.metrics } };
   if (treasure) daily.generation.treasure = floors.map((floor) => floor.treasure?.line ?? null);
   return { daily, floors };
+}
+
+// ── Terrain floors ──────────────────────────────────────────────────────────
+// A day whose modifier is moving terrain (src/terrain.js: a crumbling floor,
+// src/cracks.js, or gates, src/gates.js) has each floor composed around its
+// terrain, as an Ice day lays its tiles around the line (iceVariants). The
+// difference: ice only takes stops away from a slider, while a pit or a gate
+// changes what the monsters can do. So the terrain is laid on a motif's
+// instance before anything is searched, and the room is proved with it in:
+// the exact search, the idea, the dressing's checks, the hasty check and the
+// bot guard all play the real rules (composeFloor, unchanged but for its
+// hooks). Two things are added:
+//
+// - Where the terrain goes (layCracks, layGates): on the squares the idea
+//   lives on. Cracked tiles: one to three among the squares the motif keeps
+//   open (its lanes, key and landing squares, the start), the targets' own
+//   squares and the squares they can step to; the rest of the room's
+//   CRACK_TILES lie anywhere free. Gates: one at each target's door, either a
+//   square it can step to (a mouth) or a wall of its box opened into a gate (a
+//   door), each at a place of its own in the rhythm; one more on a kept square
+//   or anywhere free, two or three in all. No dressing lands on either.
+// - The terrain must matter (terrainMatters): a room is kept only if the same
+//   room without its tiles or gates plays differently: its line fails there,
+//   or something wins sooner, or something as short wins there that the
+//   terrain rules out here. A gate must matter shut as well as open: a wall
+//   in its place must change the play too, or it was only ever a wall.
+//
+// A floor where no instance passes takes the day's plain floor instead (the
+// same floor a plain day composes, tight forms and all) with its terrain laid
+// off the line (terrainOff, as Ice's 'off'): the line still wins, nothing
+// wins sooner and the hasty check and bot guard pass with the terrain in; and
+// if no such layout passes in TERRAIN_OFF_TRIES, with none. A Tandem floor
+// and a tight form are never composed around terrain: the Tandem keeps its
+// own composition with the terrain off its line (judged steered), and floor 2
+// tries its plain motifs around terrain before falling back to its tight form
+// with the terrain off the line. Each floor says which it got (`terrain`:
+// 'idea', 'off' or 'none').
+
+/** Rounds a terrain floor gives its motifs (each lays the instances' terrain afresh) before it falls back. */
+export const TERRAIN_ROUNDS = 2;
+/** Motif instances a round lays terrain on (and searches) per motif. */
+export const TERRAIN_INSTANCES = 12;
+/** Layouts of terrain off the line a fallback floor tries before it lays none. */
+export const TERRAIN_OFF_TRIES = 12;
+/** Waits a terrain floor's line may hold, at most. */
+export const TERRAIN_WAITS = 1;
+const waits = (line) => line.filter((action) => action.type === 'wait').length;
+const byRow = (a, b) => a.y - b.y || a.x - b.x;
+const squareAt = (n) => at(n % 8, n >> 3);
+const targetsOf = (plan) => plan.units.filter((unit) => unit.cast === 0);
+// The squares a target could step to in one move over the plan's walls (a pawn: down its file to the first wall).
+function targetSteps(plan, unit) {
+  if (unit.role !== 'pawn') return reach(plan, unit.role, unit, false);
+  const out = [];
+  for (let y = unit.y + 1; y < 8 && !plan.isWall(at(unit.x, y)); y++) out.push(at(unit.x, y));
+  return out;
+}
+
+// Cracked tiles for a motif instance: where the idea lives, then anywhere free. False when the idea has no square for one.
+function layCracks(built, rng) {
+  const { plan } = built;
+  const fits = (tile) => inside(tile) && !plan.isWall(tile) && !same(tile, EXIT) && !plan.items.some((item) => same(item, tile));
+  const collect = (tiles) => [...new Map(tiles.filter(fits).map((tile) => [index(tile), at(tile.x, tile.y)])).values()].sort(byRow);
+  // Where the idea lives: the start, each target's own square and the squares it can step to; then the other squares the motif keeps open.
+  const targets = targetsOf(plan);
+  const near = collect([plan.start, ...targets, ...targets.flatMap((target) => targetSteps(plan, target))]);
+  const kept = collect([...plan.kept].map(squareAt)).filter((tile) => !near.some((other) => same(other, tile)));
+  const pools = [shuffle(near, rng), shuffle(kept, rng)];
+  if (!pools[0].length) return false;
+  const idea = [];
+  for (let n = 1 + Math.floor(rng() * 3); n > 0; n--) {
+    const pool = (!idea.length || rng() < 2 / 3 ? pools : [pools[1], pools[0]]).find((list) => list.length);
+    if (pool) idea.push(pool.shift());
+  }
+  const rest = shuffle(SQUARES.filter((tile) => plan.free(tile) && !idea.some((other) => same(other, tile))), rng).slice(0, CRACK_TILES - idea.length);
+  const cracks = [...idea, ...rest].map(({ x, y }) => ({ x, y })).sort(byRow);
+  plan.keep(...cracks);
+  plan.terrain = { cracks };
+  return true;
+}
+
+// Gates for a motif instance: one at each target's door, then one more on a kept square or anywhere free. False when no target has a door.
+function layGates(built, rng) {
+  const { plan } = built;
+  const shut = (tile) => !inside(tile) || same(tile, EXIT) || same(tile, plan.start) || Boolean(plan.unitAt(tile)) || plan.items.some((item) => same(item, tile));
+  const gates = [], total = 2 + Math.floor(rng() * 2);
+  const lay = (tile) => {
+    if (gates.some((gate) => same(gate, tile))) return;
+    plan.walls.delete(index(tile));
+    gates.push({ x: tile.x, y: tile.y, phase: Math.floor(rng() * GATE_CYCLE) });
+  };
+  const doorsOf = (target) => {
+    const steps = shuffle(firstSteps(target.role, target).filter((tile) => !shut(tile)), rng);
+    const mouths = steps.filter((tile) => !plan.isWall(tile)), walls = steps.filter((tile) => plan.isWall(tile));
+    return rng() < 0.7 ? [...mouths, ...walls] : [...walls, ...mouths];
+  };
+  const targets = shuffle(targetsOf(plan), rng);
+  for (const target of targets) if (gates.length < total) { const [door] = doorsOf(target); if (door) lay(door); }
+  if (!gates.length) return false;
+  // A lone target may get a second door.
+  if (targets.length === 1 && rng() < 0.5) { const door = doorsOf(targets[0]).find((tile) => !gates.some((gate) => same(gate, tile))); if (door) lay(door); }
+  const kept = shuffle([...plan.kept].sort((a, b) => a - b).map(squareAt).filter((tile) => !shut(tile) && !plan.isWall(tile)), rng);
+  const free = shuffle(SQUARES.filter((tile) => plan.free(tile)), rng);
+  for (const tile of rng() < 0.5 ? [...kept, ...free] : [...free, ...kept]) { if (gates.length >= total) break; lay(tile); }
+  gates.sort(byRow);
+  plan.keep(...gates);
+  plan.terrain = { gates };
+  return true;
+}
+
+// A room without its terrain; with `walled`, a wall where each gate stood.
+function withoutTerrain(room, walled = false) {
+  const { cracks, gates, ...bare } = room;
+  if (!walled || !gates) return bare;
+  return { ...bare, map: room.map.map((row, y) => [...row].map((cell, x) => (gates.some((gate) => gate.x === x && gate.y === y) ? '#' : cell)).join('')) };
+}
+/**
+ * Does a room's terrain matter to its `line`? The same room without it plays
+ * differently: the line no longer wins there as it does here, or something
+ * wins sooner, or something as short wins there that the terrain rules out
+ * here (a plainer way in that the tiles or gates close). Gates must matter
+ * twice over: gone (open for good) and walled (shut for good).
+ */
+export function terrainMatters(base, floor, room, line) {
+  const wins = (start, moves) => Boolean(clean(playLine(start, moves))?.at(-1).exit.open);
+  const here = floorStart(base, floor, room);
+  const differs = (twin) => {
+    let start;
+    try { start = floorStart(base, floor, twin); } catch { return true; }
+    if (!wins(start, line)) return true;
+    const found = shortestWins(start, line.length);
+    return found.depth < line.length || found.lines.some((other) => !wins(here, other));
+  };
+  return differs(withoutTerrain(room)) && (!room.gates || differs(withoutTerrain(room, true)));
+}
+
+// Terrain off a finished floor's line: on no square its line moves to or rests on, nor a wall, a monster, a pickup, the start or the exit.
+function offLayout(base, room, line, states, rng) {
+  const taken = new Set([...room.enemies, ...room.items, room.start ?? HOME, EXIT, ...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index));
+  const pool = shuffle(SQUARES.filter((tile) => room.map[tile.y][tile.x] !== '#' && !taken.has(index(tile))), rng);
+  if (base.modifier === 'cracks') return { cracks: pool.slice(0, CRACK_TILES).map(({ x, y }) => ({ x, y })).sort(byRow) };
+  return { gates: pool.slice(0, 2 + Math.floor(rng() * 2)).map(({ x, y }) => ({ x, y, phase: Math.floor(rng() * GATE_CYCLE) })).sort(byRow) };
+}
+/**
+ * A finished floor (composeFloor's or composeTandem's result, composed
+ * without terrain) with the day's terrain laid off its line: the first of
+ * TERRAIN_OFF_TRIES seeded layouts with which the line still wins, never
+ * captured, nothing wins sooner, and the hasty check and the bot guard pass
+ * (`steered`: a Tandem's, the recruit on orders); else with no terrain at
+ * all, which plays as the plain floor it is. `terrain` says which: 'off' or
+ * 'none'.
+ */
+export function terrainOff(base, floor, plain, { carried = null, steered = false } = {}) {
+  const { line } = plain, mode = steered ? STEERED : undefined;
+  const unhinted = (room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) });
+  const none = { [base.modifier === 'cracks' ? 'cracks' : 'gates']: [] };
+  const bare = playLine(floorStart(base, floor, unhinted({ ...plain.room, ...none })), line, mode);
+  const passes = (room) => {
+    const dressed = floorStart(base, floor, unhinted(room)), real = floorStart(base, floor, room, carried);
+    if (!clean(playLine(dressed, line, mode))?.at(-1).exit.open || !winsAsPlayed(real, line)) return false;
+    if (plain.motif === 'walk') return true;
+    if (steered) return !steeredWin(dressed, line.length - 1) && steeredHasty(dressed, line.length - 1) > line.length && hastyScore(dressed, line.length) > line.length + 1 && partnerGuard(dressed, base, floor, line).ok;
+    return !shortestWins(dressed, line.length - 1) && hastyScore(real, BOT_GUARD.short) > BOT_GUARD.short && botGuard(real, base, floor, line.length + 1).ok;
+  };
+  if (bare) for (let n = 0; n < TERRAIN_OFF_TRIES; n++) {
+    const room = { ...plain.room, ...offLayout(base, plain.room, line, bare, random(hash(`${base.floorSeeds[floor]}:terrain:off:${n}`))) };
+    if (passes(room)) return { ...plain, room, terrain: 'off' };
+  }
+  return { ...plain, room: { ...plain.room, ...none }, terrain: 'none' };
+}
+
+/**
+ * Compose `floor` of a terrain day (composeFloor hands it over): around its
+ * terrain where a motif instance passes with terrain that matters, each of
+ * TERRAIN_ROUNDS laying the instances' terrain afresh from a seeded stream of
+ * its own; else the day's plain floor with the terrain off its line
+ * (terrainOff). What composeFloor returns, with `terrain`: 'idea', 'off' or
+ * 'none'.
+ */
+function composeTerrainFloor(base, floor, options) {
+  const began = performance.now(), seed = base.floorSeeds[floor];
+  for (let round = 0; round < TERRAIN_ROUNDS; round++) {
+    const laid = {};
+    const hooks = {
+      // Each built instance is searched exactly, so a motif gets TERRAIN_INSTANCES of them a round.
+      spent: (motif) => (laid[motif] ?? 0) >= TERRAIN_INSTANCES,
+      lay(built, motif, attempt) {
+        laid[motif] = (laid[motif] ?? 0) + 1;
+        const rng = random(hash(`${seed}:${motif}:${attempt}:terrain:${round}`));
+        built.wide = true;
+        return base.modifier === 'cracks' ? layCracks(built, rng) : layGates(built, rng);
+      },
+      // Of the shortest lines that use the idea, those that wait least come first (the sort is stable).
+      order: (candidates) => candidates.sort((a, b) => waits(a.line) - waits(b.line)),
+      // A line that waits more than TERRAIN_WAITS moves is patience, not a puzzle: no terrain makes up for it.
+      matters: (room, line) => waits(line) <= TERRAIN_WAITS && terrainMatters(base, floor, room, line),
+    };
+    try {
+      // Floor 2's tight forms are not composed around terrain: its plain motifs are (floor 1 keeps the day's idea first).
+      const composed = composeFloor(base, floor, { ...options, tight: Boolean(options.tight) && floor === 0, terrain: hooks });
+      return { ...composed, terrain: 'idea', rounds: round + 1, ms: performance.now() - began };
+    } catch (error) { if (!String(error.message).startsWith('No floor composed')) throw error; }
+  }
+  const plain = composeFloor({ ...base, modifier: 'none' }, floor, options);
+  return { ...terrainOff(base, floor, plain, options), ms: performance.now() - began };
 }

@@ -31,6 +31,9 @@
 //   node scripts/measure-tight.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--runs N]
 //     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path] [--no-partner] [--no-treasure]
 //     [--option tight|wait|lure|ideas] [--every] [--no-ceiling] [--drawn] [--dates YYYY-MM-DD,…]
+//     [--modifier none|ice|collapse|cracks|gates]
+// --modifier composes every day under that modifier instead of its own (cracks and gates, the two
+// in preview, compose floor 2 around its terrain before its tight form: src/composer.js "Terrain floors").
 // --jobs splits the dates over that many processes; --from reads rows a
 // previous run wrote with --json instead of measuring (other modes are still
 // measured), so the unchanging "off" side is computed once.
@@ -59,6 +62,7 @@ const switched = (mode) => (toggled === 'tight' ? { tight: mode === 'on' }
 const drawnOnly = process.argv.includes('--drawn') && toggledIdeas.length > 0;
 const drawn = (date) => { const raw = getRawDaily(date); return previewIdeas({ ...raw, floorSeeds: composedSeeds(date) }, switched('on')).some((ideas) => ideas.length > 0); };
 const only = arg('dates', null)?.split(',') ?? null;
+const forced = arg('modifier', null);
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
 const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
@@ -67,7 +71,7 @@ function measureDay(date, mode) {
   const raw = getRawDaily(date), builts = [];
   let composed;
   const began = performance.now();
-  try { composed = composeDay(date, { ...options, ...switched(mode), trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
+  try { composed = composeDay(date, { ...options, ...(forced && { daily: { ...raw, modifier: forced } }), ...switched(mode), trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
   const dayMs = performance.now() - began;
   const { daily, floors } = composed;
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };

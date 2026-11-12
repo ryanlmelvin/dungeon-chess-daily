@@ -23,7 +23,11 @@
 //   node scripts/measure-par-slack.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…]
 //     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N]
 //     [--no-treasure] [--no-partner] [--no-tight] [--wait] [--lure] [--ideas] [--every] [--no-ceiling]
-// --jobs splits the dates over that many processes.
+//     [--modifier none|ice|collapse|cracks|gates]
+// --jobs splits the dates over that many processes. --modifier composes every
+// day under that modifier instead of its own (none: as a plain day; cracks and
+// gates, the two in preview, lay each floor's terrain: the report then adds how
+// each floor met it, and the bot's runs past par + 4).
 // Days compose in the release configuration, as the stored editions do;
 // --no-treasure, --no-partner and --no-tight each turn one of its options off
 // (scripts/compose-options.mjs), and --wait, --lure or --ideas add the ideas
@@ -47,6 +51,7 @@ const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 const jobs = Number(arg('jobs', 1)), budget = Number(arg('budget', 600_000)), most = Number(arg('lines', 3000)), examples = Number(arg('examples', 6));
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
 const options = composeOptions();
+const forced = arg('modifier', null);
 /** A steered search tries each move with several orders, so a partner floor gets this many times --budget. */
 const PARTNER_BUDGET = 10;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
@@ -208,7 +213,7 @@ function measure() {
     if (shard && n++ % shard[1] !== shard[0]) continue;
     const builts = [];
     let composed;
-    try { composed = composeDay(date, { ...options, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+    try { composed = composeDay(date, { ...options, ...(forced && { daily: { ...raw, modifier: forced } }), trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
     const { daily, floors } = composed;
     // The search runs on the twin without hint powerups (src/generation.js proveComposed), the bot on the day as played.
     const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
@@ -227,6 +232,8 @@ function measure() {
         start: square(floor.room.start ?? { x: 4, y: 6 }), route: spell(floor.line), ...exact,
         runs: outcomes.length, botPar: outcomes.filter((run) => run.won && run.moves <= par).length, botLine: outcomes.filter((run) => run.won && run.moves <= length).length,
         botPlain: outcomes.filter((run) => run.won && run.moves <= par && !run.idea).length,
+        // A run stops at par + 5 (its cap), so one that hasn't won failed or passed par + 4.
+        botPast: outcomes.filter((run) => !run.won).length, terrain: floor.terrain ?? null,
       });
     });
   }
@@ -239,7 +246,7 @@ const sum = (rows, pick) => rows.reduce((total, row) => total + pick(row), 0);
 
 function report(rows) {
   const failed = rows.filter((row) => row.failed), floors = rows.filter((row) => !row.failed);
-  console.log(`Room around the planted idea: ${new Set(floors.map((row) => row.date)).size} days (${start} to ${end}; ${pieces.join(', ')}) in ${optionsLabel(options)}, ${floors.length} floors, ${runs} bot runs a floor.`);
+  console.log(`Room around the planted idea: ${new Set(floors.map((row) => row.date)).size} days (${start} to ${end}; ${pieces.join(', ')}) in ${optionsLabel(options)}${forced ? `, every day composed under the modifier ${forced}` : ''}, ${floors.length} floors, ${runs} bot runs a floor.`);
   if (failed.length) console.log(`${failed.length} days failed to compose: ${failed.map((row) => row.date).join(', ')}`);
   const header = '| Group | Floors | Search cut short | First actions | …keep the line | …keep par | One first action keeps the line | One keeps par | Floors with a par win off the idea | …at the line\'s own length | Par wins off the idea (mean share) | Bot runs at par or better | …under par | Bot runs at par off the idea | Floors the bot pars off the idea in half its runs |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
   const line = (name, all) => {
@@ -256,6 +263,10 @@ function report(rows) {
   table('By motif', by((row) => row.motif));
   table('By piece', by((row) => row.piece));
   table('By motif and piece', by((row) => `${row.motif} · ${row.piece}`));
+  if (floors.some((row) => row.terrain)) {
+    table('By how the floor met its terrain (src/composer.js "Terrain floors": composed around it, laid off the line, or none)', by((row) => `terrain ${row.terrain}`));
+    console.log(`\nBot runs past par + 4 or failed: ${by((row) => `terrain ${row.terrain}`).map(([name, group]) => `${name} ${percent(sum(group, (row) => row.botPast), sum(group, (row) => row.runs))}`).join(', ')}; all ${percent(sum(floors, (row) => row.botPast), sum(floors, (row) => row.runs))}.`);
+  }
   const loose = floors.filter((row) => !row.cut && row.plain > 0).sort((a, b) => b.botPlain / b.runs - a.botPlain / a.runs).slice(0, examples);
   if (loose.length) {
     console.log('\nFloors the bot most often pars off the idea (date, floor, piece, motif; planted line; a par win off the idea; bot runs at par off the idea):\n');

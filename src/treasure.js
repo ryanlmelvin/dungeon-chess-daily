@@ -164,10 +164,10 @@ export function botMarks(start, par, seedOf, runs = TREASURE_BOT.runs) {
 }
 
 // The squares a room's chest may not lie on: walls, the start, the exit, a monster's or an
-// item's square, ice (as no pickup lies on ice), and every square the planted line moves to
+// item's square, ice (as no pickup lies on ice), a cracked tile or a gate, and every square the planted line moves to
 // or comes to rest on (`states`, its positions).
 function taken(room, line, states) {
-  const squares = new Set([room.start ?? HOME, EXIT, ...room.enemies, ...room.items, ...(room.ice ?? []),
+  const squares = new Set([room.start ?? HOME, EXIT, ...room.enemies, ...room.items, ...(room.ice ?? []), ...(room.cracks ?? []), ...(room.gates ?? []),
     ...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index));
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (room.map[y][x] === '#') squares.add(y * 8 + x);
   return squares;

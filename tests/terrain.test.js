@@ -140,11 +140,11 @@ test('crumbling: a capture on a cracked tile holds it until the taker leaves; a 
   assert.ok(!has(legalMoves(beside), 5, 5), 'no piece lands in a pit');
 });
 
-test('crumbling: no tile is cracked under a pickup, and a lunge at a pit goes nowhere', () => {
+test('crumbling: no tile is cracked under a waiting recruit, and a lunge at a pit goes nowhere', () => {
   // A decoy rook walled in on e6, aimed down the file at the rook's cracked start square.
-  const laid = sealed({ enemies: [decoy('rook', 4, 2)], walls: [[3, 2], [5, 2], [4, 1]], items: [{ x: 6, y: 4, type: 'coin' }], cracks: [{ x: 4, y: 6 }, { x: 6, y: 4 }] });
+  const laid = sealed({ enemies: [decoy('rook', 4, 2)], walls: [[3, 2], [5, 2], [4, 1]], items: [{ x: 6, y: 4, type: 'companion', piece: 'knight' }], cracks: [{ x: 4, y: 6 }, { x: 6, y: 4 }] });
   let state = game('cracks', laid);
-  assert.deepEqual(state.cracks, [{ x: 4, y: 6 }], 'the tile under the coin is left whole');
+  assert.deepEqual(state.cracks, [{ x: 4, y: 6 }], 'the tile under the recruit is left whole: a recruit is never lost');
   const rook = () => state.enemies.find((foe) => foe.piece === 'rook');
   assert.equal(rook().phase, 'aim');
   // Sidestep: the square it aimed at is a pit now, so the lunge has nowhere to land.
@@ -173,6 +173,18 @@ test('crumbling: a piece left with no move at all starts its floor over, tiles m
   assert.equal(state.cracks.length, 2);
   assert.equal(state.turns, 0);
   assert.equal(saved(state, 'cracks', laid), true);
+});
+
+test('crumbling: a target sealed off by a pit makes the floor hopeless, so the restart is offered', () => {
+  // The walled-in knight on a8 can only be reached from a7: b8 is a wall, and a7 is cracked.
+  const laid = sealed({ start: { x: 0, y: 6 }, walls: [[1, 0]], cracks: [{ x: 0, y: 1 }] });
+  let state = game('cracks', laid);
+  state = act(state, move(0, 1));
+  assert.equal(hopelessFloor(state), false, 'standing on the tile, the knight is one move away');
+  state = act(state, move(0, 4));
+  assert.deepEqual(state.pits, [{ x: 0, y: 1 }]);
+  assert.equal(hopelessFloor(state), true);
+  assert.equal(hopelessFloor(resetFloor(state)), false);
 });
 
 test('gates: two moves shut, two moves open, each from its own place in the rhythm', () => {
