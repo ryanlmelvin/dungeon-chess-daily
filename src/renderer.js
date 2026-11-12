@@ -54,6 +54,11 @@ const GEM = ['..xxxxxxx..', '.xwwcccbbx.', 'xwwcccccbbx', 'xbbbbbbbbbx', '.xwccc
 const GEM_PALETTE = { x: '#14304d', w: '#f2fdff', c: '#79d8ff', b: '#3a9be0' };
 const GEM_POP_MS = 1600;
 const GEM_WIDTH = 0.56;
+// A bone ward breaking (rules.js 'shield' event): as the blocked strike lands
+// its ring bursts outward in the ward's ice-blue and throws bone-white shards,
+// so a capture that cost nothing is never mistaken for one that was missed.
+const WARD = 0xa7dfff;
+const WARD_BREAK_MS = 560;
 const BADGE_WIDTH = 0.42;
 // Paid hints (main.js): rings around the identified targets, in the objective's
 // "Targets left" pink, and the danger map's black-and-white hatch (sprites.js
@@ -156,6 +161,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   const targets = [];
   const particles = [];
   const pops = [];
+  const breaks = [];
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let state = null;
   let boardKey = '';
@@ -268,7 +274,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     itemKey = '';
     pendingItems = null;
     recruitSprites = [];
-    targets.length = particles.length = pops.length = 0;
+    targets.length = particles.length = pops.length = breaks.length = 0;
     entities.clear();
     columns = next.map?.[0]?.length || 8;
     rows = next.map?.length || 8;
@@ -587,6 +593,33 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const angle = i * Math.PI / 4;
       particles.push({ mesh, life: 0.4, velocity: new THREE.Vector3(Math.cos(angle) * 1.2, 1 + i % 2, Math.sin(angle) * 0.8) });
     }
+  }
+
+  // A bone ward's shards: more and larger than a capture's burst, in the ward's colours.
+  function shards(x, y) {
+    if (reducedMotion) return;
+    for (let i = 0; i < 12; i++) {
+      const material = new THREE.SpriteMaterial({ color: i % 3 ? WARD : WHITE, transparent: true, depthWrite: false });
+      materials.add(material);
+      const mesh = new THREE.Sprite(material);
+      mesh.renderOrder = ACTOR_LAYER;
+      mesh.scale.set(0.085, 0.085, 1);
+      mesh.position.set(x, 0.3, y);
+      actors.add(mesh);
+      const angle = i * Math.PI / 6;
+      particles.push({ mesh, life: 0.55, velocity: new THREE.Vector3(Math.cos(angle) * 1.7, 1.2 + (i % 3) * 0.5, Math.sin(angle) * 1.1) });
+    }
+  }
+  // The ward's ring, bursting at `at`: it widens and fades where the piece stands
+  // (under reduced motion it only flashes there), and throws its shards.
+  function wardBreak(x, y, at) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.41, 20), basic(WARD, { transparent: true, opacity: 0.95, depthWrite: false, depthTest: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.07, y);
+    ring.renderOrder = 3;
+    ring.visible = false;
+    actors.add(ring);
+    breaks.push({ ring, at, x, y, thrown: false });
   }
 
   // The cracking ceiling (src/cave-in.js) shakes the view and shakes dust
@@ -923,6 +956,9 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       }
       if (!animateTurn) burst(next.player.x, next.player.y);
     }
+    // A bone ward blocks the strike and breaks as it lands.
+    const warded = changedBoard ? null : events.find((event) => event.type === 'shield');
+    if (warded) wardBreak(warded.x, warded.y, animateTurn ? hitAt : now);
     // Show who struck: the attacker lunges at the player's square and back,
     // tinted red, peaking as the player flashes. A shield block lunges too.
     const strike = events.find((event) => (event.type === 'player-captured' || event.type === 'shield') && event.by);
@@ -1132,6 +1168,17 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       pendingQuake = null;
       if (event.type === 'cave-in') caveIn();
       else tremor(event.type === 'cave-crack' ? 0 : (event.total - event.left) / Math.max(1, event.total - 1));
+    }
+    for (let i = breaks.length - 1; i >= 0; i--) {
+      const broken = breaks[i];
+      if (timestamp < broken.at) continue;
+      const t = (timestamp - broken.at) / WARD_BREAK_MS;
+      if (t >= 1) { release(broken.ring); breaks.splice(i, 1); continue; }
+      if (!broken.thrown) { broken.thrown = true; shards(broken.x, broken.y); }
+      broken.ring.visible = true;
+      const wide = reducedMotion ? 1 : 1 + 1.7 * (1 - (1 - t) ** 2);
+      broken.ring.scale.set(wide, wide, 1);
+      broken.ring.material.opacity = 0.95 * (1 - t);
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i];

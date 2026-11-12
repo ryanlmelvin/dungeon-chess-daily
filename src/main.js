@@ -999,7 +999,9 @@ function showTacticCallout(events) {
   const fork = events.find((event) => event.type === 'fork');
   const pair = events.some((event) => event.type === 'bishop-pair');
   const treasure = treasureEarned(events);
-  const parts = [pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱', treasure && `Treasure! ${TREASURE_MARK}`].filter(Boolean);
+  // A bone ward that blocks a capture says so over the board: the capture cost no move, and the ward is spent.
+  const warded = events.some((event) => event.type === 'shield');
+  const parts = [warded && 'Bone ward broke!', pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱', treasure && `Treasure! ${TREASURE_MARK}`].filter(Boolean);
   if (!parts.length) return;
   // Checkmate's own moment plays first (src/checkmate.js), then the stamp.
   const mated = treasure && events.some((event) => event.type === 'checkmate');
@@ -1217,7 +1219,7 @@ function playSound(events=[]) {
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
     if(audio.state==='suspended')audio.resume();
-    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type === 'player-captured') ? [110,82] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
+    let notes = events.some(e=>e.type==='win') ? [392,494,587,784] : events.some(e=>e.type==='descend') ? [330,440,660] : events.some(e=>e.type === 'player-captured') ? [110,82] : events.some(e=>e.type==='shield') ? [988,740,494] : events.some(e=>e.type==='capture'||e.type==='companion-capture') ? [220,440] : events.some(e=>e.type==='hit') ? [180,100] : events.some(e=>e.type==='pickup'||e.type==='companion-recruit') ? [660,880] : [85];
     notes.forEach((frequency,i)=>{const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='square';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.018,audio.currentTime+i*.065);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+i*.065+.07);oscillator.connect(gain);gain.connect(audio.destination);oscillator.start(audio.currentTime+i*.065);oscillator.stop(audio.currentTime+i*.065+.08);});
   } catch {}
 }
