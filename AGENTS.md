@@ -86,7 +86,9 @@ or start from open, empty ones and set up the board by hand. The old seeded rand
 retired; saves made before then still carry its inert layout fields.
 
 **UI.** `src/main.js` owns input, the newspaper, saves, archive, sharing and dialogs;
-`src/renderer.js` is the pixelated Three.js board; `src/sprites.js`, `*-art.js`
+`src/renderer.js` is the pixelated Three.js board; `src/inspect.js` works out what a
+press and hold on an unmasked monster shows (the renderer owns the gesture and draws
+the marks; a masked monster yields nothing); `src/sprites.js`, `*-art.js`
 files draw original pixel art and explainers; `src/guide.js` / `src/first-visit.js`
 are onboarding; `src/pwa.js` + `scripts/build-sw.mjs` handle the fingerprinted,
 integrity-verified offline cache; `src/archive.js`, `src/backups.js`,
