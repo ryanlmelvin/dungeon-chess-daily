@@ -82,13 +82,15 @@ function lured(states, n, id) {
  */
 export function playsIdea(built, states, line, narrow) {
   // The ideas in preview (src/composer.js, "Ideas in preview"):
-  // - wait (the Standstill): you wait, a target that made no lunge steps onto
-  //   a square in your reach while you stand still, and is taken there on the
-  //   very next move;
+  // - wait (the Standstill): you spend a turn standing still, and afterwards
+  //   take a target on the square it has just stepped onto, in your reach,
+  //   without a lunge: the wait set the rhythm. (Waiting first and then
+  //   stepping to the square counts too: the same wait, a move sooner.)
   // - lure: a decoy wound up at you lunges and misses, and on the very next
   //   move you take a target it plainly guarded as it wound up (plainGuard).
   if (built.motif === 'wait') {
-    return line.some((action, n) => n > 0 && action.type === 'move' && line[n - 1].type === 'wait' && taken(states, n).some((id) => {
+    const waited = line.findIndex((action) => action.type === 'wait');
+    return waited >= 0 && line.some((action, n) => n > waited && action.type === 'move' && taken(states, n).some((id) => {
       const now = states[n].enemies.find((foe) => foe.id === id), before = states[n - 1].enemies.find((foe) => foe.id === id);
       return Boolean(before) && !same(now, before) && !states[n].events.some((event) => event.type === 'miss' && event.id === id);
     }));

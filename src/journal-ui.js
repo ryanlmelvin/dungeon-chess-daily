@@ -12,7 +12,7 @@
 // This module builds its own elements and styles (journal.css), so the page
 // and the main script only call it: initJournal({ prefix }).
 import './journal.css';
-import { PAGES, UNFOUND_TEXT, JOURNAL_KEY, BACKFILL_VERSION, pageFor, emptyJournal, readJournal, writeJournal, fileRun, floorFinds, backfill, pagePieces, journalProgress } from './journal.js';
+import { UNFOUND_TEXT, JOURNAL_KEY, BACKFILL_VERSION, pageFor, bookPages, emptyJournal, readJournal, writeJournal, fileRun, floorFinds, backfill, pagePieces, journalProgress } from './journal.js';
 import { drawBook, BOOK_SIZE } from './journal-art.js';
 import { drawSprite, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { getDaily, validateSave, RULES_VERSION } from './game.js';
@@ -130,7 +130,10 @@ export function initJournal({ prefix }) {
   function render(slide = 0) {
     cancelAnimationFrame(frame);
     const journal = read();
-    const lesson = PAGES[index];
+    // The book's pages as they stand: the released ones, and any preview page found (src/journal.js bookPages).
+    const pages = bookPages(journal);
+    index = Math.min(index, pages.length - 1);
+    const lesson = pages[index];
     const found = Boolean(journal.finds[lesson.id]);
     page.classList.toggle('unfound', !found);
     name.textContent = found ? lesson.name : '? ? ?';
@@ -142,9 +145,9 @@ export function initJournal({ prefix }) {
       ? `Found with ${withPieces.join(', ')}${withPieces.length < marks.length ? `; not yet with ${marks.filter((mark) => !mark.found).map((mark) => mark.piece).join(', ')}` : ''}`
       : `Not found yet. It can be found with ${marks.map((mark) => mark.piece).join(', ')}`);
     art.setAttribute('aria-label', found ? `${still() ? 'Board' : 'Animated board'}: ${lesson.art}` : 'A page not found yet');
-    count.textContent = `${index + 1} / ${PAGES.length}`;
+    count.textContent = `${index + 1} / ${pages.length}`;
     back.disabled = index === 0;
-    forward.disabled = index === PAGES.length - 1;
+    forward.disabled = index === pages.length - 1;
     page.classList.remove('from-left', 'from-right');
     if (slide) { void page.offsetWidth; page.classList.add(slide < 0 ? 'from-left' : 'from-right'); }
     // A page not found yet shows only where its diagram starts, darkened (journal.css).
@@ -159,7 +162,7 @@ export function initJournal({ prefix }) {
   }
   function turn(by) {
     const next = index + by;
-    if (!dialog.open || next < 0 || next >= PAGES.length) return;
+    if (!dialog.open || next < 0 || next >= bookPages(read()).length) return;
     index = next;
     render(by);
   }
@@ -167,7 +170,7 @@ export function initJournal({ prefix }) {
   function open(id) {
     fill();
     stopMoment();
-    const at = PAGES.findIndex((lesson) => lesson.id === id);
+    const at = bookPages(read()).findIndex((lesson) => lesson.id === id);
     if (at >= 0) index = at;
     if (!dialog.open) dialog.showModal();
     renderProgress();

@@ -12,7 +12,7 @@
 import { floorPars } from './par.js';
 import { isOfficialRun, scoredMoves, floorScoredMoves, PLAYABLE_PIECES } from './game.js';
 import { isMotifName } from './motif-code.js';
-import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL } from './journal-art.js';
+import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL, drawStandstillDemo, STANDSTILL_STILL, drawLureDemo, LURE_STILL } from './journal-art.js';
 import { drawOffBalanceDemo, OFF_BALANCE_STILL, drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
 import { drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { piecePalette } from './sprites.js';
@@ -98,6 +98,28 @@ export const PAGES = Object.freeze([
   },
 ]);
 
+/**
+ * The pages of the ideas in preview (src/composer.js PREVIEW_IDEAS): no
+ * stored edition is built around them yet, so nobody can find them outside
+ * the dev preview. The book lists such a page only once it has been found
+ * (bookPages), so the released book and its count stay as they are. Shipping
+ * an idea moves its page into PAGES.
+ */
+export const PREVIEW_PAGES = Object.freeze([
+  {
+    id: 'wait', kind: 'idea', name: 'Standstill', pieces: OFFICERS,
+    text: 'It stepped out of reach, and it must move again. Stay put one turn, then take it.',
+    art: 'A monster walled into two squares steps away as a knight lands beside its pocket. The knight waits a turn, the monster has to step back, and the knight captures it.',
+    draw: drawStandstillDemo, still: STANDSTILL_STILL,
+  },
+  {
+    id: 'lure', kind: 'idea', name: 'Lure', pieces: ['knight'],
+    text: 'A guard beside the target winds up at you. Jump aside: it lunges away, so take the target.',
+    art: 'A monster stands beside a ringed target, its red square under a knight. The knight jumps aside, the monster lunges onto the empty square and wobbles, and the knight captures the target it guarded.',
+    draw: drawLureDemo, still: LURE_STILL,
+  },
+]);
+
 /** What a page that isn't found yet says, by how it is found. */
 export const UNFOUND_TEXT = Object.freeze({
   idea: 'An idea a floor is built around. Clear that floor at par to find it.',
@@ -116,8 +138,18 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isDate = (date) => typeof date === 'string' && DATE.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** The lesson page of a motif or special move, or null: a name with no page is harmless. */
-export const pageFor = (id) => PAGES.find((page) => page.id === id) ?? null;
+/** The lesson page of a motif or special move (a preview page too), or null: a name with no page is harmless. */
+export const pageFor = (id) => PAGES.find((page) => page.id === id) ?? PREVIEW_PAGES.find((page) => page.id === id) ?? null;
+/**
+ * The pages the book shows for `journal`, in book order: every released page,
+ * and each preview page already found, after the released ideas.
+ */
+export function bookPages(journal) {
+  const found = PREVIEW_PAGES.filter((page) => journal?.finds?.[page.id]);
+  if (!found.length) return PAGES;
+  const moves = PAGES.findIndex((page) => page.kind !== 'idea');
+  return [...PAGES.slice(0, moves), ...found, ...PAGES.slice(moves)];
+}
 
 export const emptyJournal = () => ({ schema: JOURNAL_SCHEMA, finds: {} });
 
@@ -260,5 +292,6 @@ export function pagePieces(journal, page) {
 
 /** Pages found (with any piece) of the pages there are. */
 export function journalProgress(journal) {
-  return { found: PAGES.filter((page) => journal.finds[page.id]).length, total: PAGES.length };
+  const pages = bookPages(journal);
+  return { found: pages.filter((page) => journal.finds[page.id]).length, total: pages.length };
 }

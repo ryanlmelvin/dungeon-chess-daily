@@ -46,6 +46,8 @@ let archiveMode = false;
 // from every real run.
 const preview = import.meta.env.DEV && new URLSearchParams(location.search).has('composed') ? await import('./composed-preview.js') : null;
 const composedDay = preview?.composedDayFor(location.search) ?? null;
+// A preview keeps out of the journal, but for one that asks for an idea in preview (its page shows where it is found).
+const journaled = !composedDay || preview.previewJournals(location.search);
 let daily = composedDay ?? getDaily();
 try {
   const opened = composedDay ? null : sessionStorage.getItem(archiveSessionKey);
@@ -1219,7 +1221,7 @@ function takeStairs() {
   $('shop-dialog').showModal();
   $('shop-descend').focus();
   // The journal files what this floor found and cues it in the shop.
-  if (!composedDay) journal.clearedFloor(state, daily);
+  if (journaled) journal.clearedFloor(state, daily);
 }
 $('descend-button').addEventListener('click', takeStairs);
 $('shop-descend').addEventListener('click', () => { $('shop-dialog').close(); takeAction({type:'descend'}); });
@@ -1261,7 +1263,7 @@ function showResult() {
   // A past edition needs no pointer to more: the Archive button sits just above.
   const next = archiveMode ? '' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
-  if (!composedDay) journal.wonRun(state, daily);
+  if (journaled) journal.wonRun(state, daily);
   const legend = document.createElement('span');
   legend.className = 'result-legend';
   legend.textContent = next ? `${RESULT_LEGEND}\n` : RESULT_LEGEND;

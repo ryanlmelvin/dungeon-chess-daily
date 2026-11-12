@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Animated diagrams for the journal's lesson pages (src/journal.js), one per
 // idea a floor is composed around (src/composer.js): the squeeze, the tandem,
-// the mating net, and a pawn's tempo and crown lines. Drawn on a 5x5 board
+// the mating net, a pawn's tempo and crown lines, and the two ideas in
+// preview, the Standstill and the Lure. Drawn on a 5x5 board
 // crop like the other explainers (src/tactics-art.js), whose off-balance demo
 // is the bait page's. Each takes (canvas, time in ms) and loops; its *_STILL
 // time is a frame that reads on its own, for reduced motion.
@@ -280,6 +281,94 @@ export function drawCrownDemo(canvas, time, { playerPalette = {}, monsterPalette
 }
 /** The new queen, crowned on the last row, eyes the target. */
 export const CROWN_STILL = 2750;
+
+/**
+ * Standstill (an idea in preview, src/composer.js): a monster walled into two
+ * squares steps out of reach just as your knight lands beside its pocket. The
+ * knight stays where it is for a turn; the monster has to step back, and the
+ * knight takes it.
+ */
+export function drawStandstillDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet') } = {}) {
+  const t = loop(time);
+  frame(canvas, t, (ctx) => {
+    // The pocket (2,0)-(2,1); knight (3,4) -> (1,3), which covers (2,1), as the monster steps up to (2,0).
+    for (const [x, y] of [[1, 0], [3, 0], [1, 1], [3, 1], [2, 2]]) wall(ctx, x, y);
+    const hop = beat(t, 300, 900);
+    const away = beat(t, 900, 1300);
+    const cover = beat(t, 1300, 1600) * (1 - beat(t, 3300, 3500));
+    const back = beat(t, 2600, 3000);
+    const take = beat(t, 3300, 3800);
+    // It balks before it steps back: it has nowhere else to go.
+    const balk = t > 2100 && t < 2600 ? Math.round(Math.sin(t / 45) * 2) : 0;
+    line(ctx, center(1), center(3), center(2), center(1), GOLD, cover * 0.9);
+    ring(ctx, 2, 1, GOLD, cover * (0.7 + 0.3 * Math.sin(t / 110)));
+    faded(ctx, 1 - beat(t, 3700, 3850), () => sprite(ctx, 'bat', center(2) + balk, lerp(lerp(center(1), center(0), away), center(1), back), monsterPalette));
+    burst(ctx, center(2), center(1), beat(t, 3800, 4300), GOLD);
+    const from = take ? [1, 3] : [3, 4], to = take ? [2, 1] : [1, 3], p = take || hop;
+    sprite(ctx, 'piece-knight', lerp(center(from[0]), center(to[0]), p), lerp(center(from[1]), center(to[1]), p) - Math.sin(Math.PI * p) * 22, playerPalette);
+    label(ctx, 'WAIT', center(1) + 46, center(3), MINT, beat(t, 1500, 1650) * (1 - beat(t, 3150, 3300)), 24);
+    label(ctx, 'IT STEPPED AWAY', 100, 182, RED, beat(t, 1300, 1450) * (1 - beat(t, 2300, 2450)), 22);
+    label(ctx, 'IT MUST STEP BACK', 100, 182, GOLD, beat(t, 2450, 2600) * (1 - beat(t, 3600, 3750)), 22);
+    label(ctx, 'STANDSTILL!', 100, 182, GOLD, beat(t, 3800, 4000), 28);
+  });
+}
+/** The knight has waited; the monster is back on the covered square. */
+export const STANDSTILL_STILL = 3150;
+
+// Three stars circling over an off-balance monster's head.
+function stars(ctx, x, y, t) {
+  for (let i = 0; i < 3; i++) {
+    const angle = t / 170 + i * Math.PI * 2 / 3;
+    ctx.fillStyle = GOLD;
+    ctx.fillRect(Math.round(x + Math.cos(angle) * 14) - 2, Math.round(y - 24 + Math.sin(angle) * 4) - 2, 4, 4);
+  }
+}
+/**
+ * Lure (an idea in preview, src/composer.js): a decoy stands beside the
+ * target, guarding it, wound up at your knight from the next square. The
+ * knight jumps aside to where it attacks the target; the guard lunges onto
+ * the empty square, off-balance and off its post, and the knight takes the
+ * target it guarded.
+ */
+export function drawLureDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet'), guardPalette = spritePalette('moss') } = {}) {
+  const t = loop(time);
+  frame(canvas, t, (ctx) => {
+    // Knight (1,3); the guard (1,2) above it, the target (2,2) beside the guard. The knight jumps to (3,4), then takes (2,2).
+    for (const [x, y] of [[2, 1], [3, 2], [2, 3]]) wall(ctx, x, y);
+    const aside = beat(t, 1300, 1900);
+    const lunge = beat(t, 1950, 2300);
+    const landed = t >= 2300;
+    const take = beat(t, 3400, 3900);
+    const pulse = 0.7 + 0.3 * Math.sin(t / 110);
+    // Its wind-up on your square, and the square it guards beside it.
+    const windUp = beat(t, 200, 500) * (1 - beat(t, 1950, 2150));
+    tint(ctx, 1, 3, RED, windUp * 0.4 * pulse);
+    line(ctx, center(1) + 14, center(2), center(2) - 14, center(2), RED, windUp * 0.9);
+    ring(ctx, 2, 2, RED, windUp * pulse);
+    // The target, free for a move: your line to it.
+    const free = beat(t, 2400, 2700) * (1 - beat(t, 3400, 3600));
+    line(ctx, center(3), center(4), center(2), center(2), GOLD, free * 0.9);
+    ring(ctx, 2, 2, GOLD, free * pulse);
+    faded(ctx, 1 - beat(t, 3800, 3950), () => sprite(ctx, 'bat', center(2), center(2), monsterPalette));
+    burst(ctx, center(2), center(2), beat(t, 3900, 4400), GOLD);
+    if (landed) {
+      ctx.save();
+      ctx.translate(center(1), center(3) + 16);
+      ctx.rotate(Math.sin(t / 110) * 0.22);
+      sprite(ctx, 'slime', 0, -16, guardPalette);
+      ctx.restore();
+      stars(ctx, center(1), center(3), t);
+    } else sprite(ctx, 'slime', center(1), lerp(center(2), center(3), lunge), guardPalette);
+    const from = take ? [3, 4] : [1, 3], to = take ? [2, 2] : [3, 4], p = take || aside;
+    sprite(ctx, 'piece-knight', lerp(center(from[0]), center(to[0]), p), lerp(center(from[1]), center(to[1]), p) - Math.sin(Math.PI * p) * 22, playerPalette);
+    label(ctx, 'IT GUARDS THE TARGET', 100, 14, RED, beat(t, 300, 500) * (1 - beat(t, 1300, 1450)), 20);
+    label(ctx, 'JUMP ASIDE', 100, 14, MINT, beat(t, 1450, 1600) * (1 - beat(t, 2300, 2450)), 24);
+    label(ctx, 'OFF ITS POST', 100, 14, GOLD, beat(t, 2450, 2600) * (1 - beat(t, 3700, 3850)), 24);
+    label(ctx, 'LURED!', 100, 14, GOLD, beat(t, 3900, 4100), 28);
+  });
+}
+/** The guard has lunged onto the knight's old square and wobbles; the target stands free. */
+export const LURE_STILL = 3000;
 
 // A closed book, 16x16: the journal's mark on its cue and its menu button.
 const BOOK = Object.freeze([
