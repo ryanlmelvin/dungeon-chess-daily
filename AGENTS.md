@@ -71,8 +71,8 @@ net motifs; tempo / crown lines for pawns), proved by an exact shortest-win sear
 and guarded by the human-like bot, and the planted lines are the day's certificate.
 Three things ride on that, each a `composeDay` option that is on by default: the
 tight forms (`src/tight.js` judges them: subtle baits and squeezes on floor 2, floor 1
-showing the same idea plainly); a partner floor on floor 1 or 2 of a day whose matchup
-has one (a Tandem: two targets that guard each other, won with the floor's recruit on
+showing the same idea plainly); a partner floor on floor 1 or 2 of about one in three of the days whose
+matchup has one (`partnerDay`; a Tandem: two targets that guard each other, won with the floor's recruit on
 orders); and a chest off each floor's line (`src/treasure.js`: a proved win within par
 takes it, it costs the spare move, and the bot seldom takes it by accident).
 `src/generation.js` (`proveComposed`) replays the lines through `src/fairness.js`

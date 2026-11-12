@@ -5,7 +5,7 @@
 // the floor is won by the recruit taking one on your order and you the other.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeDay, composeTandem, partnerFloors, shortestWins, hastyScore, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES, RELEASE } from '../src/composer.js';
+import { composeDay, composeTandem, partnerFloors, partnerDay, PARTNER_EVERY, shortestWins, hastyScore, steeredWin, steeredHasty, playLine, usesIdea, PARTNER_MOTIF, TANDEM_MOVES, TANDEMS, TANDEM_RECRUITS, LINE_MOVES, RELEASE } from '../src/composer.js';
 import { proveComposed, getDaily } from '../src/generation.js';
 import { getRawDaily } from '../src/edition.js';
 import { act, closeAttacker } from '../src/rules.js';
@@ -17,8 +17,11 @@ import { encodeRoute } from '../src/route-code.js';
 import { encodeRooms } from '../src/room-code.js';
 import { composedDayFor } from '../src/composed-preview.js';
 
-// A bishop against rooks (floor 1), a knight against bishops (floor 2), a queen against knights (floor 2, a Breach day).
-const DAYS = ['2026-11-15', '2026-11-18', '2026-11-22'];
+// A bishop against rooks (floor 1), a knight against bishops (floor 2), a queen against knights (floor 2): three of
+// the days that take their partner floor under the release's cap (partnerDay).
+const DAYS = ['2026-11-15', '2026-11-18', '2026-12-02'];
+// A rook against knights: its matchup has a partner floor, but the cap passes it over.
+const PASSED_OVER = '2026-11-13';
 // A bishop against pawns and a queen: no tandem.
 const NO_MATCHUP = '2026-11-12';
 // A day in the release configuration (its partner floor included, as stored), and the same day without one.
@@ -50,6 +53,31 @@ test('the release configuration composes each day as its stored edition, tandem 
   assert.equal(off.generation.partner, undefined);
   assert.ok(!off.generation.motifs.includes(PARTNER_MOTIF));
   assert.ok(off.generation.certificate.actions.every((action) => action.recruit === undefined));
+});
+
+test('a partner floor lands on about one eligible day in three, by the date; "every" takes them all', () => {
+  for (const date of DAYS) assert.equal(partnerDay(getRawDaily(date)), true, date);
+  // The matchup is there, the date isn't drawn: the release composes the day without one, and stores none.
+  const raw = getRawDaily(PASSED_OVER);
+  assert.ok(partnerFloors(raw).length > 0);
+  assert.equal(partnerDay(raw), false);
+  assert.deepEqual(day(PASSED_OVER).daily, plain(PASSED_OVER).daily);
+  assert.equal(EDITIONS[PASSED_OVER].partner, undefined);
+  // Asked for on every eligible day (tests, measuring, the preview's &partner=all), it composes there too.
+  const every = composeDay(PASSED_OVER, { partner: 'every' }).daily;
+  assert.ok(partnerFloors(raw).includes(every.generation.partner));
+  assert.ok(every.generation.motifs.includes(PARTNER_MOTIF));
+  assert.equal(composedDayFor(`?composed=${PASSED_OVER}&partner=all`).generation.partner, every.generation.partner);
+  // Over two years: a day without the matchup is never drawn, and about a third of the others are.
+  let eligible = 0, drawn = 0;
+  for (let time = Date.parse('2026-11-01'); time < Date.parse('2028-11-01'); time += 86_400_000) {
+    const base = getRawDaily(new Date(time).toISOString().slice(0, 10));
+    if (!partnerFloors(base).length) { assert.equal(partnerDay(base), false); continue; }
+    eligible++;
+    if (partnerDay(base)) drawn++;
+  }
+  assert.equal(PARTNER_EVERY, 3);
+  assert.ok(drawn / eligible > 0.26 && drawn / eligible < 0.4, `${drawn} of ${eligible}`);
 });
 
 test('a day with no tandem matchup composes the same with the option on', () => {

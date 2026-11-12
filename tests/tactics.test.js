@@ -125,8 +125,8 @@ test('a new floor starts without a combo or a fork', () => {
 test('real runs with forks and combos save, resume and validate', () => {
   let forkFrame = null;
   let seen = 0;
-  // Planted lines win a fork or a combo now and then (2026-11-04 is the first).
-  for (const date of ['2026-11-01', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07']) {
+  // Planted lines win a fork or a combo now and then (2026-11-08 is the first; 2026-11-13 and 2026-11-14 do too).
+  for (const date of ['2026-11-01', '2026-11-07', '2026-11-08', '2026-11-13', '2026-11-14']) {
     const daily = getDaily(date);
     const run = botRun(daily);
     for (const frame of run.frames) {

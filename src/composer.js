@@ -1974,6 +1974,16 @@ export function partnerFloors(base) {
   const fits = [0, 1].filter((floor) => TANDEMS[base.playerPiece]?.includes(base.targets[floor]));
   return hash(`${base.date}:partner`) % 2 ? fits.reverse() : fits;
 }
+/**
+ * A day whose matchup has a partner floor takes one about one day in
+ * PARTNER_EVERY, by the date (the owner's cap, 2026-11-12): on every eligible
+ * day it was the commonest idea in the game, on half of all days and always
+ * par 4. Capped, a player meets it about once a week. `partner: 'every'`
+ * (tests, measuring, the dev preview's &partner=all) composes one on every
+ * eligible day.
+ */
+export const PARTNER_EVERY = 3;
+export const partnerDay = (base) => partnerFloors(base).length > 0 && hash(`${base.date}:partner-day`) % PARTNER_EVERY === 0;
 // The day's partner floor, composed: { floor, composed }, or null on a day with none.
 function partnerFloor(base, { starts, trace }) {
   for (const floor of partnerFloors(base)) {
@@ -2148,8 +2158,9 @@ export const FALLBACKS = Object.freeze(['partner', 'tight', 'treasure']);
  * - `treasure` adds a chest off each floor's line where one qualifies
  *   (src/treasure.js): such a floor gains `treasure` (its square and proving
  *   line), and the day's generation lists each floor's proving line, or null;
- * - `partner` gives floor 1 or 2 to a partner floor on the days whose matchup
- *   has one (partnerFloors): `generation.partner` is then that floor, whose
+ * - `partner` gives floor 1 or 2 to a partner floor on about one in
+ *   PARTNER_EVERY of the days whose matchup has one (partnerFloors,
+ *   partnerDay; 'every' takes them all): `generation.partner` is then that floor, whose
  *   line carries recruit orders (and which gets no chest: a chest's line is
  *   searched without the recruit);
  * - `tight` composes floors whose idea has to be found (src/tight.js): floor
@@ -2176,7 +2187,7 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight }) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
-  const partnered = partner ? partnerFloor(base, { starts: squares, trace }) : null;
+  const partnered = partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null;
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {

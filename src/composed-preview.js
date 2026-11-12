@@ -16,13 +16,14 @@ const startsFor = (search) => { const name = new URLSearchParams(search).get('st
 
 // Each of composeDay's options is on, as in every stored edition, unless the query turns it off:
 // &treasure=0 (no chests, src/treasure.js), &partner=0 (no partner floor), &tight=0 (no tight forms, src/tight.js).
+// &partner=all gives every day whose matchup has a partner floor one, whatever the release's cap (src/composer.js PARTNER_EVERY).
 const optionFor = (search, name) => new URLSearchParams(search).get(name) !== '0';
 
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
   const date = new URLSearchParams(search).get('composed');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) return null;
-  try { return composeDay(date, { starts: startsFor(search), treasure: optionFor(search, 'treasure'), partner: optionFor(search, 'partner'), tight: optionFor(search, 'tight') }).daily; } catch (error) { console.error(error); return null; }
+  try { return composeDay(date, { starts: startsFor(search), treasure: optionFor(search, 'treasure'), partner: new URLSearchParams(search).get('partner') === 'all' ? 'every' : optionFor(search, 'partner'), tight: optionFor(search, 'tight') }).daily; } catch (error) { console.error(error); return null; }
 }
 
 /** Each start set saves apart; e2 keeps the key earlier previews used. */

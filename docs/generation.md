@@ -164,9 +164,9 @@ par, a capture counted as the move it costs:
 
 A form gets 24 of its motif's 40 instances and keeps its first dressing that
 passes; a floor where none passes falls back to its plain motifs. King floors
-and a pawn player's floors are left as they are. Over the 742 editions, 144 floor 2s are tight (103 subtle, 41
-picked), and on 57 of the 103 floor 1 shows the same idea plainly. Only the
-idea is stored with an edition, never its form.
+and a pawn player's floors are left as they are. Over the 742 editions, 288
+floor 2s are tight (247 subtle, 41 picked). Only the idea is stored with an
+edition, never its form.
 
 ### Partner floors: the Tandem
 
@@ -184,8 +184,13 @@ A Tandem takes floor 1 or 2 of a day whose piece and target pair up
 (`TANDEMS`: a knight against rooks or bishops, a bishop against rooks or
 knights, a rook against bishops or knights, a queen against knights; never a
 pawn player, a pawn target or a lone queen), the date's seed choosing between
-two floors that both fit. Over the 742 editions that is 360 days, every one
-whose matchup allows it: 155 on floor 1 and 205 on floor 2.
+two floors that both fit. Such a day takes its Tandem about one time in three,
+drawn by the date (`PARTNER_EVERY`, `partnerDay`; the owner's cap, 2026-11-12:
+on every such day it fell on half of all days, always at par 4, and was the
+commonest idea in the game). Over the 742 editions 360 days have the matchup
+and 113 take a Tandem: 53 on floor 1 and 60 on floor 2. `partner: 'every'`
+(tests, measuring, the dev preview's `&partner=all`) composes one on every
+eligible day.
 
 Its line carries recruit orders, so its day is proved with the recruit on
 orders on that floor (above). It is checked like the other motifs, the
@@ -230,11 +235,10 @@ Of the squares that pass, the one the fewest par wins pass through is kept (a
 seeded draw settles ties), with one such win as its proof, replayed as
 played. A floor with no such square has no chest, and a partner floor never
 has one (a chest's line is searched without the recruit). Over the 742
-editions 1,024 of 2,226 floors hold a chest (379, 282 and 363 on floors 1, 2
-and 3); the first rule alone would give one to 1,365. The spare-move check
-leaves 334 of those floors with none and the accident check 7 more; on 108
-floors the chest moved to another square. A day holds 0, 1, 2 or 3 chests on
-139, 266, 253 and 84 days.
+editions 1,157 of 2,226 floors hold a chest (447, 347 and 363 on floors 1, 2
+and 3); the first rule alone would give one to 1,560, and the spare-move and
+accident checks leave 403 of those floors with none. A day holds 0, 1, 2 or 3
+chests on 118, 234, 247 and 143 days.
 
 **Identification.** One decoy species of each floor has as many copies as the
 target where it can (two for pawns, rooks, knights and bishops, one for a
@@ -287,7 +291,7 @@ percentile; a queen's days are the slow ones (6 seconds on average, the
 slowest of the window 146). After a change to the rules, the monsters, the
 modifiers, the composer or the human-like bot, run
 `npm run build:editions -- --full`: it composes all of them again (the 742
-took 282 seconds on seven threads) and reports partner floors, tight forms,
+take five to eleven minutes on seven threads, a few queen days taking minutes each) and reports partner floors, tight forms,
 chests before and after their checks, and any option a day gave up;
 `--stats path` writes a row a day. New rules apply to the whole archive.
 
