@@ -249,6 +249,21 @@ function fitPaper() {
 addEventListener('resize', fitPaper);
 document.fonts?.ready.then(fitPaper);
 new ResizeObserver(fitPaper).observe($('pwa-bar'));
+// The results paper never scrolls on a phone either: the same idea (style.css
+// .result-screen[data-fit]). "tight" closes up its spacing and drops the bot's
+// footnote; "tighter" also drops the legend of marks, keeping the line under it.
+function fitResult() {
+  const page = $('result-screen');
+  delete page.dataset.fit;
+  if (page.hidden || !matchMedia('(max-width:600px)').matches) return;
+  for (const fit of ['tight', 'tighter']) {
+    if (document.documentElement.scrollHeight <= innerHeight) return;
+    page.dataset.fit = fit;
+  }
+}
+addEventListener('resize', fitResult);
+document.fonts?.ready.then(fitResult);
+new ResizeObserver(fitResult).observe($('pwa-bar'));
 // The lead story's "Artist's impression": floor 1's target on an inked chess floor.
 function drawPaperArt(creature) {
   const canvas = $('paper-art');
@@ -1252,9 +1267,13 @@ function showResult() {
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
   if (!composedDay) journal.wonRun(state, daily);
-  $('next-edition').textContent=shareable ? `${RESULT_LEGEND}\n${next}` : next;
+  const legend = document.createElement('span');
+  legend.className = 'result-legend';
+  legend.textContent = `${RESULT_LEGEND}\n`;
+  $('next-edition').replaceChildren(...(shareable ? [legend] : []), next);
   $(shareable || composedDay ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
+  fitResult();
 }
 function showResultActions(finished) {
   if (!finished) $('bot-compare').hidden = true;
@@ -1276,6 +1295,7 @@ function showDeath() {
   $('result-summary').textContent='No legal moves left. The dungeon has the last word — this time.';
   $('next-edition').textContent=deathTakeback()?'Take back that move, or try again from floor one.':'Try again from floor one.';
   $(deathTakeback() ? 'death-takeback-button' : 'retry-button').focus({preventScroll:true});
+  fitResult();
 }
 $('death-takeback-button').addEventListener('click',()=>{
   if (!deathTakeback()) return;
@@ -1603,6 +1623,7 @@ function refreshEdition() {
   if (screen === 'result') {
     $('result-paper-button').textContent = "Read today's paper";
     $('next-edition').textContent = "Today's new edition is ready.";
+    fitResult();
     return;
   }
   daily = current; setPracticeMode(false); state = load(); renderPaper();

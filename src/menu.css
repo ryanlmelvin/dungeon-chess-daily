@@ -428,3 +428,21 @@ dialog .archive-day[aria-current] { background: #653942; }
   .result-actions button { font-size: 16px; min-height: 40px; padding: 6px 4px; flex: 1; white-space: nowrap; }
   .result-paper .next-edition { font-size: 14px !important; line-height: 1.15; margin-top: 8px; }
 }
+
+/* The results paper never scrolls on a phone (main.js fitResult): these rules
+   apply only when the roomier print doesn't fit. "tight" closes up the spacing
+   and drops the bot's footnote; "tighter" (an iPhone SE in a browser, with its
+   Install bar) also drops the legend of marks and shrinks the bot's heading. */
+@media (max-width: 600px) {
+  .result-screen[data-fit] { padding: 6px 8px 8px; }
+  .result-screen[data-fit] .result-paper { padding: 8px 14px 10px; }
+  .result-screen[data-fit] .result-paper h2 { margin-top: 8px; margin-bottom: 2px; }
+  .result-screen[data-fit] .bot-compare { margin: 8px 0 6px; padding-top: 10px; }
+  .result-screen[data-fit] .bot-note { display: none; }
+  .result-screen[data-fit] .result-paper .next-edition { margin-top: 6px; margin-bottom: 4px; }
+  .result-screen[data-fit=tighter] .result-legend { display: none; }
+  .result-screen[data-fit=tighter] .bot-compare { margin: 6px 0 4px; padding-top: 6px; }
+  .result-screen[data-fit=tighter] .bot-compare h3 { font-size: 24px; margin-bottom: 2px; }
+  .result-screen[data-fit=tighter] .bot-verdict { margin-bottom: 6px; }
+  .result-screen[data-fit=tighter] #bot-watch { min-height: 36px; padding-top: 4px; padding-bottom: 4px; }
+}
