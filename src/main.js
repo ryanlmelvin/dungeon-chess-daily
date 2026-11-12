@@ -1222,6 +1222,10 @@ function playSound(events=[]) {
 // Archive and practice runs are labeled so a shared line never passes as today's.
 const runLabel = () => [composedDay && 'COMPOSED', archiveMode && 'ARCHIVE', practice && 'PRACTICE'].filter(Boolean).join(' ');
 function shareText(){if (!isOfficialRun(state, daily)) return '';const text=getShareText(state, runPars(state, daily));const label=runLabel();return label ? text.replace('Dungeon Chess Daily',`Dungeon Chess Daily · ${label}`) : stats.card(text, daily.date);}
+// The share card's marks in one line under the results. No-break spaces hold each mark's words together, so a
+// line breaks only between marks. Worded to stand no taller than it did before the chest joined it: the same
+// lines at 440×780, 402×680 and 375×667 (it has 14px to spare at 402 wide, where a word more adds a line).
+const RESULT_LEGEND = `🟥 ⬛ 👑 Floors: moves over (+) or under (−) par, E even · ${['🇫🇷 En passant', '🏰 Castled', '🔱 Fork won', `${TREASURE_MARK} Chest at par`].map((mark) => mark.replaceAll(' ', ' ')).join(' · ')}`;
 function showResult() {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   switchScreen('result');
@@ -1244,7 +1248,7 @@ function showResult() {
   const next = archiveMode ? 'Find more past editions in the menu’s Archive.' : 'Next edition at 00:00 UTC.';
   renderBotComparison();
   if (!composedDay) journal.wonRun(state, daily);
-  $('next-edition').textContent=shareable ? `🟥 ⬛ 👑 Floors 1–3: moves over (+) or under (−) par, E for even · 🇫🇷 En passant · 🏰 Castled · 🔱 Fork won, on that floor\n${next}` : next;
+  $('next-edition').textContent=shareable ? `${RESULT_LEGEND}\n${next}` : next;
   $(shareable || composedDay ? 'share-button' : 'practice-button').focus({preventScroll:true});
   refreshEdition();
 }
