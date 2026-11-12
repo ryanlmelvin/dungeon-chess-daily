@@ -74,7 +74,7 @@ function report(rows) {
   console.log(`Ideas in preview over ${rows.length} days (${start} to ${end}); an idea draws one in ${IDEA_EVERY} of the days it fits.`);
   for (const idea of PREVIEW_IDEAS) {
     const fit = rows.filter((row) => row.ideas[idea].fits.length);
-    console.log(`\n## ${idea}: fits ${fit.length} days (${percent(fit.length, rows.length)}): floor 1 on ${fit.filter((row) => row.ideas[idea].fits.includes(0)).length}, floor 2 on ${fit.filter((row) => row.ideas[idea].fits.includes(1)).length}; by piece: ${tally(fit.map((row) => row.piece))}; draws ${fit.filter((row) => row.ideas[idea].drawn).length}.`);
+    console.log(`\n## ${idea}: fits ${fit.length} days (${percent(fit.length, rows.length)}); by piece: ${tally(fit.map((row) => row.piece))}; by matchup: ${tally(fit.map((row) => `${row.piece} v ${row.targets[0]}`))}; draws ${fit.filter((row) => row.ideas[idea].drawn).length}.`);
     for (const [mode, name] of [['full', 'Under the three tight tests'], ['open', 'Without the bot\'s ceiling']]) {
       const got = fit.filter((row) => row.ideas[idea][mode]?.floor !== null && row.ideas[idea][mode]?.floor !== undefined);
       const took = (row) => row.ideas[idea][mode];

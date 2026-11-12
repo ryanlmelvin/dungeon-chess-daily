@@ -104,7 +104,7 @@ test('an idea takes about one in three of the days it fits, by the date: never a
     const every = previewIdeas(base, { wait: 'every', lure: 'every' }), mine = previewIdeas(base, { wait: true, lure: true });
     for (const idea of PREVIEW_IDEAS) {
       const floors = ideaFloors(base, idea);
-      assert.ok(floors.every((floor) => floor === 0 || floor === 1), `${base.date}: never the king floor`);
+      assert.ok(floors.every((floor) => floor === 0), `${base.date}: floor 1 alone (floor 2 keeps its tight forms)`);
       if (base.playerPiece === 'pawn') assert.deepEqual(floors, [], `${base.date}: no pawn's day`);
       if (idea === 'lure' && floors.length) assert.equal(base.playerPiece, 'knight', `${base.date}: a lure is a knight's`);
       assert.equal(ideaDay(base, idea), floors.length > 0 && mine.flat().includes(idea), `${base.date}: ${idea} draws its day`);

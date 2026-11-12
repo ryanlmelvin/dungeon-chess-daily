@@ -33,6 +33,7 @@ node scripts/measure-human-par.mjs          # the human-like bot over the stored
 node scripts/measure-par-slack.mjs --jobs 8 # room around each floor's idea: first moves that keep par, par wins off the idea
 node scripts/measure-tight.mjs --jobs 8     # tight forms off and on, floor by floor
 node scripts/measure-treasure.mjs --jobs 8  # chest coverage, what its two checks cost, the bot's accidental marks
+node scripts/measure-ideas.mjs --jobs 8     # the ideas in preview: the days each fits, draws and composes on, what it replaces
 ```
 
 One release configuration: `composeDay(date)` with no options (`RELEASE` in
@@ -41,11 +42,23 @@ audit composes again, the preview shows and the tests compare. The measuring scr
 compose it too; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option off
 to compare (`scripts/compose-options.mjs`).
 
+Ideas in preview: two more ideas a floor can be built around, the Standstill (`wait`,
+one exactly timed Wait) and the Lure (`lure`, a knight draws a guard off the target it
+covers), are `composeDay` options that are off unless asked for and not in `RELEASE`
+(`PREVIEW_IDEAS` in `src/composer.js`), so no stored edition, test or audit sees them.
+The measuring scripts ask with `--wait`, `--lure` or `--ideas` (`--every`: every day an
+idea fits, not one in three; `--no-ceiling`: without the bot's ceiling), and
+`scripts/measure-tight.mjs --option ideas` compares the days with and without them.
+`docs/generation.md` ("Ideas in preview") has what they are, how they are judged, what
+was measured and what shipping one needs.
+
 Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to play
 that date composed afresh by the composer as it is now, before rebuilding editions
 (`src/composed-preview.js`, stripped from production builds, saved apart from real runs).
 With an unchanged composer it is the stored edition; `&treasure=0`, `&partner=0` and
-`&tight=0` each turn one option off.
+`&tight=0` each turn one option off. `&wait=1`, `&lure=1` or `&ideas=1` add the ideas in
+preview on the days they draw (`=all`: on every day they fit; `&ceiling=0`: without the
+bot's ceiling); such a preview saves apart again and files its finds in the journal.
 
 Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` and
 `npm run build`, then deploys `dist/` to Pages. `dist/` is never committed. After a
@@ -137,7 +150,9 @@ ideas' diagrams; `src/journal-ui.js` + `src/journal.css` build the menu button, 
 dialog, the one-line cue in the shop and on the results paper, and the page that flies
 into it when a find is new (it never takes a tap or opens a dialog). `main.js` only calls
 it: `clearedFloor` as the shop opens, `wonRun` on the results paper, `restored` after a
-backup merge. Adding an idea's page is adding one `PAGES` entry and its art function.
+backup merge. Adding an idea's page is adding one `PAGES` entry and its art function. The
+pages of the ideas in preview wait in `PREVIEW_PAGES`: the book lists one only once it has
+been found (`bookPages`), which today only a dev preview can do.
 
 ## Changing rules, AI, the composer or the bot
 

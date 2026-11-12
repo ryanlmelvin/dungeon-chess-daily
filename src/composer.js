@@ -2238,7 +2238,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   // A pawn's king floor nets each of its mates in turn ('net:king', …; PAWN_MATES).
   const preferred = piece === 'pawn' && floor === 2 ? pawnMates(seed).map((mate) => `net:${mate}`) : motifsFor(piece, cast.target, floor);
   if (tight) tightMotifs(preferred, base, floor);
-  // Ideas in preview go before the floor's plain motifs: first on floor 1, after the tight forms on floor 2.
+  // Ideas in preview go before the floor's plain motifs (and after a floor 2's tight forms, should one ever be offered there).
   const plainAt = preferred.findIndex((motif) => FLOOR_MOTIFS[floor].includes(motif));
   if (ideas.length && plainAt >= 0) preferred.splice(plainAt, 0, ...ideas);
   // A pawn's unhinted tempo floor, kept until a crown floor takes its place.
@@ -2400,23 +2400,27 @@ export const PREVIEW_IDEAS = Object.freeze(['wait', 'lure']);
  * fits (tests, measuring, the dev preview's &wait=all and &lure=all).
  */
 export const IDEA_EVERY = 3;
-// The floors of a day an idea in preview fits: floors 1 and 2 by matchup, and for a lure a decoy on the floor that the piece can lure.
+// Does an idea in preview fit a floor's matchup? For a lure, with a decoy on the floor that the piece can lure.
 const IDEA_FITS = Object.freeze({
   wait: (base, floor) => fitsWait(base.playerPiece, base.targets[floor]),
   lure: (base, floor) => { const cast = castFor(base, floor); return fitsLure(base.playerPiece, base.targets[floor]) && [...cast.suspects, cast.other].some((guard) => lureLines(base.playerPiece, base.targets[floor], guard.role).length > 0); },
 });
-/** The floors (0 and 1) of a day that `idea` (PREVIEW_IDEAS) fits, floor 1 first. */
-export const ideaFloors = (base, idea) => [0, 1].filter((floor) => IDEA_FITS[idea](base, floor));
+/**
+ * The floors of a day that `idea` (PREVIEW_IDEAS) fits: floor 1 (index 0) or
+ * none. The matchups these ideas fit are the ones floor 2 has a tight form
+ * for, and a tight form always comes first there: tried on floor 2 as well,
+ * over the 742 stored days, neither idea composed there once.
+ */
+export const ideaFloors = (base, idea) => [0].filter((floor) => IDEA_FITS[idea](base, floor));
 /** Does a day that `idea` fits take it? About one day in IDEA_EVERY, by the date. */
 export const ideaDay = (base, idea) => ideaFloors(base, idea).length > 0 && hash(`${base.date}:${idea}-day`) % IDEA_EVERY === 0;
 /**
  * The ideas in preview each floor of a day tries, [floor 1's, floor 2's],
  * for the options `asked` ({ wait, lure }: true, 'every' or false). Each idea
- * the day takes goes to the first floor it fits, never the day's partner
- * floor (`partnered`); where two want one floor, the date orders them, and
- * the second takes its next floor if it has one. Floor 1 tries its ideas
- * before its plain motifs; floor 2 only where no tight form composes
- * (composeFloor).
+ * the day takes goes to the floor it fits (ideaFloors: floor 1), never the
+ * day's partner floor (`partnered`); where the day takes both, the date
+ * orders them, and the floor keeps the first that composes. A floor tries
+ * its ideas before its plain motifs and after its tight forms (composeFloor).
  */
 export function previewIdeas(base, asked, partnered = null) {
   const floors = [[], []];

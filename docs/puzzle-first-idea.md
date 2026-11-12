@@ -337,6 +337,33 @@ target pawn may still wait on the file, frozen there until the pawn takes
 elsewhere; a pawn that walks up under it is cornered (that pawn counts as
 terrain, src/rules.js trapped).
 
+### The table's two level-4 ideas, in preview (2026-11-12)
+
+The waiting move and the deflection were built as the Standstill and the
+Lure, behind `composeDay` options that are off unless asked for
+([Daily generation](generation.md), "Ideas in preview"). What building them
+showed:
+
+- **Every monster moves every turn, so a guard can't simply stand.** A guard
+  with a line open to a far square walks along it, and a slider that sees
+  the piece from afar steps closer before it winds up. The one wind-up a
+  guard makes without leaving its post is the opening one, so a Lure's guard
+  starts the floor beside the piece, wound up at it, and the start square is
+  walled so its only step afterwards is back.
+- **A capture costs one move and par allows one spare**, so "take it anyway
+  and absorb the hit" makes par against a single guarded target. The Lure
+  holds only because the other target can be reached from the prize's square
+  alone, and the Standstill because each landing is attacked from one square.
+- **Only a knight lures honestly.** The guard's role is masked; its wind-up
+  shows a straight or a diagonal step, and the prize stands one step from it
+  along the same kind, so whatever it is, it covers the prize. A bishop's or
+  rook's sidestep would have to land beside the guard, safe from some of the
+  roles that red square could mean but not all.
+- **The bot's habits are these two ideas.** With nothing to gain it waits;
+  out of a red lane it steps toward the target and takes what no longer
+  looks guarded. Both ideas pass the exact tests by construction, and the
+  bot's ceiling only where a decoy leads plain play astray.
+
 ### Ice and Breach days
 
 Composed days keep the day's modifier, and every floor is proved with it on.

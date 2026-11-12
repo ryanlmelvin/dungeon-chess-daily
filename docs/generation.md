@@ -257,6 +257,112 @@ comes in at the door every ten moves, long after a line of three or four has
 opened the stairs, so only a player far over par meets one, and never on a
 pawn player's file.
 
+## Ideas in preview: the Standstill and the Lure
+
+Two more ideas a floor can be built around, built on 2026-11-12 and not
+released: no stored edition has them, and `composeDay(date)` composes
+exactly what it did. Each is a `composeDay` option of its own, off unless
+asked for and absent from `RELEASE` (`PREVIEW_IDEAS`: `wait` and `lure`). The
+dev preview asks with `&wait=1`, `&lure=1` or `&ideas=1` (both), the
+measuring scripts with `--wait`, `--lure` or `--ideas`.
+
+**Where they go.** An idea takes about one in three of the days it fits,
+drawn by the date like a Tandem's (`IDEA_EVERY`, `ideaDay`); `'every'` as the
+option's value (`&wait=all`, `--every`) takes every day it fits. It goes to
+floor 1, tried there before the floor's plain motifs, and never to the day's
+partner floor (`ideaFloors`, `previewIdeas`); a day that takes both tries
+them in an order the date sets and keeps the first that composes. Floor 2 is
+left alone: the matchups these ideas fit are the ones floor 2 has a tight
+form for, and offered floor 2 as well (after the tight forms, so as never to
+stand in for one) neither idea composed there on any of the 742 stored days.
+A floor where an idea doesn't compose keeps its own motifs, and a day that
+fails with an idea on gives it up before any release option (`FALLBACKS`).
+
+**The Standstill** (`wait`). The key is one exactly timed Wait. Each target
+paces a pocket of two squares, one step every turn, as in a squeeze, and the
+one square of its pocket the piece can ever attack, its landing, it attacks
+from one square alone (walls shut every other; a slider stands right beside
+the landing, walled off behind). The line's shape is one of `WAIT_WORDS`:
+come to stand on that square as the target steps away, wait, and take it
+where it has to step back (`KWT` against a lone queen); or wait where you
+start, or take the first target and wait where it stood for the second
+(`WTT`, `TWT`, `KWTT`, `KTWT` against two). Fits the targets a piece can
+burrow (`BURROWS`); the hint is a coin on the square to wait on. On top of
+the three tight tests below, the wait must stand alone: as it is made, every
+other action loses par (`standsAlone` in `src/tight.js`), and at least three
+other actions are on offer there (`WAIT_OTHERS`).
+
+**The Lure** (`lure`), a knight's. A target, the prize, stands walled in
+beside a decoy, its guard, and the guard opens the floor one step from the
+start square, wound up at it: the knight starts on a red square. Jump aside
+to where you attack the prize; the guard lunges onto the square you left,
+off-balance and off its post, and for that one move the prize is free. The
+start square is walled so that the guard's only step from it is back to its
+post, where it stands again a move later; and the other target can be
+attacked from the prize's square alone, so it never comes first. Taking the
+prize at any other moment is captured at once. Fits a knight against two
+rooks or two bishops with a rook, bishop, queen or king among the floor's
+decoys (`LURE_PIECES`, `lureLines`); the hint is a coin on the sidestep.
+
+*How the player can know the guard guards.* Monsters are masked, so the line
+may not rest on the guard's role. It rests on two things the board shows
+before the first move (`plainGuard` in `src/tight.js`): the guard's wind-up
+runs one step, straight or diagonal, onto the knight's square, and the prize
+stands one step from the guard along the same kind of line. Whatever attacks
+along a straight step (a rook, queen or king) covers the square straight
+beside it, and likewise for a diagonal one (a bishop, queen or king; a
+wind-up diagonally down the board may be a pawn's, so there the prize stands
+diagonally below the guard). The sidestep lands two squares or more from the
+guard, where nothing that winds up along a line takes at once. After the
+lunge the guard is off-balance, which the board shows, and an off-balance
+monster never captures. Only a knight can do this honestly: a bishop's or
+rook's only sidestep that attacks the prize lies beside the guard (safe from
+some of the roles its red square could mean, not all), a queen simply takes
+the guard, and a pawn guard can be taken by a bishop or queen and leaves a
+knight no safe sidestep.
+
+Why the guard stands beside the start: every monster moves every turn, so a
+guard with a line open to a distant square walks along it by itself, and a
+slider that sees the piece from afar steps closer before it winds up, off
+its post already. A guard stays on its post only while it is wound up, and
+the one wind-up that needs no step is the opening one. From two or three
+squares away the guard could also stop short of its post on the way back, or
+be kept off it by a piece standing in the lane, and the prize stayed free.
+
+**The tests.** Both are held to the tight tests whatever the `tight` option
+says: no win within par skips the idea (`playsIdea`: for a Standstill, a
+wait followed by the take of a target on the square it just stepped onto;
+for a Lure, a target taken on the move after its plain guard lunged and
+missed), at most half of the first actions keep par, of at least four
+(`IDEA_FIRSTS`), and the bot makes par in at most a quarter of its 40 runs.
+Every floor's own checks apply too (nothing wins sooner, the hasty two, the
+bot guard). `ceiling: false` (tooling; `&ceiling=0`, `--no-ceiling`) leaves
+the bot's ceiling out, to compare.
+
+**What the bot's ceiling means here.** The bot's own habits come close to
+both ideas, so it is a weak judge of them. With nothing to gain it waits
+("monsters often walk into range"), which is the Standstill: without the
+ceiling the bot makes par on every one of a Standstill floor's 40 runs. Out
+of a red lane it steps toward the nearest target and takes whatever no
+longer looks guarded, which is most of a Lure. A floor passes the ceiling
+only where something in its dressing leads plain play astray (a sleeping
+decoy it would rather take, or one it won't step next to), so the ceiling
+picks floors by their decoys more than by their idea.
+
+IDEAS_MEASURED
+
+`node scripts/measure-ideas.mjs --jobs 8` reports this coverage, and
+`node scripts/measure-tight.mjs --option ideas --drawn --jobs 8` the floors
+before and after.
+
+**Shipping one** would need: its option added to `RELEASE` (and to the
+build's report), its page moved from `PREVIEW_PAGES` to `PAGES`
+(`src/journal.js`), a full rebuild of the editions
+(`npm run build:editions -- --full`; no `RULES_VERSION` bump, since play is
+unchanged, and no `COMPOSER_VERSION` bump, since each idea draws from seeded
+streams of its own), the pinned tests and this document's figures brought up
+to date, and the owner's play of a local preview first.
+
 ## Stored editions
 
 `npm run build` composes every edition from launch (2026-11-01, edition 1)
@@ -454,10 +560,14 @@ and these scripts report what it finds:
   off and on and compares, floor by floor.
 - `node scripts/measure-treasure.mjs` reports chest coverage, what the two
   checks cost, how demanding each chest is and the bot's accidental marks.
+- `node scripts/measure-ideas.mjs` reports the ideas in preview (above): the
+  days each fits, draws and composes on, with and without the bot's ceiling,
+  what it takes the place of, and the mix of ideas per floor.
 
 The scripts that compose do so in the release configuration, as the build
 does; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option
-off, to compare (`scripts/compose-options.mjs`).
+off, to compare, and `--wait`, `--lure` or `--ideas` add the ideas in preview
+(`scripts/compose-options.mjs`).
 
 Over the 742 editions stored with rules version 13 (40 runs a floor), the bot
 cleared 96.6%, 96.3% and 99.9% of its runs on floors 1, 2 and 3, and took more
