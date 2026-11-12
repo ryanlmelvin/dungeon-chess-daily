@@ -2054,7 +2054,6 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const idea = exact && (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
         const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose || !exact ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
-        if (tight && built.mate && !built.relaxed && !tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea }).ok) { trace?.({ motif, attempt, stage: 'tight:lazy', room, line }); return null; }
         if (!guarded) return { hasty };
         // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
         // fallback is still a puzzle, judged until its last tries.

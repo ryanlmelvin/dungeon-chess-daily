@@ -7,7 +7,7 @@
 // Monsters are deterministic, so every line of play within par (the planted
 // line plus one) can be searched (parRoom). A tight bait or squeeze passes two
 // exact tests (tightVerdict) and one by the human-like bot (the composer runs
-// it, botFinds); a pawn's king floor one of its own:
+// it, botFinds):
 //   1. No win within par skips the idea, as a player would name it
 //      (playsIdea): a bait is a target taken off-balance right after its lunge
 //      missed, a squeeze a target taken on the square it just stepped onto, in
@@ -16,8 +16,11 @@
 //      captured at once, at most TIGHT.firstShare still leave a win within par.
 //   3. Plain sensible play doesn't find it: the bot, which knows no ideas,
 //      makes par in at most TIGHT.botPar of its runs.
-//   4. A pawn's king floor: no win within par has the pawn make fewer moves
-//      than the planted line does (the recruit king mating alone).
+// King floors are left as they are. A pawn's was once rejected when the
+// recruit king could mate while the pawn sat out a move; that swapped king
+// mates for easier promote-and-mate floors, and with every recruit on the
+// player's orders the king's mate is the player's to find (the owner's call,
+// 2026-11-11). parRoom still reports `fewest` for measuring.
 // The composer's own checks (nothing wins sooner, the hasty two, the bot
 // guard against slogs) still apply to every floor.
 import { act } from './rules.js';
@@ -170,16 +173,10 @@ export function parRoom(start, length, { actionsFrom, idea = () => true, hits = 
 /**
  * Is the floor that `start` begins tight around its planted `line`, for the
  * motif instance `built`? { ok, why, firsts, keepPar, ... }: `why` names the
- * test that failed ('cut', 'first', 'idea' or 'lazy'). A pawn's king floor
- * (`built.mate`) is asked only the third test; every other floor the first
- * two. `narrow` is the composer's own idea test (usesIdea).
+ * test that failed ('cut', 'first' or 'idea'). For a bait or a squeeze: king
+ * floors are not judged. `narrow` is the composer's own idea test (usesIdea).
  */
 export function tightVerdict(start, built, line, { actionsFrom, narrow }) {
-  const moves = line.filter((action) => action.type === 'move').length;
-  if (built.mate) {
-    const room = parRoom(start, line.length, { actionsFrom });
-    return { ...room, ok: !room.cut && room.fewest >= moves, why: room.cut ? 'cut' : room.fewest < moves ? 'lazy' : null };
-  }
   const room = parRoom(start, line.length, { actionsFrom, idea: (states, played) => playsIdea(built, states, played, narrow), stop: true, firstShare: TIGHT.firstShare });
   const why = room.cut ? 'cut' : room.keepPar > TIGHT.firstShare * room.firsts ? 'first' : room.off ? 'idea' : null;
   return { ...room, ok: !why, why };

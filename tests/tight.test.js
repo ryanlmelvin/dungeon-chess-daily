@@ -23,7 +23,7 @@ function compose(date, tight) {
 }
 
 test('with the option off a day composes as its stored edition', () => {
-  // 2026-11-18 (a knight) and 2026-11-28 (a pawn) both change with the option on.
+  // 2026-11-18 (a knight) changes with the option on; 2026-11-28 (a pawn) doesn't (the test below).
   for (const date of ['2026-11-18', '2026-11-28']) {
     const plain = composeDay(date, { tight: false }), stored = getDaily(date);
     assert.deepEqual(plain.daily.composed, stored.composed, `${date}: the stored rooms`);
@@ -115,21 +115,16 @@ test('the pincer: off the key a target dodges out of its other exit, on it every
   }
 });
 
-test('a tight pawn\'s king floor leaves the pawn no win within par with fewer moves than its line', () => {
-  // The two dated examples: the planted line, and a win as fast on which the pawn sits out a move.
+test('a tight day leaves a pawn\'s day alone, its king floor included', () => {
+  // The two dated examples: on each the recruit king can mate while the pawn sits out a move
+  // ("wait f5 wait" for "wait f5 f6"; "b6 wait wait" for "b6 b7 b8"). Those floors stay: the
+  // player orders that king, so its mate is theirs to find.
   for (const [date, planted, lazy] of [['2026-11-06', 'wait f5 f6', 'wait f5 wait'], ['2026-11-28', 'b6 b7 b8', 'b6 wait wait']]) {
-    const before = compose(date, false), floor = before.floors[2];
-    assert.equal(spell(floor.line), planted);
+    const before = compose(date, false), after = compose(date, true);
+    assert.equal(spell(before.floors[2].line), planted);
     assert.ok(playLine(before.starts[2], line(lazy))?.at(-1).exit.open, `${date}: "${lazy}" wins as fast`);
-    const moves = floor.line.filter((action) => action.type === 'move').length;
-    const verdict = tightVerdict(before.starts[2], before.builts[2], floor.line, { actionsFrom, narrow: usesIdea });
-    assert.deepEqual([verdict.ok, verdict.why], [false, 'lazy'], `${date}: the stored floor fails the verdict`);
-    assert.ok(verdict.fewest < moves);
-    const after = compose(date, true), tight = after.floors[2];
-    assert.notDeepEqual(tight.room, floor.room, `${date}: another floor composes`);
-    const room = parRoom(after.starts[2], tight.line.length, { actionsFrom });
-    assert.ok(!room.cut && room.fewest >= tight.line.filter((action) => action.type === 'move').length, `${date}: every win within par makes all the line's moves`);
-    assert.ok(tight.line.length >= 3 && tight.line.length <= 4 && after.daily.generation.motifs[2] === 'net');
+    assert.deepEqual(after.daily.composed, before.daily.composed, `${date}: the same rooms with the option on`);
+    assert.deepEqual(after.daily.generation.certificate.actions, before.daily.generation.certificate.actions, `${date}: the same lines`);
   }
 });
 
