@@ -21,7 +21,7 @@ import { planBackupMerge } from './backups.js';
 import { drawSprite, spritePalette, piecePalette, SPRITE_SIZE } from './sprites.js';
 import { pinUsable, captureGoal, shareDate, createGame as createComposedGame } from './rules.js';
 import { nextHint, hintCards, targetLine, targetSpecies, closeRangeSquares } from './rules.js';
-import { treasureMark, TREASURE_MARK } from './rules.js';
+import { treasureMark, treasureInHand, TREASURE_MARK } from './rules.js';
 import { drawTargetCard, drawDangerCard, drawUnmaskExample } from './hint-art.js';
 import { createMusic, editionTracks } from './music.js';
 import { MODIFIERS, modifierOf, modifierStatus } from './modifiers.js';
@@ -422,8 +422,10 @@ function renderPar() {
   $('par-status').hidden = par === null;
   if (par === null) return;
   // A retry wears its name on the chip, and once cleared its result ("Retry · 1 under par").
-  $('par-status').textContent = `${retry ? 'Retry · ' : ''}${retry?.cleared() ? parResult(state) : `Par ${par}`}`;
-  $('par-status').setAttribute('aria-label', `${retry ? 'Retrying this floor: nothing here counts. ' : ''}Par ${par} moves for this floor, ${floorScoredMoves(state)} so far`);
+  // The chest's 💎 rides beside par from the moment the chest is taken, for as long as par can still be made (rules.js treasureInHand).
+  const gem = treasureInHand(state, par);
+  $('par-status').textContent = `${retry ? 'Retry · ' : ''}${retry?.cleared() ? parResult(state) : `Par ${par}${gem ? ` ${TREASURE_MARK}` : ''}`}`;
+  $('par-status').setAttribute('aria-label', `${retry ? 'Retrying this floor: nothing here counts. ' : ''}Par ${par} moves for this floor, ${floorScoredMoves(state)} so far${gem ? ', treasure in hand' : ''}`);
 }
 // "2 over par" (or "even par") for a cleared floor that has a par, else ''.
 // The shop's gold line carries it, so no toast covers the next floor's log.

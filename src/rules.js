@@ -1758,6 +1758,17 @@ export function treasureMark(state, floor, par) {
   if (record) return scoredMoves(record) <= par;
   return floor === state.floor && state.objective?.complete === true && floorScoredMoves(state) <= par;
 }
+/**
+ * Is the mark still in hand on the floor in progress? Its chest is taken and
+ * par can still be made: the challenge is complete at `par` or better, or it
+ * isn't yet and a move is left under par. The par chip shows the mark while
+ * this holds (src/main.js renderPar), so a chest taken over par promises nothing.
+ */
+export function treasureInHand(state, par) {
+  if (!Number.isInteger(par) || !chestTaken(state, state?.floor)) return false;
+  const moves = floorScoredMoves(state);
+  return state.objective?.complete === true ? moves <= par : moves < par;
+}
 // A save's chests: a 'chest' feat only on a floor whose room holds a chest, once;
 // on the floor in progress the chest lies there until it is taken or the door opens.
 // A practice run's rooms hold none (setFloor).

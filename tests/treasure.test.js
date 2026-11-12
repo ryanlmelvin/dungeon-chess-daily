@@ -4,7 +4,7 @@
 // the spare move and isn't the bot's by accident.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, act, resetFloor, validateSave, getShareText, treasureMark, chestTaken, floorScoredMoves, CHEST_GOLD, TREASURE_MARK } from '../src/rules.js';
+import { createGame, act, resetFloor, validateSave, getShareText, treasureMark, treasureInHand, chestTaken, floorScoredMoves, CHEST_GOLD, TREASURE_MARK } from '../src/rules.js';
 import { getRawDaily } from '../src/edition.js';
 import { EDITIONS } from '../src/editions.js';
 import { encodeRooms, decodeRooms } from '../src/room-code.js';
@@ -87,6 +87,27 @@ test('the treasure mark needs the chest and par, and shows once on the share car
   const floors = (pars) => getShareText(next, pars, { now: new Date('2026-11-14T12:00:00Z') }).split('\n')[1];
   assert.equal(floors([2, 3, 3]), `🟥 E ${TREASURE_MARK}  ⬛ ·`);
   assert.equal(floors([1, 3, 3]), '🟥 +1  ⬛ ·', 'over par: no mark');
+});
+
+test('the mark is in hand from the chest until par is out of reach', () => {
+  // e2 to d4 (the chest) to f5 (the target): two moves.
+  const { state } = day();
+  assert.equal(treasureInHand(state, 3), false, 'no chest taken yet');
+  const held = play(state, D4);
+  assert.equal(treasureInHand(held, 3), true, 'taken, and par can still be made');
+  assert.equal(treasureInHand(held, 2), true, 'one move left under par');
+  assert.equal(treasureInHand(held, 1), false, 'the floor cannot finish at par any more');
+  assert.equal(treasureInHand(held, null), false, 'no par, no mark');
+  // A wasted move puts a par of two out of reach before the floor is cleared.
+  assert.equal(treasureInHand(play(held, E2), 2), false);
+  // Cleared at par it stays, exactly where the mark itself holds.
+  const cleared = play(held, F5);
+  assert.equal(cleared.objective.complete, true);
+  for (const par of [1, 2, 3]) assert.equal(treasureInHand(cleared, par), treasureMark(cleared, 0, par), `par ${par}`);
+  assert.equal(treasureInHand(cleared, 2), true);
+  // A floor without its chest taken never shows it.
+  const { state: bare } = day();
+  assert.equal(treasureInHand(play(bare, G3), 3), false);
 });
 
 test('restarting the floor puts the chest back and takes back its gold', () => {
