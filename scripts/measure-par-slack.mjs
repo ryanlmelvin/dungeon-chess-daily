@@ -22,11 +22,12 @@
 // figures (counted as "search cut short"). Read-only.
 //   node scripts/measure-par-slack.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…]
 //     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N]
-//     [--no-treasure] [--no-partner] [--no-tight]
+//     [--no-treasure] [--no-partner] [--no-tight] [--wait] [--lure] [--ideas] [--every] [--no-ceiling]
 // --jobs splits the dates over that many processes.
 // Days compose in the release configuration, as the stored editions do;
 // --no-treasure, --no-partner and --no-tight each turn one of its options off
-// (scripts/compose-options.mjs). A partner floor's search steers the recruit,
+// (scripts/compose-options.mjs), and --wait, --lure or --ideas add the ideas
+// in preview (with --every, on every day they fit). A partner floor's search steers the recruit,
 // as its line does (searchPartner): a first action is still a move or wait of
 // yours, kept when some order of the recruit keeps it.
 import { spawn } from 'node:child_process';

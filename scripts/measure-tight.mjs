@@ -16,12 +16,20 @@
 //     (usesIdea) and by the faithful one (playsIdea);
 //   - as played: a line may absorb captures (each costs a move), as a
 //     player's may; first actions captured at once don't count.
+// --option names the option the two sides differ by: tight (the default), or
+// an idea in preview, wait, lure or ideas (both; src/composer.js
+// PREVIEW_IDEAS), composed on the days it draws, or with --every on every day
+// it fits, and with --no-ceiling without the bot's ceiling. The report then
+// says which floors the ideas took and what stood there before. --drawn
+// measures only the dates on which one of those ideas is tried at all (the
+// rest compose the same on both sides), which makes a long range affordable.
 // By the human-like bot (--runs seeded runs a floor): runs at par or better,
 // runs that fail or pass par + 4, and runs at par off the idea (faithful).
 // Then how each floor came out (form, fallbacks, line lengths, compose time),
 // and a day-by-day table of --table days from --start. Read-only.
 //   node scripts/measure-tight.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--runs N]
 //     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path] [--no-partner] [--no-treasure]
+//     [--option tight|wait|lure|ideas] [--every] [--no-ceiling] [--drawn]
 // --jobs splits the dates over that many processes; --from reads rows a
 // previous run wrote with --json instead of measuring (other modes are still
 // measured), so the unchanging "off" side is computed once.
@@ -29,7 +37,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { composeOptions } from './compose-options.mjs';
-import { composeDay, actionsFrom, usesIdea } from '../src/composer.js';
+import { composeDay, actionsFrom, usesIdea, previewIdeas, composedSeeds, PREVIEW_IDEAS } from '../src/composer.js';
 import { parRoom, playsIdea, TIGHT } from '../src/tight.js';
 import { getRawDaily } from '../src/edition.js';
 import { certifiedFloors, playFloor, runSeed, HUMAN_RUNS } from '../src/human-bot.js';
@@ -40,6 +48,15 @@ const start = arg('start', '2026-11-11'), end = arg('end', '2027-01-10'), runs =
 const jobs = Number(arg('jobs', 1)), budget = Number(arg('budget', 600_000)), tableDays = Number(arg('table', 15));
 const modes = arg('modes', 'off,on').split(',');
 const options = composeOptions();
+// The option the modes switch: off and on.
+const toggled = arg('option', 'tight');
+const toggledIdeas = toggled === 'ideas' ? PREVIEW_IDEAS : PREVIEW_IDEAS.filter((idea) => idea === toggled);
+if (toggled !== 'tight' && !toggledIdeas.length) throw new Error(`Unknown --option ${toggled}.`);
+const switched = (mode) => (toggled === 'tight' ? { tight: mode === 'on' }
+  : Object.fromEntries(toggledIdeas.map((idea) => [idea, mode === 'on' ? (process.argv.includes('--every') ? 'every' : true) : false])));
+// With --drawn: does the switched option try an idea on this date at all?
+const drawnOnly = process.argv.includes('--drawn') && toggledIdeas.length > 0;
+const drawn = (date) => { const raw = getRawDaily(date); return previewIdeas({ ...raw, floorSeeds: composedSeeds(date) }, switched('on')).some((ideas) => ideas.length > 0); };
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
 const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
@@ -48,7 +65,7 @@ function measureDay(date, mode) {
   const raw = getRawDaily(date), builts = [];
   let composed;
   const began = performance.now();
-  try { composed = composeDay(date, { ...options, tight: mode === 'on', trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
+  try { composed = composeDay(date, { ...options, ...switched(mode), trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
   const dayMs = performance.now() - began;
   const { daily, floors } = composed;
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
@@ -86,6 +103,7 @@ function measure(wanted) {
   let n = 0;
   for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const date = new Date(time).toISOString().slice(0, 10);
+    if (drawnOnly && !drawn(date)) continue;
     if (shard && n++ % shard[1] !== shard[0]) continue;
     for (const mode of wanted) rows.push(...measureDay(date, mode));
   }
@@ -110,12 +128,29 @@ function report(all) {
     if (!floors.length) continue;
     const days = new Set(floors.map((row) => row.date)).size;
     const dayTimes = [...new Map(floors.map((row) => [row.date, row.dayMs])).values()];
-    console.log(`\n## Option ${mode}: ${days} days (${start} to ${end}), ${floors.length} floors, ${runs} bot runs a floor. Compose time a day: mean ${(mean(dayTimes) / 1000).toFixed(2)} s, slowest ${(Math.max(...dayTimes) / 1000).toFixed(1)} s.`);
+    console.log(`\n## ${toggled} ${mode}: ${days} days (${start} to ${end}), ${floors.length} floors, ${runs} bot runs a floor. Compose time a day: mean ${(mean(dayTimes) / 1000).toFixed(2)} s, slowest ${(Math.max(...dayTimes) / 1000).toFixed(1)} s.`);
     const by = (pick, rows = floors) => [...new Set(rows.map(pick))].sort().map((value) => [value, rows.filter((row) => pick(row) === value)]);
     console.log(`\n${header}`);
     for (const [name, group] of [...by((row) => `Floor ${row.floor + 1}`), ...by((row) => `Floor ${row.floor + 1} · ${ideaOf(row)}`), ...by((row) => (row.piece === 'pawn' ? `pawn player · ${ideaOf(row)}` : `other pieces · ${ideaOf(row)}`))]) console.log(line(name, group));
+    // The floors an idea in preview took, as they were before and as they are with it.
+    for (const idea of toggledIdeas) {
+      const taken = all.filter((row) => !row.failed && row.mode === 'on' && row.motif === idea);
+      const group = floors.filter((row) => taken.some((other) => other.date === row.date && other.floor === row.floor));
+      if (group.length) console.log(line(mode === 'on' ? `the ${idea} floors` : `the floors the ${idea} took, before`, group));
+    }
+    if (mode === 'on' && toggledIdeas.length) {
+      console.log('');
+      for (const idea of toggledIdeas) {
+        const taken = floors.filter((row) => row.motif === idea);
+        const before = taken.map((row) => all.find((other) => other.mode === 'off' && other.date === row.date && other.floor === row.floor)).filter(Boolean);
+        const tally = (rows, pick) => [...new Set(rows.map(pick))].sort().map((value) => `${value} ${rows.filter((row) => pick(row) === value).length}`).join(', ') || 'none';
+        console.log(`- ${idea}: ${taken.length} floors on ${new Set(taken.map((row) => row.date)).size} of ${days} days (floor 1: ${taken.filter((row) => row.floor === 0).length}, floor 2: ${taken.filter((row) => row.floor === 1).length}); by piece: ${tally(taken, (row) => row.piece)}; lines of 3: ${taken.filter((row) => row.planted === 3).length}, of 4: ${taken.filter((row) => row.planted === 4).length}; in place of: ${tally(before, ideaOf)}.`);
+      }
+      const ideas = (mode_) => { const rows = all.filter((row) => !row.failed && row.mode === mode_ && row.floor < 2); return [...new Set(rows.map(ideaOf))].sort().map((idea) => `${idea} ${[0, 1].map((f) => rows.filter((row) => row.floor === f && ideaOf(row) === idea).length).join('/')}`).join(', '); };
+      console.log(`- The mix of ideas, floor 1 / floor 2: before: ${ideas('off')}; after: ${ideas('on')}.`);
+    }
     // What a tight day's floor 2 came out as, by matchup.
-    if (mode === 'on') {
+    if (mode === 'on' && toggled === 'tight') {
       console.log('\nFloor 2 by matchup (pieces other than the pawn): what composed.\n');
       const second = floors.filter((row) => row.floor === 1 && row.piece !== 'pawn');
       for (const [name, group] of by((row) => `${row.piece} v ${row.target}`, second)) console.log(`- ${name}: ${by(ideaOf, group).map(([idea, rows]) => `${idea} ${rows.length}`).join(', ')}`);
