@@ -49,7 +49,7 @@ const CROWN_WIDTH = 0.5;
 // square, and its look-alikes wear that piece as a badge from then on.
 const UNMASK_POP_MS = 1100;
 // The chest's gem (src/treasure.js): taking the chest sends a diamond up out of
-// it, the same 💎 the floor earns on the share card at par. Original pixel art.
+// it, the same 💎 the floor earns on the share card. Original pixel art.
 const GEM = ['..xxxxxxx..', '.xwwcccbbx.', 'xwwcccccbbx', 'xbbbbbbbbbx', '.xwccccbbx.', '..xwcccbx..', '...xwcbx...', '....xcx....', '.....x.....'];
 const GEM_PALETTE = { x: '#14304d', w: '#f2fdff', c: '#79d8ff', b: '#3a9be0' };
 const GEM_POP_MS = 1600;

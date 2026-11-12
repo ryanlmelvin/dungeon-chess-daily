@@ -80,7 +80,7 @@ takes it, it costs the spare move, and the bot seldom takes it by accident).
 on a partner floor alone) and then as played.
 Every daily plays the Fair monsters (`DAILY_TIER`, `src/difficulty.js`, which holds
 the five tiers practice can choose). Par is each floor's line plus one
-(`src/par.js`); a chest taken at par or better earns the floor's 💎 (`treasureMark`
+(`src/par.js`); a chest taken earns the floor's 💎, whatever the score (`treasureMark`
 in `src/rules.js`); `src/bot.js` replays the lines after a win, a Tandem's recruit
 orders included. `src/human-bot.js` + `src/recruit-policy.js` are the "plays like a
 person" bot, now only a probe and the composer's guard. Authoritative description:

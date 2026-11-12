@@ -1747,27 +1747,21 @@ function takeChest(state) {
 /** Did the player take floor `floor`'s chest? */
 export const chestTaken = (state, floor = state?.floor) => (state?.feats ?? []).some((feat) => feat.kind === 'chest' && feat.floor === floor);
 /**
- * The treasure mark: the player took floor `floor`'s chest and finished the
- * floor at `par` or better by the floor's own score (scoredMoves: moves until
- * the challenge was complete, captures and paid hints included). On the floor
- * in progress it holds once the challenge is complete, by the score so far.
+ * The treasure mark: the player took floor `floor`'s chest on a run with a par
+ * (the official piece, color and monsters), whatever the floor's score. On the
+ * floor in progress it holds once the challenge is complete.
  */
 export function treasureMark(state, floor, par) {
   if (!Number.isInteger(par) || !chestTaken(state, floor)) return false;
-  const record = state.records.find((entry) => entry.floor === floor);
-  if (record) return scoredMoves(record) <= par;
-  return floor === state.floor && state.objective?.complete === true && floorScoredMoves(state) <= par;
+  if (state.records.some((entry) => entry.floor === floor)) return true;
+  return floor === state.floor && state.objective?.complete === true;
 }
 /**
- * Is the mark still in hand on the floor in progress? Its chest is taken and
- * par can still be made: the challenge is complete at `par` or better, or it
- * isn't yet and a move is left under par. The par chip shows the mark while
- * this holds (src/main.js renderPar), so a chest taken over par promises nothing.
+ * Is the mark in hand on the floor in progress? Its chest is taken on a run
+ * with a par. The par chip shows the mark while this holds (src/main.js renderPar).
  */
 export function treasureInHand(state, par) {
-  if (!Number.isInteger(par) || !chestTaken(state, state?.floor)) return false;
-  const moves = floorScoredMoves(state);
-  return state.objective?.complete === true ? moves <= par : moves < par;
+  return Number.isInteger(par) && chestTaken(state, state?.floor);
 }
 // A save's chests: a 'chest' feat only on a floor whose room holds a chest, once;
 // on the floor in progress the chest lies there until it is taken or the door opens.
