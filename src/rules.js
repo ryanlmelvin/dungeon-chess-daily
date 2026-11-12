@@ -1240,10 +1240,12 @@ export function closeRangeSquares(state) {
   return squares;
 }
 
-// Manual recruit control: a move or wait may carry the recruit's order for that
-// turn, a square it can move to ({x, y}) or 'hold'. An ordered recruit may
-// capture any monster, the challenge piece included. With no order (Auto, and
-// every certified route) its own AI moves it, as below.
+// Recruit orders: a move or wait may carry the recruit's order for that turn, a
+// square it can move to ({x, y}) or 'hold'. The player's game always sends one
+// (src/main.js). An ordered recruit may capture any monster, the challenge
+// piece included. With no order its own AI moves it, as below: "Auto" in these
+// comments, which is how every certified route and the Dungeon Bot play (once
+// a player's setting too).
 const RECRUIT_PROBE = Symbol('recruit probe');
 const validOrder = (order) => order === 'hold' || (order !== null && typeof order === 'object' && inside(order.x, order.y));
 const squareOrder = (order) => order !== undefined && order !== 'hold' && order !== RECRUIT_PROBE;

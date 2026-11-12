@@ -37,7 +37,7 @@ Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to pl
 that date composed afresh by the composer as it is now, before rebuilding editions
 (`src/composed-preview.js`, stripped from production builds, saved apart from real runs).
 The preview also composes partner floors (`composeDay`'s `partner` option, in no stored
-edition: a tandem floor, won with the floor's recruit on Manual orders, on days whose
+edition: a tandem floor, won with the floor's recruit on the player's orders, on days whose
 matchup has one) unless the URL adds `&partner=0`; `measure-par-slack.mjs --partner`
 measures them.
 
@@ -136,7 +136,10 @@ checks, par and versioning; keep it in step with behavior changes.
 - Floors should be short clever lines, not chases, sieges or attrition. There are no
   lives: a capture of the player adds a move to the score.
 - The king is never the daily piece; certified routes never use powerups, shields,
-  freezes or the floor 1–2 recruits, and carry no recruit orders (Auto).
+  freezes or the floor 1–2 recruits, and carry no recruit orders (the recruit moves
+  itself along them).
+- The player always orders the recruit: there is no Auto setting. Once a floor's
+  challenge is complete the recruit moves itself for the rest of that room.
 - Every daily plays Fair; par is the planted line + 1; on the king floor checkmate
   wins and the king can't take a piece the recruit king guards.
 - Keep UI text and the share card minimal. Dialogs must not scroll on small phones

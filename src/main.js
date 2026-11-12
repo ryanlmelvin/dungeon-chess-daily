@@ -85,14 +85,11 @@ let musicOn = false;
 try { musicOn = localStorage.getItem(`${prefix}music`) === 'on'; } catch {}
 $('music-toggle').checked = musicOn;
 music.setEnabled(musicOn);
-// Recruit control is a device preference like sound and music, never part of a
-// save or backup. Manual (the default) asks for the recruit's move every turn;
-// Auto lets it move itself, as certified routes and the Dungeon Bot do.
-let recruitManual = true;
-try { recruitManual = localStorage.getItem(`${prefix}recruit`) !== 'auto'; } catch {}
-$('recruit-control').value = recruitManual ? 'manual' : 'auto';
-$('recruit-auto-note').hidden = recruitManual;
-// Manual control: a move or wait that reaches the recruit's phase shows your
+// Your recruit always takes your orders until its floor's challenge is done,
+// then it moves itself (src/rules.js huntsAlone). The Auto setting that let it
+// move itself all floor long is gone, and the preference it left is cleared.
+try { localStorage.removeItem(`${prefix}recruit`); } catch {}
+// A move or wait that reaches the recruit's phase shows your
 // move first and waits here for the recruit's order. The turn is played only
 // with the order, as one action, so a save never holds half a turn. It belongs
 // to the state it began from: any other change of state drops it.
@@ -1019,8 +1016,8 @@ function takeAction(action) {
   const shopping = (action.type === 'buy' && $('shop-dialog').open) || (action.type === 'hint' && $('hint-dialog').open);
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || (!shopping && document.querySelector('dialog[open]'))) return false;
   if (refreshFromOtherWindow()) return false;
-  // Manual recruit control: show the move first, then take the recruit's order.
-  if (recruitManual && (action.type === 'move' || action.type === 'wait') && action.recruit === undefined) {
+  // Show the move first, then take the recruit's order.
+  if ((action.type === 'move' || action.type === 'wait') && action.recruit === undefined) {
     const choice = recruitChoice(state, action);
     if (choice?.moves.length) return beginOrder(action, choice);
     // A recruit with nowhere to go just holds.
@@ -1066,7 +1063,7 @@ function takeAction(action) {
   }, animationTime);
   return true;
 }
-// The recruit's order under Manual control. Your move is already on the board;
+// The recruit's order. Your move is already on the board;
 // a square marked green moves the recruit there, and the recruit itself (or
 // Hold, or Space) keeps it still. The move can't be taken back here: it was played.
 const ORDER_TIP = 'Now move your recruit: tap a square marked green, or tap the recruit (or Hold) to keep it still.';
@@ -1339,8 +1336,8 @@ function startOver(next, message) {
 let hopelessShown = null;
 async function offerHopelessRestart() {
   if (replay || screen !== 'game' || !state || state.status !== 'playing' || !state.floorSnapshot || document.querySelector('dialog[open]')) return;
-  // A recruit under Manual control may still take the targets your piece can't reach.
-  if (!hopelessFloor(state, { manualRecruit: recruitManual })) return;
+  // Your recruit, on your orders, may still take the targets your piece can't reach.
+  if (!hopelessFloor(state, { manualRecruit: true })) return;
   const piece = state.objective.piece;
   const targets = state.enemies.filter((foe) => (foe.role ?? foe.piece) === piece);
   const position = JSON.stringify([daily.date, practice, state.floor, state.player.piece, state.powers.leap, targets.map((foe) => [foe.id, foe.x, foe.y])]);
@@ -1348,7 +1345,7 @@ async function offerHopelessRestart() {
   hopelessShown = position;
   const floor = state.floor + 1;
   const what = targets.length === 1 ? `the ${piece === 'king' ? '' : 'last '}${piece}` : `the last ${targets.length} ${piece}s`;
-  const who = recruitManual && (state.companion || waitingRecruit(state)) ? 'Neither your piece nor your recruit can ever' : 'Your piece can never';
+  const who = state.companion || waitingRecruit(state) ? 'Neither your piece nor your recruit can ever' : 'Your piece can never';
   if (!await askConfirm('This floor can’t be finished', `${who} reach ${what} from here. Restart floor ${floor} to try again: you keep the gold and powers you arrived with. Moves already made here still count toward this floor’s score.`, `Restart floor ${floor}`, 'Keep playing')) return;
   if (!state || state.status !== 'playing' || !state.floorSnapshot || state.floor + 1 !== floor) return;
   refreshFromOtherWindow();
@@ -1496,7 +1493,6 @@ $('game-menu-button').addEventListener('click',openMenu);
 document.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
 $('sound-toggle').addEventListener('change',()=>{sound=$('sound-toggle').checked;try{localStorage.setItem(`${prefix}sound`,sound?'on':'off');}catch{}});
 $('music-toggle').addEventListener('change',()=>{musicOn=$('music-toggle').checked;try{localStorage.setItem(`${prefix}music`,musicOn?'on':'off');}catch{}music.setEnabled(musicOn);music.unlock();syncMusic();});
-$('recruit-control').addEventListener('change',()=>{recruitManual=$('recruit-control').value!=='auto';try{localStorage.setItem(`${prefix}recruit`,recruitManual?'manual':'auto');}catch{}$('recruit-auto-note').hidden=recruitManual;});
 $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}

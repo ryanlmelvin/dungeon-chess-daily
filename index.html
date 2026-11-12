@@ -102,8 +102,6 @@
     </div>
     <label class="sound-setting"><span>Sound effects</span><input id="sound-toggle" type="checkbox" role="switch"></label>
     <label class="sound-setting music-setting"><span>Music</span><input id="music-toggle" type="checkbox" role="switch"></label>
-    <label class="sound-setting recruit-setting"><span>Recruit control</span><select id="recruit-control"><option value="manual">Manual</option><option value="auto">Auto</option></select></label>
-    <p id="recruit-auto-note" class="recruit-note" hidden>Auto recruits cannot capture targets.</p>
     <details class="saved-progress">
     <summary>Saved progress</summary>
     <p>Moving to an installed app? Use <b>Download backup</b> in your browser, then <b>Restore backup</b> in the app to bring your progress over.</p>
@@ -186,7 +184,7 @@
       <article class="guide-page" data-section="recruits" data-title="Recruits" hidden>
         <canvas class="hint-art" data-guide-art="recruit" width="200" height="200" role="img" aria-label="Animated board: a monster’s line passes through a waiting recruit; a rook steps onto it, the recruit joins, then steps between the monster and the rook to block the line."></canvas>
         <p>Each floor’s recruit waits in a green ring. Step onto it and it joins you.</p>
-        <p>After each move, tap a green square to move it, or tap it to stay put. It can capture targets too, except on <b>Auto</b> (in the menu), where it moves itself.</p>
+        <p>After each move, tap a green square to move it, or tap it to stay put. It can capture targets too. Once the floor’s challenge is done, it moves itself.</p>
         <p>On floor 3 it’s a king, and the enemy king can’t take what it guards.</p>
       </article>
       <article class="guide-page" data-section="special" data-title="En passant" hidden>
@@ -203,7 +201,7 @@
       </article>
       <article class="guide-page" data-section="special" data-title="Bishop pair" hidden>
         <canvas class="hint-art" data-guide-art="bishop-pair" width="200" height="200" role="img" aria-label="Animated board: your bishop steps onto a waiting bishop recruit and the squares of its colour light up, half the board. The recruit hops one square sideways onto the other colour, and the rest of the board lights up too."></canvas>
-        <p>When your bishop recruits a bishop, the recruit hops to a side square on the other colour (on Manual, tap the green one). Together they cover every square.</p>
+        <p>When your bishop recruits a bishop, the recruit hops to a side square on the other colour (tap the green one). Together they cover every square.</p>
       </article>
       <article class="guide-page" data-section="tactics" data-title="Forks &amp; combos" hidden>
         <div class="guide-pair">
@@ -268,7 +266,7 @@
         <label for="practice-monsters">Monsters<select id="practice-monsters" aria-describedby="piece-warning"></select></label>
       </div>
       <p id="piece-warning" role="status" hidden>Changing from today's official piece, color or monsters means no completion message to share with friends. Today's challenge may be impossible with your choices.</p>
-      <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, so floor 3 may be impossible: only your recruit can capture it, and not on Auto.</p>
+      <p id="king-warning" role="status" hidden>A king can’t step next to the monster king, so floor 3 may be impossible: only your recruit can capture it.</p>
       <button id="piece-start" type="submit">Start practice</button>
     </form>
   </dialog>

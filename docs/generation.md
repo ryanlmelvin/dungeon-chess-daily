@@ -27,10 +27,10 @@ planted line followed by its stairs, that:
   close-range captures, turn order, promotion and every rule of the production
   engine, the day's room modifier included.
 - Is never captured, uses no shield or freeze, and never restarts.
-- Collects no powerup and recruits no piece but the king floor's own king, on
-  Auto: the line carries no recruit orders. Manual recruit control may order
-  any legal recruit move, Auto's included, so a player steering the recruit
-  can always follow the line.
+- Collects no powerup and recruits no piece but the king floor's own king, which
+  moves itself: the line carries no recruit orders. A player always orders the
+  recruit and may order any legal move, the one it would make itself included,
+  so the line can always be followed.
 - Keeps every save along the way valid (`validateSave`), as a player's run would.
 
 The proof (`proveComposed` in `src/generation.js`) replays the lines through
@@ -247,7 +247,7 @@ room's layout fields (`dungeonSeed`, `obstacleBase`, `decoys`, `scatter`,
 ## Probing with the human-like bot
 
 `src/human-bot.js` plays like a careful person: it sees only what a player
-sees, steers its recruit as on Manual, and never goes out of its way for a
+sees, steers its recruit as a player does, and never goes out of its way for a
 powerup. It no longer sets par. The composer runs it as a guard on every
 floor, and two scripts report what it finds:
 
