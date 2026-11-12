@@ -287,10 +287,11 @@ come to stand on that square as the target steps away, wait, and take it
 where it has to step back (`KWT` against a lone queen); or wait where you
 start, or take the first target and wait where it stood for the second
 (`WTT`, `TWT`, `KWTT`, `KTWT` against two). Fits the targets a piece can
-burrow (`BURROWS`); the hint is a coin on the square to wait on. On top of
-the three tight tests below, the wait must stand alone: as it is made, every
-other action loses par (`standsAlone` in `src/tight.js`), and at least three
-other actions are on offer there (`WAIT_OTHERS`).
+burrow (`BURROWS`); the hint is a coin on the square to wait on, or, where
+the line opens with the wait, on the square the target then steps onto. On
+top of the three tight tests below, the wait must stand alone: as it is
+made, every other action loses par (`standsAlone` in `src/tight.js`), and at
+least three other actions are on offer there (`WAIT_OTHERS`).
 
 **The Lure** (`lure`), a knight's. A target, the prize, stands walled in
 beside a decoy, its guard, and the guard opens the floor one step from the
