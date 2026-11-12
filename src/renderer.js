@@ -40,6 +40,8 @@ const SKID_EXTRA_MS = SKID_LEAD + SKID_MS - 145;
 // shuts rises out of its slot in GATE_RISE_MS. Under reduced motion both
 // simply change.
 const TILE_FALL_MS = 90;
+// The height of a cracked tile's fracture and an open gate's slot: just over a move square's blue (0.04), under every piece.
+const TERRAIN_OVER = 0.043;
 const GATE_RISE_MS = 170;
 // Choosing a pin: a white crosshair, never mistaken for a fork's gold ring.
 const PIN_TARGET = 0xffffff;
@@ -620,7 +622,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       const crack = basic(0xffffff, { map: textures.get('crack'), transparent: true, alphaTest: 0.5, depthWrite: false });
       for (const tile of view.cracks) {
         tileMark(terrain, tile.x, tile.y, 0.94, 0.94, weak, 0.006);
-        tileMark(terrain, tile.x, tile.y, 0.94, 0.94, crack, 0.008);
+        // The fracture lies over a move square's blue (TERRAIN_OVER), so a tile you can move to still shows it.
+        tileMark(terrain, tile.x, tile.y, 0.94, 0.94, crack, TERRAIN_OVER);
       }
     }
     if (view.pits.length) {
@@ -643,13 +646,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
         if (!reducedMotion && risen.some((tile) => tile.x === gate.x && tile.y === gate.y)) { bars.scale.y = 0.05; rising.push({ bars, at: performance.now() }); }
       } else {
         // Open: the slot its bars sank into, flat on the floor.
-        tileMark(terrain, gate.x, gate.y, 0.94, 0.94, basic(0xffffff, { map: texture, transparent: true, alphaTest: 0.5, depthWrite: false }), 0.008);
+        tileMark(terrain, gate.x, gate.y, 0.94, 0.94, basic(0xffffff, { map: texture, transparent: true, alphaTest: 0.5, depthWrite: false }), TERRAIN_OVER);
       }
       // Open and about to shut: a row of rising arrows along the square's near edge as well, where they
       // show under a piece standing in the gate (it shuts once that piece has left).
       if (gate.turning && !gate.shut) {
         const rise = basic(0xffffff, { map: textures.get('gate-rise'), transparent: true, alphaTest: 0.5, depthWrite: false });
-        for (const dx of [-0.29, 0, 0.29]) tileMark(terrain, gate.x + dx, gate.y + 0.4, 0.22, 0.132, rise, 0.012);
+        for (const dx of [-0.29, 0, 0.29]) tileMark(terrain, gate.x + dx, gate.y + 0.4, 0.22, 0.132, rise, TERRAIN_OVER + 0.002);
       }
     }
   }

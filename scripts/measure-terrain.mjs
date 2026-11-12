@@ -5,8 +5,8 @@
 // forced on (as the dev preview's &modifier= composes it) and as a plain day,
 // its twin. Floor by floor the report gives:
 //   - how the floor met its terrain (src/composer.js "Terrain floors"):
-//     composed around it ('idea': the terrain matters to the line), with it
-//     laid off the line ('off'), or with none; by idea and by piece;
+//     composed around it ('idea': the terrain matters to the line, and why),
+//     with it laid off the line ('off'), or with none; by idea and by piece;
 //   - the planted line: its length, how many of its moves are waits;
 //   - exactly (src/tight.js parRoom, certificate steps: never captured but on
 //     a pawn's day), the first actions the floor allows and how many keep the
@@ -71,7 +71,7 @@ function floorsOf(date, forced) {
       return { won: result.won, moves: result.moves, stranded: result.frames.some(stranded) };
     });
     return {
-      date, piece: raw.playerPiece, own: raw.modifier, modifier: forced, floor: f, target: raw.targets[f], motif: floor.motif, form: floor.form ?? null, terrain: floor.terrain ?? null, rounds: floor.rounds ?? null,
+      date, piece: raw.playerPiece, own: raw.modifier, modifier: forced, floor: f, target: raw.targets[f], motif: floor.motif, form: floor.form ?? null, terrain: floor.terrain ?? null, why: floor.why ?? null, rounds: floor.rounds ?? null,
       partner, hint: floor.hint ?? null, planted: length, waits: floor.line.filter((action) => action.type === 'wait').length, route: `${square(floor.room.start ?? { x: 4, y: 6 })}: ${spell(floor.line)}`,
       chest: Boolean(floor.treasure), ms: floor.ms, dayMs: ms, stages: stages[f], dropped: composed.dropped,
       cut: exact ? exact.cut : null, firsts: exact?.firsts ?? null, keepLine: exact?.keepLine ?? null, keepPar: exact?.keepPar ?? null, offIdea: exact?.off ?? null, wins: exact?.wins ?? null,
@@ -124,6 +124,8 @@ function report(rows) {
   composition('By idea (the floor\'s motif as composed)', by(forced, (row) => `${row.motif}${row.form ? ` (${row.form})` : ''}`));
   composition('By piece', by(forced, (row) => row.piece));
   composition('By piece and idea, floors composed around the terrain or not', by(forced, (row) => `${row.piece} · ${row.motif}`));
+  const around = forced.filter((row) => row.terrain === 'idea');
+  console.log(`\nWhy the terrain matters on the ${around.length} floors composed around it (the same room without it): the line fails there ${around.filter((row) => row.why === 'line').length}, something wins sooner there ${around.filter((row) => row.why === 'shorter').length}, a win as short there is ruled out here ${around.filter((row) => row.why === 'other').length}${around.some((row) => !row.why) ? `, changed by the hint laid afterwards ${around.filter((row) => !row.why).length}` : ''}.`);
   const fell = forced.filter((row) => row.terrain !== 'idea');
   console.log(`\nFloors that fell back (${fell.length}): ${by(fell, (row) => (row.partner ? 'a Tandem (never composed around terrain)' : row.form ? `a tight ${row.motif} (${row.form})` : row.motif)).map(([label, group]) => `${label} ${group.length}`).join(', ') || 'none'}.`);
 

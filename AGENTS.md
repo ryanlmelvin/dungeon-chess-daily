@@ -60,6 +60,12 @@ With an unchanged composer it is the stored edition; `&treasure=0`, `&partner=0`
 preview on the days they draw (`=all`: on every day they fit; `&ceiling=0`: without the
 bot's ceiling); such a preview saves apart again and files its finds in the journal.
 
+Two room modifiers are in preview and drawn for no date: `&modifier=cracks` (a
+crumbling floor) or `&modifier=gates` on the composer preview plays that date under
+one, saved apart, and `node scripts/measure-terrain.mjs --modifier cracks --jobs 8`
+measures one against the same dates as plain days (`measure-composer`,
+`measure-par-slack` and `measure-tight` take `--modifier` too).
+
 Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` and
 `npm run build`, then deploys `dist/` to Pages. `dist/` is never committed. After a
 deploy, check the live `release.json` and play the published edition.
@@ -71,7 +77,10 @@ deploy, check the live `release.json` and play the published edition.
 re-select, optionally with a recruit order `{x,y}` or `'hold'`), legal moves,
 captures, promotion, en passant, castling, recruits, pickups, scoring, share text.
 `src/monster-ai.js` (every monster moves every turn, seeded tie-breaks),
-`src/modifiers.js` (ice and collapse, "Breach"; dark is retired — part of `state.modifier`), `src/cave-in.js`
+`src/modifiers.js` (ice and collapse, "Breach"; dark is retired — part of `state.modifier`),
+`src/terrain.js` (the one answer to "is this square solid right now": walls, and the
+pits and shut gates of the two modifiers in preview, `src/cracks.js` and `src/gates.js`;
+`walkable` asks it, so nothing else reads a wall for play), `src/cave-in.js`
 (lingering on a cleared floor) and `src/tactics.js` (fork/combo bonuses only) plug
 into it. `src/game.js` is the public, certified API the UI imports: `getDaily()`
 normalizes to UTC and returns the canonical edition; callers can't swap its seed,

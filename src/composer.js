@@ -2642,24 +2642,29 @@ function withoutTerrain(room, walled = false) {
   return { ...bare, map: room.map.map((row, y) => [...row].map((cell, x) => (gates.some((gate) => gate.x === x && gate.y === y) ? '#' : cell)).join('')) };
 }
 /**
- * Does a room's terrain matter to its `line`? The same room without it plays
- * differently: the line no longer wins there as it does here, or something
- * wins sooner, or something as short wins there that the terrain rules out
- * here (a plainer way in that the tiles or gates close). Gates must matter
- * twice over: gone (open for good) and walled (shut for good).
+ * Why a room's terrain matters to its `line`, or null when it doesn't. The
+ * same room without it plays differently: 'line', the line no longer wins
+ * there as it does here; 'shorter', something wins sooner there; or 'other',
+ * something as short wins there that the terrain rules out here (a plainer
+ * way in that the tiles or gates close). Gates must matter twice over: gone
+ * (open for good), which gives the reason, and walled (shut for good).
  */
-export function terrainMatters(base, floor, room, line) {
+export function terrainReason(base, floor, room, line) {
   const wins = (start, moves) => Boolean(clean(playLine(start, moves))?.at(-1).exit.open);
   const here = floorStart(base, floor, room);
   const differs = (twin) => {
     let start;
-    try { start = floorStart(base, floor, twin); } catch { return true; }
-    if (!wins(start, line)) return true;
+    try { start = floorStart(base, floor, twin); } catch { return 'line'; }
+    if (!wins(start, line)) return 'line';
     const found = shortestWins(start, line.length);
-    return found.depth < line.length || found.lines.some((other) => !wins(here, other));
+    if (found.depth < line.length) return 'shorter';
+    return found.lines.some((other) => !wins(here, other)) ? 'other' : null;
   };
-  return differs(withoutTerrain(room)) && (!room.gates || differs(withoutTerrain(room, true)));
+  const reason = differs(withoutTerrain(room));
+  return reason && (!room.gates || differs(withoutTerrain(room, true))) ? reason : null;
 }
+/** Does a room's terrain matter to its `line` (terrainReason)? */
+export const terrainMatters = (base, floor, room, line) => Boolean(terrainReason(base, floor, room, line));
 
 // Terrain off a finished floor's line: on no square its line moves to or rests on, nor a wall, a monster, a pickup, the start or the exit.
 function offLayout(base, room, line, states, rng) {
@@ -2702,7 +2707,7 @@ export function terrainOff(base, floor, plain, { carried = null, steered = false
  * TERRAIN_ROUNDS laying the instances' terrain afresh from a seeded stream of
  * its own; else the day's plain floor with the terrain off its line
  * (terrainOff). What composeFloor returns, with `terrain`: 'idea', 'off' or
- * 'none'.
+ * 'none', and for 'idea' `why` (terrainReason).
  */
 function composeTerrainFloor(base, floor, options) {
   const began = performance.now(), seed = base.floorSeeds[floor];
@@ -2725,7 +2730,9 @@ function composeTerrainFloor(base, floor, options) {
     try {
       // Floor 2's tight forms are not composed around terrain: its plain motifs are (floor 1 keeps the day's idea first).
       const composed = composeFloor(base, floor, { ...options, tight: Boolean(options.tight) && floor === 0, terrain: hooks });
-      return { ...composed, terrain: 'idea', rounds: round + 1, ms: performance.now() - began };
+      // Why it matters, on the finished room (searched without its hint powerup, as the day's proof is).
+      const why = terrainReason(base, floor, { ...composed.room, items: composed.room.items.filter((item) => !(item.hint && item.type === 'powerup')) }, composed.line);
+      return { ...composed, terrain: 'idea', why, rounds: round + 1, ms: performance.now() - began };
     } catch (error) { if (!String(error.message).startsWith('No floor composed')) throw error; }
   }
   const plain = composeFloor({ ...base, modifier: 'none' }, floor, options);
