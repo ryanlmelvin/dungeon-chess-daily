@@ -31,6 +31,8 @@ import { parFor, runPars } from './par.js';
 import { celebrateCheckmate } from './checkmate.js';
 import { initJournal } from './journal-ui.js';
 import { createInspector } from './inspect.js';
+import { retryFloors, createFloorStarts, createRetry } from './retry.js';
+import './retry.css';
 
 const $ = (id) => document.getElementById(id);
 const scope = new URL('.', location.href).pathname;
@@ -55,6 +57,10 @@ if (composedDay) $('practice-button').hidden = true;
 let state = null;
 // Set while watching the bot's certified route; the saved run is untouched.
 let replay = null;
+// Set while retrying a cleared floor (src/retry.js): `state` is then the retry's own game, never saved,
+// and the real run waits in retry.real. floorStarts remembers how the run arrived on each floor this visit.
+let retry = null;
+const floorStarts = createFloorStarts();
 let practice = false;
 let renderer = null;
 let screen = 'paper';
@@ -134,6 +140,9 @@ function load() {
 }
 function save() {
   if (!state) return true;
+  // A retry is never saved: the real run is already stored as it stood.
+  if (retry) return true;
+  floorStarts.note(state);
   try {
     const stored = localStorage.getItem(key());
     if (stored !== lastSaved) {
@@ -155,6 +164,7 @@ function save() {
   }
 }
 function refreshFromOtherWindow() {
+  if (retry) return false;
   try {
     const stored = localStorage.getItem(key());
     if (stored === lastSaved) return false;
@@ -183,6 +193,7 @@ function noteRun() { if (!practice && !archiveMode && !composedDay) stats.note(s
 noteRun();
 function switchScreen(next) {
   if (replay && next !== 'game') endReplay();
+  if (retry && next !== 'game') { endRetry(); if (next === 'paper') renderPaper(); }
   screen = next;
   document.body.classList.toggle('playing', next === 'game');
   for (const name of ['paper', 'game', 'result']) $(`${name}-screen`).hidden = name !== next;
@@ -410,8 +421,9 @@ function renderPar() {
   const par = parFor(state, daily);
   $('par-status').hidden = par === null;
   if (par === null) return;
-  $('par-status').textContent = `Par ${par}`;
-  $('par-status').setAttribute('aria-label', `Par ${par} moves for this floor, ${floorScoredMoves(state)} so far`);
+  // A retry wears its name on the chip, and once cleared its result ("Retry · 1 under par").
+  $('par-status').textContent = `${retry ? 'Retry · ' : ''}${retry?.cleared() ? parResult(state) : `Par ${par}`}`;
+  $('par-status').setAttribute('aria-label', `${retry ? 'Retrying this floor: nothing here counts. ' : ''}Par ${par} moves for this floor, ${floorScoredMoves(state)} so far`);
 }
 // "2 over par" (or "even par") for a cleared floor that has a par, else ''.
 // The shop's gold line carries it, so no toast covers the next floor's log.
@@ -527,7 +539,7 @@ function placeMessageLog() {
   // Whatever sits low on the screen (the install bar; on
   // short screens the objective or stairs button) is the floor the log stays above.
   const origin = $('dungeon').getBoundingClientRect().top;
-  const floor = Math.min(board.height, ...['pwa-bar', 'objective', 'descend-button'].map((id) => {
+  const floor = Math.min(board.height, ...['pwa-bar', 'objective', 'descend-button', 'retry-bar'].map((id) => {
     const rect = $(id).getBoundingClientRect();
     return rect.height && !$(id).classList.contains('beside') && rect.top - origin > (board.top + board.bottom) / 2 ? rect.top - origin : Infinity;
   })) - 8;
@@ -737,6 +749,7 @@ function renderTools() {
   $('pin-button').setAttribute('aria-label', pinning ? 'Pin: now tap a monster' : 'Pin a monster for three moves');
   $('leap-button').textContent = `Borrow ${BORROW_GLYPH[borrowedPiece(state)]}`;
   $('leap-button').setAttribute('aria-label', `Show your borrowed move: move once like a ${borrowedPiece(state)}`);
+  renderRetryTools();
 }
 const PIN_TIP = 'Tap any monster to pin it for three moves.';
 // The pin tip goes once the pin is placed or called off.
@@ -796,7 +809,7 @@ let hintFrame = 0;
 let hintSeen = '';
 const hintFloor = () => `${gameKey(state)}|${state.tries ?? 1}|${state.floor}`;
 function renderHintButton() {
-  const next = nextHint(state);
+  const next = retry ? null : nextHint(state);
   const free = hintSeen !== hintFloor() && !state.hints?.length;
   $('hint-button').textContent = free || !next ? '? Hint' : '? Hint · +1';
   $('hint-button').setAttribute('aria-label', free ? `Hint: how an enemy ${state.objective.piece} moves` : next ? 'Hints: the next one adds a move to this floor' : 'Hints');
@@ -857,7 +870,7 @@ function renderHint(slide = 0) {
   const holder = $('hint-card');
   holder.classList.remove('from-left', 'from-right');
   if (slide) { void holder.offsetWidth; holder.classList.add(slide < 0 ? 'from-left' : 'from-right'); }
-  const next = nextHint(state);
+  const next = retry ? null : nextHint(state);
   $('hint-next').hidden = !next;
   $('hint-next').textContent = next === 'suspects' ? 'Identify the target · +1 move' : 'Show danger map · +1 move';
 }
@@ -924,7 +937,7 @@ function openSpecialMove(kind, mode = 'player') {
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
   // Your own en passant or castle has now been explained on this device (a monster's en passant is another story).
-  if (castle || mode === 'player') try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  if (!retry && (castle || mode === 'player')) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -951,7 +964,7 @@ function openSpecialMove(kind, mode = 'player') {
 // of a waiting recruit and of the bishop pair's hop.
 function openTactic(kind) {
   const copy = kind === 'recruit' ? RECRUIT_COPY : kind === 'bishop-pair' ? BISHOP_PAIR_COPY : TACTIC_COPY[kind];
-  if (TACTIC_COPY[kind]) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  if (!retry && TACTIC_COPY[kind]) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -1028,6 +1041,7 @@ function takeAction(action) {
   // Purchases happen inside their own dialog: the shop's, or a paid hint on the hint card.
   const shopping = (action.type === 'buy' && $('shop-dialog').open) || (action.type === 'hint' && $('hint-dialog').open);
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || (!shopping && document.querySelector('dialog[open]'))) return false;
+  if (retry && !retry.accepts(action)) { if (retry.cleared()) notify(RETRY_CLEARED_TIP); return false; }
   if (refreshFromOtherWindow()) return false;
   // Show the move first, then take the recruit's order.
   if ((action.type === 'move' || action.type === 'wait') && action.recruit === undefined) {
@@ -1037,7 +1051,7 @@ function takeAction(action) {
     if (choice) action = { ...action, recruit: 'hold' };
   }
   const pending = pendingOrder();
-  const next = act(state, action);
+  const next = retry ? retry.play(action) : act(state, action);
   if (next === state) return false;
   // A mate on the king floor wins at once: checkmate gets its moment.
   if (next.events.some((event) => event.type === 'checkmate')) { setTimeout(() => celebrateCheckmate(), 380); playSound([{ type: 'win' }]); }
@@ -1053,7 +1067,7 @@ function takeAction(action) {
   }
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
-  const special = autoExplainer(state.events, tacticSeen);
+  const special = retry ? null : autoExplainer(state.events, tacticSeen);
   const animationTime = (special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400) + (renderer?.skidTime(state.events) ?? 0);
   // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
   const explainAt = special === 'cave-in' ? 1100 : animationTime;
@@ -1098,7 +1112,7 @@ function giveOrder(recruit) {
   const pending = pendingOrder();
   if (pending?.hop && recruit === 'hold') { notify(HOP_TIP); return false; }
   if (!pending || !takeAction({ ...pending.action, recruit })) return false;
-  try { localStorage.setItem(tacticSeenKey('recruit-order'), '1'); } catch {}
+  if (!retry) try { localStorage.setItem(tacticSeenKey('recruit-order'), '1'); } catch {}
   return true;
 }
 function orderAt({ x, y }) {
@@ -1147,6 +1161,7 @@ function renderShop() {
   const result = parResult(state);
   $('shop-gold').textContent = shopNote ? `${shopNote} · ${state.gold} gold left` : `Floor ${state.floor + 1} cleared · ${result ? `${result} · ` : ''}${state.gold} gold`;
   $('shop-descend').textContent = `Descend to floor ${state.floor + 2} ↘`;
+  $('shop-retry').hidden = !canRetry(state.floor);
   for (const power of SHOP_ITEMS) {
     let button = document.querySelector(`[data-power="${power.id}"]`);
     if (!button) {
@@ -1180,6 +1195,8 @@ function renderShop() {
 // The shop is offered once a floor is cleared, as the player takes its stairs.
 // The last floor has no shop: its stairs end the run.
 function takeStairs() {
+  // A retry has no stairs: clearing the floor is where it ends.
+  if (retry) return;
   // A move waiting on its recruit's order finishes first.
   if (screen !== 'game' || !state || state.status !== 'playing' || turnLocked || !state.exit.open || pendingOrder() || document.querySelector('dialog[open]')) return;
   if (refreshFromOtherWindow() || !state.exit.open) return;
@@ -1512,7 +1529,7 @@ $('export-button').addEventListener('click',()=>{
   const saves={};
   try{for(let i=0;i<localStorage.length;i++){const name=localStorage.key(i);if(name.startsWith(prefix)&&!name.includes('practice:')&&name!==`${prefix}music`&&name!==`${prefix}recruit`)saves[name.slice(prefix.length)]=localStorage.getItem(name);}}
   catch{}
-  if(state&&!practice&&!composedDay)saves[`daily:v${RULES_VERSION}:${daily.date}`]=JSON.stringify(state);
+  if(state&&!practice&&!composedDay)saves[`daily:v${RULES_VERSION}:${daily.date}`]=JSON.stringify(retry?.real??state);
   const blob=new Blob([JSON.stringify({app:'dungeon-chess-daily',schema:1,saves},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`dungeon-chess-daily-${daily.date}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);progressStatus('Backup download requested.');
 });
@@ -1617,6 +1634,7 @@ function renderBotComparison() {
   $('bot-head').replaceChildren(cell('td'), ...columns.map(([short, long, , , className]) => {
     const th = cell('th', short, className); th.scope = 'col'; th.title = long; th.setAttribute('aria-label', long); return th;
   }));
+  offerFloorRetries($('bot-head'));
   const rows = ['You', 'Bot'].map((label) => { const tr = document.createElement('tr'); const th = cell('th', label); th.scope = 'row'; tr.append(th); return tr; });
   for (const [, , mine, theirs, className] of columns) {
     const cells = [mine, theirs].map((value) => cell('td', value, className));
@@ -1715,3 +1733,121 @@ $('replay-speed').addEventListener('click', () => {
   scheduleReplay();
 });
 window.addEventListener('keydown', (event) => { if (replay && event.key === 'Escape') { event.preventDefault(); stopBotReplay(); } });
+
+// Retry floor (src/retry.js): the shop offers the floor just cleared again, the
+// results paper any of the three. The board then plays the retry's own game in
+// `state`, with a free Undo and Reset in a bar under the board; nothing is saved
+// (save, refreshFromOtherWindow and takeStairs stand aside) and Done brings the
+// real run back to the shop or the paper as it was left.
+const RETRY_CLEARED_TIP = 'Floor cleared. Undo, Reset or Done.';
+function canRetry(floor) { return !practice && !replay && !retry && Boolean(state) && retryFloors(state).includes(floor); }
+function startRetry(floor, origin) {
+  if (!canRetry(floor)) return;
+  const found = floorStarts.start(state, floor, newGame);
+  if (!found) return;
+  const real = state;
+  document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+  retry = Object.assign(createRetry(found.start, {
+    // A move that would end a real try is refused; an order waiting on it goes with it.
+    onCornered: () => { ordering = null; updateGame(); notify('No legal moves from there. Try another move.'); },
+  }), { real, origin });
+  state = retry.state;
+  settleRetry();
+  document.body.classList.add('retrying');
+  switchScreen('game');
+  if (!ensureRenderer()) { leaveRetry(); return; }
+  // Focus leaves the button that opened it, so the keyboard plays the board.
+  document.activeElement?.blur?.();
+  updateGame();
+}
+// Between two positions of a retry, and on its way in and out: nothing half-played stays.
+function settleRetry() {
+  ordering = null; shownEvents = null; showMoves = false; cursor = null; pinning = false; turnLocked = false;
+  clearPinTip();
+  clearMessageLog();
+}
+// The real run comes back, unless something else already replaced the retry's game (another edition opened).
+function endRetry() {
+  const ended = retry;
+  if (!ended) return null;
+  retry = null;
+  if (state === ended.state) state = ended.real;
+  document.body.classList.remove('retrying', 'retry-cleared');
+  settleRetry();
+  renderRetryTools();
+  return ended;
+}
+function leaveRetry() {
+  const ended = endRetry();
+  if (!ended) return;
+  notify('');
+  // The run moved on in another window meanwhile: that progress shows instead.
+  if (refreshFromOtherWindow()) return;
+  if (state?.status === 'won') {
+    // The results paper is as it was left.
+    switchScreen('result');
+    ($('bot-head').querySelectorAll('.floor-retry')[ended.floor] ?? $('share-button')).focus({ preventScroll: true });
+    return;
+  }
+  if (state?.status !== 'playing') { showResult(); return; }
+  updateGame();
+  if (ended.origin !== 'shop' || !retryFloors(state).includes(state.floor)) return;
+  renderShop();
+  $('shop-dialog').showModal();
+  $('shop-retry').focus();
+}
+function renderRetryTools() {
+  const bar = $('retry-bar');
+  bar.hidden = !retry;
+  if (!retry) return;
+  // On a wide screen the bar stands in the right margin, clear of the log (retry.css, placeMessageLog).
+  bar.classList.toggle('beside', matchMedia('(min-aspect-ratio: 5/4)').matches);
+  // A move waiting on its recruit's order is undone like any other.
+  const fresh = !retry.canUndo() && !pendingOrder();
+  $('retry-undo').disabled = fresh;
+  $('retry-reset').disabled = fresh;
+  // Cleared: Done is the way on (retry.css).
+  document.body.classList.toggle('retry-cleared', retry.cleared());
+}
+function undoRetry() {
+  if (!retry) return;
+  if (!pendingOrder()) { if (!retry.canUndo()) return; state = retry.undo(); }
+  ordering = null; shownEvents = null; showMoves = false; cursor = null; pinning = false; turnLocked = false;
+  clearPinTip();
+  updateGame();
+}
+function resetRetry() {
+  if (!retry || (!retry.canUndo() && !pendingOrder())) return;
+  state = retry.reset();
+  settleRetry();
+  updateGame();
+}
+// The results table's F1 to F3 headings are the retry buttons, under a "Retry" label in its corner.
+function offerFloorRetries(head) {
+  const floors = [...head.children].slice(1, 4);
+  if (!floors.some((_, floor) => canRetry(floor))) return;
+  head.firstElementChild.textContent = 'Retry';
+  head.firstElementChild.className = 'retry-label';
+  floors.forEach((th, floor) => {
+    if (!canRetry(floor)) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'floor-retry';
+    button.textContent = th.textContent;
+    button.setAttribute('aria-label', `Retry floor ${floor + 1}`);
+    button.addEventListener('click', () => startRetry(floor, 'result'));
+    th.removeAttribute('aria-label');
+    th.replaceChildren(button);
+  });
+}
+$('shop-retry').addEventListener('click', () => { if (state) startRetry(state.floor, 'shop'); });
+$('retry-undo').addEventListener('click', undoRetry);
+$('retry-reset').addEventListener('click', resetRetry);
+$('retry-done').addEventListener('click', leaveRetry);
+window.addEventListener('keydown', (event) => {
+  if (!retry || screen !== 'game' || document.querySelector('dialog[open]') || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.target instanceof Element && event.target.closest('input,textarea,select')) return;
+  const name = event.key.toLowerCase();
+  if (name === 'u') { event.preventDefault(); undoRetry(); }
+  else if (name === 'r') { event.preventDefault(); resetRetry(); }
+});

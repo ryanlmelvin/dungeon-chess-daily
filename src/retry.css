@@ -1,0 +1,44 @@
+/* Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin. SPDX-License-Identifier: GPL-3.0-only */
+/* Retry floor (src/retry.js, wired in src/main.js): where it is offered (the
+   shop's last row, the results table's floor headings) and how the board shows
+   one is open. Nothing here adds a row to a screen. */
+
+/* The shop: Retry shares Descend's row, which stays on screen as Descend did. */
+.shop-actions { display: flex; gap: 8px; position: sticky; bottom: 0; margin-top: 12px; }
+.shop-actions .shop-descend { position: static; flex: 1; width: auto; margin-top: 0; }
+dialog .shop-retry { flex: none; white-space: nowrap; color: var(--paper); }
+/* A narrow phone has room for "↺ Retry" beside "Descend to floor 2 ↘", not for "↺ Retry floor". */
+@media (max-width: 429px) { .shop-retry-wide { display: none; } }
+@media (max-height: 720px) { .shop-actions { margin-top: 8px; } }
+
+/* The results paper: the table's F1 to F3 headings are the buttons, under "Retry" in its corner.
+   The headings keep their row's height; the tap target reaches past it. */
+.bot-table thead .retry-label { font-size: 15px; text-transform: uppercase; color: #5f5864; text-align: left; }
+.bot-table .floor-retry { position: relative; margin: -2px 0; padding: 0 8px; min-height: 0; font: inherit; line-height: inherit; text-transform: inherit; color: var(--ink); background: transparent; border: 1px solid #5f5864; box-shadow: 2px 2px 0 #999; }
+.bot-table .floor-retry::after { content: ''; position: absolute; inset: -12px -8px; }
+.bot-table .floor-retry:hover { background: #25252514; }
+.bot-table .floor-retry:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #999; }
+.bot-table .floor-retry:focus-visible { outline-color: var(--ink); }
+
+/* On the board: the par chip is the retry's mark, filled so it can't pass for the
+   run's own. It takes the gold's place and is no wider than the gold and par it
+   stands for, so the status corner keeps its height and the board stays put.
+   What a retry has no use for (gold, the stairs, the run's own restarts in the
+   menu) is put away. */
+body.retrying #par-status { padding: 0 4px; font-size: 20px; color: #100f14; background: var(--gold); text-shadow: none; white-space: nowrap; }
+body.retrying #gold-status, body.retrying #descend-button, body.retrying #reset-day-button, body.retrying #change-piece-button { display: none !important; }
+
+/* Undo, Reset and Done: a bar under the board, in the thumb's reach (the log
+   keeps above it, main.js placeMessageLog); on a wide screen, a column in the
+   right margin. */
+.retry-bar { position: absolute; z-index: 2; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); display: flex; gap: 8px; padding: 6px; background: #100f14d9; border: 2px solid #d5b16e70; box-shadow: 3px 3px #030208; }
+.retry-bar button { min-width: 72px; min-height: 44px; padding: 6px 12px; font: 400 22px/1 'VT323', 'Courier New', monospace; white-space: nowrap; color: var(--gold); background: #100f14; border: 2px solid #d5b16e70; }
+.retry-bar button:hover:not(:disabled) { background: #653942; }
+#retry-done { color: var(--paper); }
+/* Cleared: Done is the way on. */
+body.retry-cleared #retry-done { color: #100f14; background: var(--gold); border-color: var(--gold); }
+@media (max-height: 700px) {
+  .retry-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 6px); padding: 4px; }
+  .retry-bar button { min-height: 40px; padding: 4px 12px; }
+}
+.retry-bar.beside { left: auto; right: calc(env(safe-area-inset-right, 0px) + 10px); transform: none; flex-direction: column; }
