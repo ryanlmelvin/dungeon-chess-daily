@@ -51,7 +51,7 @@ import { ICE_TILES } from './modifiers.js';
 import { placeTreasure } from './treasure.js';
 // Partner floors steer the recruit (see "Partner floors" below).
 import { recruitChoice } from './rules.js';
-import { tightVerdict, playsIdea, TIGHT } from './tight.js';
+import { tightVerdict, playsIdea, standsAlone, TIGHT } from './tight.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -66,7 +66,7 @@ export const DRESS_ATTEMPTS = 6;
  * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
  * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
  */
-export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3 });
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3, wait: 3, lure: 3 });
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
@@ -1171,6 +1171,200 @@ MOTIFS.squeezePicked = (context) => {
   return built && { ...built, form: 'picked' };
 };
 
+// ── Ideas in preview (composeDay's `wait` and `lure` options, off unless asked for: not in RELEASE) ──
+//
+// Two more ideas a floor can be built around. No stored edition has them: the
+// dev preview composes them on request (src/composed-preview.js, &wait=1,
+// &lure=1, &ideas=1). Both are held to the tight tests whatever the `tight`
+// option says (src/tight.js: no win within par skips the idea, at most half
+// of the first actions keep par, the bot seldom makes par), and neither
+// depends on a decoy's hidden role.
+//
+// - Standstill ('wait'): the key is one exactly timed Wait. Each target paces
+//   a pocket of two squares, one step every turn, and the one square of the
+//   pocket you can ever attack, its landing, you attack from one square
+//   alone. You come to stand there a turn early (or start there), as the
+//   target steps away; stand still, and it has to step back into reach. Any
+//   move breaks the cover, so at that moment every action but the wait loses
+//   par (src/tight.js standsAlone).
+// - Lure ('lure'): a target stands walled in beside a decoy, its guard, which
+//   opens the floor wound up at your start square: its red path shows the
+//   kind of line it moves on, and the target is one step from it along that
+//   same kind of line, so whatever the guard is, it covers the target's
+//   square (src/tight.js plainGuard). Step aside to where you attack the
+//   target: the guard lunges onto the square you left, off-balance and off
+//   its post, and for that one move the target is free. The guard has no way
+//   on from your start square but back to its post, so the moment passes.
+
+/** The targets each idea in preview fits, by player piece: those whose moves never run along the piece's own lines (BURROWS), a lone queen left out of the lure. */
+const fitsWait = (piece, target) => target !== 'pawn' && Boolean(BURROWS[piece]?.includes(target));
+const fitsLure = (piece, target) => fitsWait(piece, target) && target !== 'queen';
+/**
+ * The shapes of a Standstill line, by target count, a letter a move: 'K' a
+ * quiet move to the square you will wait on, 'W' the wait, 'T' a take. A
+ * target is on its landing square when its 'T' comes, so its start square
+ * follows from the word.
+ */
+export const WAIT_WORDS = Object.freeze({ 1: ['KWT'], 2: ['WTT', 'TWT', 'KWTT', 'KTWT'] });
+/** Draws each idea in preview makes per attempt (as SUBTLE_TRIES). */
+export const IDEA_TRIES = 40;
+
+/**
+ * A Standstill's wait is a real choice: at that moment the piece has at least
+ * this many other actions that are not captured at once, each of which loses
+ * par (src/tight.js standsAlone).
+ */
+export const WAIT_OTHERS = 3;
+/**
+ * Is the bot's ceiling asked of this motif instance (TIGHT.botPar: plain
+ * sensible play makes par in at most a quarter of its runs)? Not of a
+ * Standstill: the bot's idle habit is to wait ("monsters often walk into
+ * range", src/human-bot.js), so it plays that idea without finding it. The
+ * exact tests judge a Standstill instead: no win within par skips the wait,
+ * and at its moment the wait alone keeps par.
+ */
+const ceiling = (built) => built.motif !== 'wait';
+
+function standstill(context) {
+  if (!fitsWait(context.piece, context.target) || context.attempt >= SUBTLE_ATTEMPTS) return null;
+  for (let tries = 0; tries < IDEA_TRIES; tries++) {
+    const built = standstillOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function standstillOnce({ piece, target, count, rng, start }) {
+  const words = WAIT_WORDS[count], word = words[Math.floor(rng() * words.length)];
+  const plan = new Plan(start);
+  plan.keep(start);
+  const slider = Boolean(RAYS[piece]);
+  // Where you have stood so far, the last your square now.
+  const stood = [start], route = [], pockets = [];
+  const attacked = (from, tile) => reachable(piece, from).some((square) => same(square, tile));
+  for (const letter of word) {
+    const here = stood.at(-1);
+    if (letter === 'W') { route.push({ type: 'wait' }); continue; }
+    if (letter === 'K') {
+      const key = shuffle(reach(plan, piece, here), rng).find((tile) => tile.y >= 1 && tile.y <= 6 && plan.free(tile));
+      if (!key) return null;
+      plan.keep(key, ...between(here, key));
+      route.push({ type: 'move', x: key.x, y: key.y });
+      stood.push(key);
+      continue;
+    }
+    // The landing: in reach from here and from nowhere you stood before, never where the target would take you
+    // here. A slider stands right beside it, so no move along the line keeps it covered.
+    const landing = shuffle(reachable(piece, here), rng).find((tile) => tile.y <= 6 && plan.free(tile) && !covers(target, tile, here)
+      && (!slider || chebyshev(tile, here) === 1) && !stood.slice(0, -1).some((square) => attacked(square, tile))
+      && pockets.every((pocket) => chebyshev(pocket.home, tile) >= 2));
+    if (!landing) return null;
+    // The pocket's other square, home: never in reach from where you stand or stood, nor striking it.
+    const home = shuffle(firstSteps(target === 'queen' ? 'king' : target, landing), rng).find((tile) => tile.y <= 6 && plan.free(tile)
+      && stood.every((square) => !attacked(square, tile) && !covers(target, tile, square))
+      && pockets.every((pocket) => chebyshev(pocket.home, tile) >= 2 && chebyshev(pocket.landing, tile) >= 2));
+    if (!home) return null;
+    plan.keep(landing, home);
+    pockets.push({ landing, home, key: here, move: route.length + 1 });
+    route.push({ type: 'move', x: landing.x, y: landing.y });
+    stood.push(landing);
+  }
+  // A target stands on its landing as its take comes: after an even number of the monsters' turns if it starts there.
+  for (const pocket of pockets) plan.place(0, target, pocket.move % 2 ? pocket.landing : pocket.home);
+  for (const pocket of pockets) {
+    if (!box(plan, target, pocket.home, [pocket.landing]) || !box(plan, target, pocket.landing, [pocket.home])) return null;
+    // Only the key square attacks the landing, and nothing the home.
+    if (!seal(plan, piece, pocket.landing, [pocket.key]) || !seal(plan, piece, pocket.home)) return null;
+    // A slider can't step back along the line and keep the landing covered through the square it left.
+    const back = at(2 * pocket.key.x - pocket.landing.x, 2 * pocket.key.y - pocket.landing.y);
+    if (slider && inside(back) && !plan.wall(back) && !plan.unitAt(back)) return null;
+  }
+  // Every move of the line is still open once the walls stand.
+  for (let n = 0, here = start; n < route.length; n++) {
+    if (route[n].type !== 'move') continue;
+    if (!reach(plan, piece, here).some((square) => same(square, route[n]))) return null;
+    here = route[n];
+  }
+  const waited = stood[route.findIndex((action) => action.type === 'wait')];
+  return { plan, motif: 'wait', found: true, route, key: waited, landing: pockets.map((pocket) => pocket.landing) };
+}
+
+/**
+ * The decoys that can guard a lure, by the kind of line they wind up along:
+ * a rook along a straight one, a bishop along a diagonal, a queen or king
+ * along either (a king from one step away).
+ */
+const LURE_GUARDS = Object.freeze({ rook: [ORTHOGONAL], bishop: [DIAGONAL], queen: [ORTHOGONAL, DIAGONAL], king: [ORTHOGONAL, DIAGONAL] });
+/**
+ * The guards each player piece can lure. After its lunge the guard stands on
+ * your start square, walled in there but for its way back, and those walls
+ * shut its lines out of the start to you too: a knight jumps them, a bishop
+ * leaves a rook's walls by its diagonals, a rook a bishop's by its ranks, a
+ * queen either's by the other kind.
+ */
+const LURE_PIECES = Object.freeze({ knight: ['rook', 'bishop', 'queen', 'king'], bishop: ['rook'], rook: ['bishop'], queen: ['rook', 'bishop'] });
+/** How far from your start square a lure's guard may stand: its red path is that long. */
+export const LURE_LANE = 3;
+
+function lure(context) {
+  if (context.count !== 2 || !fitsLure(context.piece, context.target) || context.attempt >= SUBTLE_ATTEMPTS) return null;
+  for (let tries = 0; tries < IDEA_TRIES; tries++) {
+    const built = lureOnce(context);
+    if (built) return built;
+  }
+  return null;
+}
+function lureOnce(context) {
+  const { piece, target, rng, start } = context;
+  // The guard: one of the floor's decoys that the piece can lure (one more of the unnamed species may stand in).
+  const own = context.guards.map((guard, n) => ({ ...guard, n })).filter((guard) => LURE_PIECES[piece].includes(guard.role));
+  const pool = own.length || !context.unnamed || !LURE_PIECES[piece].includes(context.unnamed.role) ? own : [{ ...context.unnamed, n: -1 }];
+  if (!pool.length) return null;
+  const guard = pool[Math.floor(rng() * pool.length)];
+  // Its line to you: the kind it shows. A target that moves along that kind could step onto the post once the guard leaves it.
+  const kinds = LURE_GUARDS[guard.role].filter((steps) => target === 'knight' || steps !== RAYS[target]);
+  if (!kinds.length) return null;
+  const steps = kinds[Math.floor(rng() * kinds.length)];
+  const [dx, dy] = steps[Math.floor(rng() * steps.length)];
+  const lane = guard.role === 'king' ? 1 : 1 + Math.floor(rng() * LURE_LANE);
+  // The post, `lane` squares from the start along the line, and the prize one step from it along the same kind of line.
+  const post = at(start.x - dx * lane, start.y - dy * lane);
+  if (!inside(post) || same(post, EXIT)) return null;
+  const sides = shuffle(steps.filter(([sx, sy]) => !(sx === dx && sy === dy)), rng).map(([sx, sy]) => at(post.x + sx, post.y + sy));
+  const fromStart = reachable(piece, start);
+  const prize = sides.find((tile) => inside(tile) && !same(tile, EXIT) && !same(tile, start) && tile.y <= 6 && !fromStart.some((square) => same(square, tile))
+    // One step, diagonally down the board: a pawn's wind-up too, and a pawn covers only the squares below it.
+    && !(steps === DIAGONAL && lane === 1 && dy === 1 && tile.y - post.y !== 1));
+  if (!prize) return null;
+  const plan = new Plan(start);
+  plan.keep(start, ...between(post, start));
+  plan.place(guard.cast, guard.role, post);
+  plan.place(0, target, prize);
+  // The sidestep: one move from the start, off the guard's line, attacking the prize, two squares or more from the
+  // guard (whatever it is, it takes nothing there) and never where a target would take you.
+  const lanes = between(post, start);
+  const aside = shuffle(fromStart, rng).find((tile) => plan.free(tile) && tile.y <= 6 && chebyshev(tile, post) >= 2 && !lanes.some((square) => same(square, tile))
+    && !covers(target, prize, tile) && reachable(piece, tile).some((square) => same(square, prize)));
+  if (!aside) return null;
+  plan.keep(aside, ...between(start, aside), ...between(aside, prize));
+  // The other target: walled in apart, in reach from the prize's square and not from the start or the sidestep.
+  const other = shuffle(reachable(piece, prize), rng).find((tile) => plan.free(tile) && tile.y <= 6 && chebyshev(tile, start) >= 2 && chebyshev(tile, prize) >= 2 && chebyshev(tile, post) >= 2
+    && !covers(target, tile, prize) && !covers(target, tile, aside) && !fromStart.some((square) => same(square, tile)) && !reachable(piece, aside).some((square) => same(square, tile)));
+  if (!other) return null;
+  plan.keep(...between(prize, other));
+  plan.place(0, target, other);
+  // The guard's only way off its post is its line to you, and from your start square its only way is back.
+  if (!box(plan, guard.role, post, [at(post.x + dx, post.y + dy)]) || !box(plan, guard.role, start, [at(start.x - dx, start.y - dy)])) return null;
+  if (!box(plan, target, prize) || !box(plan, target, other)) return null;
+  // The line is still open once the walls stand.
+  const sees = (from, to, units) => reach(plan, piece, from, units).some((square) => same(square, to));
+  if (!sees(start, aside, true) || !sees(aside, prize, true) || !sees(prize, other, true) || sees(start, prize, false) || sees(start, other, false)) return null;
+  if (guard.n >= 0) context.guards.splice(guard.n, 1);
+  const route = [aside, prize, other].map((tile) => ({ type: 'move', x: tile.x, y: tile.y }));
+  return { plan, motif: 'lure', found: true, route, key: aside, post, prize };
+}
+MOTIFS.wait = standstill;
+MOTIFS.lure = lure;
+
 /**
  * Must the idea be found? Of the human-like bot's seeded runs from `start`
  * (it knows no ideas: plain sensible play), at most TIGHT.botPar may make par.
@@ -1327,6 +1521,15 @@ export function hastyScore(start, depth, from = floorScoredMoves(start)) {
 // A move's square is where it comes to rest (on ice, past the square aimed at).
 function ideaSquare(built, states, line) {
   if (built.pawnLine) return pawnKey(states, line);
+  if (built.motif === 'wait') {
+    // The square you wait on, or (waiting where you start) the square the target then steps onto, if it is empty.
+    const n = line.findIndex((action) => action.type === 'wait');
+    const stood = states[n]?.player, next = line[n + 1];
+    if (stood && !same(stood, states[0].player)) return { x: stood.x, y: stood.y };
+    return next?.type === 'move' && !states[0].enemies.some((foe) => same(foe, next)) ? { x: next.x, y: next.y } : null;
+  }
+  // The lure's sidestep: its first move.
+  if (built.motif === 'lure') return line[0].type === 'move' ? { x: states[1].player.x, y: states[1].player.y } : null;
   if (built.motif === 'squeeze' || built.motif === 'net' || built.form) return built.key;
   if (built.motif !== 'bait') return null;
   const n = sidestep(built, states, line);
@@ -1362,7 +1565,8 @@ function hinted(built, best, line, base, floor, rng, carried) {
   // The king floor's net goes unhinted.
   const square = floor === 2 ? null : ideaSquare(built, best.states, line);
   if (!square) return { room: best.room, kind: null };
-  const kinds = shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng);
+  // An idea in preview is hinted by nothing that moves a monster: its verdict was reached on the room as dressed.
+  const kinds = shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng).filter((kind) => !(built.found && kind === 'held'));
   for (const kind of kinds) {
     const room = structuredClone(best.room);
     if (kind === 'coin') {
@@ -1424,7 +1628,8 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 
 /** Does a winning line use the planted idea? `built` is the motif instance (composeFloor's trace hands it over at stage 'kept'). */
 export function usesIdea(built, states, line) {
-  if (built.form) return playsIdea({ motif: built.motif }, states, line);
+  // A tight form's idea and an idea in preview are read as a player would name them (src/tight.js).
+  if (built.form || built.found) return playsIdea({ motif: built.motif }, states, line);
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
   if (built.motif === PARTNER_MOTIF) return tandemIdea(states);
@@ -1522,6 +1727,9 @@ function iceVariants(room, line, states, built, rng) {
 // line's first quiet move before its first take (its hint square).
 function keyMove(built, states, line) {
   if (built.pawnLine) return pawnQuiet(states, line);
+  // A Standstill's move onto the square it waits on (none when it waits where it starts); a lure's sidestep.
+  if (built.motif === 'wait') return line.findIndex((action, n) => action.type === 'move' && line[n + 1]?.type === 'wait');
+  if (built.motif === 'lure') return line[0].type === 'move' ? 0 : -1;
   if (built.motif === 'net') return line.at(-1).type === 'move' ? line.length - 1 : -1;
   if (built.motif === 'squeeze') return line.findIndex((action, n) => action.type === 'move' && same(states[n + 1].player, built.key));
   if (built.motif === 'bait') return sidestep(built, states, line);
@@ -2000,7 +2208,7 @@ function partnerFloor(base, { starts, trace }) {
  * motif (`replayed` those whose planted idea won within the line's length).
  * On an Ice day `ice` says how the room's ice meets the line (iceVariants).
  */
-export function composeFloor(base, floor, { trace, carried = null, starts = startSquares(), tight = false } = {}) {
+export function composeFloor(base, floor, { trace, carried = null, starts = startSquares(), tight = false, ideas = [] } = {}) {
   const began = performance.now();
   const piece = base.playerPiece;
   const icy = base.modifier === 'ice';
@@ -2010,6 +2218,9 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   // A pawn's king floor nets each of its mates in turn ('net:king', …; PAWN_MATES).
   const preferred = piece === 'pawn' && floor === 2 ? pawnMates(seed).map((mate) => `net:${mate}`) : motifsFor(piece, cast.target, floor);
   if (tight) tightMotifs(preferred, base, floor);
+  // Ideas in preview go before the floor's plain motifs: first on floor 1, after the tight forms on floor 2.
+  const plainAt = preferred.findIndex((motif) => FLOOR_MOTIFS[floor].includes(motif));
+  if (ideas.length && plainAt >= 0) preferred.splice(plainAt, 0, ...ideas);
   // A pawn's unhinted tempo floor, kept until a crown floor takes its place.
   let spare = null;
   for (const motif of [...preferred, 'walk']) {
@@ -2069,11 +2280,20 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const judged = motif !== 'walk' || (pawnFallback && attempt < attempts - MOTIF_ATTEMPTS);
         const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
         if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
-        if (tight && built.form) { const fails = botFinds(real, base, floor, line.length + 1) ? tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea }).why : 'bot'; if (fails) { trace?.({ motif, attempt, stage: `tight:${fails}`, room, line }); return null; } }
+        // A tight form, and an idea in preview whatever the option: its idea has to be found (src/tight.js),
+        // and a Standstill's wait must be the only action that keeps par as it is made.
+        if (built.found || (tight && built.form)) {
+          let fails = ceiling(built) && !botFinds(real, base, floor, line.length + 1) ? 'bot' : tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea }).why;
+          if (!fails && built.motif === 'wait') {
+            const alone = standsAlone(dressed, line, line.findIndex((action) => action.type === 'wait'), { actionsFrom });
+            fails = !alone.ok ? 'alone' : alone.others < WAIT_OTHERS ? 'choice' : null;
+          }
+          if (fails) { trace?.({ motif, attempt, stage: `tight:${fails}`, room, line }); return null; }
+        }
         return { hasty };
       };
       let best = null;
-      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2) && !(best && built.form); dressing++) {
+      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2) && !(best && (built.form || built.found)); dressing++) {
         const plan = dress(built.plan.clone(), context, planted.line, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
         if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
         const room = plan.room();
@@ -2144,6 +2364,50 @@ export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: tru
  * such a day gave up.
  */
 export const FALLBACKS = Object.freeze(['partner', 'tight', 'treasure']);
+/**
+ * The ideas in preview, each a composeDay option of its own name, off unless
+ * asked for (never part of RELEASE, so no stored edition has one): 'wait' the
+ * Standstill, 'lure' the Lure. A day that fails with one gives it up before
+ * any release option.
+ */
+export const PREVIEW_IDEAS = Object.freeze(['wait', 'lure']);
+/**
+ * An idea in preview takes about one in IDEA_EVERY of the days it fits, drawn
+ * by the date like a partner floor's (PARTNER_EVERY), so no new idea becomes
+ * the commonest overnight. `'every'` as the option's value takes every day it
+ * fits (tests, measuring, the dev preview's &wait=all and &lure=all).
+ */
+export const IDEA_EVERY = 3;
+// The floors of a day an idea in preview fits: floors 1 and 2 by matchup, and for a lure a decoy on the floor that the piece can lure.
+const IDEA_FITS = Object.freeze({
+  wait: (base, floor) => fitsWait(base.playerPiece, base.targets[floor]),
+  lure: (base, floor) => { const cast = castFor(base, floor); return fitsLure(base.playerPiece, base.targets[floor]) && [...cast.suspects, cast.other].some((guard) => LURE_PIECES[base.playerPiece].includes(guard.role)); },
+});
+/** The floors (0 and 1) of a day that `idea` (PREVIEW_IDEAS) fits, floor 1 first. */
+export const ideaFloors = (base, idea) => [0, 1].filter((floor) => IDEA_FITS[idea](base, floor));
+/** Does a day that `idea` fits take it? About one day in IDEA_EVERY, by the date. */
+export const ideaDay = (base, idea) => ideaFloors(base, idea).length > 0 && hash(`${base.date}:${idea}-day`) % IDEA_EVERY === 0;
+/**
+ * The ideas in preview each floor of a day tries, [floor 1's, floor 2's],
+ * for the options `asked` ({ wait, lure }: true, 'every' or false). Each idea
+ * the day takes goes to the first floor it fits, never the day's partner
+ * floor (`partnered`); where two want one floor, the date orders them, and
+ * the second takes its next floor if it has one. Floor 1 tries its ideas
+ * before its plain motifs; floor 2 only where no tight form composes
+ * (composeFloor).
+ */
+export function previewIdeas(base, asked, partnered = null) {
+  const floors = [[], []];
+  if (base.playerPiece === 'pawn') return floors;
+  const drawn = PREVIEW_IDEAS.filter((idea) => asked[idea] && (asked[idea] === 'every' || ideaDay(base, idea)));
+  if (drawn.length > 1 && hash(`${base.date}:ideas`) % 2) drawn.reverse();
+  for (const idea of drawn) {
+    const fits = ideaFloors(base, idea).filter((floor) => floor !== partnered);
+    const floor = fits.find((f) => !floors[f].length) ?? fits[0];
+    if (floor !== undefined) floors[floor].push(idea);
+  }
+  return floors;
+}
 
 /**
  * A composed day for a canonical date: the raw daily with the Fair monsters
@@ -2170,11 +2434,11 @@ export const FALLBACKS = Object.freeze(['partner', 'tight', 'treasure']);
  * FALLBACKS' order rather than fail; `dropped` lists them (empty on nearly
  * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight } = {}) {
-  const asked = { treasure, partner, tight }, dropped = [];
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = false, lure = false } = {}) {
+  const asked = { treasure, partner, tight, wait, lure }, dropped = [];
   for (;;) {
     try { return { ...composeOnce(raw, { tier, starts, trace, ...asked }), dropped }; } catch (error) {
-      const next = FALLBACKS.find((option) => asked[option]);
+      const next = [...PREVIEW_IDEAS, ...FALLBACKS].find((option) => asked[option]);
       if (!next) throw error;
       asked[next] = false;
       dropped.push(next);
@@ -2183,16 +2447,18 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   }
 }
 // composeDay with exactly the options asked for; throws when the day doesn't compose or prove with them.
-function composeOnce(raw, { tier, starts, trace, treasure, partner, tight }) {
+function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait, lure }) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   const partnered = partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null;
+  // The ideas in preview this day's floors try (none unless asked for).
+  const ideas = wait || lure ? previewIdeas(base, { wait, lure }, partnered?.floor ?? null) : [[], []];
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {
     arrived.push(Object.keys(carried).length ? { ...carried } : null);
-    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
+    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(ideas[floor]?.length && { ideas: ideas[floor] }), ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }

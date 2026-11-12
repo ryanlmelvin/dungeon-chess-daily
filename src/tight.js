@@ -43,6 +43,33 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 const taken = (states, n) => states[n + 1].events.filter((event) => event.type === 'capture' && isTarget(states[n], event.id)).map((event) => event.id);
 
 /**
+ * Is it plain to a player that a masked monster on `from`, wound up at `aim`,
+ * covers `square`? Its red path shows a straight or a diagonal mover, and
+ * `square` lies one step from it along that same kind of line: whatever it is
+ * (a rook, queen or king for a straight path; a bishop, queen or king for a
+ * diagonal one), it takes a piece that ends a move there. A wind-up from one
+ * step away, diagonally down the board, may be a pawn's, which covers only
+ * the two squares diagonally below it.
+ */
+export function plainGuard(from, aim, square) {
+  const kind = (dx, dy) => (dx === 0 || dy === 0 ? 'straight' : Math.abs(dx) === Math.abs(dy) ? 'diagonal' : null);
+  const ax = aim.x - from.x, ay = aim.y - from.y, sx = square.x - from.x, sy = square.y - from.y;
+  if (Math.max(Math.abs(sx), Math.abs(sy)) !== 1 || !kind(ax, ay) || kind(ax, ay) !== kind(sx, sy)) return false;
+  return !(kind(ax, ay) === 'diagonal' && Math.abs(ax) === 1 && ay === 1 && sy !== 1);
+}
+// Was the target `id`, which a line's move `n` takes, lured free? A decoy that
+// was wound up at you as you chose the move before, plainly guarding the
+// target from where it stood, lunged and missed.
+function lured(states, n, id) {
+  const before = states[n - 1], prize = before.enemies.find((foe) => foe.id === id);
+  return Boolean(prize) && states[n].events.some((event) => {
+    if (event.type !== 'miss' || event.id === id) return false;
+    const guard = before.enemies.find((foe) => foe.id === event.id);
+    return Boolean(guard) && !isTarget(before, guard.id) && guard.phase === 'aim' && Boolean(guard.target) && plainGuard(guard, guard.target, prize);
+  });
+}
+
+/**
  * Does a winning line use its floor's idea, as a player would name it?
  * Wider than the composer's own test of a planted line (usesIdea, which
  * `narrow` is: it asks for the planted squares), and read from where pieces
@@ -54,6 +81,19 @@ const taken = (states, n) => states[n + 1].events.filter((event) => event.type =
  * Any other motif keeps the composer's test.
  */
 export function playsIdea(built, states, line, narrow) {
+  // The ideas in preview (src/composer.js, "Ideas in preview"):
+  // - wait (the Standstill): you wait, a target that made no lunge steps onto
+  //   a square in your reach while you stand still, and is taken there on the
+  //   very next move;
+  // - lure: a decoy wound up at you lunges and misses, and on the very next
+  //   move you take a target it plainly guarded as it wound up (plainGuard).
+  if (built.motif === 'wait') {
+    return line.some((action, n) => n > 0 && action.type === 'move' && line[n - 1].type === 'wait' && taken(states, n).some((id) => {
+      const now = states[n].enemies.find((foe) => foe.id === id), before = states[n - 1].enemies.find((foe) => foe.id === id);
+      return Boolean(before) && !same(now, before) && !states[n].events.some((event) => event.type === 'miss' && event.id === id);
+    }));
+  }
+  if (built.motif === 'lure') return line.some((action, n) => n > 0 && action.type === 'move' && taken(states, n).some((id) => lured(states, n, id)));
   if (built.motif === 'bait') {
     return line.some((action, n) => n > 0 && action.type === 'move'
       && taken(states, n).some((id) => states[n].events.some((event) => event.type === 'miss' && event.id === id)));
@@ -168,6 +208,48 @@ export function parRoom(start, length, { actionsFrom, idea = () => true, hits = 
   }
   const clean = firsts.filter(counts);
   return { cut, steps, firsts: clean.length, keepLine: clean.filter((first) => first.line).length, keepPar: clean.filter((first) => first.par).length, ...tally };
+}
+
+/**
+ * Does the action a line makes at move `at` (0 for its first) stand alone:
+ * played as planted up to there, does every other action at that moment
+ * leave no win within par (the line plus one, a capture counted as the move
+ * it costs)? The Standstill's test of its wait: moving breaks the cover.
+ * { ok, others, cut }: `others` counts the other actions that are not
+ * captured at once (the choice the moment really offers), and `cut` says the
+ * search passed `budget` steps (then it is not `ok`: not proved).
+ */
+export function standsAlone(start, line, at, { actionsFrom, budget = TIGHT.budget }) {
+  const memo = new Map();
+  let steps = 0, cut = false;
+  const canWin = (state, left) => {
+    if (left <= 0 || cut) return false;
+    const key = `${left}|${positionKey(state)}`;
+    if (memo.has(key)) return memo.get(key);
+    let won = false;
+    for (const action of actionsFrom(state)) {
+      if (++steps > budget) { cut = true; return false; }
+      const next = played(state, action);
+      if (!next) continue;
+      const cost = 1 + next.hits - state.hits;
+      if (cost <= left && (next.exit.open || canWin(next, left - cost))) { won = true; break; }
+    }
+    if (!cut) memo.set(key, won);
+    return won;
+  };
+  let state = start;
+  for (const action of line.slice(0, at)) { state = played(state, action); if (!state) return { ok: false, others: 0, cut: false }; }
+  const left = line.length + 1 - at - (state.hits - start.hits), key = line[at];
+  let others = 0, keeps = 0;
+  for (const action of actionsFrom(state)) {
+    if (action.type === key.type && (action.type !== 'move' || same(action, key))) continue;
+    const next = played(state, action);
+    if (!next) continue;
+    const cost = 1 + next.hits - state.hits;
+    if (cost === 1) others++;
+    if (cost <= left && (next.exit.open || canWin(next, left - cost))) keeps++;
+  }
+  return { ok: !cut && keeps === 0, others, cut };
 }
 
 /**
