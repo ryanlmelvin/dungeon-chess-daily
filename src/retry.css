@@ -7,8 +7,14 @@
 .shop-actions { display: flex; gap: 8px; position: sticky; bottom: 0; margin-top: 12px; }
 .shop-actions .shop-descend { position: static; flex: 1; width: auto; margin-top: 0; }
 dialog .shop-retry { flex: none; white-space: nowrap; color: var(--paper); }
-/* A narrow phone has room for "↺ Retry" beside "Descend to floor 2 ↘", not for "↺ Retry floor". */
+/* A narrow phone has room for "↺ Retry" beside "Descend to floor 2 ↘", not for
+   "↺ Retry floor"; the narrowest (320 wide) for the arrow alone. */
 @media (max-width: 429px) { .shop-retry-wide { display: none; } }
+@media (max-width: 350px) {
+  .shop-retry-word { display: none; }
+  .shop-actions { gap: 6px; }
+  dialog .shop-retry { padding-left: 8px; padding-right: 8px; }
+}
 @media (max-height: 720px) { .shop-actions { margin-top: 8px; } }
 
 /* The results paper: the table's F1 to F3 headings are the buttons, under "Retry" in its corner.
