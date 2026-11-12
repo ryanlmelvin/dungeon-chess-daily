@@ -250,8 +250,7 @@ addEventListener('resize', fitPaper);
 document.fonts?.ready.then(fitPaper);
 new ResizeObserver(fitPaper).observe($('pwa-bar'));
 // The results paper never scrolls on a phone either: the same idea (style.css
-// .result-screen[data-fit]). "tight" closes up its spacing and drops the bot's
-// footnote; "tighter" also drops the legend of marks, keeping the line under it.
+// .result-screen[data-fit]). "tight" closes up its spacing; "tighter" also drops the legend of marks, keeping the line under it.
 function fitResult() {
   const page = $('result-screen');
   delete page.dataset.fit;
@@ -1637,9 +1636,6 @@ getReleaseVersion().then(version=>{$('release').textContent=`Release ${version}`
 // piece, set the player's moves beside the Dungeon Bot's (src/bot.js): the
 // line each floor was built around. Practice wins never reveal it, so it
 // cannot spoil a daily run still in play.
-const BOT_NOTES = {
-  planted: 'This is the line each floor was built around: a shortest win, never captured. Par is one move more.',
-};
 let botCache = null;
 function currentBot() {
   const id = `${daily.date}:${daily.seed}`;
@@ -1652,7 +1648,6 @@ function renderBotComparison() {
   $('bot-compare').hidden = !bot;
   if (!bot) return;
   $('bot-verdict').textContent = verdict(you, bot);
-  $('bot-note').textContent = BOT_NOTES[bot.kind];
   // One column per stat, one row each for you and the bot, so it stays short on a phone.
   const columns = [
     ...bot.floors.map((moves, index) => [`F${index + 1}`, `Floor ${index + 1} moves`, you.floors[index] ?? '–', moves]),
