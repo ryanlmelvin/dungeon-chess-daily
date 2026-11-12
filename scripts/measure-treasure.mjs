@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Measure treasure (src/treasure.js, a dev preview): every date in the range
-// is composed with composeDay's `treasure` option, and the report says
+// Measure treasure (src/treasure.js): every date in the range is composed
+// with its chests, as the stored editions are (--no-partner and --no-tight
+// turn the other two options off, scripts/compose-options.mjs), and the
+// report says
 //   - how many floors get a chest, by floor and by piece, and why the rest
 //     get none (no square qualifies, or the search passed its budget);
+//   - what the two checks cost: floors the first rule alone would give a
+//     chest, those left once the chest must cost the spare move, and those
+//     left once the bot may not take it by accident;
 //   - how demanding each chest is: the par wins that pass through its square
 //     (the composer keeps the square with the fewest), of all the floor's par
 //     wins, and how many squares qualified;
@@ -14,10 +19,12 @@
 //   - the compose time the chests add per day.
 // --days also lists each day: its piece and each floor's chest. Read-only.
 //   node scripts/measure-treasure.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--jobs N] [--days] [--json path]
+//     [--no-partner] [--no-tight]
 // --jobs splits the dates over that many processes.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { composeOptions, optionsLabel } from './compose-options.mjs';
 import { composeDay } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { certifiedFloors, playFloor, runSeed, HUMAN_RUNS } from '../src/human-bot.js';
@@ -28,6 +35,8 @@ const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); 
 const start = arg('start', '2026-11-11'), end = arg('end', '2027-01-10'), runs = Number(arg('runs', HUMAN_RUNS));
 const jobs = Number(arg('jobs', 1)), listDays = process.argv.includes('--days');
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
+// Chests are what is measured, so they are always on.
+const options = { ...composeOptions(), treasure: true };
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
 const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
 
@@ -38,7 +47,7 @@ function measure() {
     const date = new Date(time).toISOString().slice(0, 10), raw = getRawDaily(date);
     if (shard && n++ % shard[1] !== shard[0]) continue;
     let composed;
-    try { composed = composeDay(date, { treasure: true }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+    try { composed = composeDay(date, options); } catch (error) { rows.push({ date, failed: error.message }); continue; }
     const { daily, floors } = composed;
     const played = certifiedFloors(daily);
     floors.forEach((floor, f) => {
@@ -52,7 +61,7 @@ function measure() {
       }
       rows.push({
         date, piece: raw.playerPiece, modifier: daily.modifier, floor: f, motif: floor.motif, planted: floor.line.length, par, route: spell(floor.line),
-        start: square(floor.room.start ?? { x: 4, y: 6 }), ms: floor.ms, treasureMs: floor.treasureMs, miss: floor.treasureMiss ?? null,
+        start: square(floor.room.start ?? { x: 4, y: 6 }), ms: floor.ms, treasureMs: floor.treasureMs ?? 0, miss: floor.treasureMiss ?? null, checks: floor.treasureChecks ?? null,
         chest: chest ? { square: square(chest), line: spell(chest.line), moves: chest.line.length, through: chest.through, wins: chest.wins, squares: chest.squares, steps: chest.steps } : null, bot,
       });
     });
@@ -68,8 +77,14 @@ const sum = (rows, pick) => rows.reduce((total, row) => total + pick(row), 0);
 function report(rows) {
   const failed = rows.filter((row) => row.failed), floors = rows.filter((row) => !row.failed);
   const dates = [...new Set(floors.map((row) => row.date))];
-  console.log(`Treasure: ${dates.length} days (${start} to ${end}), ${floors.length} floors, ${runs} bot runs a chest floor.`);
+  console.log(`Treasure: ${dates.length} days (${start} to ${end}) in ${optionsLabel(options)}, ${floors.length} floors, ${runs} bot runs a chest floor.`);
   if (failed.length) console.log(`${failed.length} days failed to compose: ${failed.map((row) => row.date).join(', ')}`);
+  // The two checks (src/treasure.js placeTreasure): what each leaves of the floors the first rule alone would give a chest.
+  const judged = floors.filter((row) => row.checks);
+  const before = judged.filter((row) => Number.isInteger(row.checks.unchecked)), spare = judged.filter((row) => row.checks.spare > 0), calm = judged.filter((row) => row.checks.calm > 0);
+  const kept = floors.filter((row) => row.chest);
+  const moved = kept.filter((row) => Number.isInteger(row.checks?.unchecked) && square({ x: row.checks.unchecked % 8, y: row.checks.unchecked >> 3 }) !== row.chest.square).length;
+  console.log(`\nThe checks: ${before.length} floors (${percent(before.length, floors.length)}) have a chest by the first rule alone (a par win through the square, off the line); ${spare.length} once it must cost the spare move; ${calm.length} once the bot may not take it by accident; ${kept.length} (${percent(kept.length, floors.length)}) get one, ${moved} of them on another square than the first rule's. Partner floors (no chest): ${floors.filter((row) => row.miss === 'partner').length}.`);
   const header = '| Group | Floors | With a chest | No square qualifies | Search cut short | Par wins through the chest (median / mean) | …of the floor\'s par wins (median) | One par win only | Qualifying squares (median) | Chest line at the planted length | Bot takes the chest | Bot makes par | Bot takes it and makes par | Chests the bot marks in half its runs | Chests it never marks |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
   const line = (name, all) => {
     const group = all.filter((row) => row.chest), botRuns = sum(group, (row) => row.bot.runs);
@@ -84,8 +99,13 @@ function report(rows) {
   table('By piece', by((row) => row.piece));
   table('By piece and floor', by((row) => `${row.piece} · floor ${row.floor + 1}`));
   table('By motif', by((row) => row.motif));
-  const other = floors.filter((row) => row.miss && row.miss !== 'none' && row.miss !== 'cut');
-  if (other.length) console.log(`\nFloors with no chest for another reason: ${other.map((row) => `${row.date} floor ${row.floor + 1} (${row.miss})`).join(', ')}`);
+  // Why floors have no chest: none (no square qualifies), spare (a win of the line's length takes every one), bot (the bot
+  // stumbles on the rest), partner (a partner floor), cut (a search passed its budget), proof or line (listed, as they are rare).
+  const reasons = {};
+  for (const row of floors) if (row.miss) reasons[row.miss] = (reasons[row.miss] ?? 0) + 1;
+  console.log(`\nFloors with no chest, by reason: ${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([reason, count]) => `${reason} ${count}`).join(', ') || 'none'}.`);
+  const other = floors.filter((row) => row.miss === 'proof' || row.miss === 'line');
+  if (other.length) console.log(`Proof or line: ${other.map((row) => `${row.date} floor ${row.floor + 1} (${row.miss})`).join(', ')}`);
   // Time: what placing the chests adds to composing a day.
   const perDay = dates.map((date) => { const day = floors.filter((row) => row.date === date); return { date, compose: sum(day, (row) => row.ms), added: sum(day, (row) => row.treasureMs) }; });
   const slowest = [...perDay].sort((a, b) => b.added - a.added)[0];

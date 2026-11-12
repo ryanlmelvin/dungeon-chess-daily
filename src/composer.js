@@ -1007,7 +1007,7 @@ function pocketOrder(options, { seed, attempt, rng }) {
   return [...names.slice(turn), ...names.slice(0, turn)].flatMap((name) => shuffle(pockets.get(name), rng));
 }
 
-// ── Tight floors (composeDay's `tight` option, a dev preview; src/tight.js judges them) ──
+// ── Tight floors (composeDay's `tight` option, on by default: RELEASE; src/tight.js judges them) ──
 //
 // Subtle forms of the squeeze and the bait, for floor 2 of a tight day (floor
 // 1 keeps the plain form of the same idea where the matchup allows: a day's
@@ -1647,8 +1647,8 @@ function castFor(base, floor) {
 }
 
 // ── Partner floors ──────────────────────────────────────────────────────────
-// A partner floor (composeDay's `partner` option; no stored edition has one)
-// is won by your piece and the floor's recruit together. Its motif:
+// A partner floor (composeDay's `partner` option, on by default: RELEASE) is
+// won by your piece and the floor's recruit together. Its motif:
 //
 // - Tandem: the floor's two targets stand walled in a step of their own apart
 //   (rooks side by side, bishops corner to corner, knights a jump apart), so
@@ -1663,11 +1663,11 @@ function castFor(base, floor) {
 // decoy's hidden role. The twins have no step and see no square you can stand
 // on, so they never wind up: alone, you can never take one uncaptured.
 //
-// The recruit takes a target, which it does only on an order (on Auto it
-// never takes one, src/rules.js recruitMayTake). So a tandem's planted line
-// carries recruit orders, a player on Manual recruit control can follow it and
-// one on Auto can't, and its day is proved with the recruit steered on that
-// floor alone (src/generation.js proveComposed, `partner`).
+// The recruit takes a target, which it does only on an order (moving itself
+// it never takes one, src/rules.js recruitMayTake). So a tandem's planted line
+// carries recruit orders, as every turn a player takes does, and its day is
+// proved with the recruit steered on that floor alone (src/generation.js
+// proveComposed, `partner`); each stored edition names its partner floor.
 //
 // It is proved like the other motifs, the recruit steered: the line wins,
 // never captured; nothing wins in fewer moves, whatever the recruit is told
@@ -1795,11 +1795,10 @@ function ordersFor(state, action, taking = false, posts = null) {
 }
 /**
  * Every way to play one move from `state` with the recruit steered, as a
- * player on Manual recruit control may: each move or wait (partnerMoves) with
- * each order (ordersFor). `last`: the floor's last move, where only an order
- * that takes a target can matter. `posts(square, board)` (tooling, for
- * searches too deep to try every order): the quiet squares worth posting the
- * recruit on.
+ * player may: each move or wait (partnerMoves) with each order (ordersFor).
+ * `last`: the floor's last move, where only an order that takes a target can
+ * matter. `posts(square, board)` (tooling, for searches too deep to try every
+ * order): the quiet squares worth posting the recruit on.
  */
 export function partnerActions(state, last = false, posts = null) {
   return partnerMoves(state).flatMap((move) => ordersFor(state, move, last, posts));
@@ -2120,26 +2119,60 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
 }
 
 /**
+ * The release configuration: what composeDay composes unless told otherwise,
+ * and so what every stored edition is (scripts/build-editions.mjs composes
+ * with no options, as do the audit, the dev preview and the tests): a chest
+ * where one qualifies, a partner floor where the matchup has one, and the
+ * tight forms.
+ */
+export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: true });
+/**
+ * The order a day gives its options up in. Every date must compose, so a day
+ * that fails with all it was asked for (a floor that won't compose, a proof
+ * that fails) is composed again without its partner floor, then without its
+ * tight forms, then without its chests; composeDay's `dropped` names what
+ * such a day gave up.
+ */
+export const FALLBACKS = Object.freeze(['partner', 'tight', 'treasure']);
+
+/**
  * A composed day for a canonical date: the raw daily with the Fair monsters
  * and its modifier, a composed room per floor and the planted lines as its
  * certificate, proved by src/generation.js proveComposed. `floors` describes
  * each floor. `tier` composes under other monsters, and `daily` overrides the
  * raw daily (tooling: synthetic casts, or another modifier); `starts` the
  * start set (startSquares); `trace` hears each floor's composeFloor events,
- * with its `floor` (tooling). `treasure` (a dev preview, off unless asked for)
- * adds a chest off each floor's line where one qualifies (src/treasure.js):
- * such a floor gains `treasure` (its square and proving line), and the day's
- * generation lists each floor's proving line, or null. `partner` (a dev
- * preview too, off for every stored edition) gives floor 1 or 2 to a partner
- * floor on the days whose matchup has one (partnerFloors):
- * `generation.partner` is then that floor, whose line carries recruit orders
- * (and which gets no chest: a chest's line is searched without the recruit).
- * `tight` (a dev preview too, off unless asked for) composes floors whose
- * idea has to be found (src/tight.js): floor 2 takes a subtle form of the
- * day's idea, which floor 1 shows plainly, and a pawn's king floor a mate its
- * pawn can't sit out; such a floor says its `form`.
+ * with its `floor` (tooling). Three options, each on unless turned off
+ * (RELEASE; the measuring scripts and the dev preview turn them off to
+ * compare):
+ * - `treasure` adds a chest off each floor's line where one qualifies
+ *   (src/treasure.js): such a floor gains `treasure` (its square and proving
+ *   line), and the day's generation lists each floor's proving line, or null;
+ * - `partner` gives floor 1 or 2 to a partner floor on the days whose matchup
+ *   has one (partnerFloors): `generation.partner` is then that floor, whose
+ *   line carries recruit orders (and which gets no chest: a chest's line is
+ *   searched without the recruit);
+ * - `tight` composes floors whose idea has to be found (src/tight.js): floor
+ *   2 takes a subtle form of the day's idea, which floor 1 shows plainly;
+ *   such a floor says its `form`.
+ * A day that can't be composed with all it was asked for gives options up in
+ * FALLBACKS' order rather than fail; `dropped` lists them (empty on nearly
+ * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = false, partner = false, tight = false } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight } = {}) {
+  const asked = { treasure, partner, tight }, dropped = [];
+  for (;;) {
+    try { return { ...composeOnce(raw, { tier, starts, trace, ...asked }), dropped }; } catch (error) {
+      const next = FALLBACKS.find((option) => asked[option]);
+      if (!next) throw error;
+      asked[next] = false;
+      dropped.push(next);
+      trace?.({ stage: 'fallback', dropped: next, reason: error.message });
+    }
+  }
+}
+// composeDay with exactly the options asked for; throws when the day doesn't compose or prove with them.
+function composeOnce(raw, { tier, starts, trace, treasure, partner, tight }) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
@@ -2168,8 +2201,6 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   // Proved as every edition is when it loads (on its twin without hint powerups, then as played),
   // every position along the way a valid save.
   const proof = proveComposed(daily, actions, { saves: true, ...(partnered && { partner: partnered.floor }) });
-  // A partner floor that spoils the day's proof gives the day back to its own motifs.
-  if (!proof.valid && partnered) return composeDay(date, { tier, daily: raw, starts, trace, treasure, tight });
   if (!proof.valid) throw new Error(`Composed day ${raw.date} failed its proof: ${proof.reason}`);
   daily.generation = { version: GENERATOR_VERSION, source: 'composed', motifs: floors.map((floor) => floor.motif), ...(partnered && { partner: partnered.floor }), certificate: { actions, metrics: proof.metrics } };
   if (treasure) daily.generation.treasure = floors.map((floor) => floor.treasure?.line ?? null);

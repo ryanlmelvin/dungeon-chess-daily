@@ -15,21 +15,24 @@
 //     among the first actions), how many do not use the planted idea, by the
 //     composer's own test (usesIdea).
 // By the human-like bot (src/human-bot.js playFloor, --runs seeded runs from
-// the floor's start as played, steering its recruit as a Manual player would):
+// the floor's start as played, steering its recruit as a player would):
 // how often a run makes par, and how often it does so without the idea.
 // The bot knows no ideas, so that is plain sensible play.
 // A floor whose search passes --budget steps is left out of the exact
 // figures (counted as "search cut short"). Read-only.
 //   node scripts/measure-par-slack.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…]
-//     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N] [--partner]
+//     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N]
+//     [--no-treasure] [--no-partner] [--no-tight]
 // --jobs splits the dates over that many processes.
-// --partner composes each day with its partner floor (src/composer.js
-// composeDay's `partner`), where its matchup has one. That floor's search
-// steers the recruit, as its line does (searchPartner): a first action is
-// still a move or wait of yours, kept when some order of the recruit keeps it.
+// Days compose in the release configuration, as the stored editions do;
+// --no-treasure, --no-partner and --no-tight each turn one of its options off
+// (scripts/compose-options.mjs). A partner floor's search steers the recruit,
+// as its line does (searchPartner): a first action is still a move or wait of
+// yours, kept when some order of the recruit keeps it.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { composeOptions, optionsLabel } from './compose-options.mjs';
 import { composeDay, actionsFrom, partnerActions, usesIdea, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { routeTransition, positionKey } from '../src/fairness.js';
@@ -42,7 +45,7 @@ const start = arg('start', '2026-11-01'), end = arg('end', '2028-11-08'), runs =
 const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 const jobs = Number(arg('jobs', 1)), budget = Number(arg('budget', 600_000)), most = Number(arg('lines', 3000)), examples = Number(arg('examples', 6));
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
-const partner = process.argv.includes('--partner');
+const options = composeOptions();
 /** A steered search tries each move with several orders, so a partner floor gets this many times --budget. */
 const PARTNER_BUDGET = 10;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
@@ -204,7 +207,7 @@ function measure() {
     if (shard && n++ % shard[1] !== shard[0]) continue;
     const builts = [];
     let composed;
-    try { composed = composeDay(date, { partner, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+    try { composed = composeDay(date, { ...options, trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
     const { daily, floors } = composed;
     // The search runs on the twin without hint powerups (src/generation.js proveComposed), the bot on the day as played.
     const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
@@ -235,7 +238,7 @@ const sum = (rows, pick) => rows.reduce((total, row) => total + pick(row), 0);
 
 function report(rows) {
   const failed = rows.filter((row) => row.failed), floors = rows.filter((row) => !row.failed);
-  console.log(`Room around the planted idea: ${new Set(floors.map((row) => row.date)).size} days (${start} to ${end}; ${pieces.join(', ')}), ${floors.length} floors, ${runs} bot runs a floor.`);
+  console.log(`Room around the planted idea: ${new Set(floors.map((row) => row.date)).size} days (${start} to ${end}; ${pieces.join(', ')}) in ${optionsLabel(options)}, ${floors.length} floors, ${runs} bot runs a floor.`);
   if (failed.length) console.log(`${failed.length} days failed to compose: ${failed.map((row) => row.date).join(', ')}`);
   const header = '| Group | Floors | Search cut short | First actions | …keep the line | …keep par | One first action keeps the line | One keeps par | Floors with a par win off the idea | …at the line\'s own length | Par wins off the idea (mean share) | Bot runs at par or better | …under par | Bot runs at par off the idea | Floors the bot pars off the idea in half its runs |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
   const line = (name, all) => {

@@ -5,7 +5,7 @@
 // built instance's planted idea wins within the line's length (replay
 // acceptance), time per floor, and the human-like bot's runs from each floor's
 // start (src/human-bot.js playFloor, 40 seeded runs, steering its recruit as
-// a Manual player would). Par is the planted line plus one. A run misses when it fails
+// a player would). Par is the planted line plus one. A run misses when it fails
 // or takes more than par + 4 moves; a stalled move neither takes a target nor
 // brings the nearest one closer (wall-aware move tables). A king floor's shape
 // is the royal king's square and the square the planted line mates from; on a
@@ -15,10 +15,14 @@
 // meets an arrival from its tenth move on. Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…]
 //     [--pawn-days] [--modifiers ice,collapse,none] [--modifier none|ice|collapse] [--json path]
+//     [--no-treasure] [--no-partner] [--no-tight]
 // --pawn-days measures only the days whose floors 1–2 have pawn targets; --modifiers only the
 // days whose own modifier is listed (Breach is 'collapse'); --modifier composes every day under
-// that modifier instead of its own (none: as a plain day, to compare).
+// that modifier instead of its own (none: as a plain day, to compare). Days compose in the
+// release configuration, as the stored editions do; --no-treasure, --no-partner and --no-tight
+// each turn one of its options off (scripts/compose-options.mjs).
 import { writeFileSync } from 'node:fs';
+import { composeOptions, optionsLabel } from './compose-options.mjs';
 import { composeDay, MOTIF_LEVELS, COMPOSED_PIECES } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { DIFFICULTY_TIERS } from '../src/difficulty.js';
@@ -37,6 +41,7 @@ const pieces = arg('pieces', COMPOSED_PIECES.join(',')).split(',');
 const pawnDays = process.argv.includes('--pawn-days');
 const modifiers = arg('modifiers', null)?.split(',') ?? null;
 const forced = arg('modifier', null);
+const options = composeOptions();
 
 // Moves of a run that neither took a target nor brought the nearest target closer.
 function stalled(frames) {
@@ -60,7 +65,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
   const pawnTargets = raw.targets.slice(0, 2).some((role) => role === 'pawn');
   if (!pieces.includes(raw.playerPiece) || (pawnDays && !pawnTargets) || (modifiers && !modifiers.includes(raw.modifier))) continue;
   let composed;
-  try { composed = composeDay(date, { tier, starts, ...(forced && { daily: { ...raw, modifier: forced } }) }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
+  try { composed = composeDay(date, { tier, starts, ...options, ...(forced && { daily: { ...raw, modifier: forced } }) }); } catch (error) { rows.push({ date, failed: error.message }); continue; }
   const { daily, floors } = composed;
   const certified = certifiedFloors(daily);
   floors.forEach((floor, f) => {
@@ -83,6 +88,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
       date, tier: daily.difficulty, modifier: daily.modifier, ice: floor.ice ?? null, piece: raw.playerPiece, floor: f, target: raw.targets[f], motif: floor.motif, level: MOTIF_LEVELS[floor.motif], planted: floor.line.length, botPar,
       firstMoves: floor.firstMoves, forced: floor.forced, pressure: floor.pressure ?? 0, hint: floor.hint ?? null, decoys: floor.room.enemies.filter((foe) => foe.cast !== 0).length, matched: floor.matched, ms: floor.ms, stats: floor.stats, par, outcomes,
       walls: floor.room.map.join('').split('#').length - 1, shape: king && mate ? `king ${square(king)}, mate ${square(mate)}` : null, start: begin, route, mate: floor.mate ?? null,
+      form: floor.form ?? null, chest: Boolean(floor.treasure), dropped: composed.dropped,
     });
   });
 }
@@ -121,7 +127,7 @@ for (const row of floorsOf) for (const [motif, tally] of Object.entries(row.stat
 }
 const days = new Set(rows.map((row) => row.date));
 const dayMs = [...days].map((date) => floorsOf.filter((row) => row.date === date).reduce((sum, row) => sum + row.ms, 0)).filter((ms) => ms > 0);
-console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' with pawn targets' : ''}${modifiers ? ` whose modifier is ${modifiers.join(' or ')}` : ''}${forced ? `, composed as ${forced} days` : ''} (${start} to ${end}), starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
+console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' with pawn targets' : ''}${modifiers ? ` whose modifier is ${modifiers.join(' or ')}` : ''}${forced ? `, composed as ${forced} days` : ''} (${start} to ${end}), in ${optionsLabel(options)}, starts ${starts ?? 'default'}; ${rows.filter((row) => row.failed).length} failed; ${runs} bot runs a floor; ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
@@ -221,6 +227,9 @@ const hints = {};
 for (const row of floorsOf) { const key = `floor ${row.floor + 1}: ${row.hint ?? 'none'}`; hints[key] = (hints[key] ?? 0) + 1; }
 console.log(`\nHint on the key square: ${Object.entries(hints).sort().map(([key, n]) => `${key} ${n}`).join(', ')}.`);
 console.log(`\nCount rule (a decoy species has the target's copies): met on ${percent(floorsOf.filter((row) => row.matched).length, floorsOf.length)} of floors.`);
+// The release configuration's options, as these days came out: tight forms, chests, and the days that gave an option up (src/composer.js FALLBACKS).
+const gaveUp = [...new Map(floorsOf.filter((row) => row.dropped.length).map((row) => [row.date, row.dropped])).entries()];
+console.log(`Tight forms on ${floorsOf.filter((row) => row.form).length} floors (subtle ${floorsOf.filter((row) => row.form === 'subtle').length}, picked ${floorsOf.filter((row) => row.form === 'picked').length}); chests on ${floorsOf.filter((row) => row.chest).length} of ${floorsOf.length}; days that gave an option up: ${gaveUp.length}${gaveUp.length ? ` (${gaveUp.map(([date, dropped]) => `${date} ${dropped.join('+')}`).join(', ')})` : ''}.`);
 const failed = rows.filter((row) => row.failed);
 if (failed.length) console.log(`Failed: ${failed.map((row) => `${row.date} (${row.failed})`).join('; ')}`);
 const json = arg('json', null);

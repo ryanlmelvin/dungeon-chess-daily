@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Tight floors, before and after (src/tight.js; composeDay's `tight` option):
-// every date in the range is composed with the option off (as the stored
-// editions were) and on, and each floor is measured the same way both times.
+// every date in the range is composed with the option off and on (as the
+// stored editions are), and each floor is measured the same way both times.
+// The other two options compose as released on both sides unless turned off
+// (--no-partner, --no-treasure; scripts/compose-options.mjs). The exact
+// searches below run without the recruit, so a partner floor shows no par win
+// in them: pass --no-partner to measure the tight forms alone.
 //
 // Exactly, by a search over every line of play within par (src/tight.js
 // parRoom, on the day's twin without hint powerups), two ways:
@@ -17,13 +21,14 @@
 // Then how each floor came out (form, fallbacks, line lengths, compose time),
 // and a day-by-day table of --table days from --start. Read-only.
 //   node scripts/measure-tight.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--runs N]
-//     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path]
+//     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path] [--no-partner] [--no-treasure]
 // --jobs splits the dates over that many processes; --from reads rows a
 // previous run wrote with --json instead of measuring (other modes are still
 // measured), so the unchanging "off" side is computed once.
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { composeOptions } from './compose-options.mjs';
 import { composeDay, actionsFrom, usesIdea } from '../src/composer.js';
 import { parRoom, playsIdea, TIGHT } from '../src/tight.js';
 import { getRawDaily } from '../src/edition.js';
@@ -34,6 +39,7 @@ const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); 
 const start = arg('start', '2026-11-11'), end = arg('end', '2027-01-10'), runs = Number(arg('runs', HUMAN_RUNS));
 const jobs = Number(arg('jobs', 1)), budget = Number(arg('budget', 600_000)), tableDays = Number(arg('table', 15));
 const modes = arg('modes', 'off,on').split(',');
+const options = composeOptions();
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
 const square = (tile) => `${'abcdefgh'[tile.x]}${8 - tile.y}`;
 const spell = (line) => line.map((action) => (action.type === 'move' ? square(action) : action.type)).join(' ');
@@ -42,7 +48,7 @@ function measureDay(date, mode) {
   const raw = getRawDaily(date), builts = [];
   let composed;
   const began = performance.now();
-  try { composed = composeDay(date, { tight: mode === 'on', trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
+  try { composed = composeDay(date, { ...options, tight: mode === 'on', trace: (event) => { if (event.stage === 'kept') builts[event.floor] = event.built; } }); } catch (error) { return [{ date, mode, failed: error.message }]; }
   const dayMs = performance.now() - began;
   const { daily, floors } = composed;
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };

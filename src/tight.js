@@ -1,8 +1,8 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// Tight floors (a dev preview; no stored edition is one): floors whose idea
-// has to be found. The composer builds the subtle forms (src/composer.js, its
-// `tight` option); this module judges them, exactly.
+// Tight floors: floors whose idea has to be found. The composer builds the
+// subtle forms (src/composer.js, its `tight` option, on in every stored
+// edition); this module judges them, exactly.
 //
 // Monsters are deterministic, so every line of play within par (the planted
 // line plus one) can be searched (parRoom). A tight bait or squeeze passes two
