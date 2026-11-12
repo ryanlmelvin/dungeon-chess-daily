@@ -328,8 +328,7 @@ the bot (`replayNote`).
 piece on its square while the door is still shut; the recruit, the monsters
 and the coin magnet never take it, and it is gone once the challenge is
 complete (`src/rules.js`). It pays 3 gold and is recorded as a `chest` feat.
-Taking it and finishing the floor at par or better earns the floor's 💎
-(`treasureMark`), shown beside par and on the share card. The planted line
+Taking it earns the floor's 💎 (`treasureMark`), whatever the floor's score, shown beside par and on the share card. The planted line
 never takes it, so the Dungeon Bot's replay doesn't either. Practice rooms
 hold no chest, whatever the piece: it is the daily's own second goal.
 

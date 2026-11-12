@@ -71,13 +71,13 @@ test('a capture that completes the challenge on the chest\'s square comes too la
   assert.ok(valid(cleared, daily));
 });
 
-test('the treasure mark needs the chest and par, and shows once on the share card', () => {
+test('the treasure mark needs the chest, at any score, and shows once on the share card', () => {
   const { daily, state } = day();
   const cleared = play(state, D4, F5);
   assert.equal(floorScoredMoves(cleared), 2);
   assert.ok(treasureMark(cleared, 0, 2), 'the chest, at par');
   assert.ok(treasureMark(cleared, 0, 3), 'or under it');
-  assert.ok(!treasureMark(cleared, 0, 1), 'over par earns none');
+  assert.ok(treasureMark(cleared, 0, 1), 'or over it');
   assert.ok(!treasureMark(cleared, 0, null), 'nor does a run without a par');
   assert.ok(!treasureMark(play(state, D4), 0, 2), 'nor a floor still in play');
   assert.ok(!treasureMark(play(state, G3, F5), 0, 2), 'nor par without the chest');
@@ -86,25 +86,22 @@ test('the treasure mark needs the chest and par, and shows once on the share car
   assert.ok(treasureMark(next, 0, 2), 'the floor\'s record keeps it');
   const floors = (pars) => getShareText(next, pars, { now: new Date('2026-11-14T12:00:00Z') }).split('\n')[1];
   assert.equal(floors([2, 3, 3]), `🟥 E ${TREASURE_MARK}  ⬛ ·`);
-  assert.equal(floors([1, 3, 3]), '🟥 +1  ⬛ ·', 'over par: no mark');
+  assert.equal(floors([1, 3, 3]), `🟥 +1 ${TREASURE_MARK}  ⬛ ·`, 'over par: the mark all the same');
 });
 
-test('the mark is in hand from the chest until par is out of reach', () => {
+test('the mark is in hand from the moment the chest is taken, at any score', () => {
   // e2 to d4 (the chest) to f5 (the target): two moves.
   const { state } = day();
   assert.equal(treasureInHand(state, 3), false, 'no chest taken yet');
   const held = play(state, D4);
-  assert.equal(treasureInHand(held, 3), true, 'taken, and par can still be made');
-  assert.equal(treasureInHand(held, 2), true, 'one move left under par');
-  assert.equal(treasureInHand(held, 1), false, 'the floor cannot finish at par any more');
+  assert.equal(treasureInHand(held, 3), true, 'taken');
+  assert.equal(treasureInHand(held, 1), true, 'even past par');
   assert.equal(treasureInHand(held, null), false, 'no par, no mark');
-  // A wasted move puts a par of two out of reach before the floor is cleared.
-  assert.equal(treasureInHand(play(held, E2), 2), false);
-  // Cleared at par it stays, exactly where the mark itself holds.
+  assert.equal(treasureInHand(play(held, E2), 2), true, 'a wasted move keeps it');
+  // Cleared, it agrees with the mark itself.
   const cleared = play(held, F5);
   assert.equal(cleared.objective.complete, true);
   for (const par of [1, 2, 3]) assert.equal(treasureInHand(cleared, par), treasureMark(cleared, 0, par), `par ${par}`);
-  assert.equal(treasureInHand(cleared, 2), true);
   // A floor without its chest taken never shows it.
   const { state: bare } = day();
   assert.equal(treasureInHand(play(bare, G3), 3), false);

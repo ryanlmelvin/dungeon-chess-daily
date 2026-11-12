@@ -437,7 +437,7 @@ function renderPar() {
   $('par-status').hidden = par === null;
   if (par === null) return;
   // A retry wears its name on the chip, and once cleared its result ("Retry · 1 under par").
-  // The chest's 💎 rides beside par from the moment the chest is taken, for as long as par can still be made (rules.js treasureInHand).
+  // The chest's 💎 rides beside par from the moment the chest is taken (rules.js treasureInHand).
   const gem = treasureInHand(state, par);
   $('par-status').textContent = `${retry ? 'Retry · ' : ''}${retry?.cleared() ? parResult(state) : `Par ${par}${gem ? ` ${TREASURE_MARK}` : ''}`}`;
   $('par-status').setAttribute('aria-label', `${retry ? 'Retrying this floor: nothing here counts. ' : ''}Par ${par} moves for this floor, ${floorScoredMoves(state)} so far${gem ? ', treasure in hand' : ''}`);
@@ -1005,7 +1005,7 @@ function tacticSeen(kind) { try { return localStorage.getItem(tacticSeenKey(kind
 // A brief "Fork!", "Combo!", "Holy duo!" or "Treasure!" stamp over the board.
 let calloutTimer;
 // The treasure mark is earned on the move that completes the floor's challenge
-// with its chest taken, at par or better (src/rules.js treasureMark).
+// with its chest taken (src/rules.js treasureMark).
 const treasureEarned = (events) => events.some((event) => event.type === 'capture' || event.type === 'companion-capture')
   && state.objective.moves === state.turns - state.floorStart.turns && treasureMark(state, state.floor, parFor(state, daily));
 function showTacticCallout(events) {

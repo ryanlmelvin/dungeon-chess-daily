@@ -3,7 +3,7 @@
 // Treasure: an optional chest off each composed floor's planted line, as a
 // second, harder goal on the same room. Par stays the planted line plus one;
 // the chest asks for a win within par that also lands on its square before
-// the door opens. Taking it that way earns the floor's treasure mark
+// the door opens. Taking it earns the floor's treasure mark, at any score
 // (src/rules.js treasureMark).
 //
 // The composer calls placeTreasure once a floor's room, line and hint are
