@@ -725,7 +725,7 @@ const inspector = createInspector({
   board: () => (!state || replay || screen !== 'game' || state.status !== 'playing' || pinning || cavedIn(state) ? null : pendingOrder()?.board ?? state),
   show: (marks) => renderer?.inspect(marks),
   shown: () => renderer?.inspected() ?? null,
-  onShow: () => { if (tacticSeen('inspect')) return; notify(INSPECT_TIP); try { localStorage.setItem(tacticSeenKey('inspect'), '1'); } catch {} },
+  onShow: () => { if (tacticSeen('inspect')) return; notify(INSPECT_TIP); if (!retry) try { localStorage.setItem(tacticSeenKey('inspect'), '1'); } catch {} },
 });
 // Shop tools: Pin waits for a tapped monster; Borrow shows its ghosted moves; Take back undoes one.
 const BORROW_GLYPH = { knight: '♘', queen: '♕' };
