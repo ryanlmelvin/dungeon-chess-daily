@@ -11,8 +11,11 @@ Status: written 2026-11-09 as an idea, with lichess measurements added the
 same day. Phases 0 to 3 are built: the composer, the scoring rules, coverage
 of every daily piece, target role and modifier, and the switch (2026-11-11):
 every edition is now composed, the whole archive rebuilt, and the calibrated
-generator retired. [Generation and fairness](generation.md) describes what
-ships; this document keeps how it came about.
+generator retired. Chests, Tandem floors and the tight forms followed with
+rules version 13 (2026-11-12); what was measured for them is in the commit
+history and in `scripts/measure-treasure.mjs`, `measure-tight.mjs` and
+`measure-par-slack.mjs`. [Generation and fairness](generation.md) describes
+what ships; this document keeps how it came about.
 
 ## What we measured
 
@@ -79,6 +82,13 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Every edition composed, the archive from 2026-11-01 rebuilt, calibration and the weekday tiers retired | Built (phase 3, 2026-11-11) |
 | A date past the stored window borrows a stored day of its own piece and modifier, so the composer stays out of the app | Chosen (2026-11-11) over composing on the phone |
 | The paper's rule line names the edition ("EDITION NO. 14"), not a difficulty | Chosen (2026-11-11): every day plays Fair |
+| The Auto recruit setting | Removed (2026-11-11): the player always orders the recruit, which still moves itself once its floor's challenge is complete. With it gone a line that orders the recruit can be followed by everyone |
+| A floor restart starts that floor's move count over | Chosen (2026-11-11): only the attempt that clears the floor is scored; paid hints stay paid |
+| Treasure: a chest off each floor's line, with a proved win within par that takes it; chest and par earn a 💎 | Kept after play (2026-11-11), shipped with rules version 13 (2026-11-12). Two checks agreed after play: it costs the spare move (no win of the line's length takes it, so it is under par or even with treasure), and the bot may take it at par by accident in at most 4 of its 40 runs. 1,024 of 2,226 floors hold one; the first rule alone gave 1,365 |
+| Partner floors: a Tandem on floor 1 or 2, two targets that guard each other, won with the floor's recruit on your orders | Kept after play (2026-11-11), shipped 2026-11-12. Held to par without the recruit, and a queen pairs only knights. It takes every day whose matchup has one: 360 of 742. The bot makes par on most of them once it has the recruit, so it is guarded from the move that joins it, not from the floor's start |
+| Tight floors: subtle forms of the bait and the squeeze on floor 2 (the mouth, the pincer, a picked squeeze against pawns), and a day's arc: floor 1 shows the same idea plainly | Kept after play (2026-11-11), shipped 2026-11-12: no win within par skips the idea, at most half the first actions keep par, and the bot makes par in at most a quarter of its runs. 144 floor 2s |
+| A pawn's king floor rejected when the recruit king can mate while the pawn sits out a move | Dropped (2026-11-11): it swapped king mates for promote-and-mate floors, which play easier, and the player orders that king now |
+| One release configuration: what `composeDay` composes with no options is what the build stores, the audit composes again and the preview shows | Built with the release (2026-11-12). A day that can't compose with everything gives up its partner floor, then its tight forms, then its chests; none of the 742 did |
 
 ## Lichess puzzles
 

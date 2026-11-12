@@ -27,19 +27,25 @@ Content checks:
 npm run verify:editions                     # replay every stored edition in src/editions.js (seconds)
 npm run audit:editions                      # compose every stored date again and compare (minutes)
 npm run audit:dungeons -- 2026-11-01 365    # replay a year of dailies, validating the save after every action
-npm run build:editions [-- --full]          # compose missing or stale dates; --full composes every date (~5 min)
+npm run build:editions [-- --full]          # compose missing or stale dates; --full composes every date (~5 min); --stats path writes a row a day
 node scripts/measure-composer.mjs           # composer report: motifs, times, lines, the bot's runs
 node scripts/measure-human-par.mjs          # the human-like bot over the stored editions, against par
 node scripts/measure-par-slack.mjs --jobs 8 # room around each floor's idea: first moves that keep par, par wins off the idea
+node scripts/measure-tight.mjs --jobs 8     # tight forms off and on, floor by floor
+node scripts/measure-treasure.mjs --jobs 8  # chest coverage, what its two checks cost, the bot's accidental marks
 ```
+
+One release configuration: `composeDay(date)` with no options (`RELEASE` in
+`src/composer.js`: chests, partner floors, tight forms) is what the build stores, the
+audit composes again, the preview shows and the tests compare. The measuring scripts
+compose it too; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option off
+to compare (`scripts/compose-options.mjs`).
 
 Dev-only composer preview: open the dev server with `?composed=YYYY-MM-DD` to play
 that date composed afresh by the composer as it is now, before rebuilding editions
 (`src/composed-preview.js`, stripped from production builds, saved apart from real runs).
-The preview also composes partner floors (`composeDay`'s `partner` option, in no stored
-edition: a tandem floor, won with the floor's recruit on the player's orders, on days whose
-matchup has one) unless the URL adds `&partner=0`; `measure-par-slack.mjs --partner`
-measures them.
+With an unchanged composer it is the stored edition; `&treasure=0`, `&partner=0` and
+`&tight=0` each turn one option off.
 
 Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` and
 `npm run build`, then deploys `dist/` to Pages. `dist/` is never committed. After a
@@ -63,21 +69,31 @@ species, headlines, modifier) from the date. Every edition is composed:
 `src/composer.js` builds each floor around a short planted line (bait / squeeze /
 net motifs; tempo / crown lines for pawns), proved by an exact shortest-win search
 and guarded by the human-like bot, and the planted lines are the day's certificate.
-`src/generation.js` (`proveComposed`) replays them through `src/fairness.js`
-(`verifyWinningRoute`, on the day's twin without hint powerups) and then as played.
+Three things ride on that, each a `composeDay` option that is on by default: the
+tight forms (`src/tight.js` judges them: subtle baits and squeezes on floor 2, floor 1
+showing the same idea plainly); a partner floor on floor 1 or 2 of a day whose matchup
+has one (a Tandem: two targets that guard each other, won with the floor's recruit on
+orders); and a chest off each floor's line (`src/treasure.js`: a proved win within par
+takes it, it costs the spare move, and the bot seldom takes it by accident).
+`src/generation.js` (`proveComposed`) replays the lines through `src/fairness.js`
+(`verifyWinningRoute`, on the day's twin without hint powerups, the recruit on orders
+on a partner floor alone) and then as played.
 Every daily plays the Fair monsters (`DAILY_TIER`, `src/difficulty.js`, which holds
 the five tiers practice can choose). Par is each floor's line plus one
-(`src/par.js`); `src/bot.js` replays the lines after a win. `src/human-bot.js` +
-`src/recruit-policy.js` are the "plays like a person" bot, now only a probe and the
-composer's guard. Authoritative description: `docs/generation.md`; history, decisions
-and measurements: `docs/puzzle-first-idea.md`.
+(`src/par.js`); a chest taken at par or better earns the floor's 💎 (`treasureMark`
+in `src/rules.js`); `src/bot.js` replays the lines after a win, a Tandem's recruit
+orders included. `src/human-bot.js` + `src/recruit-policy.js` are the "plays like a
+person" bot, now only a probe and the composer's guard. Authoritative description:
+`docs/generation.md`; history, decisions and measurements: `docs/puzzle-first-idea.md`.
 
 **Shipped editions.** `src/editions.js` (generated, committed) stores each day's rooms
-(`src/room-code.js`), lines (`src/route-code.js`) and the motif each floor was built around
-(`src/motif-code.js`, loaded as `daily.generation.motifs`) from launch (2026-11-01) through
-two years past the build date; the app decodes and proves them as they load and never
-carries the composer. Every build composes new dates incrementally. A date past the
-window borrows a stored day of its own piece and modifier (`borrowedDaily`).
+(`src/room-code.js`, chests included), lines (`src/route-code.js`, with a partner floor's
+recruit orders), the motif each floor was built around (`src/motif-code.js`, loaded as
+`daily.generation.motifs`) and, on a day that has one, its partner floor (`partner`,
+loaded as `daily.generation.partner`) from launch (2026-11-01) through two years past
+the build date; the app decodes and proves them as they load and never carries the
+composer. Every build composes new dates incrementally. A date past the window borrows a
+stored day of its own piece and modifier (`borrowedDaily`).
 
 **Rooms in tests.** `createGame` needs a day's three composed rooms; a floor begins
 exactly as its room lays it out (`setFloor` in `src/rules.js`). Engine tests lay their own
@@ -132,7 +148,8 @@ Anything that alters gameplay, monster AI, modifiers, the composer or the human 
    the save schema and the save keys follow it). `COMPOSER_VERSION`
    (`src/generation.js`) salts the composer's seeds; bumping it re-rolls every room,
    so it is normally left alone.
-2. `npm run build:editions -- --full`, then `npm run verify:editions` and `npm test`.
+2. `npm run build:editions -- --full`, then `npm run verify:editions` and `npm test`
+   (tests pinned to stored days compare them with `composeDay(date)`).
    Let the user play a local preview of the days they'll meet before shipping.
 
 New rules apply to the whole archive: rebuild every past edition, no legacy cutoff.
@@ -144,13 +161,17 @@ checks, par and versioning; keep it in step with behavior changes.
 - Every monster moves every turn; don't propose chess-style one-reply turns.
 - Floors should be short clever lines, not chases, sieges or attrition. There are no
   lives: a capture of the player adds a move to the score.
-- The king is never the daily piece; certified routes never use powerups, shields,
-  freezes or the floor 1–2 recruits, and carry no recruit orders (the recruit moves
-  itself along them).
+- The king is never the daily piece; certified routes never use powerups, shields or
+  freezes, and take no chest. Off a partner floor they never use the floor 1–2 recruits
+  and carry no recruit orders (the king floor's recruit moves itself along them). On a
+  partner floor (a Tandem, floor 1 or 2) the line uses that floor's recruit, on orders,
+  and the stored edition names the floor.
 - The player always orders the recruit: there is no Auto setting. Once a floor's
   challenge is complete the recruit moves itself for the rest of that room.
 - Every daily plays Fair; par is the planted line + 1; on the king floor checkmate
   wins and the king can't take a piece the recruit king guards.
+- A chest lies off the planted line and costs the spare move: under par, or even with
+  treasure, never both. Practice rooms hold none.
 - Keep UI text and the share card minimal. Dialogs must not scroll on small phones
   (check around 440×780, 402×680 and iPhone SE widths).
 - Original assets only; music is CC0 and seeded by date separately from generation.
