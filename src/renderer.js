@@ -55,6 +55,7 @@ const SHADOW_OPACITY = 0.8;
 const COVERED_RECRUIT_OPACITY = 0.35;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
+const CAPTURE_NOTICE_MS = 2400;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
@@ -150,6 +151,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   renderer.domElement.setAttribute('role', 'img');
   renderer.domElement.setAttribute('aria-label', 'Dungeon chessboard. Tap a destination square to move. Tap your piece to show its legal moves. Press and hold an unmasked monster to see its moves.');
   container.appendChild(renderer.domElement);
+  // The message log announces the same penalty to assistive technology.
+  const captureNotice = document.createElement('p');
+  captureNotice.className = 'capture-notice';
+  captureNotice.setAttribute('aria-hidden', 'true');
+  captureNotice.hidden = true;
+  container.appendChild(captureNotice);
+  let captureFeedback = null;
 
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-4.5, 4.5, 4.5, -4.5, 0.1, 60);
@@ -287,6 +295,8 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
   }
 
   function buildBoard(next) {
+    captureFeedback = null;
+    captureNotice.hidden = true;
     pendingTransition = null;
     pendingHints = null;
     pendingItems = null;
@@ -1030,6 +1040,13 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     }
     const captured = events.find((event) => event.type === 'player-captured');
     const hitAt = now + enemyDelay + 145;
+    if (captured && !changedBoard) {
+      // Black turns can contain two captures, one before and one after the move.
+      const penalty = events.filter((event) => event.type === 'player-captured').length;
+      captureNotice.textContent = `Captured, +${penalty} move${penalty === 1 ? '' : 's'} penalty`;
+      captureNotice.hidden = true;
+      captureFeedback = { x: captured.x, y: captured.y, at: animateTurn ? hitAt : now };
+    }
     if (captured) {
       const player = entities.get('player');
       if (player) {
@@ -1163,6 +1180,24 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
     if (timestamp - lastRendered < 1000 / 30) return;
     const dt = Math.min(0.07, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = lastRendered = timestamp;
+    if (captureFeedback && timestamp >= captureFeedback.at) {
+      const t = (timestamp - captureFeedback.at) / CAPTURE_NOTICE_MS;
+      if (t >= 1) {
+        captureNotice.hidden = true;
+        captureFeedback = null;
+      } else {
+        captureNotice.hidden = false;
+        const bounds = container.getBoundingClientRect();
+        const point = new THREE.Vector3(captureFeedback.x, 0.8, captureFeedback.y).project(camera);
+        const halfWidth = captureNotice.offsetWidth / 2;
+        const x = Math.max(halfWidth + 12, Math.min(bounds.width - halfWidth - 12, (point.x + 1) / 2 * bounds.width));
+        const rise = reducedMotion ? 0 : 48 * t;
+        const y = Math.max(captureNotice.offsetHeight + 60, (1 - point.y) / 2 * bounds.height) - rise;
+        captureNotice.style.left = `${x}px`;
+        captureNotice.style.top = `${y}px`;
+        captureNotice.style.opacity = reducedMotion || t < 0.55 ? '1' : String((1 - t) / 0.45);
+      }
+    }
     if (pendingTransition && timestamp >= pendingTransition.at) {
       const next = pendingTransition.next;
       pendingTransition = null;
@@ -1484,6 +1519,7 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       for (const material of materials) material.dispose();
       for (const texture of [...textures.values(), ...stones]) texture.dispose();
       renderer.dispose();
+      captureNotice.remove();
       canvas.remove();
     },
   };
