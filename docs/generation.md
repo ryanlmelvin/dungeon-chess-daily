@@ -768,14 +768,18 @@ does; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option
 off, to compare, and `--wait`, `--lure` or `--ideas` add the ideas in preview
 (`scripts/compose-options.mjs`).
 
-Over the 742 editions stored with rules version 13 (40 runs a floor), the bot
-cleared 96.6%, 96.3% and 99.9% of its runs on floors 1, 2 and 3, and took more
-than par + 4 on 11.6%, 12.0% and 4.3%. Its median moves against median par
-were 4, 5 and 5 against 4, 4 and 4, alike on plain, Ice and Breach days. The
-king floors are as they were at the switch (4.3% past par + 4; 0.9% on a
+Over the 743 editions stored with rules version 14 (40 runs a floor), the bot
+cleared 98.7%, 98.5% and 99.9% of its runs on floors 1, 2 and 3, and took more
+than par + 4 on 6.8%, 9.0% and 4.4%. Its median moves against median par
+were 4, 6 and 5 against 4, 4 and 4. By the day's modifier, runs past par + 4:
+plain 6.2%, 9.7% and 4.3%; Ice 7.5%, 9.0% and 4.9%; a Crumbling floor 8.2%,
+5.5% and 5.2%; Gates 6.7%, 8.7% and 3.3%. (At version 13 it was 96.6%, 96.3%
+and 99.9% cleared and 11.6%, 12.0% and 4.3% past par + 4, measured with a
+Tandem on every day whose matchup has one: 360 days, against 113 now.) The
+king floors are as they were at the switch (4.4% past par + 4; 0.5% on a
 pawn's). Floors 1 and 2 stood at 99.6% cleared and 4.6% and 6.7% past par + 4
 then; what moved them is the Tandem, where the bot is no measure from the
-floor's own start. It makes par there in 60% of its runs, most Tandem floors
+floor's own start. On those 360 days it made par there in 60% of its runs, most Tandem floors
 in 30 or more of its 40 and about a hundred in fewer than 10, and fails or
 passes par + 4 in 30%: when its first moves don't cross the recruit it never
 thinks to fetch it, and alone it can't take a twin uncaptured. (The floors
