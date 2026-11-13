@@ -256,26 +256,30 @@ ice lies off its line, and no chest lies on ice. On a Crumbling floor or
 Gates day each room lays its own cracked tiles or gates where its idea lives
 ("Moving terrain", below).
 
-## Ideas in preview: the Standstill and the Lure
+## Drawn ideas: the Standstill and the Lure
 
-Two more ideas a floor can be built around, built on 2026-11-12 and not
-released: no stored edition has them, and `composeDay(date)` composes
-exactly what it did. Each is a `composeDay` option of its own, off unless
-asked for and absent from `RELEASE` (`PREVIEW_IDEAS`: `wait` and `lure`). The
-dev preview asks with `&wait=1`, `&lure=1` or `&ideas=1` (both), the
-measuring scripts with `--wait`, `--lure` or `--ideas`.
+Two more ideas a floor 1 can be built around, built on 2026-11-12, played by
+the owner in previews and released on 2026-11-13. Each is a `composeDay`
+option of its own, on by default (`RELEASE`; `DRAWN_IDEAS`: `wait` and
+`lure`), and a floor takes one only on the days that draw it, so they are
+rare: of the 743 stored days 20 open with a Standstill (15 a knight's, 5 a
+queen's) and 3 with a Lure (a knight's). The dev preview turns one off with
+`&wait=0`, `&lure=0` or `&ideas=0` (both), the measuring scripts with
+`--no-wait`, `--no-lure` or `--no-ideas`.
 
 **Where they go.** An idea takes about one in three of the days it fits,
 drawn by the date like a Tandem's (`IDEA_EVERY`, `ideaDay`); `'every'` as the
 option's value (`&wait=all`, `--every`) takes every day it fits. It goes to
 floor 1, tried there before the floor's plain motifs, and never to the day's
-partner floor (`ideaFloors`, `previewIdeas`); a day that takes both tries
+partner floor (`ideaFloors`, `drawnIdeas`); a day that takes both tries
 them in an order the date sets and keeps the first that composes. Floor 2 is
 left alone: the matchups these ideas fit are the ones floor 2 has a tight
 form for, and offered floor 2 as well (after the tight forms, so as never to
 stand in for one) neither idea composed there on any of the 742 stored days.
 A floor where an idea doesn't compose keeps its own motifs, and a day that
-fails with an idea on gives it up before any release option (`FALLBACKS`).
+fails with an idea on gives it up before any other option (`FALLBACKS`).
+On a Crumbling floor or Gates day an idea is tried only where the floor falls
+back to its plain composition, with the terrain off its line.
 
 **The Standstill** (`wait`). The key is one exactly timed Wait. Each target
 paces a pocket of two squares, one step every turn, as in a squeeze, and the
@@ -349,9 +353,9 @@ only where something in its dressing leads plain play astray (a sleeping
 decoy it would rather take, or one it won't step next to), so the ceiling
 picks floors by their decoys more than by their idea.
 
-**What was measured** (2026-11-12, over the 742 stored days, each idea on
-every day it fits; the floors compared are the same days with the idea off
-and on):
+**What was measured** (2026-11-12, before the release and before terrain took
+Breach's days, over the 742 days then stored, each idea on every day it
+fits; the floors compared are the same days with the idea off and on):
 
 - **The Standstill** fits floor 1 of 279 days (38%: a queen's 81, a knight's
   79, a rook's 65, a bishop's 54) and draws 97. It composes on 71 of them
@@ -393,13 +397,17 @@ and on):
 `node scripts/measure-tight.mjs --option ideas --drawn --jobs 8` the floors
 before and after.
 
-**Shipping one** would need: its option added to `RELEASE` (and to the
-build's report), its page moved from `PREVIEW_PAGES` to `PAGES`
-(`src/journal.js`), a full rebuild of the editions
-(`npm run build:editions -- --full`; no `RULES_VERSION` bump, since play is
-unchanged, and no `COMPOSER_VERSION` bump, since each idea draws from seeded
-streams of its own), the pinned tests and this document's figures brought up
-to date, and the owner's play of a local preview first.
+**As released** (2026-11-13): 105 of the 743 stored days draw an idea and 23
+changed, each on floor 1 alone: 20 Standstills (in place of 13 baits and 7
+squeezes; 15 on a knight's day, 5 on a queen's) and 3 Lures (a knight's, in
+place of 2 baits and a squeeze).
+Both options joined `RELEASE`, the two pages moved into the journal's book
+(`src/journal.js` `PAGES`; the Standstill's lists the knight and the queen,
+the pieces whose stored days have one), and only the days that draw an idea
+were composed again; the audit then matched every stored day. No
+`RULES_VERSION` bump, since play is unchanged, and no `COMPOSER_VERSION`
+bump, since each idea draws from seeded streams of its own.
+
 ## Moving terrain: a crumbling floor and gates
 
 Two room modifiers are terrain that changes during a floor. They took
@@ -755,7 +763,7 @@ and these scripts report what it finds:
   off and on and compares, floor by floor.
 - `node scripts/measure-treasure.mjs` reports chest coverage, what the two
   checks cost, how demanding each chest is and the bot's accidental marks.
-- `node scripts/measure-ideas.mjs` reports the ideas in preview (above): the
+- `node scripts/measure-ideas.mjs` reports the drawn ideas (above): the
   days each fits, draws and composes on, with and without the bot's ceiling,
   what it takes the place of, and the mix of ideas per floor.
 - `node scripts/measure-terrain.mjs --modifier cracks|gates` composes each
@@ -764,8 +772,8 @@ and these scripts report what it finds:
   `measure-par-slack` and `measure-tight` take `--modifier` too.
 
 The scripts that compose do so in the release configuration, as the build
-does; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option
-off, to compare, and `--wait`, `--lure` or `--ideas` add the ideas in preview
+does; `--no-treasure`, `--no-partner`, `--no-tight`, `--no-wait` and
+`--no-lure` each turn one option off, to compare
 (`scripts/compose-options.mjs`).
 
 Over the 743 editions stored with rules version 14 (40 runs a floor), the bot

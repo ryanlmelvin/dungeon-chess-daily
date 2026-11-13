@@ -1,7 +1,8 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// Coverage of the ideas in preview (src/composer.js PREVIEW_IDEAS: 'wait',
-// the Standstill, and 'lure', the Lure), which no stored edition has: over a
+// Coverage of the drawn ideas (src/composer.js DRAWN_IDEAS: 'wait',
+// the Standstill, and 'lure', the Lure), which the stored editions have on
+// the days that draw them: over a
 // range of dates, the days each idea fits, the days it draws (one in
 // IDEA_EVERY of those, by the date) and the days it composes on, which floor
 // it takes and what stood there in the stored edition, its lines, and the mix
@@ -16,7 +17,7 @@
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { composeDay, composedSeeds, ideaFloors, ideaDay, PREVIEW_IDEAS, IDEA_EVERY } from '../src/composer.js';
+import { composeDay, composedSeeds, ideaFloors, ideaDay, DRAWN_IDEAS, IDEA_EVERY } from '../src/composer.js';
 import { getRawDaily } from '../src/edition.js';
 import { EDITIONS } from '../src/editions.js';
 import { decodeMotifs } from '../src/motif-code.js';
@@ -48,17 +49,19 @@ function measure() {
     const base = { ...raw, floorSeeds: composedSeeds(date) };
     const stored = EDITIONS[date] ? decodeMotifs(EDITIONS[date].motifs) : null;
     const row = { date, piece: raw.playerPiece, targets: raw.targets.slice(0, 2), stored, partner: EDITIONS[date]?.partner ?? null, ideas: {} };
-    for (const idea of PREVIEW_IDEAS) {
+    for (const idea of DRAWN_IDEAS) {
       const fits = ideaFloors(base, idea);
       row.ideas[idea] = { fits, drawn: ideaDay(base, idea) };
       if (!fits.length) continue;
-      row.ideas[idea].full = tried(date, { [idea]: 'every' }, idea);
-      row.ideas[idea].open = tried(date, { [idea]: 'every', ceiling: false }, idea);
+      // The idea alone, on every day it fits (the other drawn idea off).
+      const alone = { ...Object.fromEntries(DRAWN_IDEAS.map((name) => [name, false])), [idea]: 'every' };
+      row.ideas[idea].full = tried(date, alone, idea);
+      row.ideas[idea].open = tried(date, { ...alone, ceiling: false }, idea);
     }
     // As a player would meet the day: both ideas, each on the days it draws.
-    if (PREVIEW_IDEAS.some((idea) => row.ideas[idea].drawn)) {
+    if (DRAWN_IDEAS.some((idea) => row.ideas[idea].drawn)) {
       const began = performance.now();
-      const { daily, floors } = composeDay(date, Object.fromEntries(PREVIEW_IDEAS.map((idea) => [idea, true])));
+      const { daily, floors } = composeDay(date, Object.fromEntries(DRAWN_IDEAS.map((idea) => [idea, true])));
       row.met = { motifs: daily.generation.motifs, lines: floors.map((floor) => spell(floor.line)), dayMs: performance.now() - began };
     }
     rows.push(row);
@@ -71,8 +74,8 @@ const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / va
 const tally = (values) => [...new Set(values)].sort().map((value) => `${value} ${values.filter((other) => other === value).length}`).join(', ') || 'none';
 
 function report(rows) {
-  console.log(`Ideas in preview over ${rows.length} days (${start} to ${end}); an idea draws one in ${IDEA_EVERY} of the days it fits.`);
-  for (const idea of PREVIEW_IDEAS) {
+  console.log(`Drawn ideas over ${rows.length} days (${start} to ${end}); an idea draws one in ${IDEA_EVERY} of the days it fits.`);
+  for (const idea of DRAWN_IDEAS) {
     const fit = rows.filter((row) => row.ideas[idea].fits.length);
     console.log(`\n## ${idea}: fits ${fit.length} days (${percent(fit.length, rows.length)}); by piece: ${tally(fit.map((row) => row.piece))}; by matchup: ${tally(fit.map((row) => `${row.piece} v ${row.targets[0]}`))}; draws ${fit.filter((row) => row.ideas[idea].drawn).length}.`);
     for (const [mode, name] of [['full', 'Under the three tight tests'], ['open', 'Without the bot\'s ceiling']]) {

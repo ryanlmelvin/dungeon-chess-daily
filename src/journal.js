@@ -67,6 +67,18 @@ export const PAGES = Object.freeze([
     draw: drawCrownDemo, still: CROWN_STILL,
   },
   {
+    id: 'wait', kind: 'idea', name: 'Standstill', pieces: ['knight', 'queen'],
+    text: 'It stepped out of reach, and it must move again. Stay put one turn, then take it.',
+    art: 'A monster walled into two squares steps away as a knight lands beside its pocket. The knight waits a turn, the monster has to step back, and the knight captures it.',
+    draw: drawStandstillDemo, still: STANDSTILL_STILL,
+  },
+  {
+    id: 'lure', kind: 'idea', name: 'Lure', pieces: ['knight'],
+    text: 'A guard beside the target winds up at you. Jump aside: it lunges away, so take the target.',
+    art: 'A monster stands beside a ringed target, its red square under a knight. The knight jumps aside, the monster lunges onto the empty square and wobbles, and the knight captures the target it guarded.',
+    draw: drawLureDemo, still: LURE_STILL,
+  },
+  {
     id: 'fork', kind: 'move', name: 'Fork', pieces: ANY_PIECE,
     text: 'Attack two monsters at once, then take one on your very next move: +2 gold.',
     art: 'A knight hops to a square that attacks two monsters at once, then captures one of them.',
@@ -99,25 +111,13 @@ export const PAGES = Object.freeze([
 ]);
 
 /**
- * The pages of the ideas in preview (src/composer.js PREVIEW_IDEAS): no
- * stored edition is built around them yet, so nobody can find them outside
- * the dev preview. The book lists such a page only once it has been found
- * (bookPages), so the released book and its count stay as they are. Shipping
- * an idea moves its page into PAGES.
+ * The pages of ideas in preview: built, and drawn for no stored edition yet,
+ * so nobody can find one outside the dev preview. The book lists such a page
+ * only once it has been found (bookPages), so the released book and its count
+ * stay as they are. Shipping an idea moves its page into PAGES, as the
+ * Standstill's and the Lure's were (2026-11-13). None waits here now.
  */
 export const PREVIEW_PAGES = Object.freeze([
-  {
-    id: 'wait', kind: 'idea', name: 'Standstill', pieces: OFFICERS,
-    text: 'It stepped out of reach, and it must move again. Stay put one turn, then take it.',
-    art: 'A monster walled into two squares steps away as a knight lands beside its pocket. The knight waits a turn, the monster has to step back, and the knight captures it.',
-    draw: drawStandstillDemo, still: STANDSTILL_STILL,
-  },
-  {
-    id: 'lure', kind: 'idea', name: 'Lure', pieces: ['knight'],
-    text: 'A guard beside the target winds up at you. Jump aside: it lunges away, so take the target.',
-    art: 'A monster stands beside a ringed target, its red square under a knight. The knight jumps aside, the monster lunges onto the empty square and wobbles, and the knight captures the target it guarded.',
-    draw: drawLureDemo, still: LURE_STILL,
-  },
 ]);
 
 /** What a page that isn't found yet says, by how it is found. */

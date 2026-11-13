@@ -283,7 +283,7 @@ export function drawCrownDemo(canvas, time, { playerPalette = {}, monsterPalette
 export const CROWN_STILL = 2750;
 
 /**
- * Standstill (an idea in preview, src/composer.js): a monster walled into two
+ * Standstill (a drawn idea, src/composer.js): a monster walled into two
  * squares steps out of reach just as your knight lands beside its pocket. The
  * knight stays where it is for a turn; the monster has to step back, and the
  * knight takes it.
@@ -324,7 +324,7 @@ function stars(ctx, x, y, t) {
   }
 }
 /**
- * Lure (an idea in preview, src/composer.js): a decoy stands beside the
+ * Lure (a drawn idea, src/composer.js): a decoy stands beside the
  * target, guarding it, wound up at your knight from the next square. The
  * knight jumps aside to where it attacks the target; the guard lunges onto
  * the empty square, off-balance and off its post, and the knight takes the

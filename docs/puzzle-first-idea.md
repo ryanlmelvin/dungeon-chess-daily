@@ -92,6 +92,7 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | A pawn's king floor rejected when the recruit king can mate while the pawn sits out a move | Dropped (2026-11-11): it swapped king mates for promote-and-mate floors, which play easier, and the player orders that king now |
 | No legal move starts the floor over, never the day | Chosen (2026-11-12): "too harsh in all cases", the owner's words for the day's restart |
 | Moving terrain in place of Breach: a Crumbling floor or Gates on Breach's days, never both on a day | Kept after play (2026-11-12 and 13), shipped with rules version 14. Breach never came on a floor of three or four moves and is retired with its code. Gates on a bishop's day (cracked tiles seldom matter to its floors), else either, evenly. Gates alternate every move with nothing on them to read: arrows on the gates about to change, then a number on every gate, were both tried and dropped for it |
+| The Standstill and the Lure on floor 1, each on about one in three of the days it fits | Kept after play (2026-11-13): "Ship both". Rare by design and by fit: 23 of 743 stored days, nearly all a knight's |
 | One release configuration: what `composeDay` composes with no options is what the build stores, the audit composes again and the preview shows | Built with the release (2026-11-12). A day that can't compose with everything gives up its partner floor, then its tight forms, then its chests; none of the 742 did |
 
 ## Lichess puzzles
@@ -340,11 +341,12 @@ target pawn may still wait on the file, frozen there until the pawn takes
 elsewhere; a pawn that walks up under it is cornered (that pawn counts as
 terrain, src/rules.js trapped).
 
-### The table's two level-4 ideas, in preview (2026-11-12)
+### The table's two level-4 ideas (built 2026-11-12, released 2026-11-13)
 
 The waiting move and the deflection were built as the Standstill and the
-Lure, behind `composeDay` options that are off unless asked for
-([Daily generation](generation.md), "Ideas in preview"). What building them
+Lure, `composeDay` options that were off unless asked for until the owner
+had played them, and are part of the release since
+([Daily generation](generation.md), "Drawn ideas"). What building them
 showed:
 
 - **Every monster moves every turn, so a guard can't simply stand.** A guard

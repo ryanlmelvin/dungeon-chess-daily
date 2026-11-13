@@ -17,8 +17,8 @@
 //   - as played: a line may absorb captures (each costs a move), as a
 //     player's may; first actions captured at once don't count.
 // --option names the option the two sides differ by: tight (the default), or
-// an idea in preview, wait, lure or ideas (both; src/composer.js
-// PREVIEW_IDEAS), composed on the days it draws, or with --every on every day
+// a drawn idea, wait, lure or ideas (both; src/composer.js
+// DRAWN_IDEAS), composed on the days it draws, or with --every on every day
 // it fits, and with --no-ceiling without the bot's ceiling. The report then
 // says which floors the ideas took and what stood there before. --drawn
 // measures only the dates on which one of those ideas is tried at all (the
@@ -41,7 +41,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { composeOptions } from './compose-options.mjs';
-import { composeDay, actionsFrom, usesIdea, previewIdeas, composedSeeds, PREVIEW_IDEAS } from '../src/composer.js';
+import { composeDay, actionsFrom, usesIdea, drawnIdeas, composedSeeds, DRAWN_IDEAS } from '../src/composer.js';
 import { parRoom, playsIdea, TIGHT } from '../src/tight.js';
 import { getRawDaily } from '../src/edition.js';
 import { certifiedFloors, playFloor, runSeed, HUMAN_RUNS } from '../src/human-bot.js';
@@ -54,13 +54,13 @@ const modes = arg('modes', 'off,on').split(',');
 const options = composeOptions();
 // The option the modes switch: off and on.
 const toggled = arg('option', 'tight');
-const toggledIdeas = toggled === 'ideas' ? PREVIEW_IDEAS : PREVIEW_IDEAS.filter((idea) => idea === toggled);
+const toggledIdeas = toggled === 'ideas' ? DRAWN_IDEAS : DRAWN_IDEAS.filter((idea) => idea === toggled);
 if (toggled !== 'tight' && !toggledIdeas.length) throw new Error(`Unknown --option ${toggled}.`);
 const switched = (mode) => (toggled === 'tight' ? { tight: mode === 'on' }
   : Object.fromEntries(toggledIdeas.map((idea) => [idea, mode === 'on' ? (process.argv.includes('--every') ? 'every' : true) : false])));
 // With --drawn: does the switched option try an idea on this date at all?
 const drawnOnly = process.argv.includes('--drawn') && toggledIdeas.length > 0;
-const drawn = (date) => { const raw = getRawDaily(date); return previewIdeas({ ...raw, floorSeeds: composedSeeds(date) }, switched('on')).some((ideas) => ideas.length > 0); };
+const drawn = (date) => { const raw = getRawDaily(date); return drawnIdeas({ ...raw, floorSeeds: composedSeeds(date) }, switched('on')).some((ideas) => ideas.length > 0); };
 const only = arg('dates', null)?.split(',') ?? null;
 const forced = arg('modifier', null);
 const shard = arg('shard', null)?.split('/').map(Number) ?? null;
@@ -138,7 +138,7 @@ function report(all) {
     const by = (pick, rows = floors) => [...new Set(rows.map(pick))].sort().map((value) => [value, rows.filter((row) => pick(row) === value)]);
     console.log(`\n${header}`);
     for (const [name, group] of [...by((row) => `Floor ${row.floor + 1}`), ...by((row) => `Floor ${row.floor + 1} · ${ideaOf(row)}`), ...by((row) => (row.piece === 'pawn' ? `pawn player · ${ideaOf(row)}` : `other pieces · ${ideaOf(row)}`))]) console.log(line(name, group));
-    // The floors an idea in preview took, as they were before and as they are with it.
+    // The floors a drawn idea took, as they were before and as they are with it.
     for (const idea of toggledIdeas) {
       const taken = all.filter((row) => !row.failed && row.mode === 'on' && row.motif === idea);
       const group = floors.filter((row) => taken.some((other) => other.date === row.date && other.floor === row.floor));

@@ -81,7 +81,7 @@ function lured(states, n, id) {
  * Any other motif keeps the composer's test.
  */
 export function playsIdea(built, states, line, narrow) {
-  // The ideas in preview (src/composer.js, "Ideas in preview"):
+  // The drawn ideas (src/composer.js, "Drawn ideas"):
   // - wait (the Standstill): you spend a turn standing still, and afterwards
   //   take a target on the square it has just stepped onto, in your reach,
   //   without a lunge: the wait set the rhythm. (Waiting first and then

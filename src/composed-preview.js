@@ -5,11 +5,11 @@
 // before the stored editions are rebuilt (src/editions.js). It composes the
 // release configuration, as the build does, so with an unchanged composer the
 // preview is the stored edition; &treasure=0, &partner=0 and &tight=0 each
-// turn one option off, to compare. The ideas in preview (src/composer.js
-// PREVIEW_IDEAS) are opt-in: &wait=1 (the Standstill), &lure=1 (the Lure),
-// &ideas=1 (both), each on the one day in three it draws; &wait=all,
-// &lure=all or &ideas=all on every day it fits; &ceiling=0 composes them
-// without the bot's ceiling, to compare. &modifier=cracks or &modifier=gates
+// turn one option off, to compare. The drawn ideas (src/composer.js
+// DRAWN_IDEAS: the Standstill and the Lure) compose as released, each on the
+// one day in three it draws; &wait=0, &lure=0 or &ideas=0 (both) turn them
+// off, &wait=all, &lure=all or &ideas=all put one on every day it fits, and
+// &ceiling=0 composes them without the bot's ceiling, to compare. &modifier=cracks or &modifier=gates
 // plays the date under one of the two terrain modifiers (a crumbling floor,
 // gates: src/modifiers.js) whatever it draws, to try either on any date;
 // without it the date keeps its own modifier. Its runs save apart from real
@@ -31,11 +31,11 @@ const optionFor = (search, name) => new URLSearchParams(search).get(name) !== '0
 // The modifier the query forces on the date (&modifier=cracks or gates), or null: the date's own.
 const modifierFor = (search) => { const name = new URLSearchParams(search).get('modifier'); return TERRAIN_MODIFIERS.includes(name) ? name : null; };
 
-// An idea in preview is off unless the query asks for it by name or with &ideas: =1 on the days it draws,
-// =all on every day it fits (src/composer.js IDEA_EVERY, ideaDay).
+// A drawn idea composes as released, on the days it draws, unless the query says otherwise by its name or with
+// &ideas: =0 off, =all on every day it fits (src/composer.js IDEA_EVERY, ideaDay).
 function ideaFor(search, name) {
   const query = new URLSearchParams(search), value = query.get(name) ?? query.get('ideas');
-  return value === 'all' ? 'every' : value === '1';
+  return value === 'all' ? 'every' : value !== '0';
 }
 /** composeDay's options as the page's query asks for them: the release configuration unless it says otherwise. */
 export function previewOptions(search) {
@@ -47,11 +47,12 @@ export function previewOptions(search) {
 }
 
 /**
- * Does this preview file what its floors find in the journal? Only one that
- * asks for an idea in preview, so the idea's page can be seen where it is
- * found; any other preview keeps out of the journal, as before.
+ * Does this preview file what its floors find in the journal? Only one whose
+ * query names a drawn idea (&wait, &lure or &ideas, not turned off), so the
+ * idea's page can be seen where it is found; any other preview keeps out of
+ * the journal, as before.
  */
-export const previewJournals = (search) => { const { wait, lure } = previewOptions(search); return Boolean(wait || lure); };
+export const previewJournals = (search) => { const query = new URLSearchParams(search); return ['wait', 'lure', 'ideas'].some((name) => query.has(name) && query.get(name) !== '0'); };
 
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
@@ -61,11 +62,13 @@ export function composedDayFor(search) {
   try { return composeDay(date, { ...(modifier && { daily: { ...getRawDaily(date), modifier } }), ...previewOptions(search) }).daily; } catch (error) { console.error(error); return null; }
 }
 
-// What a preview's saves are filed under besides its start set: the ideas in preview it asked for, so a run
-// of a day composed with one never loads into the same day composed without it.
+// What a preview's saves are filed under besides its start set: where it departs from the release over the drawn
+// ideas (one turned off, or put on every day it fits, or the bot's ceiling left out), so a run of a day composed
+// one way never loads into the same day composed another.
 function ideasTag(search) {
   const { wait, lure, ceiling } = previewOptions(search);
-  const tag = [wait && `wait${wait === 'every' ? '-all' : ''}`, lure && `lure${lure === 'every' ? '-all' : ''}`, (wait || lure) && !ceiling && 'open'].filter(Boolean).join('+');
+  const part = (name, value) => (value === 'every' ? `${name}-all` : value ? '' : `no-${name}`);
+  const tag = [part('wait', wait), part('lure', lure), (wait || lure) && !ceiling && 'open'].filter(Boolean).join('+');
   return tag ? `${tag}:` : '';
 }
 /** Each start set saves apart, and so does a forced modifier; e2 keeps the key earlier previews used. */

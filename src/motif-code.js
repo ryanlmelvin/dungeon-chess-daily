@@ -5,8 +5,7 @@
 // pages (src/journal.js) hang on these names.
 /**
  * One letter per motif the composer has today ('d' the tandem, a duo's floor;
- * 'a' the Standstill, a wait, and 'l' the Lure, the two ideas in preview,
- * which no stored edition has yet); any other name is stored whole.
+ * 'a' the Standstill, a wait, and 'l' the Lure, the two drawn ideas); any other name is stored whole.
  */
 const CODES = Object.freeze({ bait: 'b', squeeze: 's', net: 'n', tempo: 't', crown: 'c', fork: 'f', walk: 'w', tandem: 'd', wait: 'a', lure: 'l' });
 const NAMES = Object.freeze(Object.fromEntries(Object.entries(CODES).map(([name, code]) => [code, name])));

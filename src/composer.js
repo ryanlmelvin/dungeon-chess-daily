@@ -1179,7 +1179,7 @@ MOTIFS.squeezePicked = (context) => {
   return built && { ...built, form: 'picked' };
 };
 
-// ── Ideas in preview (composeDay's `wait` and `lure` options, off unless asked for: not in RELEASE) ──
+// ── Drawn ideas: the Standstill and the Lure (composeDay's `wait` and `lure` options, on by default: RELEASE; a floor 1 takes one on the days that draw it, ideaDay) ──
 //
 // Two more ideas a floor can be built around. No stored edition has them: the
 // dev preview composes them on request (src/composed-preview.js, &wait=1,
@@ -1215,7 +1215,7 @@ MOTIFS.squeezePicked = (context) => {
 // composes them without it, to compare.
 
 /**
- * The targets each idea in preview fits, by player piece. A Standstill's are
+ * The targets each drawn idea fits, by player piece. A Standstill's are
  * those whose moves never run along the piece's own lines (BURROWS), so a
  * wall that shuts a pocket still lets the piece reach its landing. A Lure is
  * a knight's (LURE_PIECES), against two targets it can burrow.
@@ -1229,9 +1229,9 @@ const fitsLure = (piece, target) => fitsWait(piece, target) && target !== 'queen
  * follows from the word.
  */
 export const WAIT_WORDS = Object.freeze({ 1: ['KWT'], 2: ['WTT', 'TWT', 'KWTT', 'KTWT'] });
-/** Draws each idea in preview makes per attempt (as SUBTLE_TRIES). */
+/** Draws each drawn idea makes per attempt (as SUBTLE_TRIES). */
 export const IDEA_TRIES = 40;
-/** An idea in preview leaves at least this many first actions that are not captured at once (at most half of them keep par). */
+/** A drawn idea leaves at least this many first actions that are not captured at once (at most half of them keep par). */
 export const IDEA_FIRSTS = 4;
 /**
  * A Standstill's wait is a real choice: at that moment the piece has at least
@@ -1593,7 +1593,7 @@ function hinted(built, best, line, base, floor, rng, carried) {
   // The king floor's net goes unhinted.
   const square = floor === 2 ? null : ideaSquare(built, best.states, line);
   if (!square) return { room: best.room, kind: null };
-  // An idea in preview is hinted by nothing that moves a monster: its verdict was reached on the room as dressed.
+  // A drawn idea is hinted by nothing that moves a monster: its verdict was reached on the room as dressed.
   const kinds = shuffle(floor === 0 ? ['coin', 'held'] : ['coin', 'magnet'], rng).filter((kind) => !(built.found && kind === 'held'));
   for (const kind of kinds) {
     const room = structuredClone(best.room);
@@ -1656,7 +1656,7 @@ const isTarget = (state, id) => (state.enemies.find((foe) => foe.id === id)?.rol
 
 /** Does a winning line use the planted idea? `built` is the motif instance (composeFloor's trace hands it over at stage 'kept'). */
 export function usesIdea(built, states, line) {
-  // A tight form's idea and an idea in preview are read as a player would name them (src/tight.js).
+  // A tight form's idea and a drawn idea are read as a player would name them (src/tight.js).
   if (built.form || built.found) return playsIdea({ motif: built.motif }, states, line);
   // A terrain floor's bait or squeeze may also be played as a player would name it (a lunge that found a pit or a gate lands nowhere).
   if (built.wide && !built.pawnLine && playsIdea({ motif: built.motif }, states, line, () => false)) return true;
@@ -2253,7 +2253,7 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
   // A pawn's king floor nets each of its mates in turn ('net:king', …; PAWN_MATES).
   const preferred = piece === 'pawn' && floor === 2 ? pawnMates(seed).map((mate) => `net:${mate}`) : motifsFor(piece, cast.target, floor);
   if (tight) tightMotifs(preferred, base, floor);
-  // Ideas in preview go before the floor's plain motifs (and after a floor 2's tight forms, should one ever be offered there).
+  // Drawn ideas go before the floor's plain motifs (and after a floor 2's tight forms, should one ever be offered there).
   const plainAt = preferred.findIndex((motif) => FLOOR_MOTIFS[floor].includes(motif));
   if (ideas.length && plainAt >= 0) preferred.splice(plainAt, 0, ...ideas);
   // A pawn's unhinted tempo floor, kept until a crown floor takes its place.
@@ -2321,11 +2321,11 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const guard = judged ? botGuard(real, base, floor, line.length + 1) : { ok: true };
         if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
         if (terrain && !terrain.matters(room, line)) { tally.idle = (tally.idle ?? 0) + 1; trace?.({ motif, attempt, stage: 'terrain:idle', room, line }); return null; }
-        // A tight form, and an idea in preview whatever the option: its idea has to be found (src/tight.js),
+        // A tight form, and a drawn idea whatever the option: its idea has to be found (src/tight.js),
         // and a Standstill's wait must be the only action that keeps par as it is made.
         if (built.found || (tight && built.form)) {
           const verdict = (ceiling || !built.found) && !botFinds(real, base, floor, line.length + 1) ? { why: 'bot' } : tightVerdict(dressed, built, line, { actionsFrom, narrow: usesIdea });
-          // An idea in preview is no corridor either: the floor opens with a real choice of first actions.
+          // A drawn idea is no corridor either: the floor opens with a real choice of first actions.
           let fails = verdict.why ?? (built.found && verdict.firsts < IDEA_FIRSTS ? 'few' : null);
           if (!fails && built.motif === 'wait') {
             const alone = standsAlone(dressed, line, line.findIndex((action) => action.type === 'wait'), { actionsFrom });
@@ -2396,9 +2396,10 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * and so what every stored edition is (scripts/build-editions.mjs composes
  * with no options, as do the audit, the dev preview and the tests): a chest
  * where one qualifies, a partner floor where the matchup has one, and the
- * tight forms.
+ * tight forms, and the two drawn ideas (the Standstill and the Lure) on the
+ * days that draw them.
  */
-export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: true });
+export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: true, wait: true, lure: true });
 /**
  * The order a day gives its options up in. Every date must compose, so a day
  * that fails with all it was asked for (a floor that won't compose, a proof
@@ -2408,26 +2409,26 @@ export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: tru
  */
 export const FALLBACKS = Object.freeze(['partner', 'tight', 'treasure']);
 /**
- * The ideas in preview, each a composeDay option of its own name, off unless
- * asked for (never part of RELEASE, so no stored edition has one): 'wait' the
- * Standstill, 'lure' the Lure. A day that fails with one gives it up before
- * any release option.
+ * The drawn ideas, each a composeDay option of its own name and part of
+ * RELEASE since 2026-11-13: 'wait' the Standstill, 'lure' the Lure. A floor 1
+ * takes one only on the days that draw it (ideaDay). A day that fails with
+ * one gives it up before any other option.
  */
-export const PREVIEW_IDEAS = Object.freeze(['wait', 'lure']);
+export const DRAWN_IDEAS = Object.freeze(['wait', 'lure']);
 /**
- * An idea in preview takes about one in IDEA_EVERY of the days it fits, drawn
+ * A drawn idea takes about one in IDEA_EVERY of the days it fits, drawn
  * by the date like a partner floor's (PARTNER_EVERY), so no new idea becomes
  * the commonest overnight. `'every'` as the option's value takes every day it
  * fits (tests, measuring, the dev preview's &wait=all and &lure=all).
  */
 export const IDEA_EVERY = 3;
-// Does an idea in preview fit a floor's matchup? For a lure, with a decoy on the floor that the piece can lure.
+// Does a drawn idea fit a floor's matchup? For a lure, with a decoy on the floor that the piece can lure.
 const IDEA_FITS = Object.freeze({
   wait: (base, floor) => fitsWait(base.playerPiece, base.targets[floor]),
   lure: (base, floor) => { const cast = castFor(base, floor); return fitsLure(base.playerPiece, base.targets[floor]) && [...cast.suspects, cast.other].some((guard) => lureLines(base.playerPiece, base.targets[floor], guard.role).length > 0); },
 });
 /**
- * The floors of a day that `idea` (PREVIEW_IDEAS) fits: floor 1 (index 0) or
+ * The floors of a day that `idea` (DRAWN_IDEAS) fits: floor 1 (index 0) or
  * none. The matchups these ideas fit are the ones floor 2 has a tight form
  * for, and a tight form always comes first there: tried on floor 2 as well,
  * over the 742 stored days, neither idea composed there once.
@@ -2436,17 +2437,17 @@ export const ideaFloors = (base, idea) => [0].filter((floor) => IDEA_FITS[idea](
 /** Does a day that `idea` fits take it? About one day in IDEA_EVERY, by the date. */
 export const ideaDay = (base, idea) => ideaFloors(base, idea).length > 0 && hash(`${base.date}:${idea}-day`) % IDEA_EVERY === 0;
 /**
- * The ideas in preview each floor of a day tries, [floor 1's, floor 2's],
+ * The drawn ideas each floor of a day tries, [floor 1's, floor 2's],
  * for the options `asked` ({ wait, lure }: true, 'every' or false). Each idea
  * the day takes goes to the floor it fits (ideaFloors: floor 1), never the
  * day's partner floor (`partnered`); where the day takes both, the date
  * orders them, and the floor keeps the first that composes. A floor tries
  * its ideas before its plain motifs and after its tight forms (composeFloor).
  */
-export function previewIdeas(base, asked, partnered = null) {
+export function drawnIdeas(base, asked, partnered = null) {
   const floors = [[], []];
   if (base.playerPiece === 'pawn') return floors;
-  const drawn = PREVIEW_IDEAS.filter((idea) => asked[idea] && (asked[idea] === 'every' || ideaDay(base, idea)));
+  const drawn = DRAWN_IDEAS.filter((idea) => asked[idea] && (asked[idea] === 'every' || ideaDay(base, idea)));
   if (drawn.length > 1 && hash(`${base.date}:ideas`) % 2) drawn.reverse();
   for (const idea of drawn) {
     const fits = ideaFloors(base, idea).filter((floor) => floor !== partnered);
@@ -2463,7 +2464,7 @@ export function previewIdeas(base, asked, partnered = null) {
  * each floor. `tier` composes under other monsters, and `daily` overrides the
  * raw daily (tooling: synthetic casts, or another modifier); `starts` the
  * start set (startSquares); `trace` hears each floor's composeFloor events,
- * with its `floor` (tooling). Three options, each on unless turned off
+ * with its `floor` (tooling). Five options, each on unless turned off
  * (RELEASE; the measuring scripts and the dev preview turn them off to
  * compare):
  * - `treasure` adds a chest off each floor's line where one qualifies
@@ -2476,16 +2477,20 @@ export function previewIdeas(base, asked, partnered = null) {
  *   searched without the recruit);
  * - `tight` composes floors whose idea has to be found (src/tight.js): floor
  *   2 takes a subtle form of the day's idea, which floor 1 shows plainly;
- *   such a floor says its `form`.
+ *   such a floor says its `form`;
+ * - `wait` and `lure` let floor 1 be a Standstill or a Lure on about one in
+ *   IDEA_EVERY of the days each fits (ideaDay; 'every' takes them all), held
+ *   to the tight tests and, unless `ceiling` is false (tooling), to the bot's
+ *   ceiling.
  * A day that can't be composed with all it was asked for gives options up in
- * FALLBACKS' order rather than fail; `dropped` lists them (empty on nearly
+ * order (a drawn idea first, then FALLBACKS') rather than fail; `dropped` lists them (empty on nearly
  * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = false, lure = false, ceiling = true } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, ceiling = true } = {}) {
   const asked = { treasure, partner, tight, wait, lure }, dropped = [];
   for (;;) {
     try { return { ...composeOnce(raw, { tier, starts, trace, ceiling, ...asked }), dropped }; } catch (error) {
-      const next = [...PREVIEW_IDEAS, ...FALLBACKS].find((option) => asked[option]);
+      const next = [...DRAWN_IDEAS, ...FALLBACKS].find((option) => asked[option]);
       if (!next) throw error;
       asked[next] = false;
       dropped.push(next);
@@ -2499,8 +2504,8 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
   const partnered = partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null;
-  // The ideas in preview this day's floors try (none unless asked for).
-  const ideas = wait || lure ? previewIdeas(base, { wait, lure }, partnered?.floor ?? null) : [[], []];
+  // The drawn ideas this day's floors try: each on the days it draws, or on every day it fits when asked for 'every'.
+  const ideas = wait || lure ? drawnIdeas(base, { wait, lure }, partnered?.floor ?? null) : [[], []];
   if (partnered && TERRAIN_MODIFIERS.includes(base.modifier)) partnered.composed = terrainOff(base, partnered.floor, partnered.composed, { steered: true });
   // Floors compose in order: a hint's powerup lasts the run, so each floor's checks see what came before.
   const floors = [], carried = {}, arrived = [];
@@ -2736,7 +2741,7 @@ function composeTerrainFloor(base, floor, options) {
     };
     try {
       // Floor 2's tight forms are not composed around terrain: its plain motifs are (floor 1 keeps the day's idea first).
-      // Nor are the ideas in preview (the Standstill, the Lure): they stay off around terrain, and on in the fallback below if asked for.
+      // Nor are the drawn ideas (the Standstill, the Lure): they stay off around terrain, and on in the fallback below.
       const composed = composeFloor(base, floor, { ...options, tight: Boolean(options.tight) && floor === 0, ideas: [], terrain: hooks });
       // Why it matters, on the finished room (searched without its hint powerup, as the day's proof is).
       const why = terrainReason(base, floor, { ...composed.room, items: composed.room.items.filter((item) => !(item.hint && item.type === 'powerup')) }, composed.line);

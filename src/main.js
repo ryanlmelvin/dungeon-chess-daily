@@ -46,7 +46,7 @@ let archiveMode = false;
 // from every real run.
 const preview = import.meta.env.DEV && new URLSearchParams(location.search).has('composed') ? await import('./composed-preview.js') : null;
 const composedDay = preview?.composedDayFor(location.search) ?? null;
-// A preview keeps out of the journal, but for one that asks for an idea in preview (its page shows where it is found).
+// A preview keeps out of the journal, but for one whose query names a drawn idea (its page shows where it is found).
 const journaled = !composedDay || preview.previewJournals(location.search);
 let daily = composedDay ?? getDaily();
 try {

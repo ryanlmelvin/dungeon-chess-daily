@@ -105,7 +105,7 @@ test('the dev preview forces a modifier only when asked; without it a date compo
   assert.equal(own.modifier, stored.modifier);
   assert.deepEqual(own.composed, stored.composed);
   assert.deepEqual(own.generation.certificate.actions, stored.generation.certificate.actions);
-  // A modifier that is none of the two in preview is no override.
+  // A modifier that is neither of the two terrain modifiers is no override.
   assert.deepEqual(composedDayFor(`?composed=${date}&modifier=dark`).composed, stored.composed);
   const gated = composedDayFor(`?composed=${date}&modifier=gates`);
   assert.equal(gated.modifier, 'gates');

@@ -1,13 +1,12 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
-// The ideas in preview (src/composer.js PREVIEW_IDEAS): the Standstill
-// ('wait') and the Lure ('lure'), composeDay options that are off unless
-// asked for. No stored edition has them, so with the options off every day
-// composes exactly as it is stored; on, each composes, proves, and has to be
-// found (src/tight.js).
+// The drawn ideas (src/composer.js DRAWN_IDEAS): the Standstill ('wait') and
+// the Lure ('lure'), composeDay options that are part of the release: a floor
+// 1 takes one on the days that draw it, and the stored editions have them.
+// Each composes, proves, and has to be found (src/tight.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { composeDay, actionsFrom, usesIdea, playLine, previewIdeas, ideaFloors, ideaDay, composedSeeds, partnerFloors, BOT_GUARD, RELEASE, FALLBACKS, PREVIEW_IDEAS, IDEA_EVERY, IDEA_FIRSTS, WAIT_OTHERS, MOTIF_LEVELS } from '../src/composer.js';
+import { composeDay, actionsFrom, usesIdea, playLine, drawnIdeas, ideaFloors, ideaDay, composedSeeds, partnerFloors, BOT_GUARD, RELEASE, FALLBACKS, DRAWN_IDEAS, IDEA_EVERY, IDEA_FIRSTS, WAIT_OTHERS, MOTIF_LEVELS } from '../src/composer.js';
 import { parRoom, playsIdea, tightVerdict, standsAlone, plainGuard, TIGHT } from '../src/tight.js';
 import { getDaily } from '../src/game.js';
 import { getRawDaily } from '../src/edition.js';
@@ -38,10 +37,10 @@ function compose(date, options = {}) {
 }
 // 2026-11-14: a knight against a lone queen on floor 1, a day the Standstill fits and draws.
 const WAIT_DAY = '2026-11-14';
-// 2026-11-30: a knight against two rooks on floor 1, with a bishop among the decoys: a day the Lure fits (it draws another).
+// 2026-11-30: a knight against two rooks on floor 1, with a bishop among the decoys: a day the Lure fits and neither idea draws.
 const LURE_DAY = '2026-11-30';
 
-// The tight tests every idea in preview is held to, on floor 1 of a composed day.
+// The tight tests every drawn idea is held to, on floor 1 of a composed day.
 function assertFound(date, { daily, floors, builts, starts, played }) {
   const floor = floors[0], built = builts[0], par = floor.line.length + 1;
   const states = playLine(starts[0], floor.line);
@@ -61,48 +60,56 @@ function assertFound(date, { daily, floors, builts, starts, played }) {
   return { states, room };
 }
 
-test('the ideas in preview are no part of the release: off unless asked for, and off they change nothing', () => {
-  assert.deepEqual([...PREVIEW_IDEAS], ['wait', 'lure']);
-  for (const idea of PREVIEW_IDEAS) assert.equal(RELEASE[idea], undefined, `${idea} is not in RELEASE`);
+test('the drawn ideas are part of the release: on the days that draw them, as the stored editions have them', () => {
+  assert.deepEqual([...DRAWN_IDEAS], ['wait', 'lure']);
+  for (const idea of DRAWN_IDEAS) assert.equal(RELEASE[idea], true, `${idea} is in RELEASE`);
   assert.deepEqual([...FALLBACKS], ['partner', 'tight', 'treasure']);
-  assert.deepEqual(previewIdeas(baseOf(WAIT_DAY), { wait: false, lure: false }), [[], []]);
-  // A day both ideas could change composes as stored with no options, and the same with both named off.
-  for (const date of [WAIT_DAY, LURE_DAY]) {
-    const release = compose(date), named = composeDay(date, { wait: false, lure: false }), stored = getDaily(date);
+  assert.deepEqual(drawnIdeas(baseOf(WAIT_DAY), { wait: false, lure: false }), [[], []]);
+  // With no options a day composes as it is stored: the day that draws the Standstill with one on floor 1,
+  // the day that draws neither idea with none.
+  for (const [date, first] of [[WAIT_DAY, 'wait'], [LURE_DAY, null]]) {
+    const release = compose(date), stored = getDaily(date);
     assert.deepEqual(release.daily.composed, stored.composed, `${date}: the stored rooms`);
     assert.deepEqual(release.daily.generation.certificate.actions, stored.generation.certificate.actions, `${date}: the stored lines`);
     assert.deepEqual(release.daily.generation.motifs, stored.generation.motifs, `${date}: the stored ideas`);
-    assert.deepEqual(named.daily.composed, stored.composed, `${date}: named off`);
-    assert.ok(release.floors.every((floor) => !PREVIEW_IDEAS.includes(floor.motif)), `${date}: no floor of the release is an idea in preview`);
+    assert.equal(DRAWN_IDEAS.includes(stored.generation.motifs[0]) ? stored.generation.motifs[0] : null, first, `${date}: floor 1`);
+    assert.ok(stored.generation.motifs.slice(1).every((motif) => !DRAWN_IDEAS.includes(motif)), `${date}: floors 2 and 3 are never a drawn idea`);
   }
+  // Named off, no floor is a drawn idea.
+  assert.ok(composeDay(WAIT_DAY, { wait: false, lure: false }).floors.every((floor) => !DRAWN_IDEAS.includes(floor.motif)));
   // The dev preview without the flags composes the stored edition.
-  assert.deepEqual(previewOptions(`?composed=${WAIT_DAY}`), { starts: 'wide', treasure: true, partner: true, tight: true, wait: false, lure: false, ceiling: true });
+  assert.deepEqual(previewOptions(`?composed=${WAIT_DAY}`), { starts: 'wide', treasure: true, partner: true, tight: true, wait: true, lure: true, ceiling: true });
   assert.deepEqual(composedDayFor(`?composed=${WAIT_DAY}`).composed, getDaily(WAIT_DAY).composed);
   assert.equal(previewJournals(`?composed=${WAIT_DAY}`), false);
 });
 
-test('the dev preview opts in by its query: &wait, &lure, &ideas, =all for every day an idea fits', () => {
-  assert.deepEqual([previewOptions('?composed=2026-11-14&wait=1').wait, previewOptions('?composed=2026-11-14&wait=1').lure], [true, false]);
-  assert.deepEqual([previewOptions('?composed=2026-11-14&lure=all').wait, previewOptions('?composed=2026-11-14&lure=all').lure], [false, 'every']);
-  assert.deepEqual([previewOptions('?composed=2026-11-14&ideas=1').wait, previewOptions('?composed=2026-11-14&ideas=1').lure], [true, true]);
-  assert.deepEqual([previewOptions('?composed=2026-11-14&ideas=all&wait=1').wait, previewOptions('?composed=2026-11-14&ideas=all&wait=1').lure], [true, 'every']);
-  assert.equal(previewOptions('?composed=2026-11-14&ideas=1&ceiling=0').ceiling, false);
-  assert.equal(previewOptions('?composed=2026-11-14&wait=0').wait, false);
-  // Its runs save apart from the same day composed without the idea, and it files what its floors find.
-  assert.notEqual(composedSaveTag('?composed=2026-11-14&wait=1'), composedSaveTag('?composed=2026-11-14'));
-  assert.notEqual(composedSaveTag('?composed=2026-11-14&wait=1'), composedSaveTag('?composed=2026-11-14&wait=all'));
+test('the dev preview composes the ideas as released; its query turns one off, or onto every day it fits', () => {
+  const asked = (query) => [previewOptions(`?composed=2026-11-14${query}`).wait, previewOptions(`?composed=2026-11-14${query}`).lure];
+  assert.deepEqual(asked(''), [true, true]);
+  assert.deepEqual(asked('&wait=1'), [true, true]);
+  assert.deepEqual(asked('&wait=0'), [false, true]);
+  assert.deepEqual(asked('&lure=all'), [true, 'every']);
+  assert.deepEqual(asked('&ideas=0'), [false, false]);
+  assert.deepEqual(asked('&ideas=all&wait=0'), [false, 'every']);
+  assert.equal(previewOptions('?composed=2026-11-14&ceiling=0').ceiling, false);
+  // Its runs save apart only where it departs from the release, and it files what its floors find when it names an idea.
   assert.equal(composedSaveTag('?composed=2026-11-14'), 'composed:wide:');
+  assert.equal(composedSaveTag('?composed=2026-11-14&wait=1'), 'composed:wide:');
+  assert.equal(composedSaveTag('?composed=2026-11-14&wait=all'), 'composed:wide:wait-all:');
+  assert.equal(composedSaveTag('?composed=2026-11-14&wait=0'), 'composed:wide:no-wait:');
+  assert.equal(composedSaveTag('?composed=2026-11-14&ideas=all&ceiling=0'), 'composed:wide:wait-all+lure-all+open:');
   assert.equal(previewJournals('?composed=2026-11-14&lure=1'), true);
+  assert.equal(previewJournals('?composed=2026-11-14&lure=0'), false);
   // The day the query names, with the idea it asks for.
-  assert.deepEqual(composedDayFor(`?composed=${WAIT_DAY}&wait=1`).composed, compose(WAIT_DAY, { wait: true }).daily.composed);
+  assert.deepEqual(composedDayFor(`?composed=${LURE_DAY}&lure=all`).composed, compose(LURE_DAY, { lure: 'every' }).daily.composed);
 });
 
 test('an idea takes about one in three of the days it fits, by the date: never a pawn\'s day, never the partner floor', () => {
   const fits = { wait: 0, lure: 0 }, drawn = { wait: 0, lure: 0 };
   for (let n = 0, time = Date.parse('2026-11-01'); n < 742; n++, time += DAY) {
     const base = baseOf(new Date(time).toISOString().slice(0, 10));
-    const every = previewIdeas(base, { wait: 'every', lure: 'every' }), mine = previewIdeas(base, { wait: true, lure: true });
-    for (const idea of PREVIEW_IDEAS) {
+    const every = drawnIdeas(base, { wait: 'every', lure: 'every' }), mine = drawnIdeas(base, { wait: true, lure: true });
+    for (const idea of DRAWN_IDEAS) {
       const floors = ideaFloors(base, idea);
       assert.ok(floors.every((floor) => floor === 0), `${base.date}: floor 1 alone (floor 2 keeps its tight forms)`);
       if (base.playerPiece === 'pawn') assert.deepEqual(floors, [], `${base.date}: no pawn's day`);
@@ -116,9 +123,9 @@ test('an idea takes about one in three of the days it fits, by the date: never a
     for (const floor of [0, 1]) for (const idea of every[floor]) assert.ok(ideaFloors(base, idea).includes(floor), `${base.date}: ${idea} on a floor it fits`);
     assert.equal(new Set(every.flat()).size, every.flat().length, `${base.date}: an idea takes one floor`);
     const partner = partnerFloors(base)[0];
-    if (partner !== undefined) assert.deepEqual(previewIdeas(base, { wait: 'every', lure: 'every' }, partner)[partner], [], `${base.date}: never the partner floor`);
+    if (partner !== undefined) assert.deepEqual(drawnIdeas(base, { wait: 'every', lure: 'every' }, partner)[partner], [], `${base.date}: never the partner floor`);
   }
-  for (const idea of PREVIEW_IDEAS) {
+  for (const idea of DRAWN_IDEAS) {
     assert.ok(fits[idea] > 20, `${idea} fits ${fits[idea]} days`);
     assert.ok(Math.abs(drawn[idea] / fits[idea] - 1 / IDEA_EVERY) < 0.12, `${idea} draws ${drawn[idea]} of the ${fits[idea]} days it fits`);
   }
@@ -208,14 +215,16 @@ test('a guard is plain when the target is one step from it along the kind of ste
   assert.ok(!plainGuard(guard, square('f5'), square('e4')), 'a knight\'s wind-up says nothing of the squares beside it');
 });
 
-test('each idea in preview has its letter and its journal page, and the book lists a preview page only once it is found', () => {
+test('each drawn idea has its letter and its journal page, in the book after the other ideas', () => {
   assert.equal(encodeMotifs(['wait', 'lure', 'net']), 'a,l,n');
   assert.deepEqual(decodeMotifs('a,l,n'), ['wait', 'lure', 'net']);
-  assert.deepEqual(PREVIEW_PAGES.map((page) => [page.id, page.name]), [['wait', 'Standstill'], ['lure', 'Lure']]);
+  assert.deepEqual([...PREVIEW_PAGES], [], 'no idea waits in preview');
+  const pages = DRAWN_IDEAS.map(pageFor);
+  assert.deepEqual(pages.map((page) => [page.id, page.name]), [['wait', 'Standstill'], ['lure', 'Lure']]);
   const context = new Proxy({}, { get: (target, name) => (name in target ? target[name] : () => {}), set: (target, name, value) => { target[name] = value; return true; } });
   const canvas = { width: 200, height: 200, getContext: () => context };
-  for (const page of PREVIEW_PAGES) {
-    assert.ok(PREVIEW_IDEAS.includes(page.id) && isMotifName(page.id) && pageFor(page.id) === page && !PAGES.includes(page), page.id);
+  for (const page of pages) {
+    assert.ok(isMotifName(page.id) && PAGES.includes(page), page.id);
     assert.equal(page.kind, 'idea');
     assert.ok(page.name.split(' ').length <= 2, `${page.id}: a name of one or two words`);
     assert.ok(page.text.length <= 96 && page.text.split(/[.!?](?:\s|$)/).filter(Boolean).length <= 2, `${page.id}: one or two short sentences`);
@@ -223,14 +232,15 @@ test('each idea in preview has its letter and its journal page, and the book lis
     for (const time of [0, page.still, 1234, 5599, 99_999]) assert.doesNotThrow(() => page.draw(canvas, time), `${page.id} at ${time}`);
   }
   assert.deepEqual(pageFor('lure').pieces, ['knight']);
-  // The released book is as it was until a preview page is found.
+  const moves = PAGES.findIndex((page) => page.kind !== 'idea');
+  assert.deepEqual(PAGES.slice(moves - 2, moves).map((page) => page.id), ['wait', 'lure'], 'after the other ideas, before the special moves');
+  // The book is its released pages, found or not.
   const empty = emptyJournal();
   assert.equal(bookPages(empty), PAGES);
   assert.deepEqual(journalProgress(empty), { found: 0, total: PAGES.length });
-  const found = addFinds(empty, ['lure'], 'knight', LURE_DAY).journal, book = bookPages(found);
-  assert.equal(book.length, PAGES.length + 1);
-  assert.ok(book.indexOf(pageFor('lure')) === PAGES.findIndex((page) => page.kind !== 'idea'), 'after the released ideas, before the special moves');
-  assert.deepEqual(journalProgress(found), { found: 1, total: PAGES.length + 1 });
+  const found = addFinds(empty, ['lure'], 'knight', LURE_DAY).journal;
+  assert.equal(bookPages(found), PAGES);
+  assert.deepEqual(journalProgress(found), { found: 1, total: PAGES.length });
 });
 
 test('clearing an idea\'s floor at par or better finds its page', () => {
