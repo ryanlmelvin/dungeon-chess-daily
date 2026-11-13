@@ -1,23 +1,21 @@
 // Dungeon Chess Daily — Copyright (C) 2026 Ryan L. Melvin
 // SPDX-License-Identifier: GPL-3.0-only
 // Gates (a room modifier, src/modifiers.js 'gates'): a few squares of each
-// room are gates that open and shut on a rhythm the board shows. Shut, a gate
+// room are gates that shut one move and open the next. Shut, a gate
 // is terrain (src/terrain.js): nobody stands there, lines stop there, knights
 // jump it. Open, it is floor.
 //
 // The rhythm, the same for every gate, every piece and every player:
-// - A gate stays shut for GATE_HOLD moves, then open for GATE_HOLD moves, and
-//   so on. Gates differ only in where in that cycle they begin (`phase`).
+// - A gate is shut one move and open the next, and so on (GATE_HOLD is 1).
+//   Gates differ only in which of the two they begin on (`phase`). So every
+//   gate changes after every move and the board needs no sign of what comes
+//   next: what is up now is down next move. (The first rhythm held each state
+//   two moves and marked the wait, with arrows and then a number; the owner
+//   asked for plain alternation instead, 2026-11-12.)
 // - Gates change between turns, never within one: after your move, your
 //   recruit's and every monster's. So through a whole turn everyone meets the
 //   same gates, and what you see before you move is what your move and the
 //   monsters' answer to it will meet.
-// - Every gate wears a number (src/renderer.js): the moves until it changes,
-//   this move included. A shut gate reading 1 opens after this move; an open
-//   one reading 2 is floor for this move and the next. The board does the
-//   counting, the way "Wake in 3" does for sleepers. (An earlier look marked
-//   only the gates about to change, with coloured arrows; the owner could not
-//   read them, 2026-11-12.)
 // - A gate never shuts on a piece. One that is due to shut while someone
 //   stands in it stays open, and shuts at the end of the first turn that
 //   leaves it empty while it is still due shut. Its rhythm never shifts.
@@ -34,7 +32,7 @@
 import { shutNow, occupied } from './terrain.js';
 
 /** Moves a gate holds each state. */
-export const GATE_HOLD = 2;
+export const GATE_HOLD = 1;
 /** A gate's cycle: shut for GATE_HOLD moves, then open for GATE_HOLD. */
 export const GATE_CYCLE = 2 * GATE_HOLD;
 /** Gates a composed room lays, at most. */
@@ -47,24 +45,9 @@ const step = (gate, moves) => (((moves + gate.phase) % GATE_CYCLE) + GATE_CYCLE)
 /** Is `gate` due shut once `moves` moves have been made on its floor? */
 export function dueShut(gate, moves) { return step(gate, moves) < GATE_HOLD; }
 
-/** Does `gate` change state after this move (the last move of its hold)? */
-export function changesNext(state, gate) { return step(gate, clock(state)) % GATE_HOLD === GATE_HOLD - 1; }
-
-/**
- * A gate as the board shows it: { x, y, shut, turning, left }. `left` is the
- * number it wears: the moves it keeps this state, this move included (1: it
- * changes after this move, which is `turning`). A gate held open by the piece
- * standing in it shuts as soon as it is left, so it reads 1; if its open spell
- * begins next move anyway, it reads through that spell.
- */
+/** A gate as the board shows it: { x, y, shut }. One held open by the piece standing in it is open. */
 export function gateLooks(state) {
-  const moves = clock(state);
-  return (state.gates ?? []).map((gate) => {
-    const jammed = !gate.shut && dueShut(gate, moves);
-    const turning = jammed ? dueShut(gate, moves + 1) : changesNext(state, gate);
-    const left = jammed ? (turning ? 1 : 1 + GATE_HOLD) : GATE_HOLD - (step(gate, moves) % GATE_HOLD);
-    return { x: gate.x, y: gate.y, shut: gate.shut, turning, left };
-  });
+  return (state.gates ?? []).map(({ x, y, shut }) => ({ x, y, shut }));
 }
 
 /** A floor begins: its room's gates, each as its rhythm has it before the first move. */

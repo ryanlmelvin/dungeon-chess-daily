@@ -10,7 +10,7 @@ import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
 // Moving terrain (pits and shut gates): one seam, src/terrain.js.
 import { floorAt, shutAt, settled, openLane } from './terrain.js';
 import { stepOff } from './cracks.js';
-import { gateTick } from './gates.js';
+import { gateTick, GATE_CYCLE } from './gates.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
 export const RULES_VERSION = 13;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
@@ -909,7 +909,7 @@ const validComposedRoom = (room) => Boolean(room) && Array.isArray(room.map) && 
   && room.map.every((row) => typeof row === 'string' && /^[.#]{8}$/.test(row))
   && Array.isArray(room.enemies) && Array.isArray(room.items) && (room.ice === undefined || Array.isArray(room.ice))
   // Moving terrain a room lays for itself: cracked tiles (src/cracks.js) and gates, each with its place in the rhythm (src/gates.js).
-  && (room.cracks === undefined || Array.isArray(room.cracks)) && (room.gates === undefined || (Array.isArray(room.gates) && room.gates.every((gate) => Number.isInteger(gate?.phase) && gate.phase >= 0 && gate.phase < 4)))
+  && (room.cracks === undefined || Array.isArray(room.cracks)) && (room.gates === undefined || (Array.isArray(room.gates) && room.gates.every((gate) => Number.isInteger(gate?.phase) && gate.phase >= 0 && gate.phase < GATE_CYCLE)))
   && [...room.enemies, ...room.items, ...(room.start ? [room.start] : []), ...(room.ice ?? []), ...(room.cracks ?? []), ...(room.gates ?? [])].every((entry) => entry && inside(entry.x, entry.y) && room.map[entry.y][entry.x] === '.');
 const validComposed = (rooms) => Array.isArray(rooms) && rooms.length === 3 && rooms.every(validComposedRoom);
 

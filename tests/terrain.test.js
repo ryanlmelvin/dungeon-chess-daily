@@ -9,7 +9,7 @@ import { act, createGame, legalMoves, validateSave, resetFloor, walkable, danger
 import { MODIFIERS, TERRAIN_MODIFIERS, modifierFor, modifierOf, modifierStatus } from '../src/modifiers.js';
 import { solid, floorAt, shutAt, shutNow, terrainMap, settled, maskOf } from '../src/terrain.js';
 import { cracked } from '../src/cracks.js';
-import { gateLooks, dueShut, GATE_HOLD } from '../src/gates.js';
+import { gateLooks, dueShut, GATE_HOLD, GATE_CYCLE } from '../src/gates.js';
 import { positionKey } from '../src/fairness.js';
 import { shortestWins } from '../src/composer.js';
 import { observe } from '../src/human-bot.js';
@@ -53,7 +53,7 @@ test('no date draws the two preview modifiers, and a plain day carries no terrai
 });
 
 test('one seam: a wall, a pit and a shut gate are solid alike', () => {
-  const state = game('gates', sealed({ walls: [[6, 6]], gates: [{ x: 4, y: 4, phase: 0 }, { x: 5, y: 4, phase: 2 }] }));
+  const state = game('gates', sealed({ walls: [[6, 6]], gates: [{ x: 4, y: 4, phase: 0 }, { x: 5, y: 4, phase: 1 }] }));
   assert.equal(solid(state, 6, 6), true);
   assert.equal(floorAt(state, 6, 6), false);
   assert.equal(solid(state, 4, 4), true);
@@ -187,49 +187,52 @@ test('crumbling: a target sealed off by a pit makes the floor hopeless, so the r
   assert.equal(hopelessFloor(resetFloor(state)), false);
 });
 
-test('gates: two moves shut, two moves open, each from its own place in the rhythm', () => {
-  const gates = [0, 1, 2, 3].map((phase) => ({ x: 2 + phase, y: 3, phase }));
+test('gates: shut one move, open the next, each from its own beat', () => {
+  const gates = [0, 1].map((phase) => ({ x: 2 + phase, y: 3, phase }));
   const laid = sealed({ gates });
   let state = game('gates', laid);
   const shut = () => state.gates.map((gate) => (gate.shut ? 'S' : 'O')).join('');
-  // The number each gate wears: the moves until it changes, this one included.
-  const left = () => gateLooks(state).map((gate) => { assert.equal(gate.turning, gate.left === 1); return gate.left; }).join('');
-  const seen = [[shut(), left()]];
+  const seen = [shut()];
   for (let n = 0; n < 5; n++) {
     state = act(state, wait);
-    seen.push([shut(), left()]);
+    seen.push(shut());
     assert.equal(saved(state, 'gates', laid), true);
     assert.deepEqual(state.shut, maskOf(state.gates.filter((gate) => gate.shut)));
+    // Every turn changes every gate, and says so.
+    assert.ok(state.events.some((event) => event.type === 'gates' && event.turned.length === 2));
   }
-  // Read down a column: SSOO, SOOS, OOSS, OSSO, and each gate counting 2, 1 through a hold.
-  assert.deepEqual(seen, [['SSOO', '2121'], ['SOOS', '1212'], ['OOSS', '2121'], ['OSSO', '1212'], ['SSOO', '2121'], ['SOOS', '1212']]);
-  assert.equal(GATE_HOLD, 2);
+  assert.deepEqual(seen, ['SO', 'OS', 'SO', 'OS', 'SO', 'OS']);
+  assert.equal(GATE_HOLD, 1);
+  assert.equal(GATE_CYCLE, 2);
   assert.equal(dueShut({ phase: 0 }, 0), true);
-  assert.equal(dueShut({ phase: 0 }, 2), false);
-  // The turn that changes a gate says so; one that changes none says nothing.
-  assert.ok(state.events.some((event) => event.type === 'gates' && event.turned.length === 2));
+  assert.equal(dueShut({ phase: 0 }, 1), false);
+  assert.equal(dueShut({ phase: 1 }, 1), true);
+  // The board shows a gate as shut or open and nothing more: what is up now is down next move.
+  assert.deepEqual(gateLooks(state), [{ x: 2, y: 3, shut: false }, { x: 3, y: 3, shut: true }]);
   // Restarting the floor starts the rhythm over.
-  assert.equal(resetFloor(state).gates.map((gate) => (gate.shut ? 'S' : 'O')).join(''), 'SSOO');
+  assert.equal(resetFloor(state).gates.map((gate) => (gate.shut ? 'S' : 'O')).join(''), 'SO');
+  // A room lays a gate on one beat or the other.
+  assert.throws(() => game('gates', sealed({ gates: [{ x: 2, y: 3, phase: 2 }] })));
 });
 
 test('gates: through a turn the gates look as they did when it began, the recruit’s order included', () => {
-  // A king recruit beside the rook's start; d5 is open and shuts after this move.
-  const laid = sealed({ start: { x: 3, y: 6 }, items: [{ x: 3, y: 5, type: 'companion', piece: 'king' }], gates: [{ x: 6, y: 3, phase: 3 }, { x: 6, y: 5, phase: 0 }] });
+  // A king recruit beside the rook's start; g5 is open and g3 shut, and they change after this move.
+  const laid = sealed({ start: { x: 3, y: 6 }, items: [{ x: 3, y: 5, type: 'companion', piece: 'king' }], gates: [{ x: 6, y: 3, phase: 1 }, { x: 6, y: 5, phase: 0 }] });
   let state = game('gates', laid);
   const before = gateLooks(state);
-  assert.deepEqual(before, [{ x: 6, y: 3, shut: false, turning: true, left: 1 }, { x: 6, y: 5, shut: true, turning: false, left: 2 }]);
+  assert.deepEqual(before, [{ x: 6, y: 3, shut: false }, { x: 6, y: 5, shut: true }]);
   // The position as the recruit's order is asked for: your move is played, the monsters' is not, and no gate has turned.
   const asked = recruitChoice(state, move(3, 5));
   assert.ok(asked.board.turns > state.turns);
   assert.deepEqual(gateLooks(asked.board), before);
   state = act(state, { ...move(3, 5), recruit: 'hold' });
-  assert.deepEqual(gateLooks(state), [{ x: 6, y: 3, shut: true, turning: false, left: 2 }, { x: 6, y: 5, shut: true, turning: true, left: 1 }]);
+  assert.deepEqual(gateLooks(state), [{ x: 6, y: 3, shut: true }, { x: 6, y: 5, shut: false }]);
   assert.equal(state.gateTurns, 1);
 });
 
 test('gates: a shut gate blocks standing and lines like a wall, and gates change between turns', () => {
   // d5 shuts after the first move; the rook starts on d2.
-  const laid = sealed({ start: { x: 3, y: 6 }, gates: [{ x: 3, y: 3, phase: 3 }] });
+  const laid = sealed({ start: { x: 3, y: 6 }, gates: [{ x: 3, y: 3, phase: 1 }] });
   let state = game('gates', laid);
   assert.ok(has(legalMoves(state), 3, 3) && has(legalMoves(state), 3, 0), 'open: floor, and the file runs through it');
   state = act(state, move(3, 5));
@@ -242,23 +245,24 @@ test('gates: a shut gate blocks standing and lines like a wall, and gates change
   assert.ok(has(legalMoves(knight), 2, 2) && has(legalMoves(knight), 4, 2));
 });
 
-test('gates: a gate never shuts on a piece, and shuts once it is left', () => {
-  const laid = sealed({ start: { x: 3, y: 6 }, gates: [{ x: 3, y: 3, phase: 3 }] });
+test('gates: a gate never shuts on a piece, and its rhythm never shifts', () => {
+  const laid = sealed({ start: { x: 3, y: 6 }, gates: [{ x: 3, y: 3, phase: 1 }] });
   let state = game('gates', laid);
-  // Onto the open gate on its last open move: due shut, it stays open under the rook.
+  // Onto the open gate: due shut for the next move, it stays open under the rook.
   state = act(state, move(3, 3));
   assert.equal(state.gates[0].shut, false);
   assert.equal(dueShut(state.gates[0], 1), true);
-  assert.deepEqual(gateLooks(state), [{ x: 3, y: 3, shut: false, turning: true, left: 1 }], 'shown open, shutting once it is left');
+  assert.deepEqual(gateLooks(state), [{ x: 3, y: 3, shut: false }], 'shown open');
   assert.equal(saved(state, 'gates', laid), true);
-  state = act(state, wait);
-  assert.equal(state.gates[0].shut, false, 'still held open');
-  // (It was due shut for two moves; they are over, so leaving it now finds it open again.)
-  const held = act(game('gates', laid), move(3, 3));
-  const off = act(held, move(3, 5));
-  assert.equal(off.gates[0].shut, true, 'left while it is due shut: it shuts as the turn ends');
+  // Left on the move it was held open: its open move comes next, so it is open, and shut the move after.
+  const off = act(state, move(3, 5));
+  assert.equal(off.gates[0].shut, false);
   assert.equal(saved(off, 'gates', laid), true);
-  assert.equal(act(act(off, wait), wait).gates[0].shut, false, 'and its rhythm never shifted');
+  assert.equal(act(off, wait).gates[0].shut, true, 'its rhythm never shifted');
+  // Stood in through its shut move and left on its open one: it shuts as that turn ends.
+  const stayed = act(state, wait);
+  assert.equal(stayed.gates[0].shut, false);
+  assert.equal(act(stayed, move(3, 5)).gates[0].shut, true);
 });
 
 test('gates: a wound-up monster whose path a gate shut on lunges, bounces and stands off-balance', () => {
@@ -278,7 +282,7 @@ test('gates: a wound-up monster whose path a gate shut on lunges, bounces and st
 });
 
 test('gates: shut gates never corner a piece, strand a pickup or make a floor hopeless', () => {
-  // The rook's start is walled in but for a gate that opens after two moves.
+  // The rook's start is walled in but for a gate, shut now and open next move.
   const laid = sealed({ walls: [[3, 6], [5, 6], [4, 7]], gates: [{ x: 4, y: 5, phase: 0 }], items: [{ x: 4, y: 3, type: 'coin' }] });
   let state = game('gates', laid);
   assert.deepEqual(legalMoves(state), []);
@@ -286,7 +290,6 @@ test('gates: shut gates never corner a piece, strand a pickup or make a floor ho
   assert.equal(hopelessFloor(state), false);
   state = act(state, wait);
   assert.ok(!state.events.some((event) => event.type === 'restart'), 'waiting answers a shut gate');
-  state = act(state, wait);
   assert.equal(state.gates[0].shut, false);
   assert.ok(has(legalMoves(state), 4, 3));
 });
@@ -306,14 +309,14 @@ test('saves: terrain travels with the save, reloads mid-floor and must agree wit
   assert.equal(validateSave(reloaded, DATE, daily('cracks', sealed({ cracks: [{ x: 4, y: 6 }] }))), false, 'another room’s tiles');
   assert.equal(validateSave(reloaded, DATE, daily('none', cracks)), false, 'another day’s modifier');
 
-  const gates = sealed({ gates: [{ x: 2, y: 3, phase: 1 }, { x: 5, y: 3, phase: 2 }] });
+  const gates = sealed({ gates: [{ x: 2, y: 3, phase: 1 }, { x: 5, y: 3, phase: 0 }] });
   const turned = act(game('gates', gates), wait);
   const again = JSON.parse(JSON.stringify(turned));
   assert.equal(validateSave(again, DATE, daily('gates', gates)), true);
   assert.deepEqual(act(again, wait).gates, act(turned, wait).gates);
   const forged = (change) => { const copy = JSON.parse(JSON.stringify(turned)); change(copy); return validateSave(copy, DATE, daily('gates', gates)); };
   assert.equal(forged((save) => { save.gates[1].shut = true; shutNow(save); }), false, 'shut while its rhythm has it open');
-  assert.equal(forged((save) => { save.gates[0].phase = 3; }), false, 'another rhythm');
+  assert.equal(forged((save) => { save.gates[0].phase = 0; }), false, 'the other beat');
   assert.equal(forged((save) => { save.gateTurns = 0; }), false, 'the gates’ clock behind the floor’s moves');
   assert.equal(forged((save) => { save.gates.pop(); shutNow(save); }), false, 'a gate missing');
   assert.equal(forged((save) => { save.shut = maskOf([{ x: 0, y: 7 }]); }), false, 'the board out of step with the gates');
@@ -328,7 +331,7 @@ test('the exact search sees the terrain: positions differ by it, and lines wait 
   whole.pits = whole.pits.filter((pit) => pit.x !== 5); whole.cracks.push({ x: 5, y: 6 }); shutNow(whole);
   assert.notEqual(positionKey(there), positionKey(whole));
   const gates = sealed({ gates: [{ x: 2, y: 3, phase: 0 }] });
-  const open = act(act(game('gates', gates), wait), wait);
+  const open = act(game('gates', gates), wait);
   const forced = structuredClone(open);
   forced.gates[0].shut = true; shutNow(forced);
   assert.notEqual(positionKey(open), positionKey(forced));
@@ -339,9 +342,8 @@ test('the exact search sees the terrain: positions differ by it, and lines wait 
   const pocket = (extra) => room({ enemies: [{ x: 4, y: 2, cast: 0 }], walls: [...cell, [3, 2], [5, 2], [4, 1]], ...extra });
   const depth = (modifier, laid) => shortestWins(game(modifier, laid), 4)?.depth;
   assert.equal(depth('none', pocket()), 1);
-  assert.equal(depth('gates', pocket({ gates: [{ x: 4, y: 4, phase: 2 }] })), 1, 'open now');
-  assert.equal(depth('gates', pocket({ gates: [{ x: 4, y: 4, phase: 1 }] })), 2, 'opens after one move');
-  assert.equal(depth('gates', pocket({ gates: [{ x: 4, y: 4, phase: 0 }] })), 3, 'opens after two');
+  assert.equal(depth('gates', pocket({ gates: [{ x: 4, y: 4, phase: 1 }] })), 1, 'open now');
+  assert.equal(depth('gates', pocket({ gates: [{ x: 4, y: 4, phase: 0 }] })), 2, 'shut now: a wait, then through');
   // A cracked tile on the way changes nothing until someone stands on it and leaves.
   assert.equal(depth('cracks', pocket({ cracks: [{ x: 4, y: 4 }] })), 1);
 });

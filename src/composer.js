@@ -2544,7 +2544,7 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
 //   squares and the squares they can step to; the rest of the room's
 //   CRACK_TILES lie anywhere free. Gates: one at each target's door, either a
 //   square it can step to (a mouth) or a wall of its box opened into a gate (a
-//   door), each at a place of its own in the rhythm; one more on a kept square
+//   door), each on a beat of its own (shut first or open first); one more on a kept square
 //   or anywhere free, two or three in all. No dressing lands on either.
 // - The terrain must matter (terrainMatters): a room is kept only if the same
 //   room without its tiles or gates plays differently: its line fails there,

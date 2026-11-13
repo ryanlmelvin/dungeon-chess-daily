@@ -16,9 +16,8 @@
 //
 // - cracks (Crumbling floor, src/cracks.js): a cracked tile falls away when the
 //   piece standing on it steps off, and the pit it leaves blocks like a wall.
-// - gates (src/gates.js): gate squares shut and open on a rhythm, two moves
-//   each, and each wears the moves until it changes; shut, a gate blocks like
-//   a wall.
+// - gates (src/gates.js): gate squares shut one move and open the next; shut,
+//   a gate blocks like a wall.
 //   Neither is drawn for any date yet (DRAW): a day carries one only when
 //   tooling or the dev preview asks (src/composed-preview.js &modifier=).
 //   Both are moving terrain, one seam for the whole engine (src/terrain.js).
@@ -59,8 +58,8 @@ const PREVIEW = Object.freeze({
   }),
   gates: Object.freeze({
     id: 'gates', emoji: '⛓️', name: 'Gates', changesRules: true,
-    headline: 'Gatekeeper keeps strict time: every gate stays shut two moves, then open two',
-    explain: 'Gates: shut, a gate blocks like a wall; open, it is floor. Its number is the moves until it changes: at 1 it changes after this move, once every piece has moved. A gate never shuts on a piece.',
+    headline: 'Gatekeeper keeps strict time: every gate shuts one move and opens the next',
+    explain: 'Gates: shut, a gate blocks like a wall; open, it is floor. Every gate changes after every move, once every piece has moved: shut now, open next. A gate never shuts on a piece.',
   }),
 });
 export const MODIFIERS = Object.freeze(Object.defineProperties({ ...DRAWN }, Object.fromEntries(Object.entries(PREVIEW).map(([id, value]) => [id, { value, enumerable: false }]))));
