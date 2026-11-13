@@ -30,7 +30,7 @@ function playDay(date, each = () => {}) {
   assert.equal(state.status, 'won', date);
   return { daily, arrivals, shops, lines: lines.slice(0, 3), won: state };
 }
-// A pawn day, a bishop day on a Breach day, a queen day whose line waits.
+// A pawn day, a bishop's Gates day, a queen day whose line waits.
 const DAYS = ['2026-11-05', '2026-11-12', '2026-11-10'];
 // A position without what a move says about itself.
 const position = ({ events, message, notes, unmasked, ...rest }) => rest;

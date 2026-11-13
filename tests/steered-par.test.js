@@ -46,7 +46,7 @@ function pawnRoom() {
   }
   const state = createGame(withRooms(raw));
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.companion = null;
-  delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
+  delete state.modifier; delete state.ice;
   state.objective = { piece: 'rook', complete: false };
   const target = state.species[state.floor];
   state.enemies = [{ id: 'target', species: target.id, palette: target.palette, name: target.name, piece: 'rook', role: 'rook', x: 5, y: 1, moved: true, phase: 'ready', intent: [], target: null }];

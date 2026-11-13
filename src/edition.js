@@ -187,8 +187,8 @@ export function getRawDaily(date = new Date()) {
   const species = [];
   for (let index = 0; index < 9; index++) {
     const [id, baseName, plural] = pool.splice(Math.floor(rng() * pool.length), 1)[0];
-    // Floor-mates (a floor's target and its two decoy species, which also
-    // supply Collapse reinforcements) never share a palette: a clash steps to
+    // Floor-mates (a floor's target and its two decoy species) never share a
+    // palette: a clash steps to
     // the next free one. Still one draw, so every other draw stays put.
     const floor = index < 3 ? index : Math.floor((index - 3) / 2);
     const mates = index < 3 ? [] : [species[floor], ...species.slice(3 + floor * 2, index)];
@@ -202,7 +202,7 @@ export function getRawDaily(date = new Date()) {
     date: value, edition: Math.floor((Date.parse(value) - EPOCH) / DAY) + 1, seed, playerPiece, playerColor: DAILY_COLOR, species, targets,
     theme: buildTheme(species),
     // The day's room modifier (src/modifiers.js) draws from its own hash stream.
-    modifier: modifierFor(value),
+    modifier: modifierFor(value, playerPiece),
     // The two between-floor shops' offers.
     shops: [shopStock(value, 0), shopStock(value, 1)],
   };

@@ -68,6 +68,17 @@ test('rooms survive the room code exactly, key order included', () => {
   assert.deepEqual(richBack, rich);
   assert.equal(JSON.stringify(richBack), JSON.stringify(rich));
   assert.equal(encodeRooms(rich), [`${first}mc`, ...rest].join('/'), 'the chest on g4 adds its two characters to the room\'s items, and nothing else changes');
+  // A room's cracked tiles follow '^', a character each; its gates follow '=', two each: the square and the beat it begins on.
+  const terrain = [room({ cracks: [{ x: 4, y: 3 }, { x: 0, y: 1 }] }), room({ start: { x: 1, y: 6 }, gates: [{ x: 4, y: 3, phase: 0 }, { x: 5, y: 3, phase: 1 }] }), room({ gates: [] })];
+  const terrainBack = decodeRooms(encodeRooms(terrain));
+  assert.deepEqual(terrainBack, terrain);
+  assert.equal(JSON.stringify(terrainBack), JSON.stringify(terrain));
+  const [plainCode] = encodeRooms([room({}), room({}), room({})]).split('/');
+  assert.deepEqual(encodeRooms(terrain).split('/'), [`${plainCode},^cI`, `${encodeRooms(rooms).split('/')[0]},=cAdB`, `${plainCode},=`]);
+  assert.throws(() => encodeRooms([room({ ice: [], cracks: [] }), room({}), room({})]), 'one kind of thing laid a room');
+  assert.throws(() => encodeRooms([room({ gates: [{ x: 4, y: 3, phase: 2 }] }), room({}), room({})]), 'a gate begins on beat 0 or 1');
+  assert.throws(() => decodeRooms(`${plainCode},=cC/${plainCode}/${plainCode}`));
+  assert.throws(() => decodeRooms(`${plainCode},=c/${plainCode}/${plainCode}`));
   // The code of 2026-11-01 as stored before chests: it decodes, holds none, and encodes back unchanged.
   const old = 'AAwDJ4AAAAAzZAwL1K,gOcoMoB5,FGHOXpx9/AAEIKArAUAA8XAiAIBwB-C,uOzo6oH0,JKdmstu2/NsgBAAHAQAA2BANCfB,v5,OTVXYad3';
   assert.equal(encodeRooms(decodeRooms(old)), old);

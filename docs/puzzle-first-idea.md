@@ -12,7 +12,8 @@ same day. Phases 0 to 3 are built: the composer, the scoring rules, coverage
 of every daily piece, target role and modifier, and the switch (2026-11-11):
 every edition is now composed, the whole archive rebuilt, and the calibrated
 generator retired. Chests, Tandem floors and the tight forms followed with
-rules version 13 (2026-11-12); what was measured for them is in the commit
+rules version 13 (2026-11-12), and moving terrain (a crumbling floor, gates)
+in place of Breach with version 14; what was measured for them is in the commit
 history and in `scripts/measure-treasure.mjs`, `measure-tight.mjs` and
 `measure-par-slack.mjs`. [Generation and fairness](generation.md) describes
 what ships; this document keeps how it came about.
@@ -89,6 +90,8 @@ Measured with the human-like bot's 40 runs per floor on the stored editions
 | Partner floors: a Tandem on floor 1 or 2, two targets that guard each other, won with the floor's recruit on your orders | Kept after play (2026-11-11), shipped 2026-11-12. Held to par without the recruit, and a queen pairs only knights. It takes every day whose matchup has one: 360 of 742. The bot makes par on most of them once it has the recruit, so it is guarded from the move that joins it, not from the floor's start |
 | Tight floors: subtle forms of the bait and the squeeze on floor 2 (the mouth, the pincer, a picked squeeze against pawns), and a day's arc: floor 1 shows the same idea plainly | Kept after play (2026-11-11), shipped 2026-11-12: no win within par skips the idea, at most half the first actions keep par, and the bot makes par in at most a quarter of its runs. 144 floor 2s |
 | A pawn's king floor rejected when the recruit king can mate while the pawn sits out a move | Dropped (2026-11-11): it swapped king mates for promote-and-mate floors, which play easier, and the player orders that king now |
+| No legal move starts the floor over, never the day | Chosen (2026-11-12): "too harsh in all cases", the owner's words for the day's restart |
+| Moving terrain in place of Breach: a Crumbling floor or Gates on Breach's days, never both on a day | Kept after play (2026-11-12 and 13), shipped with rules version 14. Breach never came on a floor of three or four moves and is retired with its code. Gates on a bishop's day (cracked tiles seldom matter to its floors), else either, evenly. Gates alternate every move with nothing on them to read: arrows on the gates about to change, then a number on every gate, were both tried and dropped for it |
 | One release configuration: what `composeDay` composes with no options is what the build stores, the audit composes again and the preview shows | Built with the release (2026-11-12). A day that can't compose with everything gives up its partner floor, then its tight forms, then its chests; none of the 742 did |
 
 ## Lichess puzzles

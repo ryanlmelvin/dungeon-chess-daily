@@ -31,7 +31,7 @@
 //   node scripts/measure-tight.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--jobs N] [--runs N]
 //     [--modes off,on] [--budget steps] [--table days] [--json path] [--from path] [--no-partner] [--no-treasure]
 //     [--option tight|wait|lure|ideas] [--every] [--no-ceiling] [--drawn] [--dates YYYY-MM-DD,…]
-//     [--modifier none|ice|collapse|cracks|gates]
+//     [--modifier none|ice|cracks|gates]
 // --modifier composes every day under that modifier instead of its own (cracks and gates, the two
 // in preview, compose floor 2 around its terrain before its tight form: src/composer.js "Terrain floors").
 // --jobs splits the dates over that many processes; --from reads rows a

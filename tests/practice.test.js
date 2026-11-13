@@ -8,6 +8,7 @@ import { DIFFICULTY_TIERS, TIER_IDS } from '../src/difficulty.js';
 import { monsterSmarts } from '../src/monster-ai.js';
 import { CAVE_IN_MOVES, caveInMoves } from '../src/cave-in.js';
 import { distanceTable, UNREACHABLE } from '../src/move-tables.js';
+import { shutNow } from '../src/terrain.js';
 import { room as composedRoom, withRooms } from './fixtures/rooms.js';
 
 const dates = ['2026-11-05', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-11', '2026-11-13'];
@@ -34,6 +35,8 @@ function nextFloor(previous) {
   state.captures += state.enemies.length; state.gold += optional; state.paidCaptures += optional;
   state.enemies = []; state.objective.complete = true; state.exit.open = true;
   state.turns++;
+  // On a Gates day the made-up turn moves the gates' clock too; they are left open, as a gate a piece just stood in is.
+  if (state.gates) { state.gateTurns++; for (const gate of state.gates) gate.shut = false; shutNow(state); }
   return act(state, { type: 'descend' });
 }
 

@@ -84,7 +84,7 @@ test('a pawn player composes days that mix tempo and crown floors and three mate
   assert.deepEqual([...seen.mates].sort(), ['both', 'king', 'queen']);
 });
 
-// Ice and Breach days keep their modifier on composed floors (src/composer.js).
+// An Ice day keeps its modifier on composed floors (src/composer.js); a terrain day's floors: tests/terrain-floors.test.js.
 // Two Ice bishop days. 2026-11-24: its first floor's line aims one square
 // short of the key square, on ice, and skids onto it ('skid'), and so does
 // its king floor's mate; its second floor is a Tandem, whose ice lies off the
@@ -139,31 +139,6 @@ test('a composed room’s ice replaces the day’s seeded draw', () => {
   const ice = [{ x: 4, y: 3 }, { x: 2, y: 5 }];
   assert.deepEqual(createGame({ ...daily, composed: [{ ...room, ice }, room, room] }).ice, [{ x: 4, y: 3 }, { x: 2, y: 5 }]);
   assert.deepEqual(createGame({ ...daily, composed: [{ ...room, ice: [] }, room, room] }).ice, []);
-});
-
-// No monster ever stands on a composed pawn player's file, so a Breach
-// arrival comes in off it, even when the door square is free; published
-// editions keep the door square. 2026-12-16 is a Breach pawn day.
-test('a composed Breach day brings arrivals in off a pawn player’s file', async () => {
-  const { arrivalSquare } = await import('../src/modifiers.js');
-  const daily = getRawDaily('2026-12-16');
-  assert.deepEqual([daily.modifier, daily.playerPiece], ['collapse', 'pawn']);
-  const room = { map: Array(8).fill('........'), enemies: [{ x: 0, y: 3, cast: 0 }], items: [] };
-  const state = createGame({ ...daily, composed: [room, room, room] });
-  assert.deepEqual([state.player.x, state.player.y], [4, 6]);
-  const square = arrivalSquare(state, 0);
-  assert.ok(square.x !== 4 && Math.max(Math.abs(square.x - 4), square.y) === 1, 'beside the door, off the e-file');
-  const { composed, ...published } = state;
-  assert.deepEqual(arrivalSquare(published, 0), { x: 4, y: 0 }, 'a published edition’s arrival still takes the door square');
-  assert.deepEqual(arrivalSquare({ ...state, player: { ...state.player, piece: 'queen' } }, 0), { x: 4, y: 0 }, 'once promoted, the door square again');
-  // Ten moves in, the first arrival comes in beside the door (nobody stands on its square).
-  const { collapseTick } = await import('../src/modifiers.js');
-  const due = structuredClone(state);
-  Object.assign(due, { turns: 10, message: '', events: [] });
-  collapseTick(due);
-  const arrival = due.events.find((event) => event.type === 'reinforcement');
-  assert.ok(arrival && arrival.x !== 4, 'it came in off the e-file');
-  assert.match(due.message, /^.+ stumbles in beside the door\.$/);
 });
 
 // Decoy pawns (src/composer.js DECOY_PAWN_CROWN) start on rank 6 or higher,

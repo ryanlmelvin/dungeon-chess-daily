@@ -11,13 +11,12 @@
 // is the royal king's square and the square the planted line mates from; on a
 // pawn player's king floor, its mate is the queen's, both's or the king's
 // (src/composer.js PAWN_MATES). On Ice days a floor's ice meets its line one
-// way (src/composer.js iceVariants: lock, skid or off); on Breach days a run
-// meets an arrival from its tenth move on. Read-only.
+// way (src/composer.js iceVariants: lock, skid or off). Read-only.
 //   node scripts/measure-composer.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…] [--starts e2|wide|c2,d2,…]
-//     [--pawn-days] [--modifiers ice,collapse,none] [--modifier none|ice|collapse] [--json path]
+//     [--pawn-days] [--modifiers ice,cracks,gates,none] [--modifier none|ice|cracks|gates] [--json path]
 //     [--no-treasure] [--no-partner] [--no-tight]
 // --pawn-days measures only the days whose floors 1–2 have pawn targets; --modifiers only the
-// days whose own modifier is listed (Breach is 'collapse'); --modifier composes every day under
+// days whose own modifier is listed; --modifier composes every day under
 // that modifier instead of its own (none: as a plain day, to compare). Days compose in the
 // release configuration, as the stored editions do; --no-treasure, --no-partner and --no-tight
 // each turn one of its options off (scripts/compose-options.mjs).
@@ -28,7 +27,6 @@ import { getRawDaily } from '../src/edition.js';
 import { DIFFICULTY_TIERS } from '../src/difficulty.js';
 import { certifiedFloors, playFloor, runSeed, medianRun, HUMAN_RUNS } from '../src/human-bot.js';
 import { targetDistance } from '../src/fairness.js';
-import { floorScoredMoves } from '../src/rules.js';
 
 const DAY = 86_400_000;
 const arg = (name, fallback) => { const at = process.argv.indexOf(`--${name}`); return at > 0 ? process.argv[at + 1] : fallback; };
@@ -72,9 +70,7 @@ for (let time = Date.parse(start); time <= Date.parse(end); time += DAY) {
     const par = floor.line.length + 1;
     const outcomes = Array.from({ length: runs }, (_, run) => {
       const result = playFloor(certified.starts[f], { seed: runSeed(daily, f, run), frames: true });
-      // Breach: the move (scored, as par counts) at which the run met its first arrival, if it did.
-      const arrived = result.frames.findIndex((frame) => frame.events.some((event) => event.type === 'reinforcement'));
-      return { won: result.won, moves: result.moves, hits: result.hits, stalled: stalled(result.frames), arrival: arrived > 0 ? floorScoredMoves(result.frames[arrived]) - floorScoredMoves(result.frames[0]) : null };
+      return { won: result.won, moves: result.moves, hits: result.hits, stalled: stalled(result.frames) };
     });
     // Par two ways (an open question): the planted line plus one, or the bot's median (src/human-bot.js medianRun, as production).
     const botPar = medianRun(outcomes, floor.line.length).par;
@@ -111,7 +107,6 @@ function summarize(group) {
     past: percent(all.filter((run) => !run.won || run.moves > run.planted).length, all.length),
     short: `${percent(won.filter((run) => run.moves - run.hits <= 2).length, all.length)} / ${percent(won.filter((run) => run.moves <= 2).length, all.length)}`,
     stalled: mean(all.map((run) => run.stalled)).toFixed(2),
-    arrivals: `${percent(all.filter((run) => run.arrival !== null).length, all.length)} / ${percent(all.filter((run) => run.arrival !== null && run.arrival <= run.par + 4).length, all.length)}`,
     hits: mean(all.map((run) => run.hits)).toFixed(2),
     botMedian: median(group.map((row) => median(row.outcomes.filter((run) => run.won).map((run) => run.moves)))),
     ms: `${mean(group.map((row) => row.ms)).toFixed(1)} / ${median(group.map((row) => row.ms)).toFixed(1)}`,
@@ -131,8 +126,8 @@ console.log(`Composer over ${days.size} ${pieces.join(', ')} days${pawnDays ? ' 
 console.log(`Time to compose a day: mean ${mean(dayMs).toFixed(0)} ms, median ${median(dayMs).toFixed(0)} ms, slowest ${Math.max(...dayMs).toFixed(0)} ms.\n`);
 console.log('| Motif | Instances built | Planted idea wins (replay acceptance) | Kept after dressing |\n|---|---|---|---|');
 for (const [motif, tally] of Object.entries(tries)) console.log(`| ${motif} | ${tally.built} | ${percent(tally.replayed, tally.built)} | ${percent(tally.kept, tally.built)} |`);
-const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Walls | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | Runs meeting an arrival (all / by par+4) | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
-const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.walls} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.arrivals} | ${s.ms} |`; };
+const header = '| Group | Floors | Line 3 / 4 moves | Unique first move | Walls | Mean par (line+1 / bot median) | Runs missing par+4 (line+1 / bot median) | Runs won in ≤2 (moves / moves + captures) | Stalled moves / run | Captures / run | Pressured turns on the line (floors with any) | Runs past the line length | ms per floor (mean / median) |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|';
+const line = (name, group) => { const s = summarize(group); return `| ${name} | ${s.floors} | ${s.planted} | ${s.unique} | ${s.walls} | ${s.pars} | ${s.miss} | ${s.short} | ${s.stalled} | ${s.hits} | ${s.pressure} | ${s.past} | ${s.ms} |`; };
 console.log(`\nBy motif:\n\n${header}`);
 for (const motif of motifs) console.log(line(motif, floorsOf.filter((row) => row.motif === motif)));
 console.log(line('all', floorsOf));
@@ -158,7 +153,7 @@ for (const f of [0, 1, 2]) {
 }
 const modifierNames = [...new Set(floorsOf.map((row) => row.modifier))];
 if (modifierNames.length > 1 || modifierNames[0] !== 'none') {
-  console.log(`\nBy modifier (Breach is collapse):\n\n${header}`);
+  console.log(`\nBy modifier:\n\n${header}`);
   for (const modifier of modifierNames) console.log(line(modifier, floorsOf.filter((row) => row.modifier === modifier)));
 }
 const icy = floorsOf.filter((row) => row.ice);

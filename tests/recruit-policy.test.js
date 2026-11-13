@@ -67,7 +67,7 @@ function room() {
   const date = Array.from({ length: 30 }, (_, day) => dayAfter('2031-03-01', day)).find((day) => getRawDaily(day).playerPiece === 'rook');
   const state = createGame(withRooms(date));
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.companion = null;
-  delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
+  delete state.modifier; delete state.ice;
   Object.assign(state.player, { x: 7, y: 7, moved: true });
   state.powers.freeze = 6;
   return state;

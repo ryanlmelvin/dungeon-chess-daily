@@ -3,7 +3,7 @@
 import { PIECES, PIECE_COUNTS } from './pieces.js';
 import { hash, hashMore, random } from './random.js';
 import { shopStock } from './edition.js';
-import { setupFloorModifier, iceSlide, collapseTick, extraPopulation, reinforcementOptions, validModifierState } from './modifiers.js';
+import { setupFloorModifier, iceSlide, validModifierState } from './modifiers.js';
 import { breakTactics, scoreTactics, tacticGold, validTactics, TACTIC_KINDS, TACTIC_EVENTS } from './tactics.js';
 import { chooseMonsterMove, safeToStrike, safeCloseIn, screenStep } from './monster-ai.js';
 import { caveInTick, cavedIn, validCaveIn, CAVE_IN_EVENTS } from './cave-in.js';
@@ -12,7 +12,7 @@ import { floorAt, shutAt, settled, openLane } from './terrain.js';
 import { stepOff } from './cracks.js';
 import { gateTick, GATE_CYCLE } from './gates.js';
 export { PIECES, PLAYABLE_PIECES, PIECE_COUNTS } from './pieces.js';
-export const RULES_VERSION = 13;
+export const RULES_VERSION = 14;
 const ORTHOGONAL = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 const DIAGONAL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const KNIGHT = [[-2, -1], [-1, -2], [1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1]];
@@ -832,10 +832,15 @@ function reachableFrom(state, piece, from) {
 // on one of its first moves, as it does for the day's piece (a pawn recruit
 // on a file open to the far rank); a coin or power-up it can't reach moves to
 // a square it can, two or more steps away (the room's middle rows when it
-// can). Pawns only advance, so their rooms are left as they are.
+// can). Pawns only advance, so their rooms are left as they are. Nothing is
+// moved onto a cracked tile or a gate the room lays (src/terrain.js), and
+// the fitting reads the room before its terrain is set up: every gate open,
+// no tile fallen.
 function fitPracticeRoom(state, layoutPiece) {
   const piece = state.startingPiece;
   if (!state.practice || piece === layoutPiece || piece === 'pawn') return;
+  const room = state.composed?.[state.floor];
+  const laid = (tile) => [...(room?.cracks ?? []), ...(room?.gates ?? [])].some((other) => same(other, tile));
   let reach = reachableFrom(state, piece, state.player);
   const near = (index) => Math.max(Math.abs((index % 8) - state.player.x), Math.abs(Math.floor(index / 8) - state.player.y)) <= 1;
   if (reach.every((seen, index) => !seen || near(index))) {
@@ -856,7 +861,7 @@ function fitPracticeRoom(state, layoutPiece) {
   const recruit = state.items.find((item) => item.type === 'companion');
   if (recruit) {
     const fits = (tile) => !same(tile, state.exit) && !enemyAt(state, tile.x, tile.y) && !state.items.some((other) => other !== recruit && same(other, tile))
-      && (recruit.piece !== 'pawn' || openFile(state, tile));
+      && !laid(tile) && (recruit.piece !== 'pawn' || openFile(state, tile));
     const first = movesFor(state, { ...state.player, piece }).filter(fits);
     if (!first.some((tile) => same(tile, recruit))) {
       const anywhere = [];
@@ -872,7 +877,7 @@ function fitPracticeRoom(state, layoutPiece) {
     for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
       const tile = { x, y };
       if (!reached(tile) || Math.max(Math.abs(x - state.player.x), Math.abs(y - state.player.y)) <= 1 || same(tile, state.exit)
-        || enemyAt(state, x, y) || state.items.some((other) => same(other, tile))) continue;
+        || enemyAt(state, x, y) || state.items.some((other) => same(other, tile)) || laid(tile)) continue;
       free.push(tile);
     }
     const middle = free.filter((tile) => tile.y >= 3 && tile.y <= 5);
@@ -980,7 +985,9 @@ function setFloor(state) {
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
   }
-  // Practice with another piece: its first moves, recruit and pickups fitted to it.
+  // Practice with another piece: its first moves, recruit and pickups fitted to it, on the
+  // room as laid: the squares the last floor's terrain shut (or this floor's, set up before) are not this room's.
+  delete state.shut;
   fitPracticeRoom(state, state.layoutPiece ?? state.startingPiece);
   setupFloorModifier(state);
   // On an Ice day a room may lay its own ice (placed around its planted line) instead of the seeded draw.
@@ -1158,8 +1165,7 @@ function bonusCaptures(state) {
   const earlier = state.records.slice(0, state.floor).reduce((sum, record) => sum + record.captures - floorCensus(state, record.floor).targets, 0);
   const remaining = state.enemies.filter((foe) => (foe.role ?? foe.piece) !== state.targets[state.floor]).length;
   const { residents, targets } = floorCensus(state);
-  // Collapse reinforcements are decoys too: each one that entered pays when taken.
-  return earlier + residents - targets + (state.reinforcements ?? 0) - remaining;
+  return earlier + residents - targets - remaining;
 }
 
 function spentGold(state) {
@@ -1212,23 +1218,15 @@ export function captureGoal(piece) {
 
 const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 const distinct = (cast) => cast.filter((species, index) => cast.findIndex((entry) => entry.id === species.id) === index);
-/**
- * Who can stand on `floor`: its target species, its decoys and, on a collapse
- * day, the decoy species its reinforcements come from, by name. Saves may
- * unmask any of them (validateSave).
- */
+/** Who can stand on `floor`: its target species and its decoys, by name. Saves may unmask any of them (validateSave). */
 export function floorLineup(state, floor = state.floor) {
-  const arrivals = state.modifier === 'collapse'
-    ? reinforcementOptions({ ...state, floor, exit: { x: 4, y: 0 } }, 0).map((foe) => state.species.find((entry) => entry.id === foe.species))
-    : [];
-  return distinct([state.species[floor], ...floorDecoys(state, floor), ...arrivals]).sort(byName);
+  return distinct([state.species[floor], ...floorDecoys(state, floor)]).sort(byName);
 }
 
 /**
  * The decoy species a composed `floor` casts with as many copies as its target
  * (the count rule, composer.js castFor), or null on a floor with no other
- * species. Picked from the date on its own hash stream (never gameplay's); a
- * decoy standing in the room from the start comes before a collapse arrival.
+ * species. Picked from the date on its own hash stream (never gameplay's).
  * The key dates from when the paper printed this species beside the target:
  * changing it would move every composed room.
  */
@@ -1618,7 +1616,7 @@ function play(previous, action) {
       if (state.playerColor === 'white' && !checkmate(state)) { enemyTurn(state); settle(state); }
     }
     gateTick(state);
-    collapseTick(state); settle(state);
+    settle(state);
     caveInTick(state, previous); settle(state);
     if (trapped(state)) restartFloor(state, [], noMoves(state));
     return state;
@@ -1765,7 +1763,7 @@ function play(previous, action) {
     if (state.playerColor === 'white' && (close || !checkmate(state))) { enemyTurn(state, Boolean(close)); settle(state); }
   }
   gateTick(state);
-  collapseTick(state); settle(state);
+  settle(state);
   caveInTick(state, previous); settle(state);
   if (trapped(state)) restartFloor(state, [], noMoves(state));
   return state;
@@ -1905,10 +1903,8 @@ export function validateSave(value, date, daily) {
     if (value.seed !== daily.seed || value.startingPiece !== daily.playerPiece || !equal(value.species, daily.species) || !equal(value.targets, daily.targets) || !equal(value.theme, daily.theme)) return false;
     // The day's rooms travel with every save of it.
     if (!validComposed(daily.composed) || !equal(value.composed, daily.composed)) return false;
-    // Collapse days may add reinforcements to a floor (up to a cap).
     const census = [0, 1, 2].map((floor) => floorCensus(daily, floor));
-    const population = (floor) => census[floor].residents + extraPopulation(value.modifier);
-    const reinforced = value.reinforcements ?? 0;
+    const population = (floor) => census[floor].residents;
     const totalPopulation = [0, 1, 2].reduce((sum, floor) => sum + population(floor), 0);
     // Each capture may also pay a fork and a combo bonus (tactics.js).
     const maxGold = totalPopulation + 9 + totalPopulation * (TACTIC_KINDS.length + 1) + 3 * CHEST_GOLD;
@@ -1949,11 +1945,8 @@ export function validateSave(value, date, daily) {
     }
     if (!Array.isArray(value.enemies) || value.enemies.length > population(value.floor) || !Array.isArray(value.items) || value.items.length > template.items.length || !Array.isArray(value.records) || !Array.isArray(value.events) || value.events.length > 56) return false;
     if (!value.enemies.every((foe) => {
-      const original = template.enemies.find((entry) => entry.id === foe.id)
-        ?? Array.from({ length: reinforced }, (_, n) => reinforcementOptions(value, n)).flat().find((entry) => entry.id === foe.id && entry.species === foe.species);
+      const original = template.enemies.find((entry) => entry.id === foe.id);
       if (!original || foe.species !== original.species || foe.palette !== original.palette || foe.name !== original.name || foe.role !== original.role) return false;
-      // A reinforcement only enters while its role has room under a chess army's counts.
-      if (original !== template.enemies.find((entry) => entry.id === foe.id) && value.enemies.filter((entry) => entry.role === foe.role).length > PIECE_COUNTS[foe.role]) return false;
       if (foe.piece !== original.piece && !(original.piece === 'pawn' && foe.piece === 'queen' && foe.promoted === true)) return false;
       if (!walkable(value, foe.x, foe.y) || typeof foe.moved !== 'boolean' || same(foe, value.player)) return false;
       // A held decoy sleeps as long as its room says, which may outlast a pin.
@@ -1983,13 +1976,13 @@ export function validateSave(value, date, daily) {
     if (!value.records.every((record) => record.stars === undefined || integer(record.stars, 1, 3))) return false;
     if (!value.records.every((record) => record.hints === undefined || validHints(record.hints))) return false;
     if (!value.floorStart || !integer(value.floorStart.turns, 0, value.turns) || !integer(value.floorStart.captures, 0, value.captures) || !integer(value.floorStart.treasure, 0, value.treasure) || !integer(value.floorStart.hits, 0, value.hits)) return false;
-    if (!validTactics(value, [...template.enemies.map((foe) => foe.id), ...Array.from({ length: value.reinforcements ?? 0 }, (_, n) => `f${value.floor}-r${n}`)])) return false;
+    if (!validTactics(value, template.enemies.map((foe) => foe.id))) return false;
     const previous = value.records.slice(0, value.floor);
     for (const key of ['turns', 'captures', 'treasure', 'hits']) if (previous.reduce((sum, record) => sum + (record[key] ?? 0), 0) !== value.floorStart[key]) return false;
     const coinsLeft = value.items.filter((item) => item.type === 'coin').length;
     if (!validCaveIn(value)) return false;
     // Coins a cave-in buried were never collected.
-    if (value.captures !== value.floorStart.captures + population(value.floor) - extraPopulation(value.modifier) + reinforced - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - coinsLeft - (value.caveIn?.buried ?? 0)) return false;
+    if (value.captures !== value.floorStart.captures + population(value.floor) - value.enemies.length || value.treasure !== value.floorStart.treasure + template.items.filter((item) => item.type === 'coin').length - coinsLeft - (value.caveIn?.buried ?? 0)) return false;
     // Saves from before floor resets have no snapshot; a present one must be this floor's start.
     if (value.floorSnapshot !== undefined) {
       const start = value.floorSnapshot;
@@ -2004,7 +1997,7 @@ export function validateSave(value, date, daily) {
     if (ep !== undefined && ep !== null && !(typeof ep === 'object' && equal(Object.keys(ep).sort(), ['id', 'x', 'y']) && ep.y === 2 && integer(ep.x, 0, 7)
       && value.enemies.some((foe) => foe.id === ep.id && foe.piece === 'pawn' && foe.x === ep.x && foe.y === 3))) return false;
     if (value.notes !== undefined && !(Array.isArray(value.notes) && value.notes.length > 0 && value.notes.length <= 8 && value.notes.every((note) => typeof note === 'string' && note && note.length <= 1000))) return false;
-    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'reinforcement', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', 'checkmate', 'crumble', 'gates', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || ((template.enemies.some((foe) => foe.id === event.id) || Array.from({ length: reinforced }, (_, n) => `f${value.floor}-r${n}`).includes(event.id)) && inside(event.from?.x, event.from?.y))))) return false;
+    if (typeof value.message !== 'string' || value.message.length > 1000 || !value.events.every((event) => ['move', 'capture', 'player-captured', 'damage', 'pickup', 'powerup', 'shield', 'descend', 'win', 'promotion', 'enemy-promotion', 'enemy-phase', 'enemy-move', 'companion-order', 'companion-recruit', 'companion-phase', 'companion-move', 'companion-capture', 'companion-promotion', 'miss', 'restart', 'close-capture', 'wait', 'en-passant', 'castle', 'bishop-pair', 'slide', 'pin', 'unpin', 'leap', 'takeback', 'unmask', 'hint', 'checkmate', 'crumble', 'gates', ...TACTIC_EVENTS, ...CAVE_IN_EVENTS].includes(event.type) && inside(event.x, event.y) && (event.type !== 'enemy-move' || (template.enemies.some((foe) => foe.id === event.id) && inside(event.from?.x, event.from?.y))))) return false;
     return true;
   } catch { return false; }
 }

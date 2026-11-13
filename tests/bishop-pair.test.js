@@ -31,7 +31,7 @@ function scenario({ piece = 'bishop', recruit = [3, 3], from = [4, 4], recruitPi
   Object.assign(state.player, { x: from[0], y: from[1], moved: true });
   state.map = Array(8).fill('........'); state.props = []; state.enemies = []; state.companion = null;
   state.items = [{ type: 'companion', piece: recruitPiece, x: recruit[0], y: recruit[1] }];
-  delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
+  delete state.modifier; delete state.ice;
   state.objective = { piece: 'knight', complete: false };
   state.powers.freeze = 6;
   return state;

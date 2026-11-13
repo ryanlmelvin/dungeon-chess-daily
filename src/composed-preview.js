@@ -10,9 +10,10 @@
 // &ideas=1 (both), each on the one day in three it draws; &wait=all,
 // &lure=all or &ideas=all on every day it fits; &ceiling=0 composes them
 // without the bot's ceiling, to compare. &modifier=cracks or &modifier=gates
-// plays the date under one of the two room modifiers in preview (a crumbling
-// floor, gates: src/modifiers.js), which no date draws yet; without it the
-// date keeps its own modifier. Its runs save apart from real ones.
+// plays the date under one of the two terrain modifiers (a crumbling floor,
+// gates: src/modifiers.js) whatever it draws, to try either on any date;
+// without it the date keeps its own modifier. Its runs save apart from real
+// ones.
 // src/main.js loads this module only in a dev build opened with ?composed=,
 // so published builds never carry it.
 import { composeDay, START_SETS, COMPOSED_STARTS } from './composer.js';

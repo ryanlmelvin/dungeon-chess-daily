@@ -21,7 +21,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start))
   throw new Error('Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days]');
 }
 const summary = { start, days: count, stored: 0, borrowed: 0, longestRoute: 0, promotedRoutes: 0, partnerDays: 0, recruitOrders: 0, chests: 0, pieces: {}, pars: {}, modifiers: {}, maxLoadMs: 0 };
-const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, slides: 0, reinforcements: 0, checkmates: 0 };
+const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, slides: 0, pits: 0, gateTurns: 0, checkmates: 0 };
 const tally = (bucket, key) => { bucket[key] = (bucket[key] ?? 0) + 1; };
 for (let offset = 0; offset < count; offset++) {
   const date = new Date(Date.parse(start) + offset * 86_400_000).toISOString().slice(0, 10);
@@ -46,7 +46,9 @@ for (let offset = 0; offset < count; offset++) {
     state = act(state, action);
     assert.equal(validateSave(state, date, daily), true, `${date}: save after ${JSON.stringify(action)}`);
     entry.slides += state.events.filter((event) => event.type === 'slide').length;
-    entry.reinforcements += state.events.filter((event) => event.type === 'reinforcement').length;
+    // Moving terrain as the certificate meets it: tiles that fell, and turns on which a gate changed.
+    entry.pits += state.events.filter((event) => event.type === 'crumble').length;
+    entry.gateTurns += state.events.filter((event) => event.type === 'gates').length;
     entry.checkmates += state.events.filter((event) => event.type === 'checkmate').length;
   }
   assert.equal(state.status, 'won', `${date}: the certificate wins as played`);

@@ -1094,7 +1094,6 @@ export function createDungeonRenderer(container, { onTile, onLayout } = {}) {
       drawTerrain(ground);
     }
     // A monster entering through a collapsing door arrives in a puff of dust.
-    for (const event of events) if (event.type === 'reinforcement') burst(event.x, event.y);
     // The ceiling comes down once the turn's moves have landed (never on a new room).
     if (changedBoard) pendingQuake = null;
     else {

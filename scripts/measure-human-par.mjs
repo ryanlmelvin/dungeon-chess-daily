@@ -71,7 +71,7 @@ if (!isMainThread) {
   console.log(line('all', rows));
   console.log('\nBy modifier:\n');
   console.log(header.replace('Piece', 'Modifier'));
-  for (const modifier of ['none', 'ice', 'collapse']) {
+  for (const modifier of ['none', 'ice', 'cracks', 'gates']) {
     const group = rows.filter((row) => row.modifier === modifier);
     if (group.length) console.log(line(modifier, group));
   }

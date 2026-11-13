@@ -132,7 +132,7 @@ test('validateSave checks a save\'s chests', () => {
   assert.ok(!valid(forge(bare.state, (save) => { save.feats.push({ floor: 0, kind: 'chest' }); save.gold += CHEST_GOLD; }), bare.daily), 'a chest feat on a floor that has none');
 });
 
-// The composer's chests, as stored. 2026-11-12 is a bishop's Breach day,
+// The composer's chests, as stored. 2026-11-12 is a bishop's Gates day,
 // 2026-11-14 a knight's plain day, 2026-11-24 a bishop's Ice day (its floor 2
 // a Tandem, which gets no chest) and 2026-11-19 a pawn's day.
 const DATES = ['2026-11-12', '2026-11-14', '2026-11-24', '2026-11-19'];

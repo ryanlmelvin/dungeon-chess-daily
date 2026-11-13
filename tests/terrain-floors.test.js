@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Terrain floors (src/composer.js): a day forced onto one of the two preview
-// modifiers (a crumbling floor, gates) composes every floor around its
-// terrain or with it off the line, proves as any edition does, and nothing
-// changes for a date composed without the override.
+// Terrain floors (src/composer.js): a day forced onto one of the two terrain
+// modifiers (a crumbling floor, gates), as tooling and the dev preview can
+// force any date, composes every floor around its terrain or with it off the
+// line, proves as any edition does, and nothing changes for a date composed
+// without the override.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { composeDay, terrainMatters, terrainOff, TERRAIN_WAITS, PARTNER_MOTIF } from '../src/composer.js';

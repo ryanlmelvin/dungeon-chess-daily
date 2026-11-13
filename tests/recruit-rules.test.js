@@ -29,7 +29,7 @@ function scenario(piece = 'rook', { x = 4, y = 6 } = {}) {
   Object.assign(state.player, { x, y, moved: true });
   if (piece === 'king') { state.startingPiece = 'king'; state.player.piece = 'king'; }
   state.map = Array(8).fill('........'); state.props = []; state.items = []; state.enemies = []; state.companion = null;
-  delete state.modifier; delete state.ice; delete state.reinforcements; delete state.reinforcementsSkipped;
+  delete state.modifier; delete state.ice;
   state.objective = { piece: 'knight', complete: false };
   state.powers.freeze = 6;
   return state;

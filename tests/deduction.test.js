@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { act, createGame, createPracticeGame, getDaily, getShareText, validateSave, floorScoredMoves, scoredMoves, resetFloor } from '../src/game.js';
 import { getRawDaily, headlineFor } from '../src/edition.js';
 import { floorLineup, floorDecoys, matchedDecoy, nextHint, hintCards, closeRangeSquares, closeAttacker, targetLine, targetSpecies, PAID_HINTS } from '../src/rules.js';
-import { reinforcementOptions } from '../src/modifiers.js';
 import { floorPars } from '../src/par.js';
 import { botRun, playerRun } from '../src/bot.js';
 
@@ -65,9 +64,7 @@ test('each floor\'s full cast is exactly the species that can stand there, order
       assert.equal(state.floor, floor);
       const lineup = floorLineup(issue, floor);
       const residents = new Set(state.enemies.map((foe) => foe.species));
-      // Collapse days may add the floor's decoy species through the door.
-      const arrivals = issue.modifier === 'collapse' ? [0, 1, 2].flatMap((n) => reinforcementOptions(state, n).map((foe) => foe.species)) : [];
-      assert.deepEqual(new Set(lineup.map((species) => species.id)), new Set([...residents, ...arrivals]), `${issue.date} floor ${floor + 1}`);
+      assert.deepEqual(new Set(lineup.map((species) => species.id)), residents, `${issue.date} floor ${floor + 1}`);
       assert.ok(lineup.some((species) => species.id === issue.species[floor].id), 'the target is in the cast');
       assert.deepEqual(lineup.map((species) => species.name), lineup.map((species) => species.name).sort(), 'ordered by name');
       assert.deepEqual(floorLineup(state), lineup, 'the edition and the board agree');
@@ -93,7 +90,6 @@ test('matchedDecoy picks one other species from the floor, a resident first, sta
       if (!picked) { alone++; continue; }
       assert.notEqual(picked.id, issue.species[floor].id, `${label}: never the target`);
       assert.ok(floorLineup(issue, floor).some((species) => species.id === picked.id), `${label}: it can appear there`);
-      // A decoy already in the room comes before a collapse arrival.
       const decoys = [...new Map(floorDecoys(issue, floor).map((species) => [species.id, species])).values()];
       if (decoys.length) assert.ok(decoys.some((species) => species.id === picked.id), `${label}: a decoy in the room`);
       else arrivalsOnly++;

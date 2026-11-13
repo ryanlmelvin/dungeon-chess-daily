@@ -252,10 +252,9 @@ proved with it on. On Ice days each room lays its own eight ice tiles
 (`room.ice`): where the line's move onto its key square runs along a line, it
 aims one square short, on ice, and skids onto the key square, which is ice too
 where a move aimed straight at it would skid past (`iceVariants`). A Tandem's
-ice lies off its line, and no chest lies on ice. On Breach days a monster
-comes in at the door every ten moves, long after a line of three or four has
-opened the stairs, so only a player far over par meets one, and never on a
-pawn player's file.
+ice lies off its line, and no chest lies on ice. On a Crumbling floor or
+Gates day each room lays its own cracked tiles or gates where its idea lives
+("Moving terrain", below).
 
 ## Ideas in preview: the Standstill and the Lure
 
@@ -401,16 +400,20 @@ build's report), its page moved from `PREVIEW_PAGES` to `PAGES`
 unchanged, and no `COMPOSER_VERSION` bump, since each idea draws from seeded
 streams of its own), the pinned tests and this document's figures brought up
 to date, and the owner's play of a local preview first.
-## Moving terrain, in preview: a crumbling floor and gates
+## Moving terrain: a crumbling floor and gates
 
-Two more room modifiers are built and drawn for no date yet
-(`src/modifiers.js`: neither is in `DRAW`, and `MODIFIERS` leaves both out of
-a listing). They are meant for Breach's days, where an arrival every ten
-moves never comes on a floor of three or four. A day carries one only when
-tooling passes it (`composeDay`'s `daily`, the measuring scripts'
-`--modifier`) or the dev preview is opened with `&modifier=cracks` or
-`&modifier=gates` (`src/composed-preview.js`); nothing stored, no rules
-version and no composer version changed for them.
+Two room modifiers are terrain that changes during a floor. They took
+Breach's days with rules version 14 (2026-11-13): Breach, a monster in at
+the door every ten moves, never came on a floor of three or four, and is
+retired with its code. A date draws terrain on one day in four
+(`src/modifiers.js` `DRAW`, Breach's old slot, so no other day's draw
+moved), and the day's piece settles which (`terrainFor`): Gates on a
+bishop's day, since cracked tiles seldom matter to a bishop's floors (39% of
+them composed around the tiles, against 89% around gates, below), else one
+or the other, evenly, by the date. Tooling can still force either on any
+date (`composeDay`'s `daily`, the measuring scripts' `--modifier`), and so
+can the dev preview, with `&modifier=cracks` or `&modifier=gates`
+(`src/composed-preview.js`).
 
 **One seam.** Both are terrain that changes during a floor, and the engine
 has one notion of it (`src/terrain.js`): `solid()` says whether a square is
@@ -465,7 +468,9 @@ tiles go where the idea lives: one to three among the start, the targets' own
 squares, the squares they can step to and the squares the motif keeps open,
 the rest of the eight anywhere free. Its gates go at the targets' doors: a
 square a target can step to, or a wall of its box opened into a gate, each on
-a beat of its own, then one more on a kept square or anywhere free. Three rules are added to every floor's own:
+a beat of its own, then one more on a kept square or anywhere free. On the
+king floor no gate stands on the lane from the start to the recruit, which
+waits one move away as on any day. Three rules are added to every floor's own:
 
 1. **The terrain matters** (`terrainReason`). The same room without its
    tiles or gates must play differently: its line fails there, or something
@@ -544,11 +549,11 @@ queen's day is the slow one, 15 to 30 s on average on the busy machine and
 7 s under gates on the quieter. The dev preview composes in
 the page, so a queen's day takes a while to open.
 
-Shipping either one would take: its ids drawn for dates (`DRAW`; Breach's
-179 days are the ones to give them), a rules version (terrain is play), the
-room code holding a room's tiles or gates (`src/room-code.js`, as it holds
-ice), every edition rebuilt, a manual page each, and the journal left as it
-is (a terrain floor is still filed under its idea).
+Both shipped with rules version 14: the room code holds a room's cracked
+tiles or gates as it holds ice (`src/room-code.js`: `^` and a character a
+tile, or `=` and two characters a gate, its square and its beat), every
+edition was rebuilt, the manual's Room modifiers page describes both, and
+the journal is as it was (a terrain floor is still filed under its idea).
 
 ## Stored editions
 
@@ -623,7 +628,9 @@ and the coin magnet never take it, and it is gone once the challenge is
 complete (`src/rules.js`). It pays 3 gold and is recorded as a `chest` feat.
 Taking it earns the floor's 💎 (`treasureMark`), whatever the floor's score, shown beside par and on the share card. The planted line
 never takes it, so the Dungeon Bot's replay doesn't either. Practice rooms
-hold no chest, whatever the piece: it is the daily's own second goal.
+hold no chest, whatever the piece: it is the daily's own second goal. A
+practice room keeps the day's cracked tiles or gates, and fitting it to
+another piece (`fitPracticeRoom`) moves no recruit or pickup onto one.
 
 ## The monsters
 
@@ -679,8 +686,9 @@ walled in under one is cornered at once (`trapped`), and its floor starts over.
 
 ## Saves and versions
 
-Saves carry the rules version (`RULES_VERSION`, 13 since the chest, a new
-item that pays gold; 12 from the switch) in their key (`daily:v13:DATE`) and
+Saves carry the rules version (`RULES_VERSION`, 14 since moving terrain took
+Breach's days; 13 from the chest, a new item that pays gold; 12 from the
+switch) in their key (`daily:v14:DATE`) and
 in the state; a run saved under other rules is kept in backups but never
 loaded into a new edition. A save of a composed day carries the day's rooms
 (`state.composed`), and `validateSave` checks they are the edition's. It
@@ -751,7 +759,7 @@ and these scripts report what it finds:
   days each fits, draws and composes on, with and without the bot's ceiling,
   what it takes the place of, and the mix of ideas per floor.
 - `node scripts/measure-terrain.mjs --modifier cracks|gates` composes each
-  date under one of the two modifiers in preview and as a plain day, and
+  date under one of the two terrain modifiers and as a plain day, and
   compares them floor by floor (above); `measure-composer`,
   `measure-par-slack` and `measure-tight` take `--modifier` too.
 

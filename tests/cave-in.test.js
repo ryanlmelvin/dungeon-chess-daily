@@ -7,7 +7,6 @@ import { getDaily } from '../src/generation.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { playFloor } from '../src/human-bot.js';
 import { tacticGold } from '../src/tactics.js';
-import { modifierStatus } from '../src/modifiers.js';
 import { CAVE_IN_MOVES, CAVE_IN_DEFAULT_MOVES, caveInMoves, caveInRunning, caveInLabel, caveInLoss, cavedIn, goldAtRisk } from '../src/cave-in.js';
 import { withRooms } from './fixtures/rooms.js';
 
@@ -25,7 +24,7 @@ const shuffle = (state, n) => (n % 2 ? wait : state.player.x === 3 ? move(5, 5) 
 // (3,4). Monsters stay frozen unless a test thaws them.
 function room({ difficulty = 'tricky', floor = 0, piece = 'knight', enemies = [], items = [], freeze = 9 } = {}) {
   const state = createGame(withRooms('2026-11-09'));
-  for (const key of ['modifier', 'ice', 'reinforcements', 'reinforcementsSkipped']) delete state[key];
+  for (const key of ['modifier', 'ice']) delete state[key];
   Object.assign(state, { difficulty, floor, startingPiece: piece, playerColor: 'white', awaitingPlayer: false, enPassant: null, companion: null });
   state.player = { piece, x: 4, y: 6, moved: true };
   state.map = Array(8).fill('........'); state.props = []; state.items = items; state.enemies = enemies;
@@ -265,13 +264,6 @@ test('black, Pin and Collapse days: one tick per completed move, none for free a
   const pinned = act(opened, { type: 'pin', id: 'd' });
   assert.equal(pinned.enemies.find((entry) => entry.id === 'd').pinned, 3);
   assert.deepEqual(pinned.caveIn, opened.caveIn); assert.equal(pinned.turns, opened.turns);
-  // Collapse: arrivals stop once the door opens, while the ceiling counts down.
-  const collapse = room({ enemies: [foe('k', 'king', 3, 4)] });
-  Object.assign(collapse, { modifier: 'collapse', reinforcements: 0, reinforcementsSkipped: 0, turns: 9 });
-  let state = act(collapse, move(3, 4));
-  for (let n = 0; n < 4; n++) state = act(state, shuffle(state, n));
-  assert.equal(state.reinforcements, 0); assert.ok(!state.enemies.length);
-  assert.equal(modifierStatus(state), '🧱 Breach'); assert.equal(caveInLabel(state), 'Take the stairs! Caving in 1');
 });
 
 test('the shop at the stairs spends banked gold first', () => {

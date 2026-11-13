@@ -12,11 +12,15 @@
 // - ',' and its items, two characters each: the square, then 'o' a coin
 //   ('O' the hint coin), 'c' the chest, a powerup's letter (POWER_LETTERS,
 //   upper case when it is the hint) or a recruit's piece as its PIECES digit;
-// - on an Ice day, ',' and its ice tiles, a character each.
+// - on a day with a room modifier, ',' and what the room lays for it: on an
+//   Ice day its ice tiles, a character each; on a Crumbling floor day '^' and
+//   its cracked tiles, a character each; on a Gates day '=' and its gates,
+//   two characters each: the square, then the beat it begins on (its phase).
 // Decoding gives back the same rooms, key order included, so a save of the
 // day (which carries its rooms) compares equal.
 import { ALPHABET } from './route-code.js';
 import { PIECES } from './pieces.js';
+import { GATE_CYCLE } from './gates.js';
 
 const WALL_CHARS = 11;
 const NO_START = '.';
@@ -26,6 +30,8 @@ const POWER_OF = Object.fromEntries(Object.entries(POWER_LETTERS).flatMap(([powe
 /** The chest's letter (src/treasure.js): no powerup's, in either case. */
 const CHEST = 'c';
 const MAX_HELD = 20;
+/** What begins a room's list of cracked tiles, and of gates: neither is a square's character. */
+const CRACKS = '^', GATES = '=';
 
 const square = (tile) => {
   if (!Number.isInteger(tile?.x) || !Number.isInteger(tile?.y) || tile.x < 0 || tile.y < 0 || tile.x > 7 || tile.y > 7) throw new RangeError('A room square is off the board.');
@@ -60,8 +66,13 @@ function encodeRoom(room) {
     if (item.type === 'companion' && PIECES.includes(item.piece)) return square(item) + PIECES.indexOf(item.piece);
     throw new RangeError(`A room item a room code can't hold: ${JSON.stringify(item)}.`);
   }).join('');
-  const ice = room.ice ? `,${room.ice.map(square).join('')}` : '';
-  return `${walls}${start}${monsters},${items}${ice}`;
+  if ([room.ice, room.cracks, room.gates].filter(Boolean).length > 1) throw new RangeError('A room lays ice, cracked tiles or gates, never two of them.');
+  const gate = ({ x, y, phase }) => {
+    if (!Number.isInteger(phase) || phase < 0 || phase >= GATE_CYCLE) throw new RangeError('A gate begins shut (0) or open (1).');
+    return square({ x, y }) + ALPHABET[phase];
+  };
+  const laid = room.ice ? `,${room.ice.map(square).join('')}` : room.cracks ? `,${CRACKS}${room.cracks.map(square).join('')}` : room.gates ? `,${GATES}${room.gates.map(gate).join('')}` : '';
+  return `${walls}${start}${monsters},${items}${laid}`;
 }
 
 function decodeRoom(text) {
@@ -77,7 +88,7 @@ function decodeRoom(text) {
       }
     }
   }
-  const [monsters, items, ice, extra] = text.slice(WALL_CHARS + 1).split(',');
+  const [monsters, items, laid, extra] = text.slice(WALL_CHARS + 1).split(',');
   if (items === undefined || extra !== undefined || monsters.length % 2 || items.length % 2) throw new SyntaxError('Bad lists in a room code.');
   const pairs = (list) => Array.from({ length: list.length / 2 }, (_, n) => [list[n * 2], list[n * 2 + 1]]);
   const room = {
@@ -98,7 +109,16 @@ function decodeRoom(text) {
     }),
   };
   if (text[WALL_CHARS] !== NO_START) room.start = tileOf(text[WALL_CHARS]);
-  if (ice !== undefined) room.ice = [...ice].map(tileOf);
+  if (laid === undefined) return room;
+  if (laid[0] === CRACKS) room.cracks = [...laid.slice(1)].map(tileOf);
+  else if (laid[0] === GATES) {
+    if (laid.length % 2 !== 1) throw new SyntaxError('Bad gates in a room code.');
+    room.gates = pairs(laid.slice(1)).map(([at, beat]) => {
+      const phase = ALPHABET.indexOf(beat);
+      if (phase < 0 || phase >= GATE_CYCLE) throw new SyntaxError('Bad gate in a room code.');
+      return { ...tileOf(at), phase };
+    });
+  } else room.ice = [...laid].map(tileOf);
   return room;
 }
 

@@ -152,7 +152,7 @@ test('a floor restart starts that floor\'s count over; an older save\'s earlier 
   assert.equal(floorScoredMoves(retry), 0);
 });
 
-test('the scored count stops when the challenge is complete; later moves still count for collapse', () => {
+test('the scored count stops when the challenge is complete; later moves still spend turns', () => {
   let done = null;
   playRoute((state) => { if (!done && state.floor === 0 && state.objective.complete) done = state; });
   const frozen = floorScoredMoves(done);

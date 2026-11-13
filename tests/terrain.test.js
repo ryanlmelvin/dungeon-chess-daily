@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getRawDaily } from '../src/edition.js';
 import { act, createGame, legalMoves, validateSave, resetFloor, walkable, dangerTiles, hopelessFloor, unreachablePickups, recruitChoice } from '../src/rules.js';
-import { MODIFIERS, TERRAIN_MODIFIERS, modifierFor, modifierOf, modifierStatus } from '../src/modifiers.js';
+import { MODIFIERS, TERRAIN_MODIFIERS, modifierOf, modifierStatus } from '../src/modifiers.js';
 import { solid, floorAt, shutAt, shutNow, terrainMap, settled, maskOf } from '../src/terrain.js';
 import { cracked } from '../src/cracks.js';
 import { gateLooks, dueShut, GATE_HOLD, GATE_CYCLE } from '../src/gates.js';
@@ -29,20 +29,16 @@ const wait = { type: 'wait' };
 const has = (list, x, y) => list.some((tile) => tile.x === x && tile.y === y);
 const saved = (state, modifier, ...rooms) => validateSave(JSON.parse(JSON.stringify(state)), DATE, daily(modifier, ...rooms));
 
-test('no date draws the two preview modifiers, and a plain day carries no terrain', () => {
-  assert.deepEqual(Object.keys(MODIFIERS), ['none', 'ice', 'collapse']);
+test('terrain is its day’s modifier’s alone: a plain or Ice day carries none', () => {
+  assert.deepEqual(Object.keys(MODIFIERS), ['none', 'ice', 'cracks', 'gates']);
   assert.deepEqual(TERRAIN_MODIFIERS, ['cracks', 'gates']);
-  for (let offset = 0; offset < 800; offset++) {
-    const date = new Date(Date.parse('2026-11-01') + offset * 86_400_000).toISOString().slice(0, 10);
-    assert.ok(!TERRAIN_MODIFIERS.includes(modifierFor(date)));
-  }
-  // They are entries all the same, so a day that carries one is named and explained.
+  // A day that carries one is named and explained.
   assert.equal(modifierOf({ modifier: 'cracks' }).name, 'Crumbling floor');
   assert.equal(modifierOf({ modifier: 'gates' }).name, 'Gates');
   assert.equal(modifierStatus({ modifier: 'gates' }), '⛓️ Gates');
   // A room's tiles and gates mean nothing without the day's modifier.
   const laid = sealed({ cracks: [{ x: 4, y: 4 }], gates: [{ x: 3, y: 3, phase: 0 }] });
-  for (const modifier of ['none', 'ice', 'collapse']) {
+  for (const modifier of ['none', 'ice']) {
     const state = game(modifier, laid);
     for (const field of ['shut', 'cracks', 'pits', 'gates', 'gateTurns']) assert.equal(state[field], undefined, `${modifier}: ${field}`);
     assert.equal(walkable(state, 3, 3), true);

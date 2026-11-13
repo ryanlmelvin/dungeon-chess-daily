@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Measure the two moving-terrain modifiers (src/terrain.js): a crumbling
-// floor (src/cracks.js) and gates (src/gates.js). Neither is drawn for any
-// date yet, so every date in the range is composed twice: with the modifier
-// forced on (as the dev preview's &modifier= composes it) and as a plain day,
-// its twin. Floor by floor the report gives:
+// floor (src/cracks.js) and gates (src/gates.js). Every date in the range is
+// composed twice, whatever it draws: with the modifier forced on (as the dev
+// preview's &modifier= composes it) and as a plain day, its twin. Floor by floor the report gives:
 //   - how the floor met its terrain (src/composer.js "Terrain floors"):
 //     composed around it ('idea': the terrain matters to the line, and why),
 //     with it laid off the line ('off'), or with none; by idea and by piece;

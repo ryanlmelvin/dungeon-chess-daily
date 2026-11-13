@@ -42,9 +42,9 @@ const floorMoves = (state) => state.turns - (state.floorStart?.turns ?? 0);
 /**
  * The search's identity of a position: everything that decides how it plays
  * on. Enemy order, pawn history, complete committed lanes, off-balance and
- * pinned monsters, the en passant window and Collapse arrivals all affect
- * act(), and so does time, but only the floor's own: monster tie-breaks,
- * Collapse arrivals and every countdown count the moves made on this floor
+ * pinned monsters and the en passant window all affect
+ * act(), and so does time, but only the floor's own: monster tie-breaks and
+ * every countdown count the moves made on this floor
  * (src/rules.js monsterTie), never the whole run's, so two paths into the
  * same floor position are one position however long the earlier floors took.
  * Only the classic monsters of old-versus-new comparisons hash the whole
@@ -60,7 +60,6 @@ export function positionKey(state, includeTime = true) {
     state.enemies.map((enemy) => [enemy.id, enemy.x, enemy.y, enemy.piece, enemy.role,
       enemy.moved, enemy.promoted, enemy.phase, enemy.target, enemy.intent, enemy.offBalance === true, enemy.pinned ?? 0]),
     state.items.filter((item) => item.type !== 'coin'), state.powers, state.companion, state.companions, state.enPassant ?? null,
-    state.reinforcements ?? null, state.reinforcementsSkipped ?? null,
     // Moving terrain (src/terrain.js): the tiles still cracked, and each gate's state.
     state.cracks ?? null, state.gates ?? null,
   ]);

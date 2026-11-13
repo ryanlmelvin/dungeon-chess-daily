@@ -26,8 +26,9 @@
 // A day keeps its modifier. On Ice days each room lays its own ice around the
 // planted line: where the line's key move runs along a line, it aims one
 // square short, on ice, and skids onto the key square; the other tiles lie
-// off the line (iceVariants). On Breach days a monster comes in at the door
-// every ten moves, long after a planted line of 3 or 4 has opened the stairs.
+// off the line (iceVariants). On a Crumbling floor or Gates day each room
+// lays its own cracked tiles or gates where its idea lives, and is proved
+// with them in ("Terrain floors", below).
 //
 // Monsters are deterministic (seeded ties), so a floor is a one-player puzzle:
 // an exact search over the player's moves (shortestWins) finds its true
@@ -89,8 +90,8 @@ export const COMPOSED_TIER = DAILY_TIER;
 /**
  * How each floor's spare decoys (those not in the planted trick) behave:
  * 'held' stand still and harmless for as many moves as the planted line
- * (par − 1, par being the line plus one), then wake and hunt, like
- * reinforcements on a timer; 'roam' hunt from the first move. Floor 1 is a
+ * (par − 1, par being the line plus one), then wake and hunt; 'roam' hunt
+ * from the first move. Floor 1 is a
  * clean puzzle on a clock, then the day turns up the pressure.
  */
 export const FLOOR_DECOYS = Object.freeze(['held', 'roam', 'roam']);
@@ -285,6 +286,8 @@ function between(a, b) {
   for (let k = 1; k < n; k++) out.push(at(a.x + dx * k, a.y + dy * k));
   return out;
 }
+// Does one of a room's `gates` (src/gates.js) stand on the lane from `from` to `to`?
+const gatedLane = (gates, from, to) => Boolean(gates?.length) && between(from, to).some((tile) => gates.some((gate) => same(gate, tile)));
 const empty = new Plan();
 const reachable = (piece, from, plan = empty) => reach(plan, piece, from);
 const SQUARES = Object.freeze(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)));
@@ -1850,8 +1853,10 @@ function dress(plan, context, line, base, floor, rng) {
     // The king floor's recruit, a king, waits one move from the start, as always,
     // too far from the royal king to step beside it within the line. Every king
     // floor has one: a dressing whose decoys took its squares is tried again.
+    // On a Gates day no gate stands on its lane from the start: shut, it would
+    // put the recruit a move further off.
     const king = plan.units.find((unit) => unit.role === 'king' && unit.cast === 0);
-    const tile = shuffle(reach(plan, context.piece, start), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)));
+    const tile = shuffle(reach(plan, context.piece, start), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)) && !gatedLane(plan.terrain?.gates, start, square));
     if (!tile) return null;
     plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
   } else if (!plan.items.some((item) => item.type === 'companion')) {
@@ -2667,11 +2672,13 @@ export function terrainReason(base, floor, room, line) {
 export const terrainMatters = (base, floor, room, line) => Boolean(terrainReason(base, floor, room, line));
 
 // Terrain off a finished floor's line: on no square its line moves to or rests on, nor a wall, a monster, a pickup, the start or the exit.
-function offLayout(base, room, line, states, rng) {
+// On the king floor no gate stands on the lane from the start to the recruit either, which waits one move away (dress).
+function offLayout(base, floor, room, line, states, rng) {
   const taken = new Set([...room.enemies, ...room.items, room.start ?? HOME, EXIT, ...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index));
   const pool = shuffle(SQUARES.filter((tile) => room.map[tile.y][tile.x] !== '#' && !taken.has(index(tile))), rng);
   if (base.modifier === 'cracks') return { cracks: pool.slice(0, CRACK_TILES).map(({ x, y }) => ({ x, y })).sort(byRow) };
-  return { gates: pool.slice(0, 2 + Math.floor(rng() * 2)).map(({ x, y }) => ({ x, y, phase: Math.floor(rng() * GATE_CYCLE) })).sort(byRow) };
+  const lane = new Set((floor === 2 ? room.items.filter((item) => item.type === 'companion') : []).flatMap((item) => between(room.start ?? HOME, item)).map(index));
+  return { gates: pool.filter((tile) => !lane.has(index(tile))).slice(0, 2 + Math.floor(rng() * 2)).map(({ x, y }) => ({ x, y, phase: Math.floor(rng() * GATE_CYCLE) })).sort(byRow) };
 }
 /**
  * A finished floor (composeFloor's or composeTandem's result, composed
@@ -2695,7 +2702,7 @@ export function terrainOff(base, floor, plain, { carried = null, steered = false
     return !shortestWins(dressed, line.length - 1) && hastyScore(real, BOT_GUARD.short) > BOT_GUARD.short && botGuard(real, base, floor, line.length + 1).ok;
   };
   if (bare) for (let n = 0; n < TERRAIN_OFF_TRIES; n++) {
-    const room = { ...plain.room, ...offLayout(base, plain.room, line, bare, random(hash(`${base.floorSeeds[floor]}:terrain:off:${n}`))) };
+    const room = { ...plain.room, ...offLayout(base, floor, plain.room, line, bare, random(hash(`${base.floorSeeds[floor]}:terrain:off:${n}`))) };
     if (passes(room)) return { ...plain, room, terrain: 'off' };
   }
   return { ...plain, room: { ...plain.room, ...none }, terrain: 'none' };

@@ -82,7 +82,9 @@ function replay(edition) {
 
 test('stored editions of every daily piece and modifier certify with the production rules', () => {
   const seen = new Set();
-  for (let day = 0; seen.size < PIECES.length * 3 && day < 400; day++) {
+  // Every piece on plain, Ice, Crumbling floor and Gates days, but a bishop's crumbling floor: its terrain day is always Gates.
+  const kinds = PIECES.length * 4 - 1;
+  for (let day = 0; seen.size < kinds && day < 700; day++) {
     const raw = getRawDaily(new Date(Date.UTC(2026, 10, 1 + day)));
     const kind = `${raw.playerPiece}:${raw.modifier ?? 'none'}`;
     if (seen.has(kind)) continue;
@@ -100,7 +102,8 @@ test('stored editions of every daily piece and modifier certify with the product
     assert.deepEqual(proof.metrics, daily.generation.certificate.metrics);
     assert.equal(proof.metrics.hits, 0, `${kind}: planted lines are never captured`);
   }
-  assert.equal(seen.size, PIECES.length * 3, 'every piece on plain, Ice and Breach days');
+  assert.equal(seen.size, kinds, 'every piece on every kind of day it can draw');
+  assert.ok(!seen.has('bishop:cracks'));
 });
 
 test('a stored Tandem day certifies with its recruit on orders, on its partner floor alone', () => {

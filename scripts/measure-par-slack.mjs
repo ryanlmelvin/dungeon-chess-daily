@@ -23,7 +23,7 @@
 //   node scripts/measure-par-slack.mjs [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--runs N] [--pieces knight,bishop,…]
 //     [--jobs N] [--budget steps] [--lines N] [--json path] [--examples N]
 //     [--no-treasure] [--no-partner] [--no-tight] [--wait] [--lure] [--ideas] [--every] [--no-ceiling]
-//     [--modifier none|ice|collapse|cracks|gates]
+//     [--modifier none|ice|cracks|gates]
 // --jobs splits the dates over that many processes. --modifier composes every
 // day under that modifier instead of its own (none: as a plain day; cracks and
 // gates, the two in preview, lay each floor's terrain: the report then adds how

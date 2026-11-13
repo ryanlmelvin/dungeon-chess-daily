@@ -60,8 +60,8 @@ With an unchanged composer it is the stored edition; `&treasure=0`, `&partner=0`
 preview on the days they draw (`=all`: on every day they fit; `&ceiling=0`: without the
 bot's ceiling); such a preview saves apart again and files its finds in the journal.
 
-Two room modifiers are in preview and drawn for no date: `&modifier=cracks` (a
-crumbling floor) or `&modifier=gates` on the composer preview plays that date under
+The two terrain modifiers (a crumbling floor, gates) can be forced on any date:
+`&modifier=cracks` or `&modifier=gates` on the composer preview plays that date under
 one, saved apart, and `node scripts/measure-terrain.mjs --modifier cracks --jobs 8`
 measures one against the same dates as plain days (`measure-composer`,
 `measure-par-slack` and `measure-tight` take `--modifier` too).
@@ -77,9 +77,10 @@ deploy, check the live `release.json` and play the published edition.
 re-select, optionally with a recruit order `{x,y}` or `'hold'`), legal moves,
 captures, promotion, en passant, castling, recruits, pickups, scoring, share text.
 `src/monster-ai.js` (every monster moves every turn, seeded tie-breaks),
-`src/modifiers.js` (ice and collapse, "Breach"; dark is retired — part of `state.modifier`),
+`src/modifiers.js` (a day's modifier, part of `state.modifier`: ice, or one of the two
+terrain modifiers, a crumbling floor and gates; Dark and Breach are retired),
 `src/terrain.js` (the one answer to "is this square solid right now": walls, and the
-pits and shut gates of the two modifiers in preview, `src/cracks.js` and `src/gates.js`;
+pits and shut gates of the two terrain modifiers, `src/cracks.js` and `src/gates.js`;
 `walkable` asks it, so nothing else reads a wall for play), `src/cave-in.js`
 (lingering on a cleared floor) and `src/tactics.js` (fork/combo bonuses only) plug
 into it. `src/game.js` is the public, certified API the UI imports: `getDaily()`
@@ -109,7 +110,7 @@ person" bot, now only a probe and the composer's guard. Authoritative descriptio
 `docs/generation.md`; history, decisions and measurements: `docs/puzzle-first-idea.md`.
 
 **Shipped editions.** `src/editions.js` (generated, committed) stores each day's rooms
-(`src/room-code.js`, chests included), lines (`src/route-code.js`, with a partner floor's
+(`src/room-code.js`, chests and a room's ice, cracked tiles or gates included), lines (`src/route-code.js`, with a partner floor's
 recruit orders), the motif each floor was built around (`src/motif-code.js`, loaded as
 `daily.generation.motifs`) and, on a day that has one, its partner floor (`partner`,
 loaded as `daily.generation.partner`) from launch (2026-11-01) through two years past
