@@ -776,12 +776,14 @@ does; `--no-treasure`, `--no-partner`, `--no-tight`, `--no-wait` and
 `--no-lure` each turn one option off, to compare
 (`scripts/compose-options.mjs`).
 
-Over the 743 editions stored with rules version 14 (40 runs a floor), the bot
-cleared 98.7%, 98.5% and 99.9% of its runs on floors 1, 2 and 3, and took more
-than par + 4 on 6.8%, 9.0% and 4.4%. Its median moves against median par
-were 4, 6 and 5 against 4, 4 and 4. By the day's modifier, runs past par + 4:
-plain 6.2%, 9.7% and 4.3%; Ice 7.5%, 9.0% and 4.9%; a Crumbling floor 8.2%,
-5.5% and 5.2%; Gates 6.7%, 8.7% and 3.3%. (At version 13 it was 96.6%, 96.3%
+Over the 743 editions stored with rules version 14, the drawn ideas in (40
+runs a floor), the bot cleared 98.6%, 98.5% and 99.9% of its runs on floors
+1, 2 and 3, and took more than par + 4 on 7.1%, 9.0% and 4.4%. Its median
+moves against median par were 5, 6 and 5 against 4, 4 and 4. By the day's
+modifier, runs past par + 4: plain 6.7%, 9.7% and 4.3%; Ice 7.7%, 9.0% and
+4.9%; a Crumbling floor 8.2%, 5.5% and 5.2%; Gates 6.7%, 8.7% and 3.3%.
+(Before the 23 Standstill and Lure floors went in, floor 1 stood at 98.7%
+cleared and 6.8% past par + 4.) (At version 13 it was 96.6%, 96.3%
 and 99.9% cleared and 11.6%, 12.0% and 4.3% past par + 4, measured with a
 Tandem on every day whose matchup has one: 360 days, against 113 now.) The
 king floors are as they were at the switch (4.4% past par + 4; 0.5% on a
