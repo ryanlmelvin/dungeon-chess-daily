@@ -361,7 +361,7 @@ function logState() {
   }
   // The king floor opens with your own king already with you, and says so: nothing to fetch.
   if (escorted(state) && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
-    messageLog.push({ text: 'Your king is already with you: no need to fetch it. You move it after each of your moves.', action, escort: true });
+    messageLog.push({ text: 'Your king is already with you: no need to recruit it. Move the king after you move yourself each turn.', action, escort: true });
   }
   messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
 }
@@ -372,7 +372,7 @@ function escorted(game) {
 // The explainer of such a floor: it opens by itself the first time on this device, then from its line's What? button.
 const ESCORT_COPY = Object.freeze({
   title: 'Your king is with you',
-  text: 'On floor 3 your own king is already with you: you don’t need to go and fetch it. After each of your moves, tap a green square to move it, or tap it to stay put. The enemy king can’t take what it guards.',
+  text: 'No need to recruit your king on floor 3. Move the king after you move yourself each turn. Tap a green square to move it, or tap the king to stay put. The enemy king can’t capture pieces your king guards.',
   art: 'Animated board: your rook slides to the top row, your king steps up beside the enemy king’s corner, and the enemy king topples.',
   draw: drawEscortDemo, still: ESCORT_STILL,
 });
