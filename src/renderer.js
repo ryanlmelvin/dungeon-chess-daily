@@ -55,7 +55,7 @@ const SHADOW_OPACITY = 0.8;
 const COVERED_RECRUIT_OPACITY = 0.35;
 // How long an attacker's lunge toward the player lasts.
 const STRIKE_MS = 300;
-const CAPTURE_NOTICE_MS = 2400;
+const CAPTURE_NOTICE_MS = 2200;
 const FORK_GLOW_MS = 900;
 const CROWN_POP_MS = 450;
 const CROWN_WIDTH = 0.5;
