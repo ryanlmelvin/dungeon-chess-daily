@@ -1838,7 +1838,7 @@ function validChests(value, daily) {
 // A spoiler-free result card, golf-style:
 //   Dungeon Chess Daily · Nov 7 ♝
 //   🟥 +2  ⬛ E 🔱  👑 −12 🔱
-//   https://ryanlmelvin.github.io/dungeon-chess-daily/
+//   https://dungeonchess.ryanlmelvin.com/
 // The title names the edition's UTC date (with the year only when it isn't the
 // current one) and the run's starting piece. Then each floor reached, two spaces
 // apart: its marker, its moves against par (src/par.js; E for even, · without a
@@ -1876,7 +1876,7 @@ function cardDate(date, now) {
   return day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(day.getUTCFullYear() !== now.getUTCFullYear() && { year: 'numeric' }), timeZone: 'UTC' });
 }
 
-export function getShareText(state, pars = null, { url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/', now = new Date() } = {}) {
+export function getShareText(state, pars = null, { url = 'https://dungeonchess.ryanlmelvin.com/', now = new Date() } = {}) {
   const floors = [];
   for (let floor = 0; floor <= Math.min(state.floor, 2); floor++) {
     const record = state.records.find((entry) => entry.floor === floor);

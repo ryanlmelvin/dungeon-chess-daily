@@ -217,7 +217,7 @@ test('share text is a title, one line of floors (marker, moves against par and t
   const state = createGame({ ...daily, playerPiece: 'pawn' });
   state.status = 'won'; state.floor = 2;
   state.records = [{ floor: 0, turns: 8 }, { floor: 1, turns: 12 }, { floor: 2, turns: 9 }];
-  const url = 'https://ryanlmelvin.github.io/dungeon-chess-daily/';
+  const url = 'https://dungeonchess.ryanlmelvin.com/';
   const share = (pars) => getShareText(state, pars, { now: new Date(Date.UTC(2026, 10, 7)) });
   const floors = (pars) => share(pars).split('\n')[1];
   const text = share([10, 11, 9]);

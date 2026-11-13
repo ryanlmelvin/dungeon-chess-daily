@@ -1,6 +1,6 @@
 # Dungeon Chess Daily
 
-[Play Dungeon Chess Daily](https://ryanlmelvin.github.io/dungeon-chess-daily/) · [Source](https://github.com/ryanlmelvin/dungeon-chess-daily)
+[Play Dungeon Chess Daily](https://dungeonchess.ryanlmelvin.com/) · [Source](https://github.com/ryanlmelvin/dungeon-chess-daily)
 
 A short daily dungeon played with chess moves. A twirling pixel newspaper pictures three disguised targets under tabloid headlines that riddle how they move. Take one chess piece through three crowded rooms, unmask your targets, collect powerups, and share a spoiler-free emoji result. Designed for a complete daily run in five minutes or less.
 
@@ -34,7 +34,7 @@ By [Ryan L. Melvin](https://ryanlmelvin.com).
   ```
   Dungeon Chess Daily · Nov 7 ♝
   🟥 +2  ⬛ E 🇫🇷  👑 −12 🔱
-  https://ryanlmelvin.github.io/dungeon-chess-daily/
+  https://dungeonchess.ryanlmelvin.com/
   ```
 - There are no lives. Being captured adds one move to that floor's score, like a paid hint, unless a bone ward absorbs it, and play goes on from where you stand. A promoted pawn that is captured becomes a pawn again, returning to a safe square if needed. A piece with no legal move at all, even with every monster gone, starts its floor over, as **Restart this floor** does: the gold and powers you arrived with, and the floor's move count afresh. Nothing sends you back to floor one but your own **Restart today's dungeon**. A held Take-back can still undo the move that cornered you.
 
@@ -58,7 +58,7 @@ Use **Install** from the newspaper or result screen. The installation dialog inc
 
 Progress saves automatically on the device. **Download backup** and **Restore backup** in the menu transfer saved editions between browsers or installed apps; there is no account or automatic cloud synchronization. Before moving to an installed app, download a backup in the browser and restore it in the app. Restore merges saved days: won runs take priority, playable runs take priority over failed attempts, unfinished runs keep the later room, and ties keep the current run. Existing sound preferences stay unchanged. **Enable persistent storage** asks the browser to protect local data from automatic cleanup. The browser may grant or decline the request, and clearing browser data can still erase progress, so keep a backup. Certified editions use version 13 save keys (the chest is a new item that pays gold). The streak ledger and the journal are kept apart from the saves, so the change leaves them as they were. Earlier ruleset runs remain archived and included in backups; their old layouts are not loaded into the new certified editions.
 
-Updates download in the background. **Update available**, including in the game menu, saves progress before reloading and refuses activation if saving fails. Other open windows keep their own reload choice. [Update recovery](https://ryanlmelvin.github.io/dungeon-chess-daily/update.html) works independently of the main app and preserves stored progress. Service-worker caches and saves are scoped to this project's path.
+Updates download in the background. **Update available**, including in the game menu, saves progress before reloading and refuses activation if saving fails. Other open windows keep their own reload choice. [Update recovery](https://dungeonchess.ryanlmelvin.com/update.html) works independently of the main app and preserves stored progress. Service-worker caches and saves are scoped to this project's path.
 
 ## Develop
 
