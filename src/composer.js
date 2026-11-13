@@ -57,6 +57,9 @@ import { tightVerdict, playsIdea, standsAlone, TIGHT } from './tight.js';
 import { TERRAIN_MODIFIERS } from './modifiers.js';
 import { CRACK_TILES } from './cracks.js';
 import { GATE_CYCLE } from './gates.js';
+// Mate floors (see "Mate floors" below): the arenas they are composed in.
+import { MATE_ARENAS } from './mate-arenas.js';
+import { ALPHABET } from './route-code.js';
 
 export { COMPOSER_VERSION, composedSeeds } from './generation.js';
 /** The player pieces the composer builds days for, whatever their targets: every daily piece. */
@@ -1849,8 +1852,9 @@ function dress(plan, context, line, base, floor, rng) {
   // Floors 1 and 2 keep coins off the line as red herrings; the king floor has no hint and no items but its recruit.
   if (floor === 2 && context.piece === 'pawn') {
     // A pawn's net placed its recruit already, one step up its file (pawnNet).
-  } else if (floor === 2) {
-    // The king floor's recruit, a king, waits one move from the start, as always,
+  } else if (floor === 2 && !plan.items.some((item) => item.type === 'companion')) {
+    // The king floor's recruit, a king, waits one move from the start, as always
+    // (a mate floor's stands joined already, on its own square: composeMate),
     // too far from the royal king to step beside it within the line. Every king
     // floor has one: a dressing whose decoys took its squares is tried again.
     // On a Gates day no gate stands on its lane from the start: shut, it would
@@ -2209,6 +2213,217 @@ export function composeTandem(base, floor, { trace, starts = startSquares() } = 
   return null;
 }
 
+// ── Mate floors (composeDay's `mate` option, in preview: off unless asked for) ──
+// A king floor won the way a chess mate is: by your piece and your own king
+// together. The room joins the king recruit to you as the floor opens
+// (`joined`: src/rules.js setFloor), on a square of its own, and you order it
+// every turn, as on a Tandem floor.
+//
+// The arena comes from a real mate (src/mate-arenas.js: lichess puzzles in
+// which the solver has a king and one piece): its walls stand where the other
+// enemy men stood, mirrored or turned as the seed says. Played as it stands
+// a real mate is too short here (measured 2026-11-13: of 3,913 such mates in
+// two, 3,340 were won in one turn): both your pieces move each turn, and an
+// enemy man that became a wall no longer steps in between. So the three
+// pieces are set back, the enemy king within two squares of its own square,
+// your king within one of its own, your piece anywhere, until the exact
+// search, the recruit steered and every order tried on every turn, finds the
+// floor won in MATE_TURNS turns and no sooner, by a line that passes no turn
+// (a wait with the king told to hold). A mate may be completed by the king's
+// quiet step, so no turn's orders are pruned (mateWin).
+//
+// Kings may stand side by side here (docs/puzzle-first-idea.md: the third
+// king rule was dropped after play), and a recruit is never taken, so your
+// king attacks as well as guards. Left alone the composer's first floors
+// were the king's walk: three king steps, the piece never moving. So a mate
+// floor is one the king can't win by itself even with par's spare turn
+// (kingAlone), and whose planted line moves your piece on every turn, or on
+// all but one (MATE_WAITS). A typical line cuts the enemy king off with the
+// piece and walks your king in.
+//
+// The room's two guards roam, as on every king floor; the dressing must leave
+// a line of MATE_TURNS turns and nothing sooner, a hasty win (captures
+// absorbed) must score worse than the line, and the bot's runs, the king at
+// its side from the first move, must pass its guard. No chest (its line would
+// be searched without the recruit) and no hint, as on every king floor. A
+// pawn's day has no arenas, and a day with ice or moving terrain keeps its
+// own king floor for now.
+
+/** A mate floor's motif. */
+export const MATE_MOTIF = 'mate';
+/** Turns a mate floor's line takes: no fewer wins it. */
+export const MATE_TURNS = 3;
+/** Turns of a mate floor's line on which your piece may stand still while your king moves, at most. */
+export const MATE_WAITS = 1;
+/** Arenas a mate floor tries, and the set-backs it tries in each, before the day keeps its own king floor. */
+export const MATE_ARENA_TRIES = 12;
+export const MATE_SETUPS = 16;
+// The eight turns of the board: an arena's walls came from pawns and pieces alike, so it has no way up.
+const BOARD_TURNS = [(t) => at(t.x, t.y), (t) => at(7 - t.x, t.y), (t) => at(t.x, 7 - t.y), (t) => at(7 - t.x, 7 - t.y), (t) => at(t.y, t.x), (t) => at(7 - t.y, t.x), (t) => at(t.y, 7 - t.x), (t) => at(7 - t.y, 7 - t.x)];
+// An arena of src/mate-arenas.js, turned: the real squares of the piece, its king and the enemy king, and the walls.
+function arenaOf(code, turn) {
+  const [piece, king, foe, ...walls] = [...code].map((ch) => BOARD_TURNS[turn](squareAt(ALPHABET.indexOf(ch))));
+  return { piece, king, foe, walls };
+}
+// A set-back in an arena: the plan of a room with the enemy king, your king (joined) and your start, or null.
+function mateSetup(arena, rng) {
+  const plan = new Plan();
+  for (const wall of arena.walls) if (!same(wall, EXIT)) plan.walls.add(index(wall));
+  const open = SQUARES.filter((tile) => !plan.isWall(tile) && !same(tile, EXIT));
+  const pick = (list) => list[Math.floor(rng() * list.length)];
+  const foe = pick(open.filter((tile) => chebyshev(tile, arena.foe) <= 2));
+  const king = foe && pick(open.filter((tile) => chebyshev(tile, arena.king) <= 1 && chebyshev(tile, foe) >= 2));
+  const start = king && pick(open.filter((tile) => !same(tile, king) && chebyshev(tile, foe) >= 2));
+  if (!start) return null;
+  plan.start = start;
+  plan.place(0, 'king', foe);
+  plan.items.push({ x: king.x, y: king.y, type: 'companion', piece: 'king', joined: true });
+  return plan;
+}
+// Can the floor be won from `state` within `turns` turns, never captured, whatever the king is told? Every order
+// is tried on every turn, the last included (partnerActions' `last` would leave out a mate the king's quiet step completes).
+function mateWin(state, turns) {
+  for (const action of partnerActions(state)) {
+    const next = routeTransition(state, action, STEERED);
+    if (next && (next.exit.open || (turns > 1 && mateWin(next, turns - 1)))) return true;
+  }
+  return false;
+}
+// A turn passed outright: you wait and your king stands still.
+const passes = (action) => action.type === 'wait' && (action.recruit === undefined || action.recruit === 'hold');
+// A line that wins from `state` in `turns` turns or fewer, never captured, with no turn passed outright and your
+// piece standing still on `waits` turns at most, the first found; null when none does.
+function mateLine(state, turns, waits = 0) {
+  for (const action of partnerActions(state)) {
+    if (passes(action) || (action.type === 'wait' && waits < 1)) continue;
+    const next = routeTransition(state, action, STEERED);
+    if (!next) continue;
+    if (next.exit.open) return [action];
+    const rest = turns > 1 ? mateLine(next, turns - 1, waits - (action.type === 'wait' ? 1 : 0)) : null;
+    if (rest) return [action, ...rest];
+  }
+  return null;
+}
+// The floor's planted line: your piece moves on every turn if such a line wins, else on all but one
+// (MATE_WAITS). A floor whose fastest wins leave the piece standing longer is the king's walk: another set-back.
+const plantedMate = (state, turns) => { for (let waits = 0; waits <= MATE_WAITS; waits++) { const line = mateLine(state, turns, waits); if (line) return line; } return null; };
+// Can the king win the floor by itself within `turns` turns, your piece never moving (and captured where it
+// stands as often as the guards like: a piece that only has to keep out of their way does no work either)?
+// Your king can't be taken and may stand beside the enemy king (the third king rule was dropped), so on an
+// open floor it simply walks over; a mate floor is one where it can't, even with par's spare turn.
+function kingAlone(state, turns) {
+  for (const action of ordersFor(state, { type: 'wait' })) {
+    const next = act(state, action);
+    if (next === state || next.status !== 'playing' || next.floor !== state.floor || next.events.some((event) => event.type === 'restart')) continue;
+    if (next.exit.open || (turns > 1 && kingAlone(next, turns - 1))) return true;
+  }
+  return false;
+}
+// steeredHasty with every order tried on every turn: the lowest score of a win within `turns` turns by a player who may be captured.
+function mateHasty(state, turns, from = floorScoredMoves(state)) {
+  let best = Infinity;
+  for (const action of partnerActions(state)) {
+    const next = act(state, action);
+    if (next === state || next.status !== 'playing' || next.events.some((event) => event.type === 'restart') || next.floor !== state.floor) continue;
+    if (next.exit.open) best = Math.min(best, floorScoredMoves(next) - from);
+    else if (turns > 1) best = Math.min(best, mateHasty(next, turns - 1, from));
+  }
+  return best;
+}
+/**
+ * The bot guard for a mate floor: the human-like bot from the floor's start,
+ * your king at its side already. A floor fails when more than a third of its
+ * runs fail or take more than par + 4 moves (BOT_GUARD): a sign that the
+ * guards spoil the mate. The exact search already rules out a shorter win.
+ */
+export function mateGuard(start, base, floor, line) {
+  const par = line.length + 1;
+  let missed = 0;
+  for (let run = 0; run < BOT_GUARD.runs && missed <= BOT_GUARD.missShare * BOT_GUARD.runs; run++) {
+    const result = playFloor(start, { seed: runSeed(base, floor, run), cap: par + BOT_GUARD.slack + 1 });
+    if (!result.won || result.moves > par + BOT_GUARD.slack) missed++;
+  }
+  return { ok: missed <= BOT_GUARD.missShare * BOT_GUARD.runs, missed };
+}
+// The squares a mate line needs left alone: where your piece, your king and the enemy king stand along it,
+// the squares a slider crosses, and the squares around the king where it is mated.
+function mateSquares(states) {
+  const squares = [];
+  for (const [n, state] of states.entries()) {
+    const foe = state.enemies.find((enemy) => enemy.role === 'king') ?? states[n - 1]?.enemies.find((enemy) => enemy.role === 'king');
+    squares.push(at(state.player.x, state.player.y), ...(state.companion ? [at(state.companion.x, state.companion.y)] : []), ...(foe ? [at(foe.x, foe.y)] : []));
+    if (n) squares.push(...between(states[n - 1].player, state.player));
+    if (n === states.length - 1 && foe) squares.push(...AROUND.map(([dx, dy]) => at(foe.x + dx, foe.y + dy)));
+  }
+  return squares.filter(inside);
+}
+/**
+ * Compose the king floor of `base` as a mate floor, or null when the day's
+ * piece has no arenas (a pawn's), the day has ice or moving terrain, or no
+ * set-back passes. Returns what composeFloor does; its line carries the
+ * king's orders, as a partner floor's does.
+ */
+export function composeMate(base, { trace } = {}) {
+  const began = performance.now();
+  const floor = 2, piece = base.playerPiece, arenas = MATE_ARENAS[piece], motif = MATE_MOTIF;
+  if (!arenas?.length || base.modifier !== 'none') return null;
+  const cast = castFor(base, floor), seed = base.floorSeeds[floor];
+  const tally = { built: 0, replayed: 0, kept: 0 }, stats = { [motif]: tally };
+  for (let attempt = 0; attempt < MATE_ARENA_TRIES; attempt++) {
+    const rng = random(hash(`${seed}:${motif}:${attempt}`));
+    const arena = arenaOf(arenas[Math.floor(rng() * arenas.length)], Math.floor(rng() * BOARD_TURNS.length));
+    for (let setup = 0; setup < MATE_SETUPS; setup++) {
+      const core = mateSetup(arena, rng);
+      if (!core) { trace?.({ motif, attempt, stage: 'build' }); continue; }
+      tally.built++;
+      let bare;
+      try { bare = floorStart(base, floor, core.room()); } catch { trace?.({ motif, attempt, stage: 'build' }); continue; }
+      // Won sooner than the line's length, or not within it: another set-back.
+      if (mateWin(bare, MATE_TURNS - 1)) { trace?.({ motif, attempt, stage: 'shorter', room: core.room() }); continue; }
+      // The king can't do it by itself, even with par's spare turn; and a line in which your piece does the work wins.
+      if (kingAlone(bare, MATE_TURNS + 1)) { trace?.({ motif, attempt, stage: 'king', room: core.room() }); continue; }
+      const planted = plantedMate(bare, MATE_TURNS);
+      if (!planted || mateHasty(bare, MATE_TURNS - 1) <= MATE_TURNS) { trace?.({ motif, attempt, stage: planted ? 'hasty' : 'idea', room: core.room() }); continue; }
+      tally.replayed++;
+      const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start: core.start, guards: [...cast.suspects, cast.other], unnamed: cast.unnamed };
+      // Both guards roam: the mate uses neither.
+      context.quiet = context.guards;
+      // A dressed room's checks: a line of the same length wins there (the planted one, else one of the room's
+      // own), nothing wins sooner, a hasty win scores worse, and the bot's runs pass. { room, line, states, pressure }, or null.
+      const judge = (room) => {
+        const dressed = floorStart(base, floor, room);
+        let line = planted, states = clean(playLine(dressed, line, STEERED));
+        if (!states) { line = plantedMate(dressed, MATE_TURNS); states = line ? clean(playLine(dressed, line, STEERED)) : null; }
+        const why = !states ? 'line' : mateWin(dressed, line.length - 1) ? 'shorter' : kingAlone(dressed, line.length + 1) ? 'king'
+          : mateHasty(dressed, line.length - 1) <= line.length ? 'hasty' : null;
+        if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
+        const guard = mateGuard(dressed, base, floor, line);
+        if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
+        return { room, line, states, pressure: pressure(states) };
+      };
+      const lane = mateSquares(clean(playLine(bare, planted, STEERED)) ?? [bare]);
+      let best = null;
+      for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
+        const plan = core.clone();
+        plan.keep(...lane);
+        const dressed = dress(plan, context, planted, base, floor, random(hash(`${seed}:${motif}:${attempt}:${setup}:dress:${dressing}`)));
+        if (!dressed) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
+        const passed = judge(dressed.room());
+        if (passed && (!best || passed.pressure > best.pressure)) best = passed;
+      }
+      if (!best) continue;
+      tally.kept++;
+      trace?.({ motif, attempt, stage: 'kept', built: { plan: core, motif } });
+      const { room, line, states } = best;
+      return {
+        room, hint: null, line, motif, depth: line.length, firstMoves: 1, forced: forcedShare(states), pressure: best.pressure,
+        matched: cast.matched, lifeTrade: false, stats, ms: performance.now() - began,
+      };
+    }
+  }
+  return null;
+}
+
 /** The floors of a day a partner floor could take (floors 1 and 2 whose target pairs up for the day's piece), the day's own pick first. */
 export function partnerFloors(base) {
   const fits = [0, 1].filter((floor) => TANDEMS[base.playerPiece]?.includes(base.targets[floor]));
@@ -2482,15 +2697,18 @@ export function drawnIdeas(base, asked, partnered = null) {
  *   IDEA_EVERY of the days each fits (ideaDay; 'every' takes them all), held
  *   to the tight tests and, unless `ceiling` is false (tooling), to the bot's
  *   ceiling.
+ * One more is in preview, off unless asked for: `mate` composes the king
+ * floor as a mate floor (composeMate), your own king at your side from the
+ * first move, where the day's piece and modifier have one.
  * A day that can't be composed with all it was asked for gives options up in
  * order (a drawn idea first, then FALLBACKS') rather than fail; `dropped` lists them (empty on nearly
  * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, ceiling = true } = {}) {
-  const asked = { treasure, partner, tight, wait, lure }, dropped = [];
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, mate = false, ceiling = true } = {}) {
+  const asked = { treasure, partner, tight, wait, lure, mate }, dropped = [];
   for (;;) {
     try { return { ...composeOnce(raw, { tier, starts, trace, ceiling, ...asked }), dropped }; } catch (error) {
-      const next = [...DRAWN_IDEAS, ...FALLBACKS].find((option) => asked[option]);
+      const next = ['mate', ...DRAWN_IDEAS, ...FALLBACKS].find((option) => asked[option]);
       if (!next) throw error;
       asked[next] = false;
       dropped.push(next);
@@ -2499,7 +2717,7 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   }
 }
 // composeDay with exactly the options asked for; throws when the day doesn't compose or prove with them.
-function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait, lure, ceiling }) {
+function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait, lure, mate, ceiling }) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
@@ -2511,14 +2729,16 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
   const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {
     arrived.push(Object.keys(carried).length ? { ...carried } : null);
-    floors.push(partnered?.floor === floor ? partnered.composed : composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(ideas[floor]?.length && { ideas: ideas[floor], ceiling }), ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
+    // In preview (`mate`): the king floor as a mate floor, your king at your side, where the day's piece has one.
+    const mated = mate && floor === 2 ? composeMate(base, { ...(trace && { trace: (event) => trace({ floor, ...event }) }) }) : null;
+    floors.push(partnered?.floor === floor ? partnered.composed : mated ?? composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(ideas[floor]?.length && { ideas: ideas[floor], ceiling }), ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
   }
   // Treasure: once a floor's room, line and hint are settled, a chest where one qualifies. Nothing else in the room changes.
   if (treasure) for (const [floor, composed] of floors.entries()) {
     // A partner floor gets none: a chest's line is searched without the recruit, and its floor is won with it.
-    if (partnered?.floor === floor) { Object.assign(composed, { treasure: null, treasureMiss: 'partner' }); continue; }
+    if (partnered?.floor === floor || composed.motif === MATE_MOTIF) { Object.assign(composed, { treasure: null, treasureMiss: 'partner' }); continue; }
     const began = performance.now();
     Object.assign(composed, placeTreasure(composed, {
       seed: base.floorSeeds[floor], actionsFrom, start: (room) => floorStart(base, floor, room),

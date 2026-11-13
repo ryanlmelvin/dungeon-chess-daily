@@ -40,7 +40,13 @@ const cache = new Map();
  * (`generation.partner`): the recruit on orders on a day that has one, else
  * moving itself, as on every other day.
  */
-export const certificateMode = (partner) => (partner === null || partner === undefined ? undefined : { recruit: 'steer' });
+export const certificateMode = (partner, escort = false) => ((partner === null || partner === undefined) && !escort ? undefined : { recruit: 'steer' });
+/**
+ * Does the day's king floor open with its recruit already joined (a mate
+ * floor, src/composer.js composeMate)? Its line carries the king's orders, so
+ * the day is proved with the recruit steered, as a day with a partner floor is.
+ */
+export const escorted = (daily) => Boolean(daily?.composed?.[2]?.items?.some((item) => item.type === 'companion' && item.joined === true));
 
 /**
  * Prove a composed day by its `actions` (each floor's planted line, then the
@@ -57,14 +63,17 @@ export const certificateMode = (partner) => (partner === null || partner === und
  */
 export function proveComposed(daily, actions, { saves = false, partner = null } = {}) {
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
-  const proof = verifyWinningRoute(createGame(twin), actions, certificateMode(partner));
+  const escort = escorted(daily);
+  const proof = verifyWinningRoute(createGame(twin), actions, certificateMode(partner, escort));
   if (!proof.valid) return proof;
   let played = createGame(daily);
   if (saves && !validateSave(played, daily.date, daily)) return { valid: false, reason: 'The day\'s start is not a valid save.' };
   for (const [n, action] of actions.entries()) {
     const next = act(played, action);
     if (next === played || next.hits > played.hits) return { valid: false, reason: 'The line fails as played, hints collected.' };
-    if (partner !== null && played.floor !== partner && (action.recruit !== undefined || (played.floor < 2 && next.events.some((event) => event.type === 'companion-recruit')))) return { valid: false, reason: 'A recruit helps off the partner floor.' };
+    // A recruit takes orders on the day's partner floor, and on a king floor it opened beside you, alone.
+    const steered = played.floor === partner || (escort && played.floor === 2);
+    if ((partner !== null || escort) && !steered && (action.recruit !== undefined || (played.floor < 2 && next.events.some((event) => event.type === 'companion-recruit')))) return { valid: false, reason: 'A recruit helps off the partner floor.' };
     if (saves && !validateSave(next, daily.date, daily)) return { valid: false, reason: `The save after the line's action ${n + 1} is not valid.` };
     played = next;
   }

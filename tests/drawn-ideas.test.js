@@ -78,7 +78,7 @@ test('the drawn ideas are part of the release: on the days that draw them, as th
   // Named off, no floor is a drawn idea.
   assert.ok(composeDay(WAIT_DAY, { wait: false, lure: false }).floors.every((floor) => !DRAWN_IDEAS.includes(floor.motif)));
   // The dev preview without the flags composes the stored edition.
-  assert.deepEqual(previewOptions(`?composed=${WAIT_DAY}`), { starts: 'wide', treasure: true, partner: true, tight: true, wait: true, lure: true, ceiling: true });
+  assert.deepEqual(previewOptions(`?composed=${WAIT_DAY}`), { starts: 'wide', treasure: true, partner: true, tight: true, wait: true, lure: true, ceiling: true, mate: false });
   assert.deepEqual(composedDayFor(`?composed=${WAIT_DAY}`).composed, getDaily(WAIT_DAY).composed);
   assert.equal(previewJournals(`?composed=${WAIT_DAY}`), false);
 });

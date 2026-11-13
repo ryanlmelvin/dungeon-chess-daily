@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Animated diagrams for the journal's lesson pages (src/journal.js), one per
 // idea a floor is composed around (src/composer.js): the squeeze, the tandem,
-// the mating net, a pawn's tempo and crown lines, and the two ideas in
-// preview, the Standstill and the Lure. Drawn on a 5x5 board
+// the mating net, a pawn's tempo and crown lines, the Standstill and the Lure,
+// and the explainer of a floor that opens with your own king at your side.
+// Drawn on a 5x5 board
 // crop like the other explainers (src/tactics-art.js), whose off-balance demo
 // is the bait page's. Each takes (canvas, time in ms) and loops; its *_STILL
 // time is a frame that reads on its own, for reduced motion.
@@ -223,6 +224,43 @@ export function drawNetDemo(canvas, time, { playerPalette = {}, kingPalette = pi
 }
 /** The rook's check covers every square the king could step to. */
 export const NET_STILL = 2700;
+
+/**
+ * Your own king at your side (a mate floor, src/composer.js composeMate): you
+ * move, then your king moves. Your rook checks along the top row and your
+ * king steps up to cover the squares beside the enemy king: checkmate.
+ */
+export function drawEscortDemo(canvas, time, { playerPalette = {}, kingPalette = piecePalette('black') } = {}) {
+  const t = loop(time);
+  frame(canvas, t, (ctx) => {
+    // The enemy king in the corner (4,0); your rook (0,3) -> (0,0), then your king (2,3) -> (3,2).
+    const slide = beat(t, 900, 1600);
+    const step = beat(t, 2100, 2700);
+    const mate = beat(t, 3300, 3900);
+    const pulse = 0.7 + 0.3 * Math.sin(t / 110);
+    // Your king starts beside you: nothing to step onto.
+    ring(ctx, 2, 3, MINT, beat(t, 100, 300) * (1 - beat(t, 800, 950)) * pulse);
+    line(ctx, center(0) + 16, center(0), center(4), center(0), GOLD, beat(t, 1600, 1800) * 0.9);
+    for (const [x, y] of [[3, 1], [4, 1]]) tint(ctx, x, y, MINT, beat(t, 2700, 2900) * 0.3 * pulse);
+    ring(ctx, 4, 0, RED, beat(t, 1700, 1900) * pulse * (1 - mate));
+    faded(ctx, 1 - beat(t, 4500, 4800), () => {
+      ctx.save();
+      ctx.translate(center(4), center(0) + 16);
+      ctx.rotate(-ease(mate) * Math.PI / 2);
+      sprite(ctx, 'piece-king', 0, -16, kingPalette);
+      ctx.restore();
+    });
+    burst(ctx, center(4), center(0), beat(t, 3700, 4300), GOLD);
+    sprite(ctx, 'piece-king', lerp(center(2), center(3), step), lerp(center(3), center(2), step), COMPANION_PALETTE);
+    sprite(ctx, 'piece-rook', center(0), lerp(center(3), center(0), slide), playerPalette);
+    label(ctx, 'YOUR KING IS WITH YOU', 100, 182, MINT, beat(t, 100, 300) * (1 - beat(t, 800, 950)), 20);
+    label(ctx, 'YOU MOVE', 100, 182, GOLD, beat(t, 950, 1100) * (1 - beat(t, 1950, 2100)), 26);
+    label(ctx, 'THEN YOUR KING', 100, 182, MINT, beat(t, 2100, 2250) * (1 - beat(t, 3150, 3300)), 24);
+    label(ctx, 'CHECKMATE!', 100, 182, GOLD, beat(t, 3500, 3700), 30);
+  });
+}
+/** Your rook checks along the row and your king has stepped up: no square is left. */
+export const ESCORT_STILL = 3000;
 
 /**
  * Tempo: a pawn takes only on its diagonals. It steps up, then waits, and the

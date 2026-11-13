@@ -906,7 +906,8 @@ const validFloorSeeds = (seeds) => Array.isArray(seeds) && seeds.length === 3 &&
  * own). A day carries one room per floor: `map` (eight rows of '.' and '#'),
  * `enemies` ({ x, y, cast, held? }, where cast 0 is the floor's target species
  * and 1 and 2 its decoy species, and `held` the moves a decoy sleeps; tooling
- * may pass a `species` instead), `items` (coins, a powerup, the recruit) and
+ * may pass a `species` instead), `items` (coins, a powerup, the recruit; a
+ * recruit with `joined` is with you as the floor opens) and
  * the player's `start` where it isn't e2. On an Ice day a room lays its own
  * `ice` tiles (open squares); without them it gets the day's seeded draw.
  */
@@ -981,6 +982,13 @@ function setFloor(state) {
   });
   // The chest is the daily's second goal, proved for the day's own piece against par: a practice run has none.
   state.items = room.items.filter((item) => !(state.practice && item.type === 'chest')).map((item) => ({ ...item }));
+  // A recruit the room has joined to you already (`joined`: a mate floor's own king, src/composer.js) stands on
+  // its square as the floor opens and takes orders from the first move: there is nothing to step onto.
+  const ally = state.items.find((item) => item.type === 'companion' && item.joined === true);
+  if (ally) {
+    state.items = state.items.filter((item) => item !== ally);
+    state.companion = { piece: ally.piece, basePiece: ally.piece, x: ally.x, y: ally.y, moved: false, sharing: false };
+  }
   state.props = [];
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
     if (state.map[y][x] === '#') state.props.push({ x, y, type: ['pillar', 'crate', 'barrel', 'rock'][hash(`${floorSeed(state)}:prop:${state.floor}:${x},${y}`) % 4] });
@@ -1963,13 +1971,15 @@ export function validateSave(value, date, daily) {
     if (value.objective.moves !== undefined && !(value.objective.complete && integer(value.objective.moves, 1, value.turns - value.floorStart.turns))) return false;
     if (!value.items.every((item) => template.items.some((original) => equal(original, item))) || new Set(value.items.map((item) => `${item.x},${item.y}`)).size !== value.items.length) return false;
     if (!validChests(value, daily)) return false;
-    const recruit = template.items.find((item)=>item.type==='companion');
+    // The floor's recruit: one that waits in the room, or one the room joined to you as it opened (setFloor).
+    const waiting = template.items.find((item)=>item.type==='companion');
+    const recruit = waiting ?? (template.companion ? { piece: template.companion.basePiece } : undefined);
     if (value.companion !== null) {
       const ally=value.companion;
       if (!ally || !recruit || ally.basePiece !== recruit.piece || (ally.piece !== ally.basePiece && !(ally.basePiece==='pawn' && ally.piece==='queen')) || !walkable(value,ally.x,ally.y) || typeof ally.moved !== 'boolean' || typeof ally.sharing !== 'boolean') return false;
       if (ally.sharing !== same(ally,value.player) || value.enemies.some((foe)=>same(foe,ally)) || value.items.some((item)=>item.type==='companion')) return false;
-    // A room's recruit waits where it lies until it joins you.
-    } else if (recruit && !value.items.some((item)=>item.type==='companion')) return false;
+    // A room's recruit waits where it lies until it joins you; one that began joined is never lost.
+    } else if (template.companion || (waiting && !value.items.some((item)=>item.type==='companion'))) return false;
     if (value.records.length !== (value.status === 'won' ? 3 : value.floor)) return false;
     if (!value.records.every((record, index) => record.floor === index && integer(record.turns, 1, value.turns) && (record.scored === undefined || integer(record.scored, 1, record.turns)) && (record.restartedMoves === undefined || integer(record.restartedMoves, 1, Number.MAX_SAFE_INTEGER)) && (record.hits === undefined || integer(record.hits, 1, 2 * record.turns)) && integer(record.captures, census[index].targets, population(index)) && integer(record.treasure, 0, 3) && record.grade === (record.treasure === 3 ? 'gold' : record.captures > census[index].targets ? 'silver' : 'bronze'))) return false;
     // Saves from before par stars were removed may still carry them on floor records.

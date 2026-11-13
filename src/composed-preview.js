@@ -9,7 +9,11 @@
 // DRAWN_IDEAS: the Standstill and the Lure) compose as released, each on the
 // one day in three it draws; &wait=0, &lure=0 or &ideas=0 (both) turn them
 // off, &wait=all, &lure=all or &ideas=all put one on every day it fits, and
-// &ceiling=0 composes them without the bot's ceiling, to compare. &modifier=cracks or &modifier=gates
+// &ceiling=0 composes them without the bot's ceiling, to compare. &mate=1
+// composes the king floor as a mate floor, an idea in preview: your own king
+// at your side from the first move (src/composer.js composeMate). &floor=2
+// or &floor=3 opens the preview on that floor, the earlier floors played
+// along their planted lines. &modifier=cracks or &modifier=gates
 // plays the date under one of the two terrain modifiers (a crumbling floor,
 // gates: src/modifiers.js) whatever it draws, to try either on any date;
 // without it the date keeps its own modifier. Its runs save apart from real
@@ -17,7 +21,7 @@
 // src/main.js loads this module only in a dev build opened with ?composed=,
 // so published builds never carry it.
 import { composeDay, START_SETS, COMPOSED_STARTS } from './composer.js';
-import { validateSave } from './rules.js';
+import { validateSave, act } from './rules.js';
 import { getRawDaily } from './edition.js';
 import { TERRAIN_MODIFIERS } from './modifiers.js';
 
@@ -43,6 +47,8 @@ export function previewOptions(search) {
   return {
     starts: startsFor(search), treasure: optionFor(search, 'treasure'), partner: query.get('partner') === 'all' ? 'every' : optionFor(search, 'partner'), tight: optionFor(search, 'tight'),
     wait: ideaFor(search, 'wait'), lure: ideaFor(search, 'lure'), ceiling: optionFor(search, 'ceiling'),
+    // In preview: &mate=1 composes the king floor as a mate floor, your king at your side (src/composer.js composeMate).
+    mate: query.get('mate') === '1',
   };
 }
 
@@ -66,13 +72,26 @@ export function composedDayFor(search) {
 // ideas (one turned off, or put on every day it fits, or the bot's ceiling left out), so a run of a day composed
 // one way never loads into the same day composed another.
 function ideasTag(search) {
-  const { wait, lure, ceiling } = previewOptions(search);
+  const { wait, lure, ceiling, mate } = previewOptions(search);
   const part = (name, value) => (value === 'every' ? `${name}-all` : value ? '' : `no-${name}`);
-  const tag = [part('wait', wait), part('lure', lure), (wait || lure) && !ceiling && 'open'].filter(Boolean).join('+');
+  const tag = [part('wait', wait), part('lure', lure), (wait || lure) && !ceiling && 'open', mate && 'mate'].filter(Boolean).join('+');
   return tag ? `${tag}:` : '';
 }
-/** Each start set saves apart, and so does a forced modifier; e2 keeps the key earlier previews used. */
-export const composedSaveTag = (search) => `${startsFor(search) === 'e2' ? 'composed:' : `composed:${startsFor(search)}:`}${ideasTag(search)}${modifierFor(search) ? `${modifierFor(search)}:` : ''}`;
+// The floor a preview opens on (&floor=2 or &floor=3), or null: floor 1, as any day.
+const floorFor = (search) => { const floor = Number(new URLSearchParams(search).get('floor')); return floor === 2 || floor === 3 ? floor : null; };
+/**
+ * A preview's new game: `game`, or with &floor=2 or &floor=3 the same game
+ * with the floors before that one already played along their planted lines,
+ * a shortcut to the floor under study (a king floor, say).
+ */
+export function previewGame(search, daily, game) {
+  const floor = floorFor(search);
+  let state = game;
+  if (floor) for (const action of daily.generation.certificate.actions) { if (state.floor >= floor - 1) break; state = act(state, action); }
+  return state;
+}
+/** Each start set saves apart, and so do a forced modifier and a preview that opens on a later floor; e2 keeps the key earlier previews used. */
+export const composedSaveTag = (search) => `${startsFor(search) === 'e2' ? 'composed:' : `composed:${startsFor(search)}:`}${ideasTag(search)}${modifierFor(search) ? `${modifierFor(search)}:` : ''}${floorFor(search) ? `floor${floorFor(search)}:` : ''}`;
 
 /** A saved preview run belongs to its day as composed now: a valid save of it, rooms included. */
 export const composedSaveFits = (value, daily) => validateSave(value, daily.date, daily);

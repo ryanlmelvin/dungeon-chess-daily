@@ -408,6 +408,71 @@ were composed again; the audit then matched every stored day. No
 `RULES_VERSION` bump, since play is unchanged, and no `COMPOSER_VERSION`
 bump, since each idea draws from seeded streams of its own.
 
+## In preview: mate floors, your own king at your side
+
+A king floor won the way a chess mate is, by your piece and your own king
+together (`src/composer.js` "Mate floors", `composeMate`). Built on
+2026-11-13 behind `composeDay`'s `mate` option, which is off unless asked
+for and no part of `RELEASE`: no stored edition has one. The dev preview
+asks with `&mate=1` (and `&floor=3` opens a preview on its king floor, the
+earlier floors played along their lines).
+
+**Your king starts beside you** (the owner's choice, 2026-11-13). A room's
+recruit may be `joined` (`src/rules.js` `setFloor`): it stands on its square
+as the floor opens, with nothing to step onto, and takes orders from the
+first move, as on a Tandem floor. The floor's opening line says "Your own
+king fights alongside you!", with a What? button, and the first such floor
+on a device opens that explainer by itself as you arrive. A day whose king
+floor opens so is proved with the recruit steered on that floor
+(`src/generation.js` `escorted`).
+
+**Why not the lichess mates as they stand.** The lichess puzzle database
+(CC0) has 10,757 mates in one to three in which the solver has only a king
+and one piece (rook 8,168, queen 2,500, knight 67, bishop 22; none for a
+pawn). Played here with every other enemy man a wall and your king joined,
+they are too short: of the 3,913 mates in two, 3,340 are won in one turn,
+560 in two and 13 not at all; of the 350 mates in three, 191 in one turn,
+157 in two and 2 in three. Both your pieces move each turn, and a man that
+became a wall no longer steps in between. (Had the king waited to be
+fetched, as every other recruit does, only 130 of the 4,263 mates in two or
+three would fit at all: the fetch leaves your piece and your king side by
+side.)
+
+**So the real positions are the arenas** (`src/mate-arenas.js`, built by
+`scripts/build-mate-arenas.mjs` from the database, which is not in the
+repo): 300 a rook's, 300 a queen's, 46 a knight's and 17 a bishop's, each
+the squares of the piece, its king and the enemy king and a wall for every
+other enemy man. An arena is mirrored or turned as the seed says and the
+three pieces are set back (the enemy king within two squares of its own,
+your king within one, your piece anywhere) until the exact search, the
+recruit steered and every order tried on every turn, finds the floor won in
+`MATE_TURNS` (three) turns and no sooner.
+
+**The king's walk.** Kings may stand side by side here (the third king rule
+was dropped after play) and a recruit is never taken, so your king attacks
+as well as guards. The first floors composed were three king steps with the
+piece never moving. So a mate floor is one the king can't win by itself
+within par, your piece standing still and captured as often as the guards
+like (`kingAlone`), and whose planted line passes no turn and moves your
+piece on every turn, or on all but one (`MATE_WAITS`). The lines that come
+out are this game's mates, not chess's: the piece checks or cuts the enemy
+king off, and your king walks in beside it.
+
+**The other checks** are a partner floor's: a hasty win (captures absorbed)
+scores worse than the line, the two guards roam and the dressed room must
+still hold a line of three turns and nothing sooner, and the bot's runs
+from the floor's start pass its guard (`mateGuard`). No chest and no hint.
+A pawn's day has no arenas, and a day with ice or moving terrain keeps its
+own king floor for now.
+
+**Measured** (2026-11-13) over the 24 plain days of an officer between
+2026-11-14 and 2027-01-15: 19 composed a mate floor (a knight's 7 of 8, a
+bishop's 8 of 9, a rook's 2 of 4, a queen's 2 of 3), in 0.6 to 22 s a
+floor. Not yet measured: how many first actions find the mate, and how the
+bot fares against par. Shipping it would need those, a share of days
+(`RELEASE` and a draw, as the Tandem's), the room code holding a joined
+recruit, a journal page, Ice and terrain days, and the owner's play first.
+
 ## Moving terrain: a crumbling floor and gates
 
 Two room modifiers are terrain that changes during a floor. They took

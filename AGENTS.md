@@ -61,6 +61,14 @@ drawn ideas (`=all`: on every day they fit; `&ceiling=0`: without the bot's ceil
 preview that departs from the release saves apart again; one whose query names an idea
 files its finds in the journal.
 
+In preview, a mate floor (`composeDay`'s `mate` option, off unless asked for;
+`composeMate` in `src/composer.js`): a king floor that opens with your own king already
+at your side (a room's recruit may be `joined`) and is won by the two of you in three
+turns, composed in the arena of a real lichess mate (`src/mate-arenas.js`, built by
+`scripts/build-mate-arenas.mjs` from the lichess puzzle database, which is not in the
+repo). The preview asks with `&mate=1`; `&floor=2` or `&floor=3` opens a preview on
+that floor. `docs/generation.md` ("In preview: mate floors") has the rest.
+
 The two terrain modifiers (a crumbling floor, gates) can be forced on any date:
 `&modifier=cracks` or `&modifier=gates` on the composer preview plays that date under
 one, saved apart, and `node scripts/measure-terrain.mjs --modifier cracks --jobs 8`

@@ -5,6 +5,7 @@ import { initGuide } from './guide.js';
 import { isFirstVisit, markGuideSeen } from './first-visit.js';
 import { drawMoveDemo, drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { TACTIC_COPY, RECRUIT_COPY, BISHOP_PAIR_COPY } from './tactics-art.js';
+import { drawEscortDemo, ESCORT_STILL } from './journal-art.js';
 import { autoExplainer } from './explainers.js';
 import { COMBO_START } from './tactics.js';
 import { headlineFor, FIRST_EDITION_DATE } from './edition.js';
@@ -53,7 +54,7 @@ try {
   const opened = composedDay ? null : sessionStorage.getItem(archiveSessionKey);
   if (isArchiveDate(opened, daily.date, FIRST_EDITION_DATE)) { daily = getDaily(opened); archiveMode = true; }
 } catch {}
-const newGame = () => (composedDay ? createComposedGame(composedDay) : createGame(daily));
+const newGame = () => (composedDay ? preview.previewGame(location.search, composedDay, createComposedGame(composedDay)) : createGame(daily));
 // Practice replays the stored edition's rooms, so the composer preview has none.
 if (composedDay) $('practice-button').hidden = true;
 let state = null;
@@ -358,8 +359,23 @@ function logState() {
   if (recruit && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
     messageLog.push({ text: `A ${recruit.piece} waits to join you: step onto its square to recruit it.`, action, recruit: true });
   }
+  // A floor that opens with your own king beside you says so.
+  if (escorted(state) && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
+    messageLog.push({ text: 'Your own king fights alongside you!', action, escort: true });
+  }
   messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
 }
+/** Did this floor open with your own king already at your side (a mate floor: src/rules.js setFloor, `joined`)? */
+function escorted(game) {
+  return Boolean(game?.companion && game.composed?.[game.floor]?.items.some((item) => item.type === 'companion' && item.joined === true));
+}
+// The explainer of such a floor: it opens by itself the first time on this device, then from its line's What? button.
+const ESCORT_COPY = Object.freeze({
+  title: 'Your king is with you',
+  text: 'On this floor your own king starts at your side: there is nothing to step onto. After each of your moves you move your king too, or tap it to stay put. Together, leave the enemy king no safe square.',
+  art: 'Animated board: your rook slides to the top row, your king steps up beside the enemy king’s corner, and the enemy king topples.',
+  draw: drawEscortDemo, still: ESCORT_STILL,
+});
 /** This floor's recruit while it still waits on its square, or null once it has joined. */
 function waitingRecruit(game) {
   return game?.companion ? null : game?.items?.find((item) => item.type === 'companion') ?? null;
@@ -401,6 +417,7 @@ function showGameFeedback() {
     if (castled && fresh && /Castled!/.test(entry.text)) line.append(' ', what('What is castling?', () => openSpecialMove('castle')));
     // The recruit line keeps its explainer while that recruit still waits.
     if (entry.recruit && fresh && waitingRecruit(state)) line.append(' ', what('What is a recruit?', () => openSpecialMove('recruit')));
+    if (entry.escort && fresh) line.append(' ', what('Why is your king with you?', () => openSpecialMove('escort')));
     // The bishop pair's "Holy duo!" line keeps its explainer until the next action.
     if (pairHop && fresh && /^Holy duo!/.test(entry.text)) line.append(' ', what('What is the bishop pair?', () => openSpecialMove('bishop-pair')));
     if (cracked && fresh && /The ceiling starts to crack!/.test(entry.text)) line.append(' ', what('What does the cracking ceiling mean?', () => openSpecialMove('cave-in')));
@@ -947,7 +964,7 @@ let specialMoveFrame = 0;
 // by itself once per device, then from its line's What? button.
 function openSpecialMove(kind, mode = 'player') {
   if (!state || document.querySelector('dialog[open]')) return;
-  if (TACTIC_COPY[kind] || kind === 'recruit' || kind === 'bishop-pair') return openTactic(kind);
+  if (TACTIC_COPY[kind] || kind === 'recruit' || kind === 'bishop-pair' || kind === 'escort') return openTactic(kind);
   const castle = kind === 'castle';
   const copy = castle ? CASTLE : EN_PASSANT[mode];
   // Your own en passant or castle has now been explained on this device (a monster's en passant is another story).
@@ -977,8 +994,8 @@ function openSpecialMove(kind, mode = 'player') {
 // with their own animated explainer (tactics-art.js), as do the What? buttons
 // of a waiting recruit and of the bishop pair's hop.
 function openTactic(kind) {
-  const copy = kind === 'recruit' ? RECRUIT_COPY : kind === 'bishop-pair' ? BISHOP_PAIR_COPY : TACTIC_COPY[kind];
-  if (!retry && TACTIC_COPY[kind]) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
+  const copy = kind === 'recruit' ? RECRUIT_COPY : kind === 'bishop-pair' ? BISHOP_PAIR_COPY : kind === 'escort' ? ESCORT_COPY : TACTIC_COPY[kind];
+  if (!retry && (TACTIC_COPY[kind] || kind === 'escort')) try { localStorage.setItem(tacticSeenKey(kind), '1'); } catch {}
   const canvas = $('special-move-art');
   $('special-move-title').textContent = copy.title;
   $('special-move-text').textContent = copy.text;
@@ -1083,7 +1100,9 @@ function takeAction(action) {
   }
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
-  const special = retry ? null : autoExplainer(state.events, tacticSeen);
+  // The first floor on this device that opens with your own king beside you explains it as you arrive.
+  const arrived = !retry && escorted(state) && state.events.some((event) => event.type === 'descend') && !tacticSeen('escort');
+  const special = retry ? null : autoExplainer(state.events, tacticSeen) ?? (arrived ? 'escort' : null);
   const animationTime = (special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400) + (renderer?.skidTime(state.events) ?? 0);
   // The cracking ceiling's explainer waits for the shake and the stairs countdown to show first.
   const explainAt = special === 'cave-in' ? 1100 : animationTime;
