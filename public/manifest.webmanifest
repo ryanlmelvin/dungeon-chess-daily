@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Dungeon Chess Daily",
   "short_name": "Chess Daily",
-  "description": "Read the monster clues. Make your chess moves. Escape three daily dungeon rooms.",
+  "description": "A daily chess puzzle with dungeon crawler mechanics.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
