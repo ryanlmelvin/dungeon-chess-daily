@@ -121,12 +121,10 @@ function lastFloor() {
 }
 
 test('an ordered recruit may capture the last floor’s king; the stairs then win the run, and every save validates', () => {
-  let state = lastFloor();
-  const pickup = state.items.find((item) => item.type === 'companion');
-  assert.ok(legalMoves(state).some((tile) => tile.x === pickup.x && tile.y === pickup.y));
-  state = act(state, move(pickup.x, pickup.y, 'hold'));
-  assert.equal(state.companion.basePiece, pickup.piece); assert.equal(state.companion.sharing, true);
-  assert.match(state.message, /joins you this floor\. You move it after each of your moves\. It can capture from your next move on, even the king\./);
+  const state = lastFloor();
+  // Your own king is with you as the king floor opens: nothing waits to be picked up.
+  assert.deepEqual([state.companion.basePiece, state.companion.sharing], ['king', false]);
+  assert.ok(!state.items.some((item) => item.type === 'companion'));
   assert.equal(validateSave(JSON.parse(JSON.stringify(state)), state.date), true);
   // Stand the king on a square the recruit can reach.
   const square = recruitChoice(state, wait()).moves.find((tile) => !tile.capture);
@@ -316,8 +314,10 @@ test('Auto is unchanged: every recruit move a certified route leaves to the recr
 
 test('a certificate carries recruit orders on its partner floor alone: the route code keeps them, and the verifier refuses any other', () => {
   // The first stored officer's day without a partner floor, and the first with one.
-  const plain = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner === undefined && getRawDaily(date).playerPiece !== 'pawn');
-  const tandem = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner !== undefined);
+  // Days whose king floor is a net: its line names no order (your king stands by), so any orders are a partner floor's.
+  const net = (date) => EDITIONS[date].motifs.split(',')[2] === 'n';
+  const plain = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner === undefined && getRawDaily(date).playerPiece !== 'pawn' && net(date));
+  const tandem = Object.keys(EDITIONS).find((date) => EDITIONS[date].partner !== undefined && net(date));
   for (const date of [plain, tandem]) {
     const daily = getDaily(date), partner = daily.generation.partner ?? null;
     const { actions, metrics } = daily.generation.certificate;
@@ -333,7 +333,7 @@ test('a certificate carries recruit orders on its partner floor alone: the route
     const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
     const replay = verifyWinningRoute(createRoom(twin), actions, certificateMode(partner));
     assert.equal(replay.valid, true, replay.reason); assert.deepEqual(replay.metrics, metrics);
-    // Every other move ordered too: a route whose recruit moves itself takes no order, and the day's proof none off its partner floor.
+    // Every other move ordered too: a route whose recruit moves itself takes no order, and the day's proof none off its partner floor and its king floor.
     const ordered = actions.map((action) => (action.type === 'descend' || action.recruit !== undefined ? action : { ...action, recruit: 'hold' }));
     const refused = verifyWinningRoute(createRoom(twin), ordered);
     assert.equal(refused.valid, false); assert.match(refused.reason, /Only chess moves/);
@@ -347,14 +347,12 @@ test('a certificate carries recruit orders on its partner floor alone: the route
 test('runs played with orders keep valid saves on every floor', () => {
   const daily = getDaily('2026-11-13');
   let state = createGame(daily);
-  // Down to the king floor by the planted lines, whose recruit king waits a move from the start;
-  // pick it up and order it around for a few turns.
+  // Down to the king floor by the planted lines, where your own king is with you as it opens;
+  // order it around for a few turns.
   for (const action of daily.generation.certificate.actions) { if (state.floor === 2) break; state = act(state, action); }
   assert.equal(state.floor, 2);
-  const pickup = state.items.find((item) => item.type === 'companion');
-  assert.ok(legalMoves(state).some((tile) => tile.x === pickup.x && tile.y === pickup.y));
+  assert.equal(state.companion.piece, 'king');
   state.powers.freeze = 6;
-  state = act(state, move(pickup.x, pickup.y, 'hold'));
   for (let turn = 0; turn < 4; turn++) {
     const choice = recruitChoice(state, wait());
     const order = choice.moves.find((tile) => !tile.capture) ?? 'hold';
@@ -441,9 +439,7 @@ test('a recruit that joins after the clear hunts on its own from its first move'
 });
 
 test('on the last floor, once the king falls to your piece, the recruit hunts on its own: no order step before the stairs', () => {
-  let state = lastFloor();
-  const pickup = state.items.find((item) => item.type === 'companion');
-  state = act(state, move(pickup.x, pickup.y, 'hold'));
+  const state = lastFloor();
   // Stand the king on a square your piece can take it from.
   const square = legalMoves(state).find((tile) => !tile.capture && !(tile.x === state.player.x && tile.y === state.player.y));
   const king = state.enemies.find((monster) => monster.role === 'king');

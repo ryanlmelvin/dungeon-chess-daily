@@ -12,7 +12,7 @@
 import { floorPars } from './par.js';
 import { isOfficialRun, scoredMoves, floorScoredMoves, PLAYABLE_PIECES } from './game.js';
 import { isMotifName } from './motif-code.js';
-import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL, drawStandstillDemo, STANDSTILL_STILL, drawLureDemo, LURE_STILL } from './journal-art.js';
+import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL, drawStandstillDemo, STANDSTILL_STILL, drawLureDemo, LURE_STILL, drawEscortDemo, ESCORT_STILL } from './journal-art.js';
 import { drawOffBalanceDemo, OFF_BALANCE_STILL, drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
 import { drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { piecePalette } from './sprites.js';
@@ -53,6 +53,12 @@ export const PAGES = Object.freeze([
     text: 'Check the king where every square it could step to is covered. Checkmate wins at once.',
     art: 'A king stands in a dead end of two squares. A rook checks along the line, covering both, and the king topples: checkmate.',
     draw: drawNetDemo, still: NET_STILL,
+  },
+  {
+    id: 'mate', kind: 'idea', name: 'Royal pair', pieces: OFFICERS,
+    text: 'Your own king starts beside you. Cut the enemy king off with your piece and close in together.',
+    art: 'A rook slides to the top row, checking the enemy king in its corner. Your king steps up to cover the squares beside it, and the enemy king topples: checkmate.',
+    draw: drawEscortDemo, still: ESCORT_STILL,
   },
   {
     id: 'tempo', kind: 'idea', name: 'Tempo', pieces: ['pawn'],

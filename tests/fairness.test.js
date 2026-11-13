@@ -47,7 +47,8 @@ function replay(edition) {
   for (const action of daily.generation.certificate.actions) {
     assert.ok(['move', 'descend', 'wait'].includes(action.type));
     const partnered = state.floor === partner;
-    assert.ok(action.recruit === undefined || (partnered && action.type !== 'descend'), 'only a partner floor\'s moves carry recruit orders');
+    // On the king floor your own king is with you and takes orders too (a mate floor's line, a pawn's net).
+    assert.ok(action.recruit === undefined || ((partnered || royalRules(state)) && action.type !== 'descend'), 'only a partner floor\'s moves and the king floor\'s carry recruit orders');
     if (action.type === 'move') {
       assert.ok(legalMoves(state).some((tile) => tile.x === action.x && tile.y === action.y));
       // Only the king floor's own recruit may help under royal rules, and a partner floor's on that floor.
@@ -60,7 +61,7 @@ function replay(edition) {
     assert.ok(next.hits <= spendableHits(initial));
     assert.deepEqual(next.powers, { shield: 0, freeze: 0, magnet: 0, pin: 0, leap: 0, takeback: 0 });
     assert.deepEqual(next.purchases, []);
-    if (royalRules(next)) assert.ok(next.companion === null || next.companion.basePiece === 'king');
+    if (royalRules(next)) assert.equal(next.companion?.basePiece, 'king', 'your own king is with you on the king floor');
     else if (next.floor !== partner) assert.equal(next.companion, null);
     assert.equal(next.companions?.length ?? 0, 0);
     assert.ok(!next.events.some((event) => ['restart', 'powerup', 'shield', 'recruit'].includes(event.type) || (event.type === 'player-captured' && !spendableHits(initial)) || (event.type.startsWith('companion') && !royalRules(state) && !partnered)));
@@ -128,10 +129,10 @@ test('a stored Tandem day certifies with its recruit on orders, on its partner f
     assert.equal(proveComposed(daily, actions, { saves: true, partner: floor }).valid, true, date);
     assert.equal(proveComposed(daily, actions, { saves: true }).valid, false, `${date}: unnamed, the orders are refused`);
     assert.equal(proveComposed(daily, actions, { partner: 1 - floor }).valid, false, `${date}: the recruit helps on its own floor alone`);
-    // The orders sit on the partner floor's moves and nowhere else.
+    // The orders sit on the partner floor's moves, and the king floor's where your king has work to do.
     let at = 0;
     for (const action of actions) {
-      if (action.recruit !== undefined) assert.equal(at, floor, `${date}: an order on floor ${at + 1}`);
+      if (action.recruit !== undefined) assert.ok(at === floor || at === 2, `${date}: an order on floor ${at + 1}`);
       if (action.type === 'descend') at++;
     }
   }

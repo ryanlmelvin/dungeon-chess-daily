@@ -307,7 +307,7 @@ test('100 consecutive certified dates win without powers, never captured, preser
     const proof = verifyWinningRoute(state, issue.generation.certificate.actions, certificateMode(partner));
     assert.equal(proof.valid, true, `${state.date}: ${proof.reason}`);
     for (const action of issue.generation.certificate.actions) {
-      assert.ok(action.recruit === undefined || state.floor === partner, `${state.date}: an order off the partner floor`);
+      assert.ok(action.recruit === undefined || state.floor === partner || state.floor === 2, `${state.date}: an order off the partner floor and the king floor`);
       const next = act(state, action);
       if (next.floor !== state.floor && next.status === 'playing') assertInitialArmy(next);
       state = next;

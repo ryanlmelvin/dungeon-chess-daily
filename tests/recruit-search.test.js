@@ -133,7 +133,8 @@ test('a steered route verifies only as steered, and reports what its recruit did
   assert.equal(proof.valid, true, proof.reason);
   const { recruit } = proof.metrics;
   assert.equal(recruit.orders, route.actions.filter((action) => action.recruit !== undefined).length);
-  assert.ok(recruit.joined >= 1 && recruit.joined <= 3);
+  // Floors 1 and 2 may each hold a recruit to step onto; the king floor's is with you already and joins nothing.
+  assert.ok(recruit.joined >= 0 && recruit.joined <= 2);
   assert.ok(recruit.targetCaptures >= recruit.clears && recruit.captures >= recruit.targetCaptures);
   // Auto certificates carry no orders: the default verifier refuses the same route.
   const refused = verifyWinningRoute(createGame(daily), route.actions);

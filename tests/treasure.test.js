@@ -214,7 +214,7 @@ test('a chest taken on the move that mates still counts against the spare move',
 test('one batch of the bot\'s runs answers for every square: a chest never changes its play', async () => {
   const { botMarks, TREASURE_BOT } = await import('../src/treasure.js');
   const { certifiedFloors, playFloor, runSeed } = await import('../src/human-bot.js');
-  // 2026-11-16 (a rook): its king floor's chest was chosen after the bot ruled four squares out.
+  // 2026-11-16 (a rook): its floor 2's chest was chosen after the bot ruled a square out (its king floor is a mate floor, which has none).
   const { daily, floors } = await composed('2026-11-16');
   const chestless = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => item.type !== 'chest') })) };
   const played = certifiedFloors(daily), bare = certifiedFloors(chestless);
@@ -234,7 +234,7 @@ test('one batch of the bot\'s runs answers for every square: a chest never chang
     assert.ok(direct <= TREASURE_BOT.share * TREASURE_BOT.runs, `floor ${f + 1}: seldom by accident`);
   });
   assert.ok(judged >= 2);
-  assert.ok(floors[2].treasureChecks.calm < floors[2].treasureChecks.spare, 'the bot ruled squares out on the king floor');
+  assert.ok(floors[1].treasureChecks.calm < floors[1].treasureChecks.spare, 'the bot ruled a square out on floor 2');
   // 2026-12-31's floor 1 (a knight): the bot stumbles on every square that costs the spare move, so it has no chest.
   const lost = (await composed('2026-12-31')).floors[0];
   assert.deepEqual([lost.treasure, lost.treasureMiss], [null, 'bot']);
@@ -312,7 +312,8 @@ test('each chest lies off its planted line and its proving line takes it at par,
     // A floor without one says why.
     for (const floor of floors) if (!floor.treasure) assert.ok(['none', 'spare', 'bot', 'partner'].includes(floor.treasureMiss), `${date}: ${floor.treasureMiss}`);
   }
-  assert.ok(chests >= 6, 'most floors of these days carry a chest');
+  // (A Tandem and a mate floor get none, and a pawn's day few.)
+  assert.ok(chests >= 4, 'these days carry several chests');
 });
 
 test('a run that takes every chest at par validates all the way and marks its share card', async () => {

@@ -132,13 +132,11 @@ test('the pincer: off the key a target dodges out of its other exit, on it every
 });
 
 test('a tight day leaves a pawn\'s day alone, its king floor included', () => {
-  // The two dated examples: on each the recruit king can mate while the pawn sits out a move
-  // ("wait f5 wait" for "wait f5 f6"; "b6 wait wait" for "b6 b7 b8"). Those floors stay: the
-  // player orders that king, so its mate is theirs to find.
-  for (const [date, planted, lazy] of [['2026-11-06', 'wait f5 f6', 'wait f5 wait'], ['2026-11-28', 'b6 b7 b8', 'b6 wait wait']]) {
+  // Two pawn days: a pawn's floors have no tight forms, and its king floor (won with your king, on your orders)
+  // is as it is with the option off.
+  for (const date of ['2026-11-06', '2026-11-28']) {
     const before = compose(date, false), after = compose(date, true);
-    assert.equal(spell(before.floors[2].line), planted);
-    assert.ok(playLine(before.starts[2], line(lazy))?.at(-1).exit.open, `${date}: "${lazy}" wins as fast`);
+    assert.equal(before.floors[2].motif, 'net');
     assert.deepEqual(after.daily.composed, before.daily.composed, `${date}: the same rooms with the option on`);
     assert.deepEqual(after.daily.generation.certificate.actions, before.daily.generation.certificate.actions, `${date}: the same lines`);
   }

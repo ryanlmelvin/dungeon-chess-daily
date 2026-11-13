@@ -133,18 +133,23 @@ function* floorsOf(daily) {
   }
 }
 
-// The composer places every recruit (src/composer.js): on the king floor a king,
-// one move from the start; on floors 1 and 2, now and then, any piece.
-test('every stored king floor waits with a king recruit one move from its start; floors 1 and 2 recruit any piece', () => {
+// The composer places every recruit (src/composer.js): on the king floor your own
+// king, with you as the floor opens (src/rules.js setFloor); on floors 1 and 2,
+// now and then, any piece, waiting to be stepped onto.
+test('every stored king floor opens with your king at your side; floors 1 and 2 recruit any piece, which waits', () => {
   const early = new Set();
   for (const [date, entry] of Object.entries(EDITIONS)) {
-    const daily = { ...getRawDaily(date), difficulty: 'fair', floorSeeds: composedSeeds(date), composed: decodeRooms(entry.rooms) };
+    const rooms = decodeRooms(entry.rooms);
+    const daily = { ...getRawDaily(date), difficulty: 'fair', floorSeeds: composedSeeds(date), composed: rooms };
     for (const start of floorsOf(daily)) {
       const recruits = start.items.filter((item) => item.type === 'companion');
       assert.ok(recruits.length <= 1, `${date} floor ${start.floor + 1}`);
-      if (start.floor < 2) { for (const recruit of recruits) early.add(recruit.piece); continue; }
-      assert.deepEqual(recruits.map((recruit) => recruit.piece), ['king'], date);
-      assert.ok(legalMoves(start).some((tile) => same(tile, recruits[0])), `${date}: one move from the start`);
+      if (start.floor < 2) { assert.equal(start.companion, null, `${date}: a recruit waits before the king floor`); for (const recruit of recruits) early.add(recruit.piece); continue; }
+      // The room lays the king as any recruit; the floor opens with it joined, on that square, and nothing waits.
+      const laid = rooms[2].items.filter((item) => item.type === 'companion');
+      assert.deepEqual(laid.map((item) => item.piece), ['king'], date);
+      assert.deepEqual([start.companion?.piece, start.companion?.x, start.companion?.y, recruits.length], ['king', laid[0].x, laid[0].y, 0], date);
+      assert.ok(!same(start.companion, start.player), `${date}: on a square of its own`);
     }
   }
   assert.deepEqual([...early].sort(), [...PIECES].sort());

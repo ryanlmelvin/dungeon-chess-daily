@@ -32,17 +32,18 @@ test('a route keeps a partner floor\'s recruit orders: hold, or the square the r
   for (const bad of ['~', '>A', '!~', '!>A', 's~~', 's>', 's>!', 's>.', 's~>A']) assert.throws(() => decodeRoute(bad), SyntaxError, bad);
   assert.throws(() => encodeRoute([{ type: 'descend', recruit: 'hold' }]), RangeError);
   assert.throws(() => encodeRoute([{ type: 'wait', recruit: { x: 8, y: 0 } }]), RangeError);
-  // Every stored route decodes and encodes back to the very same code, and its orders sit on its partner floor alone.
+  // Every stored route decodes and encodes back to the very same code, and its orders sit on its partner floor
+  // or on the king floor, where your own king is with you (a mate floor's line and a pawn's net carry its orders).
   let ordered = 0;
   for (const [date, entry] of Object.entries(EDITIONS)) {
     const route = decodeRoute(entry.route);
     assert.equal(encodeRoute(route), entry.route, date);
     let floor = 0;
     for (const action of route) {
-      if (action.recruit !== undefined) { assert.equal(floor, entry.partner, `${date}: an order on floor ${floor + 1}`); ordered++; }
+      if (action.recruit !== undefined) { assert.ok(floor === entry.partner || floor === 2, `${date}: an order on floor ${floor + 1}`); ordered++; }
       if (action.type === 'descend') floor++;
     }
-    assert.equal(/[~>]/.test(entry.route), entry.partner !== undefined, `${date}: orders, and only on a day with a partner floor`);
+    if (entry.partner !== undefined) assert.ok(/[~>]/.test(entry.route), `${date}: a partner floor's line carries orders`);
     assert.ok(entry.partner === undefined || entry.partner === 0 || entry.partner === 1, date);
   }
   assert.ok(ordered > 0, 'some stored day has a partner floor');

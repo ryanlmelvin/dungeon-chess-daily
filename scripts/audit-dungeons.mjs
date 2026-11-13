@@ -8,7 +8,7 @@
 // Wall-clock measurements never affect generation.
 //   node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days]
 import assert from 'node:assert/strict';
-import { getDaily, proveComposed, certificateMode } from '../src/generation.js';
+import { getDaily, proveComposed, certificateMode, escorted } from '../src/generation.js';
 import { createGame, act, validateSave } from '../src/rules.js';
 import { verifyWinningRoute } from '../src/fairness.js';
 import { floorPars } from '../src/par.js';
@@ -20,7 +20,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isFinite(Date.parse(start))
   || !Number.isInteger(count) || count < 1 || count > 10_000) {
   throw new Error('Usage: node scripts/audit-dungeons.mjs [YYYY-MM-DD] [1..10000 days]');
 }
-const summary = { start, days: count, stored: 0, borrowed: 0, longestRoute: 0, promotedRoutes: 0, partnerDays: 0, recruitOrders: 0, chests: 0, pieces: {}, pars: {}, modifiers: {}, maxLoadMs: 0 };
+const summary = { start, days: count, stored: 0, borrowed: 0, longestRoute: 0, promotedRoutes: 0, partnerDays: 0, mateDays: 0, recruitOrders: 0, chests: 0, pieces: {}, pars: {}, modifiers: {}, maxLoadMs: 0 };
 const byModifier = (modifier) => summary.modifiers[modifier] ??= { days: 0, totalTurns: 0, longestRoute: 0, threatenedDecisions: 0, slides: 0, pits: 0, gateTurns: 0, checkmates: 0 };
 const tally = (bucket, key) => { bucket[key] = (bucket[key] ?? 0) + 1; };
 for (let offset = 0; offset < count; offset++) {
@@ -31,17 +31,20 @@ for (let offset = 0; offset < count; offset++) {
   // The proof replays on the day's twin without hint powerups (src/generation.js proveComposed).
   const twin = { ...daily, composed: daily.composed.map((room) => ({ ...room, items: room.items.filter((item) => !(item.hint && item.type === 'powerup')) })) };
   const partner = daily.generation.partner ?? null;
-  const proof = verifyWinningRoute(createGame(twin), daily.generation.certificate.actions, certificateMode(partner));
+  // A mate floor (the king floor opening with your king joined) is steered too.
+  const escort = escorted(daily);
+  const proof = verifyWinningRoute(createGame(twin), daily.generation.certificate.actions, certificateMode(partner, escort));
   assert.equal(proof.valid, true, `${date}: ${proof.reason}`);
   // The day's own proof, which also holds the recruit's help to the partner floor.
   const proved = proveComposed(daily, daily.generation.certificate.actions, { saves: true, partner });
   assert.equal(proved.valid, true, `${date}: ${proved.reason}`);
   if (partner !== null) summary.partnerDays++;
+  if (escort) summary.mateDays++;
   summary.chests += daily.composed.filter((room) => room.items.some((item) => item.type === 'chest')).length;
   let state = createGame(daily);
   const entry = byModifier(daily.modifier ?? 'none');
   for (const action of daily.generation.certificate.actions) {
-    assert.ok(action.recruit === undefined || state.floor === partner, `${date}: a recruit order off the partner floor`);
+    assert.ok(action.recruit === undefined || state.floor === partner || (escort && state.floor === 2), `${date}: a recruit order off the partner floor`);
     if (action.recruit !== undefined) summary.recruitOrders++;
     state = act(state, action);
     assert.equal(validateSave(state, date, daily), true, `${date}: save after ${JSON.stringify(action)}`);

@@ -37,7 +37,7 @@ node scripts/measure-ideas.mjs --jobs 8     # the drawn ideas (Standstill, Lure)
 ```
 
 One release configuration: `composeDay(date)` with no options (`RELEASE` in
-`src/composer.js`: chests, partner floors, tight forms) is what the build stores, the
+`src/composer.js`: chests, partner floors, tight forms, the drawn ideas, mate floors) is what the build stores, the
 audit composes again, the preview shows and the tests compare. The measuring scripts
 compose it too; `--no-treasure`, `--no-partner` and `--no-tight` each turn one option off
 to compare (`scripts/compose-options.mjs`).
@@ -61,13 +61,15 @@ drawn ideas (`=all`: on every day they fit; `&ceiling=0`: without the bot's ceil
 preview that departs from the release saves apart again; one whose query names an idea
 files its finds in the journal.
 
-In preview, a mate floor (`composeDay`'s `mate` option, off unless asked for;
-`composeMate` in `src/composer.js`): a king floor that opens with your own king already
-at your side (a room's recruit may be `joined`) and is won by the two of you in three
-turns, composed in the arena of a real lichess mate (`src/mate-arenas.js`, built by
+Mate floors (`composeDay`'s `mate` option, in `RELEASE`; `composeMate` in
+`src/composer.js`): a king floor won by your piece and your own king together in three
+turns, composed in
+the arena of a real lichess mate (`src/mate-arenas.js`, built by
 `scripts/build-mate-arenas.mjs` from the lichess puzzle database, which is not in the
-repo). The preview asks with `&mate=1`; `&floor=2` or `&floor=3` opens a preview on
-that floor. `docs/generation.md` ("In preview: mate floors") has the rest.
+repo). An officer's plain day takes one about one day in two (`mateDay`); the other king
+floors are nets. The preview turns it off with `&mate=0`, forces it with `&mate=all`,
+and `&floor=2` or `&floor=3` opens a preview on that floor. `docs/generation.md` ("Mate
+floors") has the rest.
 
 The two terrain modifiers (a crumbling floor, gates) can be forced on any date:
 `&modifier=cracks` or `&modifier=gates` on the composer preview plays that date under
@@ -198,12 +200,16 @@ checks, par and versioning; keep it in step with behavior changes.
   lives: a capture of the player adds a move to the score. A piece with no legal move
   starts its floor over (`restartFloor`), never the day.
 - The king is never the daily piece; certified routes never use powerups, shields or
-  freezes, and take no chest. Off a partner floor they never use the floor 1–2 recruits
-  and carry no recruit orders (the king floor's recruit moves itself along them). On a
-  partner floor (a Tandem, floor 1 or 2) the line uses that floor's recruit, on orders,
-  and the stored edition names the floor.
+  freezes, and take no chest. On floors 1 and 2 they never use the recruit and carry no
+  recruit orders, but on a partner floor (a Tandem), whose line uses that floor's
+  recruit, on orders, and which the stored edition names.
+- On the king floor your own king is with you as the floor opens (`setFloor`): nothing
+  is fetched, and it moves on orders alone (a move or wait that names none holds it).
+  A net's line names none; a mate floor's and a pawn's net's carry its orders.
 - The player always orders the recruit: there is no Auto setting. Once a floor's
   challenge is complete the recruit moves itself for the rest of that room.
+- The recruit mechanic is the same every day: floors 1 and 2 may hold one to step
+  onto; floor 3 always opens with your king joined.
 - Every daily plays Fair; par is the planted line + 1; on the king floor checkmate
   wins and the king can't take a piece the recruit king guards.
 - A chest lies off the planted line and costs the spare move: under par, or even with

@@ -220,7 +220,8 @@ function measure() {
     const plain = certifiedFloors(twin), played = certifiedFloors(daily);
     floors.forEach((floor, f) => {
       const built = builts[f], length = floor.line.length, par = length + 1;
-      const exact = daily.generation.partner === f ? searchPartner(plain.starts[f], built, length) : searchFloor(plain.starts[f], built, length);
+      // A partner floor's line, and a mate floor's, carries the recruit's orders: searched with it steered.
+      const exact = daily.generation.partner === f || daily.generation.motifs[f] === 'mate' ? searchPartner(plain.starts[f], built, length) : searchFloor(plain.starts[f], built, length);
       const outcomes = Array.from({ length: runs }, (_, run) => {
         const result = playFloor(played.starts[f], { seed: runSeed(daily, f, run), frames: true, cap: par + 5 });
         let idea = null;

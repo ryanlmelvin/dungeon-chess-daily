@@ -27,7 +27,7 @@ const twinOf = (daily) => ({ ...daily, composed: daily.composed.map((room) => ({
 
 // This is terrain reachability with the actual chess movement graph. Combat
 // survivability is checked independently by replaying the full winning route.
-test('every stored edition\'s floors have reachable pickups: a few coins, a powerup only as a hint, and the king floor\'s king', () => {
+test('every stored edition\'s floors have reachable pickups: a few coins and a powerup only as a hint; the king floor opens with your king', () => {
   let floors = 0;
   // Every third stored edition (the build proves every one: npm run verify:editions).
   const dates = Object.keys(EDITIONS).filter((_, index) => index % 3 === 0);
@@ -43,10 +43,10 @@ test('every stored edition\'s floors have reachable pickups: a few coins, a powe
       assert.ok(last ? coins === 0 : coins <= 3, `${label}: ${coins} coins`);
       // A powerup lies in a room only as floor 1 or 2's hint.
       assert.ok(state.items.filter((item) => item.type === 'powerup').every((item) => item.hint && !last), label);
-      // Floors 1 and 2 may recruit any piece; the last always waits with a king.
+      // Floors 1 and 2 may hold a recruit of any piece; on the last your own king is with you already, and nothing waits.
       const recruits = state.items.filter((item) => item.type === 'companion').map((item) => item.piece);
-      if (last) assert.deepEqual(recruits, ['king'], label);
-      else assert.ok(recruits.length <= 1, label);
+      if (last) assert.deepEqual([recruits.length, state.companion?.piece], [0, 'king'], label);
+      else { assert.ok(recruits.length <= 1, label); assert.equal(state.companion, null, label); }
       floors++;
     };
     checkFloor();

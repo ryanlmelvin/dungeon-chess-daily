@@ -36,17 +36,22 @@ export const composedSeeds = (date) => [0, 1, 2].map((floor) => hash(`composer:$
 const cache = new Map();
 
 /**
- * How src/fairness.js verifies a day's certificate, given its partner floor
- * (`generation.partner`): the recruit on orders on a day that has one, else
- * moving itself, as on every other day.
+ * How src/fairness.js verifies a day's certificate: the recruit on orders.
+ * A day's king floor has your own king with you (`escort`, as every composed
+ * day's does: escorted), whose orders a mate floor's or a pawn's line
+ * carries, and a day with a partner floor (`partner`, `generation.partner`)
+ * steers that floor's recruit too. Only a day with neither (tooling: rooms
+ * without a king-floor recruit) leaves the recruit to move itself.
  */
-export const certificateMode = (partner, escort = false) => ((partner === null || partner === undefined) && !escort ? undefined : { recruit: 'steer' });
+export const certificateMode = (partner, escort = true) => ((partner === null || partner === undefined) && !escort ? undefined : { recruit: 'steer' });
 /**
- * Does the day's king floor open with its recruit already joined (a mate
- * floor, src/composer.js composeMate)? Its line carries the king's orders, so
- * the day is proved with the recruit steered, as a day with a partner floor is.
+ * Does the day's king floor have its recruit, your own king, which is with
+ * you as that floor opens (src/rules.js setFloor)? Every composed day's does.
+ * A mate floor's line carries the king's orders (src/composer.js
+ * composeMate), so such a day is proved with the recruit steered, as a day
+ * with a partner floor is; a net's line names none, and the king holds.
  */
-export const escorted = (daily) => Boolean(daily?.composed?.[2]?.items?.some((item) => item.type === 'companion' && item.joined === true));
+export const escorted = (daily) => Boolean(daily?.composed?.[2]?.items?.some((item) => item.type === 'companion'));
 
 /**
  * Prove a composed day by its `actions` (each floor's planted line, then the
@@ -71,7 +76,7 @@ export function proveComposed(daily, actions, { saves = false, partner = null } 
   for (const [n, action] of actions.entries()) {
     const next = act(played, action);
     if (next === played || next.hits > played.hits) return { valid: false, reason: 'The line fails as played, hints collected.' };
-    // A recruit takes orders on the day's partner floor, and on a king floor it opened beside you, alone.
+    // A recruit takes orders on the day's partner floor and on the king floor, where your king is with you, alone.
     const steered = played.floor === partner || (escort && played.floor === 2);
     if ((partner !== null || escort) && !steered && (action.recruit !== undefined || (played.floor < 2 && next.events.some((event) => event.type === 'companion-recruit')))) return { valid: false, reason: 'A recruit helps off the partner floor.' };
     if (saves && !validateSave(next, daily.date, daily)) return { valid: false, reason: `The save after the line's action ${n + 1} is not valid.` };

@@ -359,20 +359,20 @@ function logState() {
   if (recruit && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
     messageLog.push({ text: `A ${recruit.piece} waits to join you: step onto its square to recruit it.`, action, recruit: true });
   }
-  // A floor that opens with your own king beside you says so.
+  // The king floor opens with your own king already with you, and says so: nothing to fetch.
   if (escorted(state) && (fresh || state.events.some((event) => event.type === 'descend' || event.type === 'restart'))) {
-    messageLog.push({ text: 'Your own king fights alongside you!', action, escort: true });
+    messageLog.push({ text: 'Your king is already with you: no need to fetch it. You move it after each of your moves.', action, escort: true });
   }
   messageLog = messageLog.slice(-MESSAGE_LOG_MAX);
 }
-/** Did this floor open with your own king already at your side (a mate floor: src/rules.js setFloor, `joined`)? */
+/** The king floor, where your own king is with you from the first move (src/rules.js setFloor). */
 function escorted(game) {
-  return Boolean(game?.companion && game.composed?.[game.floor]?.items.some((item) => item.type === 'companion' && item.joined === true));
+  return Boolean(game?.floor === 2 && game.companion);
 }
 // The explainer of such a floor: it opens by itself the first time on this device, then from its line's What? button.
 const ESCORT_COPY = Object.freeze({
   title: 'Your king is with you',
-  text: 'On this floor your own king starts at your side: there is nothing to step onto. After each of your moves you move your king too, or tap it to stay put. Together, leave the enemy king no safe square.',
+  text: 'On floor 3 your own king is already with you: you don’t need to go and fetch it. After each of your moves, tap a green square to move it, or tap it to stay put. The enemy king can’t take what it guards.',
   art: 'Animated board: your rook slides to the top row, your king steps up beside the enemy king’s corner, and the enemy king topples.',
   draw: drawEscortDemo, still: ESCORT_STILL,
 });
@@ -417,7 +417,7 @@ function showGameFeedback() {
     if (castled && fresh && /Castled!/.test(entry.text)) line.append(' ', what('What is castling?', () => openSpecialMove('castle')));
     // The recruit line keeps its explainer while that recruit still waits.
     if (entry.recruit && fresh && waitingRecruit(state)) line.append(' ', what('What is a recruit?', () => openSpecialMove('recruit')));
-    if (entry.escort && fresh) line.append(' ', what('Why is your king with you?', () => openSpecialMove('escort')));
+    if (entry.escort && fresh) line.append(' ', what('How does your king work?', () => openSpecialMove('escort')));
     // The bishop pair's "Holy duo!" line keeps its explainer until the next action.
     if (pairHop && fresh && /^Holy duo!/.test(entry.text)) line.append(' ', what('What is the bishop pair?', () => openSpecialMove('bishop-pair')));
     if (cracked && fresh && /The ceiling starts to crack!/.test(entry.text)) line.append(' ', what('What does the cracking ceiling mean?', () => openSpecialMove('cave-in')));
@@ -1030,7 +1030,9 @@ function showTacticCallout(events) {
   const treasure = treasureEarned(events);
   // A bone ward that blocks a capture says so over the board: the capture cost no move, and the ward is spent.
   const warded = events.some((event) => event.type === 'shield');
-  const parts = [warded && 'Bone ward broke!', pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱', treasure && `Treasure! ${TREASURE_MARK}`].filter(Boolean);
+  // Arriving on the king floor: your own king is with you already (nothing to fetch).
+  const kinged = escorted(state) && events.some((event) => event.type === 'descend');
+  const parts = [kinged && 'Your king is with you!', warded && 'Bone ward broke!', pair && 'Holy duo!', won && `Fork won! +${won.gold}`, combo && `Combo ×${combo.count}! +${combo.gold}`, !won && !combo && fork && 'Fork! 🔱', treasure && `Treasure! ${TREASURE_MARK}`].filter(Boolean);
   if (!parts.length) return;
   // Checkmate's own moment plays first (src/checkmate.js), then the stamp.
   const mated = treasure && events.some((event) => event.type === 'checkmate');
@@ -1100,7 +1102,7 @@ function takeAction(action) {
   }
   if (!shopping) showTacticCallout(state.events);
   // A waiting recruit's explainer never opens here, only from its line's What? button.
-  // The first floor on this device that opens with your own king beside you explains it as you arrive.
+  // The first king floor on this device explains, as you arrive, that your own king is with you already.
   const arrived = !retry && escorted(state) && state.events.some((event) => event.type === 'descend') && !tacticSeen('escort');
   const special = retry ? null : autoExplainer(state.events, tacticSeen) ?? (arrived ? 'escort' : null);
   const animationTime = (special || state.events.some(event => event.type === 'companion-phase' || event.type === 'recruit') ? 600 : 400) + (renderer?.skidTime(state.events) ?? 0);

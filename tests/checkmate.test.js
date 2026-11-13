@@ -60,17 +60,18 @@ test('a mate standing as you wait wins before the recruit moves', () => {
 
 test('a mate the recruit’s move completes still counts', () => {
   // Only a7 walled: after h8 the king could still step to b7, until the
-  // recruit covers it from c7 (Auto's step from d6, nearest the king).
+  // recruit covers it from c7 (its step from d6, nearest the king).
   const state = kingFloor({ player: [7, 6], recruit: [3, 2], walls: [[0, 1]] });
   const choice = recruitChoice(state, move(7, 0));
   assert.ok(choice?.moves.some((tile) => tile.x === 2 && tile.y === 1), 'no mate yet: the recruit step comes up');
-  for (const action of [{ ...move(7, 0), recruit: { x: 2, y: 1 } }, move(7, 0)]) {
-    const next = act(state, action);
-    const order = types(next);
-    assert.ok(next.exit.open && order.includes('checkmate'), 'the recruit on c7 completes the mate');
-    assert.ok(order.indexOf('companion-move') < order.indexOf('checkmate'), 'checked after the recruit’s move');
-    assert.ok(!order.includes('enemy-phase'), 'the monsters never move');
+  const next = act(state, { ...move(7, 0), recruit: { x: 2, y: 1 } });
+  const order = types(next);
+  assert.ok(next.exit.open && order.includes('checkmate'), 'the recruit on c7 completes the mate');
+  assert.ok(order.indexOf('companion-move') < order.indexOf('checkmate'), 'checked after the recruit’s move');
+  assert.ok(!order.includes('enemy-phase'), 'the monsters never move');
+  // On the king floor your king moves on orders alone: told to hold, or told nothing, it stays on d6 and the king slips out.
+  for (const action of [{ ...move(7, 0), recruit: 'hold' }, move(7, 0)]) {
+    const held = act(state, action);
+    assert.ok(!held.exit.open && !types(held).includes('checkmate') && !types(held).includes('companion-move'), 'held on d6, the king slips out');
   }
-  const held = act(state, { ...move(7, 0), recruit: 'hold' });
-  assert.ok(!held.exit.open && !types(held).includes('checkmate'), 'held on d6, the king slips out');
 });

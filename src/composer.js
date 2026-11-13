@@ -74,7 +74,7 @@ export const DRESS_ATTEMPTS = 6;
  * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
  * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
  */
-export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3, wait: 3, lure: 3 });
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3, wait: 3, lure: 3, mate: 3 });
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
@@ -154,13 +154,15 @@ export const PAWN_TARGETS = 2;
  * - 'both': the pawn promotes and mates with the recruit king's help (the
  *   recruit guards the queen beside the king, or covers its way out);
  * - 'queen': the pawn walks up, promotes and mates as a queen, needing no help.
- * Where 'king' doesn't build, each day's seed orders the other two (pawnMates).
+ * Each day's seed orders the three (pawnMates); the first that composes is the day's.
  * Whichever is planted, the pawn's file is open to the last rank, so it can
  * always promote (the user's rule).
  */
 export const PAWN_MATES = Object.freeze(['king', 'both', 'queen']);
-// The order a pawn day's king floor tries its mates in: 'king', then the other two as its seed says.
-const pawnMates = (seed) => ['king', ...(hash(`${seed}:mates`) % 2 ? ['both', 'queen'] : ['queen', 'both'])];
+// The order a pawn day's king floor tries its mates in: as its seed says, each kind first on a third of the days.
+// ('king' came first while the recruit moved itself and its mate seldom built; steered, it builds nearly always,
+// and first every day it left no room for the other two.)
+const pawnMates = (seed) => { const order = [...PAWN_MATES], turn = hash(`${seed}:mates`) % 6; const first = order.splice(turn % 3, 1); return [...first, ...(turn >= 3 ? order.reverse() : order)]; };
 /** A start set by name, or a list of square names ('c2,d2,e2'). */
 export function startSquares(starts = COMPOSED_STARTS) {
   if (Array.isArray(starts)) return starts;
@@ -289,8 +291,6 @@ function between(a, b) {
   for (let k = 1; k < n; k++) out.push(at(a.x + dx * k, a.y + dy * k));
   return out;
 }
-// Does one of a room's `gates` (src/gates.js) stand on the lane from `from` to `to`?
-const gatedLane = (gates, from, to) => Boolean(gates?.length) && between(from, to).some((tile) => gates.some((gate) => same(gate, tile)));
 const empty = new Plan();
 const reachable = (piece, from, plan = empty) => reach(plan, piece, from);
 const SQUARES = Object.freeze(Array.from({ length: 64 }, (_, n) => at(n % 8, n >> 3)));
@@ -858,8 +858,8 @@ function pawnLineOnce(context, kind) {
 }
 
 /**
- * The king floor for a pawn player, by `mate` (PAWN_MATES). The recruit king
- * waits one step up the pawn's file, so the line collects it at once, and the
+ * The king floor for a pawn player, by `mate` (PAWN_MATES). Your own king is
+ * with you as the floor opens, beside your pawn and off its file, and the
  * file stays open to the last rank: off the planted line, the pawn can always
  * walk up and promote. For 'queen' and 'both' the pawn does promote; the king
  * paces a two-square pocket along a queen line from the mating square, one
@@ -881,11 +881,15 @@ function pawnNet(context) {
 function pawnNetOnce(context) {
   const { rng, start, mate, relaxed } = context;
   const plan = new Plan(start);
-  const recruit = at(start.x, start.y - 1);
-  if (!inside(recruit)) return null;
+  const front = at(start.x, start.y - 1);
+  if (!inside(front)) return null;
+  // Your own king is with you as the floor opens (src/rules.js setFloor): it stands beside your pawn, off its file.
+  const sides = [at(start.x - 1, start.y), at(start.x + 1, start.y)].filter(inside);
+  const recruit = sides[Math.floor(rng() * sides.length)];
   // Your pawn's file up to the last rank stays open (no walls, no monster starting there).
   const path = Array.from({ length: start.y }, (_, n) => at(start.x, start.y - 1 - n));
   plan.keep(start, ...path);
+  plan.items.push({ x: recruit.x, y: recruit.y, type: 'companion', piece: 'king' });
   // The king starts on `other`, never beside your start square.
   const pocketAt = (home, other, open) => {
     if (![home, other].every((tile) => inside(tile) && plan.free(tile) && tile.x !== start.x) || covers('king', other, start)) return false;
@@ -905,10 +909,9 @@ function pawnNetOnce(context) {
     const home = at(other.x + dx, other.y + dy);
     const posts = AROUND.map(([px, py]) => at(home.x + px, home.y + py)).filter((tile) => inside(tile) && chebyshev(tile, other) > 1 && !same(tile, cover));
     const post = posts[Math.floor(rng() * posts.length)];
-    if (!post || home.y > 2 || cover.y >= recruit.y || !inside(home) || home.x === start.x || chebyshev(post, recruit) > LINE_MOVES.max) return null;
+    if (!post || home.y > 2 || cover.y >= front.y || !inside(home) || home.x === start.x || chebyshev(post, recruit) > LINE_MOVES.max) return null;
     plan.keep(post);
     if (!pocketAt(home, other, [post])) return null;
-    plan.items.push({ x: recruit.x, y: recruit.y, type: 'companion', piece: 'king' });
     return { plan, motif: 'net', mate, key: null, relaxed };
   }
   // The pawn promotes on its file's last square.
@@ -932,7 +935,6 @@ function pawnNetOnce(context) {
   if (!pocketAt(home, other, [...line, ...(k === 1 ? [check] : [])])) return null;
   const cap = at(other.x + dx, other.y + dy);
   if (inside(cap)) plan.wall(cap);
-  plan.items.push({ x: recruit.x, y: recruit.y, type: 'companion', piece: 'king' });
   const route = [...path, ...(after ? [check] : [])].map((tile) => ({ type: 'move', x: tile.x, y: tile.y }));
   return { plan, motif: 'net', mate, key: check, route, relaxed };
 }
@@ -997,7 +999,7 @@ function slideRoutes(plan, piece, mates) {
   return routes;
 }
 
-// Where the king floor's recruit may wait: one move from the start, too far
+// Where your king may stand as a net's king floor opens, if no square beside the start is free (dress): one move from the start, too far
 // from the royal king `king` to step beside it within the line.
 const recruitSquares = (plan, piece, king) => reach(plan, piece, plan.start).filter((square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1);
 
@@ -1483,7 +1485,11 @@ export function actionsFrom(state) {
     if (item && ((item.type === 'powerup' && !item.hint) || (item.type === 'companion' && state.floor !== 2))) continue;
     actions.push({ type: 'move', x: move.x, y: move.y });
   }
-  return actions;
+  // On the king floor your own king is with you and moves on your orders alone (src/rules.js): an action that
+  // names none holds it. An officer's net is its piece's work, composed with the king standing by and proved
+  // against its help afterwards (composeFloor's judge, mateWin). A pawn's nets are won with the king (it checks,
+  // or guards your queen), so a pawn's searches try every order with each action.
+  return state.floor === 2 && state.companion && state.startingPiece === 'pawn' ? actions.flatMap((action) => ordersFor(state, action)) : actions;
 }
 
 /**
@@ -1853,14 +1859,13 @@ function dress(plan, context, line, base, floor, rng) {
   if (floor === 2 && context.piece === 'pawn') {
     // A pawn's net placed its recruit already, one step up its file (pawnNet).
   } else if (floor === 2 && !plan.items.some((item) => item.type === 'companion')) {
-    // The king floor's recruit, a king, waits one move from the start, as always
-    // (a mate floor's stands joined already, on its own square: composeMate),
-    // too far from the royal king to step beside it within the line. Every king
-    // floor has one: a dressing whose decoys took its squares is tried again.
-    // On a Gates day no gate stands on its lane from the start: shut, it would
-    // put the recruit a move further off.
+    // Your own king is with you as the king floor opens (src/rules.js setFloor; a mate floor's and a pawn's
+    // are placed already): it stands beside your start square where it can, else one move from it, and too
+    // far from the royal king to step beside it within the line. Every king floor has one: a dressing whose
+    // decoys took its squares is tried again.
     const king = plan.units.find((unit) => unit.role === 'king' && unit.cast === 0);
-    const tile = shuffle(reach(plan, context.piece, start), rng).find((square) => recruitSquares(plan, context.piece, king).some((spot) => same(spot, square)) && !gatedLane(plan.terrain?.gates, start, square));
+    const far = (square) => plan.free(square) && chebyshev(square, king) > LINE_MOVES.max + 1;
+    const tile = shuffle(AROUND.map(([dx, dy]) => at(start.x + dx, start.y + dy)).filter(inside), rng).find(far) ?? shuffle(reach(plan, context.piece, start), rng).find(far);
     if (!tile) return null;
     plan.items.push({ x: tile.x, y: tile.y, type: 'companion', piece: 'king' });
   } else if (!plan.items.some((item) => item.type === 'companion')) {
@@ -2213,11 +2218,11 @@ export function composeTandem(base, floor, { trace, starts = startSquares() } = 
   return null;
 }
 
-// ── Mate floors (composeDay's `mate` option, in preview: off unless asked for) ──
+// ── Mate floors (composeDay's `mate` option, on by default: RELEASE; about one in MATE_EVERY of the days that fit, mateDay) ──
 // A king floor won the way a chess mate is: by your piece and your own king
-// together. The room joins the king recruit to you as the floor opens
-// (`joined`: src/rules.js setFloor), on a square of its own, and you order it
-// every turn, as on a Tandem floor.
+// together. On every king floor your king is with you as the floor opens
+// (src/rules.js setFloor) and moves on your orders; on a net it only stands
+// by, and here it is half the answer.
 //
 // The arena comes from a real mate (src/mate-arenas.js: lichess puzzles in
 // which the solver has a king and one piece): its walls stand where the other
@@ -2247,10 +2252,22 @@ export function composeTandem(base, floor, { trace, starts = startSquares() } = 
 // its side from the first move, must pass its guard. No chest (its line would
 // be searched without the recruit) and no hint, as on every king floor. A
 // pawn's day has no arenas, and a day with ice or moving terrain keeps its
-// own king floor for now.
+// own king floor for now (mateFits).
+//
+// The other king floors, the nets, show their answer: the enemy king stands
+// in a mouth of walls, and the square to reach and the moves it takes can be
+// read off the room. A mate floor shows much less, which the owner found no
+// bad thing, as one kind among two (2026-11-13: "a mix of both old and new").
+// So a day that fits takes one about one day in MATE_EVERY, by the date.
 
 /** A mate floor's motif. */
 export const MATE_MOTIF = 'mate';
+/** A day that fits a mate floor takes one about one day in MATE_EVERY, by the date; the rest keep their nets. */
+export const MATE_EVERY = 2;
+/** Does the day fit a mate floor? Its piece has arenas (no pawn's does) and the day is plain. */
+export const mateFits = (base) => Boolean(MATE_ARENAS[base.playerPiece]?.length) && (base.modifier ?? 'none') === 'none';
+/** Does a day that fits take a mate floor? `mate: 'every'` (tests, measuring, the dev preview's &mate=all) composes one on every day that fits. */
+export const mateDay = (base) => mateFits(base) && hash(`${base.date}:mate-day`) % MATE_EVERY === 0;
 /** Turns a mate floor's line takes: no fewer wins it. */
 export const MATE_TURNS = 3;
 /** Turns of a mate floor's line on which your piece may stand still while your king moves, at most. */
@@ -2265,7 +2282,7 @@ function arenaOf(code, turn) {
   const [piece, king, foe, ...walls] = [...code].map((ch) => BOARD_TURNS[turn](squareAt(ALPHABET.indexOf(ch))));
   return { piece, king, foe, walls };
 }
-// A set-back in an arena: the plan of a room with the enemy king, your king (joined) and your start, or null.
+// A set-back in an arena: the plan of a room with the enemy king, your king and your start, or null.
 function mateSetup(arena, rng) {
   const plan = new Plan();
   for (const wall of arena.walls) if (!same(wall, EXIT)) plan.walls.add(index(wall));
@@ -2277,7 +2294,7 @@ function mateSetup(arena, rng) {
   if (!start) return null;
   plan.start = start;
   plan.place(0, 'king', foe);
-  plan.items.push({ x: king.x, y: king.y, type: 'companion', piece: 'king', joined: true });
+  plan.items.push({ x: king.x, y: king.y, type: 'companion', piece: 'king' });
   return plan;
 }
 // Can the floor be won from `state` within `turns` turns, never captured, whatever the king is told? Every order
@@ -2366,7 +2383,7 @@ function mateSquares(states) {
 export function composeMate(base, { trace } = {}) {
   const began = performance.now();
   const floor = 2, piece = base.playerPiece, arenas = MATE_ARENAS[piece], motif = MATE_MOTIF;
-  if (!arenas?.length || base.modifier !== 'none') return null;
+  if (!mateFits(base)) return null;
   const cast = castFor(base, floor), seed = base.floorSeeds[floor];
   const tally = { built: 0, replayed: 0, kept: 0 }, stats = { [motif]: tally };
   for (let attempt = 0; attempt < MATE_ARENA_TRIES; attempt++) {
@@ -2392,8 +2409,10 @@ export function composeMate(base, { trace } = {}) {
       // own), nothing wins sooner, a hasty win scores worse, and the bot's runs pass. { room, line, states, pressure }, or null.
       const judge = (room) => {
         const dressed = floorStart(base, floor, room);
-        let line = planted, states = clean(playLine(dressed, line, STEERED));
-        if (!states) { line = plantedMate(dressed, MATE_TURNS); states = line ? clean(playLine(dressed, line, STEERED)) : null; }
+        // The line's positions if it still wins there, never captured (the guards may spoil it without touching you).
+        const won = (moves) => { const states = moves && clean(playLine(dressed, moves, STEERED)); return states?.at(-1).exit.open ? states : null; };
+        let line = planted, states = won(line);
+        if (!states) { line = plantedMate(dressed, MATE_TURNS); states = won(line); }
         const why = !states ? 'line' : mateWin(dressed, line.length - 1) ? 'shorter' : kingAlone(dressed, line.length + 1) ? 'king'
           : mateHasty(dressed, line.length - 1) <= line.length ? 'hasty' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
@@ -2401,7 +2420,7 @@ export function composeMate(base, { trace } = {}) {
         if (!guard.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: 'bot', ...guard, room }); return null; }
         return { room, line, states, pressure: pressure(states) };
       };
-      const lane = mateSquares(clean(playLine(bare, planted, STEERED)) ?? [bare]);
+      const lane = mateSquares(playLine(bare, planted, STEERED) ?? [bare]);
       let best = null;
       for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
         const plan = core.clone();
@@ -2527,7 +2546,10 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
         const hasty = !exact ? known : !states?.at(-1).exit.open || loose ? Infinity : hastyScore(real, BOT_GUARD.short);
         // A pawn's idea (its takes, its mate's kind) is checked again on the dressed room.
         const idea = exact && (built.pawnLine || built.mate) && states?.at(-1).exit.open && !usesIdea(built, states, line);
-        const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose || !exact ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : null;
+        // An officer's king floor is composed with your king standing by; nothing may win sooner with its help either,
+        // every order tried on every turn (mateWin: a pawn's searches try them already).
+        const helped = () => floor === 2 && piece !== 'pawn' && mateWin(dressed, wins.depth - 1);
+        const why = !states?.at(-1).exit.open ? 'line' : idea ? 'idea' : loose || !exact ? null : shortestWins(dressed, wins.depth - 1) ? 'shorter' : hasty <= BOT_GUARD.short ? 'hasty' : helped() ? 'king' : null;
         if (why) { trace?.({ motif, attempt, stage: `redress:${why}`, room, line }); return null; }
         if (!guarded) return { hasty };
         // The open walk is no puzzle, so the bot guard doesn't judge it (or run); a pawn's
@@ -2611,10 +2633,11 @@ export function composeFloor(base, floor, { trace, carried = null, starts = star
  * and so what every stored edition is (scripts/build-editions.mjs composes
  * with no options, as do the audit, the dev preview and the tests): a chest
  * where one qualifies, a partner floor where the matchup has one, and the
- * tight forms, and the two drawn ideas (the Standstill and the Lure) on the
- * days that draw them.
+ * tight forms, the two drawn ideas (the Standstill and the Lure) on the days
+ * that draw them, and a mate floor for the king floor on the days that draw
+ * one.
  */
-export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: true, wait: true, lure: true });
+export const RELEASE = Object.freeze({ treasure: true, partner: true, tight: true, wait: true, lure: true, mate: true });
 /**
  * The order a day gives its options up in. Every date must compose, so a day
  * that fails with all it was asked for (a floor that won't compose, a proof
@@ -2679,7 +2702,7 @@ export function drawnIdeas(base, asked, partnered = null) {
  * each floor. `tier` composes under other monsters, and `daily` overrides the
  * raw daily (tooling: synthetic casts, or another modifier); `starts` the
  * start set (startSquares); `trace` hears each floor's composeFloor events,
- * with its `floor` (tooling). Five options, each on unless turned off
+ * with its `floor` (tooling). Six options, each on unless turned off
  * (RELEASE; the measuring scripts and the dev preview turn them off to
  * compare):
  * - `treasure` adds a chest off each floor's line where one qualifies
@@ -2697,14 +2720,14 @@ export function drawnIdeas(base, asked, partnered = null) {
  *   IDEA_EVERY of the days each fits (ideaDay; 'every' takes them all), held
  *   to the tight tests and, unless `ceiling` is false (tooling), to the bot's
  *   ceiling.
- * One more is in preview, off unless asked for: `mate` composes the king
- * floor as a mate floor (composeMate), your own king at your side from the
- * first move, where the day's piece and modifier have one.
+ * - `mate` composes the king floor as a mate floor (composeMate), your own
+ *   king at your side from the first move, on about one in MATE_EVERY of the
+ *   days that fit one (mateDay; 'every' takes them all).
  * A day that can't be composed with all it was asked for gives options up in
  * order (a drawn idea first, then FALLBACKS') rather than fail; `dropped` lists them (empty on nearly
  * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, mate = false, ceiling = true } = {}) {
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, mate = RELEASE.mate, ceiling = true } = {}) {
   const asked = { treasure, partner, tight, wait, lure, mate }, dropped = [];
   for (;;) {
     try { return { ...composeOnce(raw, { tier, starts, trace, ceiling, ...asked }), dropped }; } catch (error) {
@@ -2729,8 +2752,8 @@ function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait,
   const floors = [], carried = {}, arrived = [];
   for (const floor of [0, 1, 2]) {
     arrived.push(Object.keys(carried).length ? { ...carried } : null);
-    // In preview (`mate`): the king floor as a mate floor, your king at your side, where the day's piece has one.
-    const mated = mate && floor === 2 ? composeMate(base, { ...(trace && { trace: (event) => trace({ floor, ...event }) }) }) : null;
+    // The king floor as a mate floor, your king at your side, on the days that draw one (mateDay); where none composes, the day's net.
+    const mated = mate && floor === 2 && (mate === 'every' || mateDay(base)) ? composeMate(base, { ...(trace && { trace: (event) => trace({ floor, ...event }) }) }) : null;
     floors.push(partnered?.floor === floor ? partnered.composed : mated ?? composeFloor(base, floor, { carried: arrived[floor], starts: squares, tight, ...(ideas[floor]?.length && { ideas: ideas[floor], ceiling }), ...(trace && { trace: (event) => trace({ floor, ...event }) }) }));
     const prize = floors.at(-1).room.items.find((item) => item.hint && item.type === 'powerup');
     if (prize) carried[prize.power] = (carried[prize.power] ?? 0) + 1;
@@ -2897,13 +2920,11 @@ export function terrainReason(base, floor, room, line) {
 export const terrainMatters = (base, floor, room, line) => Boolean(terrainReason(base, floor, room, line));
 
 // Terrain off a finished floor's line: on no square its line moves to or rests on, nor a wall, a monster, a pickup, the start or the exit.
-// On the king floor no gate stands on the lane from the start to the recruit either, which waits one move away (dress).
-function offLayout(base, floor, room, line, states, rng) {
+function offLayout(base, room, line, states, rng) {
   const taken = new Set([...room.enemies, ...room.items, room.start ?? HOME, EXIT, ...line.filter((action) => action.type === 'move'), ...states.map((state) => state.player)].map(index));
   const pool = shuffle(SQUARES.filter((tile) => room.map[tile.y][tile.x] !== '#' && !taken.has(index(tile))), rng);
   if (base.modifier === 'cracks') return { cracks: pool.slice(0, CRACK_TILES).map(({ x, y }) => ({ x, y })).sort(byRow) };
-  const lane = new Set((floor === 2 ? room.items.filter((item) => item.type === 'companion') : []).flatMap((item) => between(room.start ?? HOME, item)).map(index));
-  return { gates: pool.filter((tile) => !lane.has(index(tile))).slice(0, 2 + Math.floor(rng() * 2)).map(({ x, y }) => ({ x, y, phase: Math.floor(rng() * GATE_CYCLE) })).sort(byRow) };
+  return { gates: pool.slice(0, 2 + Math.floor(rng() * 2)).map(({ x, y }) => ({ x, y, phase: Math.floor(rng() * GATE_CYCLE) })).sort(byRow) };
 }
 /**
  * A finished floor (composeFloor's or composeTandem's result, composed
@@ -2924,10 +2945,12 @@ export function terrainOff(base, floor, plain, { carried = null, steered = false
     if (!clean(playLine(dressed, line, mode))?.at(-1).exit.open || !winsAsPlayed(real, line)) return false;
     if (plain.motif === 'walk') return true;
     if (steered) return !steeredWin(dressed, line.length - 1) && steeredHasty(dressed, line.length - 1) > line.length && hastyScore(dressed, line.length) > line.length + 1 && partnerGuard(dressed, base, floor, line).ok;
-    return !shortestWins(dressed, line.length - 1) && hastyScore(real, BOT_GUARD.short) > BOT_GUARD.short && botGuard(real, base, floor, line.length + 1).ok;
+    // An officer's king floor: nothing wins sooner with your king's help either (composeFloor's judge).
+    return !shortestWins(dressed, line.length - 1) && hastyScore(real, BOT_GUARD.short) > BOT_GUARD.short && botGuard(real, base, floor, line.length + 1).ok
+      && !(floor === 2 && base.playerPiece !== 'pawn' && mateWin(dressed, line.length - 1));
   };
   if (bare) for (let n = 0; n < TERRAIN_OFF_TRIES; n++) {
-    const room = { ...plain.room, ...offLayout(base, floor, plain.room, line, bare, random(hash(`${base.floorSeeds[floor]}:terrain:off:${n}`))) };
+    const room = { ...plain.room, ...offLayout(base, plain.room, line, bare, random(hash(`${base.floorSeeds[floor]}:terrain:off:${n}`))) };
     if (passes(room)) return { ...plain, room, terrain: 'off' };
   }
   return { ...plain, room: { ...plain.room, ...none }, terrain: 'none' };

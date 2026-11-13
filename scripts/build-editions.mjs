@@ -20,8 +20,8 @@ import { writeFile } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { FIRST_EDITION_DATE, getRawDaily } from '../src/edition.js';
-import { composedDaily, proveComposed, storedPartner } from '../src/generation.js';
-import { composeDay, PARTNER_MOTIF } from '../src/composer.js';
+import { composedDaily, proveComposed, storedPartner, escorted } from '../src/generation.js';
+import { composeDay, PARTNER_MOTIF, MATE_MOTIF } from '../src/composer.js';
 import { encodeRoute, decodeRoute } from '../src/route-code.js';
 import { encodeRooms, decodeRooms } from '../src/room-code.js';
 import { encodeMotifs, decodeMotifs } from '../src/motif-code.js';
@@ -62,6 +62,8 @@ function staleReason(date, entry) {
     const partner = storedPartner(entry);
     if (motifs.some((motif, floor) => (motif === PARTNER_MOTIF) !== (floor === partner))) return 'its partner floor and its motifs disagree';
     const daily = composedDaily(getRawDaily(date), decodeRooms(entry.rooms), decodeRoute(entry.route), date, partner);
+    // A mate floor is a king floor, and every king floor has its king (yours, with you as it opens).
+    if (motifs.slice(0, 2).includes(MATE_MOTIF) || !escorted(daily)) return 'its king floor and its motifs disagree';
     const proof = proveComposed(daily, daily.generation.certificate.actions, { saves: true, partner });
     return proof.valid ? null : proof.reason;
   } catch (error) { return error.message; }
@@ -149,7 +151,7 @@ if (!isMainThread) {
   const floors = fresh.flatMap((row) => row.floors), forms = floors.filter((floor) => floor.form);
   const gaveUp = fresh.filter((row) => row.dropped.length);
   const unchecked = floors.filter((floor) => Number.isInteger(floor.checks?.unchecked)).length;
-  console.log(`Partner floors on ${fresh.filter((row) => row.partner !== undefined).length} days; tight forms on ${forms.length} floors (subtle ${forms.filter((floor) => floor.form === 'subtle').length}, picked ${forms.filter((floor) => floor.form === 'picked').length}); `
+  console.log(`Partner floors on ${fresh.filter((row) => row.partner !== undefined).length} days; mate floors on ${fresh.filter((row) => decodeMotifs(row.motifs)[2] === MATE_MOTIF).length}; tight forms on ${forms.length} floors (subtle ${forms.filter((floor) => floor.form === 'subtle').length}, picked ${forms.filter((floor) => floor.form === 'picked').length}); `
     + `chests on ${floors.filter((floor) => floor.chest).length} of ${floors.length} floors (${unchecked} before the spare-move and accident checks); `
     + `days that gave an option up: ${gaveUp.length}${gaveUp.length ? ` (${gaveUp.map((row) => `${row.date} ${row.dropped.join('+')}`).join(', ')})` : ''}.`);
   const stats = arg('stats', null);

@@ -160,9 +160,10 @@ test('real final-floor recruits survive save and resume, and invalid companion d
   const daily=getDaily('2026-11-13');let state=createGame(daily);
   for(const action of daily.generation.certificate.actions) {if(state.floor===2)break;state=act(state,action);}
   assert.equal(state.floor,2);
-  const pickup=state.items.find((item)=>item.type==='companion');
-  const recruited=act(state,move(pickup.x,pickup.y));
-  assert.ok(recruited.companion);assert.equal(validateSave(recruited,recruited.date),true);
+  // Your own king is with you as the king floor opens (src/rules.js setFloor): nothing is picked up.
+  const pickup={x:state.companion.x,y:state.companion.y,type:'companion',piece:'king'};
+  const recruited=state;
+  assert.ok(recruited.companion&&!recruited.items.some((item)=>item.type==='companion'));assert.equal(validateSave(recruited,recruited.date),true);
   const saved=JSON.parse(JSON.stringify(recruited));assert.equal(validateSave(saved,saved.date),true);
   const resumed=act(saved,{type:'move',...legalMoves(saved)[0]});assert.equal(validateSave(resumed,resumed.date),true);
   for(const mutate of [

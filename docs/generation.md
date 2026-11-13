@@ -408,23 +408,48 @@ were composed again; the audit then matched every stored day. No
 `RULES_VERSION` bump, since play is unchanged, and no `COMPOSER_VERSION`
 bump, since each idea draws from seeded streams of its own.
 
-## In preview: mate floors, your own king at your side
+## Mate floors: your own king at your side
 
 A king floor won the way a chess mate is, by your piece and your own king
 together (`src/composer.js` "Mate floors", `composeMate`). Built on
-2026-11-13 behind `composeDay`'s `mate` option, which is off unless asked
-for and no part of `RELEASE`: no stored edition has one. The dev preview
-asks with `&mate=1` (and `&floor=3` opens a preview on its king floor, the
-earlier floors played along their lines).
+2026-11-13 and played by the owner in previews the same day. It is a
+`composeDay` option, `mate`, on by default (`RELEASE`), and one kind of king
+floor among two: a day that fits one (an officer's plain day, `mateFits`)
+takes it about one day in two, by the date (`MATE_EVERY`, `mateDay`), and
+the rest keep their nets. The owner's reason for the mix: a net shows its
+answer (the enemy king stands in a mouth of walls, and the square to reach
+and the moves it takes can be read off the room), a mate floor shows much
+less, "but I don't think that's bad. The variety is nice. Just a mix of both
+old and new would be good." The dev preview turns it off with `&mate=0` and
+composes one on every day that fits with `&mate=all`; `&floor=3` opens a
+preview on its king floor, the earlier floors played along their lines.
 
-**Your king starts beside you** (the owner's choice, 2026-11-13). A room's
-recruit may be `joined` (`src/rules.js` `setFloor`): it stands on its square
-as the floor opens, with nothing to step onto, and takes orders from the
-first move, as on a Tandem floor. The floor's opening line says "Your own
-king fights alongside you!", with a What? button, and the first such floor
-on a device opens that explainer by itself as you arrive. A day whose king
-floor opens so is proved with the recruit steered on that floor
-(`src/generation.js` `escorted`).
+**Your king is with you on every king floor** (rules version 15,
+2026-11-13). The owner first chose that a mate floor's king start beside
+you rather than be fetched, then that every day's floor 3 work the same
+way: "The recruit-joining mechanic should stay the same across all days...
+the recruit king automatically joins every day on floor 3." So on the king
+floor the room's recruit stands on its square, joined, as the floor opens
+(`src/rules.js` `setFloor`): there is nothing to step onto, and you move it
+after each of your moves from the first. It moves on your orders alone: a
+move or wait that names none holds it still (`recruitOrder`), which is how
+a net's planted line, the searches and the Dungeon Bot's replay play it.
+The floor's opening line says "Your king is already with you: no need to
+fetch it. You move it after each of your moves.", with a What? button, a
+stamp over the board says "Your king is with you!" as you arrive, and the
+first king floor on a device opens the explainer by itself (the owner had
+walked over to fetch a king that was already theirs). Every day is proved
+with the recruit steered on its king floor (`src/generation.js`).
+
+**What that asks of the other king floors.** A net (an officer's king floor)
+is still its piece's work: it is composed with your king standing by, beside
+your start square where it can and too far from the enemy king to step
+beside it within the line, and then proved against the king's help: nothing
+wins a turn sooner with every order tried on every turn (`composeFloor`'s
+judge, `mateWin`), which takes a few seconds for a line of four. A pawn's
+nets are won with the king (it checks, or guards your queen), so its king
+stands beside the pawn, off its file, and a pawn's searches try every order
+(`actionsFrom`); its lines carry the king's orders.
 
 **Why not the lichess mates as they stand.** The lichess puzzle database
 (CC0) has 10,757 mates in one to three in which the solver has only a king
@@ -463,15 +488,27 @@ scores worse than the line, the two guards roam and the dressed room must
 still hold a line of three turns and nothing sooner, and the bot's runs
 from the floor's start pass its guard (`mateGuard`). No chest and no hint.
 A pawn's day has no arenas, and a day with ice or moving terrain keeps its
-own king floor for now.
+own king floor for now (`mateFits`).
 
 **Measured** (2026-11-13) over the 24 plain days of an officer between
-2026-11-14 and 2027-01-15: 19 composed a mate floor (a knight's 7 of 8, a
-bishop's 8 of 9, a rook's 2 of 4, a queen's 2 of 3), in 0.6 to 22 s a
-floor. Not yet measured: how many first actions find the mate, and how the
-bot fares against par. Shipping it would need those, a share of days
-(`RELEASE` and a draw, as the Tandem's), the room code holding a joined
-recruit, a journal page, Ice and terrain days, and the owner's play first.
+2026-11-14 and 2027-01-15, a mate floor asked for on each: 19 composed one
+(a knight's 7 of 8, a bishop's 8 of 9, a rook's 2 of 4, a queen's 2 of 3),
+in 0.6 to 22 s a floor.
+
+**As stored.** Of the 743 days, 297 fit a mate floor and 142 draw one; 126
+have it (a bishop's 38, a queen's 33, a knight's 31, and a rook's 24 of the
+40 that draw one: a rook is strong enough that most set-backs win too soon),
+and the rest of those kept their nets. Your king moves on 85% of their
+lines' turns. The king floors are then 126 mate floors, 451 officers' nets
+and 166 pawns' nets (a pawn's three mates about a third each, by the seed:
+`pawnMates`). The idea's journal
+page is "Royal pair" (`mate`, `m` in the stored motifs), and the manual's
+Recruits page says your king is with you on floor 3. Still to do: Ice and
+terrain days (their king floors are nets), and how many first actions find
+the mate, which is not measured. A build caught one fault on the way: a
+dressed room was accepted where the planted line no longer won (the guards
+spoiled it without touching you), and the day's proof then gave the mate
+floor up; the dressing's judge now requires the win.
 
 ## Moving terrain: a crumbling floor and gates
 
@@ -541,9 +578,8 @@ tiles go where the idea lives: one to three among the start, the targets' own
 squares, the squares they can step to and the squares the motif keeps open,
 the rest of the eight anywhere free. Its gates go at the targets' doors: a
 square a target can step to, or a wall of its box opened into a gate, each on
-a beat of its own, then one more on a kept square or anywhere free. On the
-king floor no gate stands on the lane from the start to the recruit, which
-waits one move away as on any day. Three rules are added to every floor's own:
+a beat of its own, then one more on a kept square or anywhere free. Three
+rules are added to every floor's own:
 
 1. **The terrain matters** (`terrainReason`). The same room without its
    tiles or gates must play differently: its line fails there, or something
@@ -759,9 +795,10 @@ walled in under one is cornered at once (`trapped`), and its floor starts over.
 
 ## Saves and versions
 
-Saves carry the rules version (`RULES_VERSION`, 14 since moving terrain took
-Breach's days; 13 from the chest, a new item that pays gold; 12 from the
-switch) in their key (`daily:v14:DATE`) and
+Saves carry the rules version (`RULES_VERSION`, 15 since your own king is
+with you on every king floor; 14 from moving terrain taking Breach's days;
+13 from the chest, a new item that pays gold; 12 from the switch) in their
+key (`daily:v15:DATE`) and
 in the state; a run saved under other rules is kept in backups but never
 loaded into a new edition. A save of a composed day carries the day's rooms
 (`state.composed`), and `validateSave` checks they are the edition's. It
@@ -841,14 +878,17 @@ does; `--no-treasure`, `--no-partner`, `--no-tight`, `--no-wait` and
 `--no-lure` each turn one option off, to compare
 (`scripts/compose-options.mjs`).
 
-Over the 743 editions stored with rules version 14, the drawn ideas in (40
-runs a floor), the bot cleared 98.6%, 98.5% and 99.9% of its runs on floors
-1, 2 and 3, and took more than par + 4 on 7.1%, 9.0% and 4.4%. Its median
-moves against median par were 5, 6 and 5 against 4, 4 and 4. By the day's
-modifier, runs past par + 4: plain 6.7%, 9.7% and 4.3%; Ice 7.7%, 9.0% and
-4.9%; a Crumbling floor 8.2%, 5.5% and 5.2%; Gates 6.7%, 8.7% and 3.3%.
-(Before the 23 Standstill and Lure floors went in, floor 1 stood at 98.7%
-cleared and 6.8% past par + 4.) (At version 13 it was 96.6%, 96.3%
+Over the 743 editions stored with rules version 15 (40 runs a floor), the
+bot cleared 98.6%, 98.5% and 99.9% of its runs on floors 1, 2 and 3, and
+took more than par + 4 on 7.1%, 9.0% and 6.0%. Its median moves against
+median par were 5, 6 and 5 against 4, 4 and 4. By the day's modifier, runs
+past par + 4: plain 6.7%, 9.7% and 6.5%; Ice 7.7%, 9.0% and 6.0%; a
+Crumbling floor 8.2%, 5.5% and 4.8%; Gates 6.7%, 8.7% and 4.8%. The king
+floors by kind, the king with you from the first move on all of them: a
+mate floor has the bot at par or better on 17% of its runs and past par + 4
+or failed on 10.5% (a queen's 20%); an officer's net on 37% and 6.2%; a
+pawn's net on 46% and 1.9%. (At version 14, the king still waiting to be
+fetched and every king floor a net, floor 3 stood at 4.4% past par + 4.) (At version 13 it was 96.6%, 96.3%
 and 99.9% cleared and 11.6%, 12.0% and 4.3% past par + 4, measured with a
 Tandem on every day whose matchup has one: 360 days, against 113 now.) The
 king floors are as they were at the switch (4.4% past par + 4; 0.5% on a
