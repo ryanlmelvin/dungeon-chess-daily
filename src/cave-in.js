@@ -17,7 +17,7 @@
 // The room shows the countdown (renderer.js, main.js): the crack ('cave-crack'
 // event) and every move after it ('cave-tremor') shake the board and shake
 // dust loose, harder as the count runs down, and the stairs button reads
-// "Take the stairs! Caving in 3" (caveInLabel). The cave-in itself ('cave-in')
+// "Take stairs ↘ · caves in 3" (caveInLabel). The cave-in itself ('cave-in')
 // brings the rubble down, then the shop opens with what it cost (caveInLoss).
 //
 // state.caveIn, absent until the door opens and on every new floor:
@@ -117,9 +117,9 @@ export function goldAtRisk(state) {
   return Math.max(0, Math.min(state?.caveIn?.risk ?? 0, state?.gold ?? 0));
 }
 
-/** The stairs button during the countdown, e.g. "Take the stairs! Caving in 3", or '' otherwise. */
+/** The stairs button during the countdown, e.g. "Take stairs ↘ · caves in 3" (the calm label plus the count), or '' otherwise. */
 export function caveInLabel(state) {
-  return caveInRunning(state) ? `Take the stairs! Caving in ${state.caveIn.moves}` : '';
+  return caveInRunning(state) ? `Take stairs ↘ · caves in ${state.caveIn.moves}` : '';
 }
 
 /**

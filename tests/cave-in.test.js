@@ -97,13 +97,13 @@ test('the open door starts a countdown set by the day’s tier, and every move o
     assert.equal(caveInMoves(state), total, difficulty);
     assert.deepEqual(state.caveIn, { moves: total, risk: 0, buried: 0 });
     // The stairs button carries the count, and the crack shakes the room.
-    assert.equal(caveInLabel(state), `Take the stairs! Caving in ${total}`);
+    assert.equal(caveInLabel(state), `Take stairs ↘ · caves in ${total}`);
     assert.deepEqual(state.events.filter((event) => event.type.startsWith('cave-')), [{ type: 'cave-crack', x: 3, y: 4, moves: total }]);
     assert.match(state.message, new RegExp(`It caves in after ${total} more moves, and gold you grab now is at risk until you take the stairs\\.$`));
     for (let left = total - 1; left >= 1; left--) {
       state = act(state, shuffle(state, left));
       assert.equal(state.caveIn.moves, left);
-      assert.equal(caveInLabel(state), `Take the stairs! Caving in ${left}`);
+      assert.equal(caveInLabel(state), `Take stairs ↘ · caves in ${left}`);
       // Every move or wait after the crack shakes the room again, harder as the count runs down.
       assert.deepEqual(state.events.filter((event) => event.type.startsWith('cave-')), [{ type: 'cave-tremor', x: state.player.x, y: state.player.y, left, total }]);
     }

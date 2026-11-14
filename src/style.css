@@ -132,8 +132,10 @@ body.replaying .game-message{bottom:calc(env(safe-area-inset-bottom,0px) + 128px
 #modifier-status{color:#d7d1e4;font-size:11px;border-style:dashed;min-height:0;padding:3px 7px;line-height:1.3}
 /* Cave-in (cave-in.js): gold at risk and the stairs button's countdown. */
 .gold-risk{color:#ff9a4a;white-space:nowrap}
-.descend-button.caving{color:#ff9a4a;border-color:#ff9a4a}.descend-button.urgent{animation:stairs-urgent .8s steps(2) infinite}@keyframes stairs-urgent{50%{background:#3a2a25f0;color:#ffd0a8}}
-@media(prefers-reduced-motion:reduce){.descend-button.urgent{animation:none;background:#3a2a25f0}}
+/* Lit top and left edges only: the dark right and bottom edges and the shadow keep it a raised button. */
+.descend-button.caving{color:#ff9a4a;border-top-color:#ff9a4a;border-left-color:#ff9a4a;animation:stairs-caving 1.4s ease-in-out infinite alternate}@keyframes stairs-caving{to{background:#3d2620f0;box-shadow:2px 2px 0 var(--menu-shadow),0 0 10px #ff9a4a66}}
+.descend-button.urgent{animation:stairs-urgent .8s steps(2) infinite}@keyframes stairs-urgent{50%{background:#3a2a25f0;color:#ffd0a8}}
+@media(prefers-reduced-motion:reduce){.descend-button.caving{animation:none}.descend-button.urgent{background:#3a2a25f0}}
 .shop-news{color:#ff9a4a;margin:0 0 8px}.shop-news b{color:#ffd0a8}
 @media(max-width:600px){.modifier-bulletin{font-size:17px;padding:5px 8px}}
 /* Phones: the whole paper, down to its Enter button, fits the screen without
