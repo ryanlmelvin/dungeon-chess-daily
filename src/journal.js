@@ -12,7 +12,7 @@
 import { floorPars } from './par.js';
 import { isOfficialRun, scoredMoves, floorScoredMoves, PLAYABLE_PIECES } from './game.js';
 import { isMotifName } from './motif-code.js';
-import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL, drawStandstillDemo, STANDSTILL_STILL, drawLureDemo, LURE_STILL, drawEscortDemo, ESCORT_STILL } from './journal-art.js';
+import { drawSqueezeDemo, SQUEEZE_STILL, drawTandemDemo, TANDEM_STILL, drawNetDemo, NET_STILL, drawTempoDemo, TEMPO_STILL, drawCrownDemo, CROWN_STILL, drawStandstillDemo, STANDSTILL_STILL, drawLureDemo, LURE_STILL, drawEscortDemo, ESCORT_STILL, drawLockoutDemo, LOCKOUT_STILL } from './journal-art.js';
 import { drawOffBalanceDemo, OFF_BALANCE_STILL, drawForkDemo, FORK_STILL, drawComboDemo, COMBO_STILL, drawBishopPairDemo, BISHOP_PAIR_STILL } from './tactics-art.js';
 import { drawEnPassantDemo, EN_PASSANT_STILL, drawCastleDemo, CASTLE_STILL } from './guide-art.js';
 import { piecePalette } from './sprites.js';
@@ -121,9 +121,16 @@ export const PAGES = Object.freeze([
  * so nobody can find one outside the dev preview. The book lists such a page
  * only once it has been found (bookPages), so the released book and its count
  * stay as they are. Shipping an idea moves its page into PAGES, as the
- * Standstill's and the Lure's were (2026-11-13). None waits here now.
+ * Standstill's and the Lure's were (2026-11-13). One waits here now: the
+ * Lockout (src/composer.js composeLockout; the dev preview's &lockout=1).
  */
 export const PREVIEW_PAGES = Object.freeze([
+  {
+    id: 'lockout', kind: 'idea', name: 'Lockout', pieces: ['knight', 'queen'],
+    text: 'While a target is out of its hole, move your recruit in. It can’t go back: capture it.',
+    art: 'A monster steps out of a walled hole. A knight lands on a mint pawn, its recruit, which steps up into the hole; the monster shakes, unable to go back, and the knight captures it.',
+    draw: drawLockoutDemo, still: LOCKOUT_STILL,
+  },
 ]);
 
 /** What a page that isn't found yet says, by how it is found. */

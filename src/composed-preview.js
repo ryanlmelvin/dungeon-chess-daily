@@ -12,7 +12,9 @@
 // &ceiling=0 composes them without the bot's ceiling, to compare. The mate
 // floor (your own king at your side on the king floor: src/composer.js
 // composeMate) composes on the days that draw one; &mate=0 turns it off and
-// &mate=all composes one on every day that fits. &floor=2
+// &mate=all composes one on every day that fits. &lockout=1 composes a
+// lockout floor (a preview, no part of the release: src/composer.js
+// composeLockout) on every day whose matchup has one. &floor=2
 // or &floor=3 opens the preview on that floor, the earlier floors played
 // along their planted lines. &modifier=cracks or &modifier=gates
 // plays the date under one of the two terrain modifiers (a crumbling floor,
@@ -51,16 +53,19 @@ export function previewOptions(search) {
     // The mate floor composes as released, on the days that draw one (src/composer.js mateDay): &mate=0 turns it off,
     // &mate=all (or =1) composes one on every day that fits.
     mate: ['all', '1'].includes(query.get('mate')) ? 'every' : query.get('mate') !== '0',
+    // The lockout floor is a preview, no option of the release: named only when the query asks for it, &lockout=1 (or
+    // =all), which composes one on every day that fits.
+    ...(['all', '1'].includes(query.get('lockout')) && { lockout: true }),
   };
 }
 
 /**
  * Does this preview file what its floors find in the journal? Only one whose
- * query names a drawn idea (&wait, &lure or &ideas, not turned off), so the
- * idea's page can be seen where it is found; any other preview keeps out of
- * the journal, as before.
+ * query names a drawn idea (&wait, &lure or &ideas, not turned off) or the
+ * lockout, so the idea's page can be seen where it is found; any other
+ * preview keeps out of the journal, as before.
  */
-export const previewJournals = (search) => { const query = new URLSearchParams(search); return ['wait', 'lure', 'ideas'].some((name) => query.has(name) && query.get(name) !== '0'); };
+export const previewJournals = (search) => { const query = new URLSearchParams(search); return ['wait', 'lure', 'ideas', 'lockout'].some((name) => query.has(name) && query.get(name) !== '0'); };
 
 /** The composed day the page's query names, or null. */
 export function composedDayFor(search) {
@@ -74,9 +79,9 @@ export function composedDayFor(search) {
 // ideas (one turned off, or put on every day it fits, or the bot's ceiling left out), so a run of a day composed
 // one way never loads into the same day composed another.
 function ideasTag(search) {
-  const { wait, lure, ceiling, mate } = previewOptions(search);
+  const { wait, lure, ceiling, mate, lockout } = previewOptions(search);
   const part = (name, value) => (value === 'every' ? `${name}-all` : value ? '' : `no-${name}`);
-  const tag = [part('wait', wait), part('lure', lure), (wait || lure) && !ceiling && 'open', mate === 'every' ? 'mate' : !mate && 'no-mate'].filter(Boolean).join('+');
+  const tag = [part('wait', wait), part('lure', lure), (wait || lure) && !ceiling && 'open', mate === 'every' ? 'mate' : !mate && 'no-mate', lockout && 'lockout'].filter(Boolean).join('+');
   return tag ? `${tag}:` : '';
 }
 // The floor a preview opens on (&floor=2 or &floor=3), or null: floor 1, as any day.

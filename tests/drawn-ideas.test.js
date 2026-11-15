@@ -218,7 +218,7 @@ test('a guard is plain when the target is one step from it along the kind of ste
 test('each drawn idea has its letter and its journal page, in the book after the other ideas', () => {
   assert.equal(encodeMotifs(['wait', 'lure', 'net']), 'a,l,n');
   assert.deepEqual(decodeMotifs('a,l,n'), ['wait', 'lure', 'net']);
-  assert.deepEqual([...PREVIEW_PAGES], [], 'no idea waits in preview');
+  assert.deepEqual(PREVIEW_PAGES.map((page) => page.id), ['lockout'], 'one idea waits in preview: the Lockout (tests/lockout.test.js)');
   const pages = DRAWN_IDEAS.map(pageFor);
   assert.deepEqual(pages.map((page) => [page.id, page.name]), [['wait', 'Standstill'], ['lure', 'Lure']]);
   const context = new Proxy({}, { get: (target, name) => (name in target ? target[name] : () => {}), set: (target, name, value) => { target[name] = value; return true; } });

@@ -353,6 +353,40 @@ export function drawStandstillDemo(canvas, time, { playerPalette = {}, monsterPa
 /** The knight has waited; the monster is back on the covered square. */
 export const STANDSTILL_STILL = 3150;
 
+/**
+ * Lockout (in preview, src/composer.js composeLockout): a monster steps out
+ * of its walled hole. Your knight lands on a pawn recruit that waits below
+ * the hole and sends it up into it; the monster, with nowhere to step, stays
+ * out, and the knight takes it.
+ */
+export function drawLockoutDemo(canvas, time, { playerPalette = {}, monsterPalette = spritePalette('violet') } = {}) {
+  const t = loop(time);
+  frame(canvas, t, (ctx) => {
+    // The hole (2,1) and the square outside it (3,0); the pawn (2,2) steps up into the hole; knight (0,3) -> (2,2) -> (3,0).
+    for (const [x, y] of [[1, 0], [1, 2], [3, 2], [4, 1]]) wall(ctx, x, y);
+    const out = beat(t, 200, 600);
+    const hop = beat(t, 800, 1400);
+    const push = beat(t, 1700, 2200);
+    const take = beat(t, 3700, 4300);
+    const pulse = 0.7 + 0.3 * Math.sin(t / 110);
+    // It tries to step back and can't: the pawn stands in its hole.
+    const balk = t > 2400 && t < 3500 ? Math.round(Math.sin(t / 45) * 2) : 0;
+    ring(ctx, 2, 1, MINT, push * pulse * (1 - beat(t, 3600, 3800)));
+    ring(ctx, 3, 0, GOLD, beat(t, 3000, 3300) * pulse * (1 - take));
+    faded(ctx, 1 - beat(t, 4200, 4350), () => sprite(ctx, 'bat', lerp(center(2), center(3), out) + balk, lerp(center(1), center(0), out), monsterPalette));
+    burst(ctx, center(3), center(0), beat(t, 4300, 4800), GOLD);
+    sprite(ctx, 'piece-pawn', center(2), lerp(center(2), center(1), push), COMPANION_PALETTE);
+    const from = take ? [2, 2] : [0, 3], to = take ? [3, 0] : [2, 2], p = take || hop;
+    sprite(ctx, 'piece-knight', lerp(center(from[0]), center(to[0]), p), lerp(center(from[1]), center(to[1]), p) - Math.sin(Math.PI * p) * 22, playerPalette);
+    label(ctx, 'IT STEPS OUT', 100, 182, RED, beat(t, 300, 450) * (1 - beat(t, 1500, 1650)), 22);
+    label(ctx, 'RECRUIT INTO ITS HOLE', 100, 182, MINT, beat(t, 1700, 1850) * (1 - beat(t, 2500, 2650)), 20);
+    label(ctx, 'IT CAN’T GO BACK', 100, 182, RED, beat(t, 2650, 2800) * (1 - beat(t, 3600, 3750)), 22);
+    label(ctx, 'LOCKED OUT!', 100, 182, GOLD, beat(t, 4300, 4500), 28);
+  });
+}
+/** The pawn stands in the hole; the monster is stuck outside it. */
+export const LOCKOUT_STILL = 3200;
+
 // Three stars circling over an off-balance monster's head.
 function stars(ctx, x, y, t) {
   for (let i = 0; i < 3; i++) {

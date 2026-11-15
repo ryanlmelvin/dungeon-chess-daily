@@ -74,7 +74,7 @@ export const DRESS_ATTEMPTS = 6;
  * key move is. With no weekly ramp, every day climbs the same way: floor 1 at
  * level 2, floor 2 at level 3 and the king floor's net at 3 or 4.
  */
-export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3, wait: 3, lure: 3, mate: 3 });
+export const MOTIF_LEVELS = Object.freeze({ walk: 1, bait: 2, fork: 2, squeeze: 3, net: 3, tempo: 3, crown: 3, tandem: 3, wait: 3, lure: 3, mate: 3, lockout: 3 });
 /**
  * Each floor's motifs in order of preference. Floor 2 falls back to a level-2
  * motif only where no level-3 one fits the matchup (a knight against knights,
@@ -1672,6 +1672,7 @@ export function usesIdea(built, states, line) {
   const first = line[0];
   const onKey = first.type === 'move' && built.key && same(first, built.key);
   if (built.motif === PARTNER_MOTIF) return tandemIdea(states);
+  if (built.motif === LOCKOUT_MOTIF) return lockoutAt(states, line) >= 0;
   if (built.pawnLine) {
     // A quiet first move, and every target taken on a planted take square.
     return !states[1].events.some((event) => event.type === 'capture') && line.every((action, n) => action.type !== 'move'
@@ -2218,6 +2219,271 @@ export function composeTandem(base, floor, { trace, starts = startSquares() } = 
   return null;
 }
 
+// ── The Lockout (a second partner floor; composeDay's `lockout` option, a preview: not in RELEASE) ──
+// The recruit as a stopper. Each of the floor's two targets paces a pocket of
+// two squares, its home and its landing, walled in on every other step of its
+// own, as a squeeze's targets are: every monster moves every turn, so it steps
+// out and back for good. A monster with no step stands still. So while a
+// target is out on its landing, the recruit, ordered onto its home, leaves it
+// nowhere to go: it stays out, and you take it there when you please.
+//
+// The floor opens with both targets out. The recruit, a pawn, waits one move
+// from you, straight below one target's empty home. The line (LOCKOUT_MOVES):
+// step onto the pawn and send it up into the home; take that target on its
+// landing, where it has had to stay; take the other from there as it steps out
+// again. Without the order the first target is home again by your second move
+// and has to be waited out.
+//
+// The recruit is a pawn. Any other recruit that reaches the home square takes
+// the target on it a move later just as fast, which is a Tandem's idea, not
+// this one; a pawn steps straight up into an empty square and takes nothing
+// that stands on it. Where it can it waits on its first rank, with a single
+// and a double step to choose between, only one of them the home.
+//
+// What was tried and set aside (2026-11-15):
+// - Blocking a distant guard's line. A rook, bishop or queen far off gives a
+//   turn's warning before it strikes (src/rules.js windUp), so a target it
+//   watches is taken and left in time; a guard beside its target strikes at
+//   once from a square away, where nothing stands between. A recruit in a red
+//   path does stop the lunge, and so does one sharing your square, but a floor
+//   that needs it has to keep you in one path two turns running.
+// - The pawn stepping in on your second move, timed to the target stepping
+//   out (both targets home as the floor opens). No such room stands: from the
+//   square you take the first target on, your piece reaches the second's home
+//   as well, where it is again without the pawn.
+// - A rook's or a bishop's day. A pocket's walls stand on its target's other
+//   steps, and beside a pawn they fall on the lines a rook or bishop moves
+//   along to and from the pawn's square.
+//
+// Proved like a Tandem, the recruit steered: the line wins, never captured;
+// nothing wins in fewer moves, whatever the recruit is told (steeredWin); every
+// win in the line's three moves, every order tried, locks a target out
+// (lockoutLines, lockoutAt), so the floor is not also a Tandem or a walk; the
+// hasty checks hold; and the human-like bot finishes within par + 4 in two
+// runs of three, both from the move that joins the recruit (partnerGuard) and
+// from the floor's start (botGuard): it seldom finds the idea, and a floor
+// must be no slog for a player who misses it. No hint: every square of the
+// idea holds a monster or the recruit.
+
+/** The Lockout's motif. */
+export const LOCKOUT_MOTIF = 'lockout';
+/** A lockout's line: join the pawn and send it into a home, take the target locked out, take the other. */
+export const LOCKOUT_MOVES = 3;
+/**
+ * The targets a lockout can pocket, by player piece: bishops for a knight,
+ * knights for a queen (two of a Tandem's matchups: you never move as the
+ * target does, so its walls leave your lines open). No room stands for a rook
+ * or a bishop (see above), and a rook target's home lets no pawn in: every
+ * square beside it straight on is its wall or its landing.
+ */
+export const LOCKOUTS = Object.freeze({ knight: ['bishop'], queen: ['knight'] });
+/** Layouts a lockout builds walls for per attempt before giving up: each is one draw of its squares that fits on an empty board. */
+export const LOCKOUT_TRIES = 60;
+// The motif: two pockets, one's home straight above the pawn that will stop it. Every layout of the squares that
+// fits the empty board is listed, and they are built in a seeded order, those that give the pawn two steps to
+// choose between first, until one's walls stand.
+function lockout(context) {
+  if (context.count !== 2 || !LOCKOUTS[context.piece]?.includes(context.target)) return null;
+  const { piece, target, rng, start } = context;
+  const among = (list, tile) => list.some((square) => same(square, tile));
+  const fromStart = reachable(piece, start);
+  // A pocket's squares: never the start, the exit, or where its target would take you on the start square; a
+  // landing, where a target stands as the floor opens, is out of the start square's reach.
+  const square = (tile) => inside(tile) && tile.y >= 1 && tile.y <= 6 && !same(tile, EXIT) && !same(tile, start) && !covers(target, tile, start);
+  const held = (tile) => square(tile) && chebyshev(tile, start) >= 2 && !among(fromStart, tile);
+  const layouts = [];
+  // The pawn's square, your first move, and the home it steps into as it joins: a step up, or from its first rank two.
+  for (const post of fromStart.filter((tile) => tile.y >= 2 && tile.y <= 6 && !same(tile, EXIT))) {
+    for (const home of [at(post.x, post.y - 1), ...(post.y === 6 ? [at(post.x, 4)] : [])]) {
+      const climb = between(post, home);
+      if (!square(home) || climb.some((tile) => same(tile, start))) continue;
+      // The landing of the target locked out, your second move; then the other's, your third, and its home.
+      for (const landing of firstSteps(target, home)) {
+        if (!held(landing) || !among(reachable(piece, post), landing) || covers(target, landing, post)) continue;
+        for (const other of reachable(piece, landing)) {
+          if (!held(other) || covers(target, other, post)) continue;
+          for (const den of firstSteps(target, other)) {
+            if (!square(den) || covers(target, den, landing) || new Set([post, ...climb, home, landing, other, den].map(index)).size !== 5 + climb.length) continue;
+            // Your lines cross no pocket's square, nor the pawn in the home.
+            const lanes = [...between(start, post), ...between(post, landing), ...between(landing, other)];
+            if ([home, landing, other, den].some((tile) => among(lanes, tile))) continue;
+            // Every other step of a pocket's squares takes a wall, so none may be a square the line needs open.
+            const walled = (open) => [[den, other], [other, den], [home, landing], [landing, home]].every(([stays, steps]) => firstSteps(target, stays)
+              .every((tile) => same(tile, steps) || same(tile, landing) || same(tile, other) || !among(open, tile)));
+            const open = [start, EXIT, post, home, den, ...lanes, ...climb];
+            // On its first rank the pawn has a second step to choose, where that square can stay open and empty: the
+            // one past the home, or the one short of it.
+            const spare = post.y === 6 ? (home.y === 5 ? at(post.x, 4) : at(post.x, 5)) : null;
+            const choice = Boolean(spare) && ![landing, other, den].some((tile) => same(tile, spare)) && walled([...open, spare]);
+            if (choice || walled(open)) layouts.push({ post, home, landing, other, den, climb, lanes, spare: choice ? spare : null });
+          }
+        }
+      }
+    }
+  }
+  // Why a layout failed, counted for the trace.
+  const no = (why) => { (context.misses ??= {})[why] = (context.misses[why] ?? 0) + 1; return null; };
+  if (!layouts.length) return no('layout');
+  const order = shuffle(layouts, rng);
+  for (const layout of [...order.filter(({ spare }) => spare), ...order.filter(({ spare }) => !spare)].slice(0, LOCKOUT_TRIES)) {
+    const { post, home, landing, other, den, climb, lanes, spare } = layout;
+    const plan = new Plan(start);
+    plan.keep(start, post, home, den, ...lanes, ...climb, ...(spare ? [spare] : []));
+    plan.place(0, target, landing);
+    plan.place(0, target, other);
+    if (![[den, other], [other, den], [home, landing], [landing, home]].every(([stays, steps]) => box(plan, target, stays, [steps]))) { no('box'); continue; }
+    // Once the walls stand: your three moves are open, and from the start you take nothing.
+    const sees = (from, to, units = true) => among(reach(plan, piece, from, units), to);
+    if (!sees(start, post) || !sees(post, landing) || !sees(landing, other) || sees(start, landing, false) || sees(start, other, false)) { no('sight'); continue; }
+    plan.items.push({ x: post.x, y: post.y, type: 'companion', piece: 'pawn' });
+    return { plan, motif: LOCKOUT_MOTIF, recruit: 'pawn', post, choice: Boolean(spare), pockets: [{ home, landing }, { home: den, landing: other }] };
+  }
+  return null;
+}
+
+/**
+ * Where a line locks a target out: the index of the action whose order stood
+ * the recruit on the one square a target could step to, so that it stayed
+ * where it was (the recruit held instead, it steps away) and was taken there
+ * later; -1 when the line has none. Read off the positions, as played.
+ */
+export function lockoutAt(states, line) {
+  for (let n = 0; n < line.length - 1; n++) {
+    const order = line[n].recruit, before = states[n], after = states[n + 1];
+    if (!order || order === 'hold' || !after.companion || !same(after.companion, order)) continue;
+    const loose = routeTransition(before, { ...line[n], recruit: 'hold' }, STEERED);
+    for (const foe of after.enemies) {
+      if (!isTarget(after, foe.id)) continue;
+      const was = before.enemies.find((other) => other.id === foe.id), free = loose?.enemies.find((other) => other.id === foe.id);
+      if (!was || !same(was, foe) || !free || same(free, foe)) continue;
+      const taken = states.findIndex((state, m) => m > n + 1 && state.events.some((event) => (event.type === 'capture' || event.type === 'companion-capture') && event.id === foe.id));
+      if (taken > 0 && states.slice(n + 1, taken).every((state) => { const there = state.enemies.find((other) => other.id === foe.id); return there && same(there, foe); })) return n;
+    }
+  }
+  return -1;
+}
+/**
+ * Every win of a floor from `start` in exactly LOCKOUT_MOVES moves, never
+ * captured, the recruit steered and every order tried (at most `cap`). A
+ * floor with a shorter win has none to speak of: steeredWin says so first.
+ */
+function lockoutLines(start, cap = 256) {
+  const lines = [];
+  const walk = (state, path) => {
+    const last = path.length === LOCKOUT_MOVES - 1;
+    for (const action of partnerActions(state, last)) {
+      if (lines.length >= cap) return;
+      const next = routeTransition(state, action, STEERED);
+      if (!next) continue;
+      if (next.exit.open) { if (last) lines.push([...path, action]); } else if (!last) walk(next, [...path, action]);
+    }
+  };
+  walk(start, []);
+  return lines;
+}
+/**
+ * A lockout floor's exact checks from `start`: nothing wins in fewer moves
+ * than the line, every win in its three moves locks a target out, and a
+ * hasty win (captures absorbed) scores worse than the line with the recruit
+ * and worse than par without it. { lines } when they hold, else { why }.
+ */
+function lockoutVerdict(start) {
+  if (steeredWin(start, LOCKOUT_MOVES - 1)) return { why: 'shorter' };
+  const lines = lockoutLines(start);
+  if (!lines.length) return { why: 'line' };
+  if (!lines.every((line) => lockoutAt(playLine(start, line, STEERED), line) >= 0)) return { why: 'other' };
+  if (steeredHasty(start, LOCKOUT_MOVES - 1) <= LOCKOUT_MOVES || hastyScore(start, LOCKOUT_MOVES) <= LOCKOUT_MOVES + 1) return { why: 'hasty' };
+  return { lines };
+}
+// The squares a lockout line needs clear at the start, besides those you move to: your lines and the recruit's climb.
+function lockoutLanes(states) {
+  const lanes = [];
+  for (let n = 1; n < states.length; n++) {
+    const was = states[n - 1], now = states[n];
+    lanes.push(...between(was.player, now.player));
+    const from = was.companion ?? was.items.find((item) => item.type === 'companion');
+    if (now.companion && from) lanes.push(...between(from, now.companion), { x: now.companion.x, y: now.companion.y });
+  }
+  return lanes;
+}
+
+/** The floors of a day a lockout could take (floors 1 and 2 whose target a lockout pockets for the day's piece), the day's own pick first. */
+export function lockoutFloors(base) {
+  const fits = [0, 1].filter((floor) => LOCKOUTS[base.playerPiece]?.includes(base.targets[floor]));
+  return hash(`${base.date}:lockout`) % 2 ? fits.reverse() : fits;
+}
+/**
+ * Compose `floor` of `base` as a lockout floor, or null when its matchup has
+ * none (LOCKOUTS) or no instance passes. Returns what composeTandem does;
+ * `firstMoves` and `lines` count the floor's three-move wins (lockoutLines),
+ * every one a lockout; `locks` is the move of the line whose order locks its
+ * target out (1: the move that joins the pawn), and `choice` says whether the
+ * pawn had two steps to choose between there.
+ */
+export function composeLockout(base, floor, { trace, starts = startSquares() } = {}) {
+  const began = performance.now();
+  const piece = base.playerPiece, cast = castFor(base, floor), seed = base.floorSeeds[floor], motif = LOCKOUT_MOTIF;
+  if (floor > 1 || cast.count !== 2 || !LOCKOUTS[piece]?.includes(cast.target)) return null;
+  const tally = { built: 0, replayed: 0, kept: 0 }, stats = { [motif]: tally };
+  for (let attempt = 0; attempt < MOTIF_ATTEMPTS; attempt++) {
+    const rng = random(hash(`${seed}:${motif}:${attempt}`));
+    const start = starts.length === 1 ? starts[0] : starts[Math.floor(random(hash(`${seed}:${motif}:${attempt}:start`))() * starts.length)];
+    const context = { piece, target: cast.target, count: cast.count, rng, seed, attempt, start, guards: [...cast.suspects, cast.other], unnamed: cast.unnamed };
+    const built = lockout(context);
+    if (!built) { trace?.({ motif, attempt, stage: 'build', misses: context.misses }); continue; }
+    tally.built++;
+    // Every decoy roams: the idea uses none.
+    context.quiet = context.guards;
+    const bare = floorStart(base, floor, built.plan.room());
+    const found = lockoutVerdict(bare);
+    if (!found.lines) { trace?.({ motif, attempt, stage: found.why === 'line' ? 'idea' : found.why, room: built.plan.room() }); continue; }
+    // The planted line: of the floor's wins, one that moves the recruit least (its other orders change nothing).
+    const orders = (line) => line.filter((action) => action.recruit && action.recruit !== 'hold').length;
+    const planted = shuffle(found.lines, rng).sort((a, b) => orders(a) - orders(b))[0];
+    tally.replayed++;
+    // A dressed room's checks: the same exact ones (the planted line where it still wins, else one of the room's
+    // own), and the bot's runs. { room, line, states, lines, pressure }, or null.
+    const judge = (room) => {
+      const dressed = floorStart(base, floor, room);
+      const verdict = lockoutVerdict(dressed);
+      if (!verdict.lines) { trace?.({ motif, attempt, stage: `redress:${verdict.why}`, room, line: planted }); return null; }
+      const line = verdict.lines.find((other) => JSON.stringify(other) === JSON.stringify(planted)) ?? [...verdict.lines].sort((a, b) => orders(a) - orders(b))[0];
+      const states = clean(playLine(dressed, line, STEERED));
+      if (!states) { trace?.({ motif, attempt, stage: 'redress:line', room, line }); return null; }
+      // The bot's runs, twice: from the move that joins the pawn, as planted (a Tandem's guard), and from the floor's
+      // start, as on any floor, where it seldom finds the idea: missed, the floor must still be no slog.
+      const guard = partnerGuard(dressed, base, floor, line), plain = guard.ok ? botGuard(dressed, base, floor, line.length + 1) : null;
+      if (!guard.ok || !plain.ok) { tally.guarded = (tally.guarded ?? 0) + 1; trace?.({ motif, attempt, stage: guard.ok ? 'bot:start' : 'bot', ...(plain ?? guard), room }); return null; }
+      return { room, line, states, lines: verdict.lines, pressure: pressure(states) };
+    };
+    let best = null;
+    for (let dressing = 0; dressing < DRESS_ATTEMPTS && !(best?.pressure >= 2); dressing++) {
+      const core = built.plan.clone();
+      core.keep(...lockoutLanes(playLine(bare, planted, STEERED)));
+      const plan = dress(core, context, planted, base, floor, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}`)));
+      if (!plan) { trace?.({ motif, attempt, stage: 'dress' }); continue; }
+      let passed = judge(plan.room());
+      // On an Ice day the room's ice lies off the line (iceVariants, 'off'), and the iced room is judged again.
+      if (passed && base.modifier === 'ice') {
+        const iced = iceVariants(passed.room, passed.line, passed.states, built, random(hash(`${seed}:${motif}:${attempt}:dress:${dressing}:ice`))).find((variant) => variant.kind === 'off');
+        passed = iced ? judge(iced.room) : null;
+        if (passed) passed.ice = 'off';
+      }
+      if (passed && (!best || passed.pressure > best.pressure)) best = passed;
+    }
+    if (!best) continue;
+    tally.kept++;
+    trace?.({ motif, attempt, stage: 'kept', built });
+    const { room, line, states, lines } = best;
+    return {
+      room, hint: null, line, motif, depth: line.length, firstMoves: new Set(lines.map((other) => JSON.stringify(other[0]))).size, lines: lines.length,
+      forced: forcedShare(states), pressure: best.pressure, matched: cast.matched, lifeTrade: false, ...(best.ice && { ice: best.ice }),
+      recruit: built.recruit, locks: lockoutAt(states, line) + 1, choice: built.choice, stats, ms: performance.now() - began,
+    };
+  }
+  return null;
+}
+
 // ── Mate floors (composeDay's `mate` option, on by default: RELEASE; about one in MATE_EVERY of the days that fit, mateDay) ──
 // A king floor won the way a chess mate is: by your piece and your own king
 // together. On every king floor your king is with you as the floor opens
@@ -2462,6 +2728,15 @@ export const partnerDay = (base) => partnerFloors(base).length > 0 && hash(`${ba
 function partnerFloor(base, { starts, trace }) {
   for (const floor of partnerFloors(base)) {
     const composed = composeTandem(base, floor, { starts, ...(trace && { trace: (event) => trace({ floor, ...event }) }) });
+    if (composed) return { floor, composed };
+  }
+  return null;
+}
+
+// The day's lockout floor, composed: { floor, composed }, or null on a day with none.
+function lockoutFloor(base, { starts, trace }) {
+  for (const floor of lockoutFloors(base)) {
+    const composed = composeLockout(base, floor, { starts, ...(trace && { trace: (event) => trace({ floor, ...event }) }) });
     if (composed) return { floor, composed };
   }
   return null;
@@ -2723,15 +2998,19 @@ export function drawnIdeas(base, asked, partnered = null) {
  * - `mate` composes the king floor as a mate floor (composeMate), your own
  *   king at your side from the first move, on about one in MATE_EVERY of the
  *   days that fit one (mateDay; 'every' takes them all).
+ * A seventh is a preview, off unless asked for (it is no part of RELEASE):
+ * - `lockout` gives floor 1 or 2 to a lockout floor (composeLockout) on every
+ *   day whose matchup has one (lockoutFloors), in place of the day's Tandem if
+ *   it has one: `generation.partner` is then that floor.
  * A day that can't be composed with all it was asked for gives options up in
  * order (a drawn idea first, then FALLBACKS') rather than fail; `dropped` lists them (empty on nearly
  * every day).
  */
-export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, mate = RELEASE.mate, ceiling = true } = {}) {
-  const asked = { treasure, partner, tight, wait, lure, mate }, dropped = [];
+export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts, trace, treasure = RELEASE.treasure, partner = RELEASE.partner, tight = RELEASE.tight, wait = RELEASE.wait, lure = RELEASE.lure, mate = RELEASE.mate, lockout = false, ceiling = true } = {}) {
+  const asked = { treasure, partner, tight, wait, lure, mate, lockout }, dropped = [];
   for (;;) {
     try { return { ...composeOnce(raw, { tier, starts, trace, ceiling, ...asked }), dropped }; } catch (error) {
-      const next = ['mate', ...DRAWN_IDEAS, ...FALLBACKS].find((option) => asked[option]);
+      const next = ['lockout', 'mate', ...DRAWN_IDEAS, ...FALLBACKS].find((option) => asked[option]);
       if (!next) throw error;
       asked[next] = false;
       dropped.push(next);
@@ -2740,11 +3019,13 @@ export function composeDay(date, { tier, daily: raw = getRawDaily(date), starts,
   }
 }
 // composeDay with exactly the options asked for; throws when the day doesn't compose or prove with them.
-function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait, lure, mate, ceiling }) {
+function composeOnce(raw, { tier, starts, trace, treasure, partner, tight, wait, lure, mate, lockout, ceiling }) {
   const squares = startSquares(starts);
   const base = { ...raw, difficulty: tier ?? COMPOSED_TIER, modifier: raw.modifier ?? 'none', floorSeeds: composedSeeds(raw.date) };
   delete base.generation;
-  const partnered = partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null;
+  // A lockout (a preview: asked for, it takes every day that fits one) stands in for the day's Tandem; where none composes, the day is as released.
+  const partnered = (lockout ? lockoutFloor(base, { starts: squares, trace }) : null)
+    ?? (partner && (partner === 'every' || partnerDay(base)) ? partnerFloor(base, { starts: squares, trace }) : null);
   // The drawn ideas this day's floors try: each on the days it draws, or on every day it fits when asked for 'every'.
   const ideas = wait || lure ? drawnIdeas(base, { wait, lure }, partnered?.floor ?? null) : [[], []];
   if (partnered && TERRAIN_MODIFIERS.includes(base.modifier)) partnered.composed = terrainOff(base, partnered.floor, partnered.composed, { steered: true });

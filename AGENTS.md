@@ -71,6 +71,13 @@ floors are nets. The preview turns it off with `&mate=0`, forces it with `&mate=
 and `&floor=2` or `&floor=3` opens a preview on that floor. `docs/generation.md` ("Mate
 floors") has the rest.
 
+The Lockout (`composeDay`'s `lockout` option, `composeLockout` in `src/composer.js`) is a
+second partner floor in preview, no part of `RELEASE`: two targets pace two-square
+pockets, and a pawn recruit, ordered into one's home while it is out, leaves it nowhere
+to go. It fits a knight against bishops and a queen against knights. The preview plays it
+with `&lockout=1` (it files its journal page, which waits in `PREVIEW_PAGES`);
+`docs/generation.md` ("The Lockout") has what was tried, the checks and the measurements.
+
 The two terrain modifiers (a crumbling floor, gates) can be forced on any date:
 `&modifier=cracks` or `&modifier=gates` on the composer preview plays that date under
 one, saved apart, and `node scripts/measure-terrain.mjs --modifier cracks --jobs 8`
@@ -177,7 +184,7 @@ dialog, the one-line cue in the shop and on the results paper, and the page that
 into it when a find is new (it never takes a tap or opens a dialog). `main.js` only calls
 it: `clearedFloor` as the shop opens, `wonRun` on the results paper, `restored` after a
 backup merge. Adding an idea's page is adding one `PAGES` entry and its art function. The
-page of an idea still in preview waits in `PREVIEW_PAGES` (empty today): the book lists
+page of an idea still in preview waits in `PREVIEW_PAGES` (today the Lockout's): the book lists
 one only once it has been found (`bookPages`), which only a dev preview can do.
 
 ## Changing rules, AI, the composer or the bot

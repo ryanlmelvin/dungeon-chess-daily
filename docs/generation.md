@@ -510,6 +510,80 @@ dressed room was accepted where the planted line no longer won (the guards
 spoiled it without touching you), and the day's proof then gave the mate
 floor up; the dressing's judge now requires the win.
 
+## The Lockout (in preview)
+
+A second partner floor, built 2026-11-15 and not released: `composeDay`'s
+`lockout` option, off unless asked for (it is no part of `RELEASE`), so no
+stored edition has one and the build never composes one. The dev preview
+plays it with `&lockout=1`.
+
+**The idea.** It came from a tester's note, "the recruit blocks a lane". Each
+of the floor's two targets paces a pocket of two squares, its home and its
+landing, walled in on every other step of its own, as a squeeze's targets are:
+every monster moves every turn, so it steps out and back for good, and a
+monster with no step stands still. The floor opens with both targets out. A
+pawn recruit waits one move from the start, straight below one target's empty
+home. The line is three moves (par 4): step onto the pawn and send it up into
+the home; take that target on its landing, where it has had to stay; take the
+other from there as it steps out again. Without the order the first target is
+home again by your second move and has to be waited out.
+
+**Why a pawn.** Any other recruit that reaches the home square takes the
+target on it a move later just as fast, which is a Tandem's idea. A pawn steps
+straight up into an empty square and takes nothing that stands on it. Where
+the room allows, it waits on its first rank with a single and a double step to
+choose between, only one of them the home (57 of the 95 floors below).
+
+**Which days.** A knight against two bishops and a queen against two knights
+(`LOCKOUTS`), on floor 1 or 2: 95 of the 743 stored days (47 and 48), and all
+95 compose, a floor in about an eighth of a second. No room stands for a rook
+or a bishop: a pocket's walls stand on its target's other steps, and beside a
+pawn they fall on the lines a rook or bishop moves along to and from the
+pawn's square. A rook target's home lets no pawn in at all.
+
+**What was tried first and set aside.**
+
+- Blocking a distant guard's line, which is how the idea was first put. The
+  rules leave it nothing to do: a rook, bishop or queen far off gives a turn's
+  warning before it strikes, so a target it watches is taken and left in time,
+  and a guard beside its target strikes at once from a square away, where
+  nothing stands between. A recruit standing in a red path does stop the
+  lunge (so does one sharing your square), but a floor that needs it has to
+  keep you in one path two turns running.
+- The pawn stepping in on your second move, timed to the target stepping out
+  (both targets home as the floor opens). No such room stands: from the square
+  you take the first target on, a queen reaches the second's home as well, and
+  a knight's two jumps land on the wrong colour.
+
+**The checks** (`composeLockout`), the recruit steered as on a Tandem:
+
+- the line wins, never captured, and nothing wins in fewer moves whatever the
+  pawn is told (`steeredWin`);
+- every win in three moves, every order tried, locks a target out
+  (`lockoutLines`, `lockoutAt`: an order stood the pawn on the one square a
+  target could step to, so it stayed where it was, and it was taken there), so
+  the floor is not also a Tandem or a walk;
+- the hasty checks hold, as on a Tandem;
+- the human-like bot finishes within par + 4 in two runs of three, both from
+  the move that joins the pawn (`partnerGuard`) and from the floor's start
+  (`botGuard`): a player who misses the idea must not be left with a slog.
+
+It has no hint (every square of the idea holds a monster or the pawn), no
+chest (a partner floor), and on a terrain or Ice day its terrain lies off the
+line, as a Tandem's does.
+
+**Measured over the 95 floors (2026-11-15).** Without the idea the best play,
+with or without the pawn, makes par on 39 floors and one over on 54 (two over
+on one, and one floor has no such win in six moves). The bot, from the start,
+40 runs a floor: 25% of runs come in under par, which is the lockout found
+(the pawn's step forward is one of the few orders it has), 10% at par, 63%
+one to four over, and 3% further off or lost. By floor: it finds the lockout
+on every run on 15 floors, on some on 10 and on none on 70.
+
+**Not decided.** Whether it ships, and on what share of the days it fits: it
+takes every one when asked for, and a day that draws a Tandem gives the Tandem
+up to it. The journal's page ("Lockout") waits in `PREVIEW_PAGES`.
+
 ## Moving terrain: a crumbling floor and gates
 
 Two room modifiers are terrain that changes during a floor. They took
