@@ -81,6 +81,10 @@ Publishing is a push to `main`: `.github/workflows/deploy.yml` runs `npm test` a
 `npm run build`, then deploys `dist/` to Pages. `dist/` is never committed. After a
 deploy, check the live `release.json` and play the published edition.
 
+Ship finished work without asking: when a change is done and `npm test` passes, merge
+it to `main` and push. The one exception is a change that alters editions (see
+"Changing rules, AI, the composer or the bot"): let the user play the preview first.
+
 ## Architecture
 
 **Engine (pure, deterministic, shared by browser, tests and scripts).**
